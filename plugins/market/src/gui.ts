@@ -5,17 +5,18 @@
  */
 import { Plugin, Panel, Command, SettingsPage, Ipc } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
-import { fetchIndex, rows, type MarketEntry, type MarketIndex } from './catalog.js'
+import { fetchIndex, rows, search, type MarketEntry, type MarketIndex } from './catalog.js'
 
 /** Contract: window calls index(), main process serves it. */
 const Market = Ipc.define({
   id: 'opencode-market',
   methods: {
     index: { output: Schema.Unknown },
+    install: { input: Schema.String, output: Schema.String },
   },
 })
 
-type Api = { index(): Promise<MarketIndex> }
+type Api = { index(): Promise<MarketIndex>; install(name: string): Promise<string> }
 
 let snapshot: { ok: true; i: MarketIndex } | { ok: false; err: string } | null = null
 
@@ -57,6 +58,13 @@ export default Plugin.define({
   main(ctx) {
     ctx.provide(Market, {
       index: () => fetchIndex() as Promise<MarketIndex>,
+      install: (name: string) =>
+        new Promise<string>((resolve, reject) => {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { execFile } = require('node:child_process') as typeof import('node:child_process')
+          execFile('opencode', ['plugin', 'add', name], { timeout: 60_000 },
+            (e, out, err) => e ? reject(new Error(err || e.message)) : resolve(out || 'installed'))
+        }),
     })
   },
 })
@@ -89,11 +97,22 @@ export function MarketView(props: { api: Api }) {
   meta.style.cssText = 'opacity:.6;font-size:12px'
   meta.textContent = `${r.i.plugins.length} entries · not affiliated · findings ≠ proof of safety`
   root.appendChild(meta)
-  for (const e of rows(r.i.plugins)) root.appendChild(entryRow(e))
+  const q = document.createElement('input')
+  q.placeholder = 'search…'
+  q.style.cssText = 'width:100%;padding:6px;margin:6px 0;box-sizing:border-box'
+  const list = document.createElement('div')
+  const renderList = (entries: MarketEntry[]) => {
+    list.replaceChildren()
+    for (const e of rows(entries)) list.appendChild(entryRow(e, props.api))
+  }
+  q.oninput = () => renderList(search(r.i.plugins, q.value))
+  root.appendChild(q)
+  root.appendChild(list)
+  renderList(r.i.plugins)
   return root
 }
 
-function entryRow(e: MarketEntry): HTMLElement {
+function entryRow(e: MarketEntry, api: Api): HTMLElement {
   const v = e.verification?.status ?? 'unverified'
   const flag = e.capabilities?.redFlags.length ? ' ⚠' : ''
   const color = v === 'verified' ? '#4a4' : e.capabilities?.redFlags.length ? '#c66' : '#888'
@@ -110,7 +129,17 @@ function entryRow(e: MarketEntry): HTMLElement {
   const code = document.createElement('code')
   code.style.cssText = 'font-size:11px;opacity:.6'
   code.textContent = `opencode plugin add ${e.name}`
-  div.append(b, span, desc, code)
+  const btn = document.createElement('button')
+  btn.textContent = 'add'
+  btn.style.cssText = 'margin-left:8px;font-size:11px;cursor:pointer'
+  btn.onclick = () => {
+    btn.disabled = true; btn.textContent = '…'
+    api.install(e.name).then(
+      () => { btn.textContent = 'installed'; btn.style.color = '#4a4' },
+      (x: unknown) => { btn.textContent = 'failed'; btn.title = String(x); btn.style.color = '#c66' },
+    )
+  }
+  div.append(b, span, desc, code, btn)
   return div
 }
 

@@ -3,7 +3,7 @@
  * Real API: ctx.keymap.layer() + KeymapCommand.slash (packages/plugin/src/tui/context.ts).
  */
 import { Plugin } from '@opencode/plugin/tui'
-import { fetchIndex } from './catalog.js'
+import { fetchIndex, search } from './catalog.js'
 
 export default Plugin.define({
   id: 'opencode-market',
@@ -14,14 +14,20 @@ export default Plugin.define({
         id: 'opencode-market.open',
         title: 'Open plugin market',
         palette: true,
-        slash: { name: 'market' },
-        run: () => {
+        slash: { name: 'market', arguments: true },
+        run: (input) => {
           fetchIndex()
             .then(idx => {
-              const lines = idx.plugins
-                .slice(0, 50)
-                .map(p => `${p.name.padEnd(36)} ${p.verification?.status ?? '?'}  ${p.description?.en ?? ''}`)
-              ctx.ui.dialog.alert({ title: `Market (${idx.plugins.length})`, message: lines.join('\n') })
+              const hits = search(idx.plugins, String(input ?? ''))
+              const options = hits.slice(0, 40).map(p => ({
+                title: `${p.name} — ${p.verification?.status ?? '?'}`,
+                value: p.name,
+                description: p.description?.en ?? '',
+              }))
+              if (!options.length) { ctx.ui.toast(`market: no match for "${input}"`); return }
+              void ctx.ui.dialog.select<string>({ title: `Market (${hits.length})`, options })
+                .then(name => name && ctx.ui.dialog.alert({
+                  title: name, message: `install: opencode plugin add ${name}` }))
             })
             .catch(e => ctx.ui.toast(`market fetch failed: ${(e as Error).message}`))
         },

@@ -38,3 +38,11 @@ export function rows(entries: MarketEntry[]): MarketEntry[] {
     e.verification?.status === 'verified' ? 0 : e.capabilities?.redFlags.length ? 2 : 1
   return [...entries].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
 }
+
+/** Client-side search over name+description (case-insensitive substring). */
+export function search(entries: MarketEntry[], q: string): MarketEntry[] {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return entries
+  return entries.filter(e =>
+    e.name.toLowerCase().includes(needle) || (e.description?.en ?? '').toLowerCase().includes(needle))
+}
