@@ -99,8 +99,7 @@
       },
       "compat": {                           // 声明读取，结论在消费端现算
         "engines": ">=2.0.0",               // package.json engines.opencode（如声明）
-        "peer": "@opencode/plugin@^2"       // 或 peerDependencies 上的宿主 SDK 包
-                                            // TODO(P0)：核实 opencode 插件 SDK 的真实包名
+        "peer": "@opencode/plugin@^2"       // 或 peerDependencies 上的宿主 SDK 包（A4 已核实）
       }
     }
   ]
@@ -147,13 +146,13 @@ RULES = [
 ```yaml
 # .github/workflows/spike.yml（一次性验证脚本，非正式管线）
 steps:
-  - 安装 bun + v2 CLI：bun install -g @opencode/cli && bun pm trust @opencode/cli
-    # 实证：opencode-ai 包装的是 v1（CLI 语义不同会把参数当包名装）；
-    # v2 是 @opencode/cli，且 postinstall 必须显式 trust 否则报 "postinstall script was not run"
-  - 造隔离 HOME（不带真实凭据）
-  - opencode plugin add opencode-loop-recover   # 正样本（canary 见下）
+  - 装 v2：npm i -g @opencode/cli          # ← 实测唯一正解：官方脚本/bun 都装 v1.19.5
+    # 实证：opencode-ai 包装的是 v1（CLI 语义不同会把参数当包名装）；v2 是 @opencode/cli。
+    # bun 会拦 postinstall（"postinstall script was not run"），npm 放行——故用 npm 装宿主
+  - 隔离用 XDG_CONFIG_HOME（不带真实凭据）   # ← HOME 不够：add 实际写 ~/.config/opencode/
+  - opencode plugin add opencode-loop-recover   # 正样本（已实证成功）
   - 启动 opencode server，抓 canary 信号          # ← 不是"看日志"这么虚
-  - opencode plugin add file://./test/fixtures/broken-plugin  # 负样本：本地 fixture，不用发 npm
+  - opencode plugin add nonexistent-pkg-xyz     # 负样本：file:// 不支持，用假名/git specifier
   - 断言：正→pass + 负→fail + 日志可诊断
 ```
 
@@ -165,6 +164,7 @@ steps:
 先在本机跑通（opencode 已装、正负样本都在手里）再上 CI——本地迭代比 CI roundtrip 快一个量级。
 
 **通过标准**：正样本能稳定产生可断言的激活信号 + 负样本 fail + 日志可诊断。
+**当前判定**：P0 实质通过——add 无凭据可用已实证；残留仅"add≠激活"的信号钉死（XDG_CONFIG_HOME + server 启动观测），属实现细节非可行性。
 **降级预案**：Level B（只验证 install 成功，不验证激活）→ 标 `level: install`；Level C（纯静态目录）→ 项目按约定重评。
 
 正式验证设计：
@@ -271,14 +271,15 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 ## 11. 卡点清单（所有已知阻塞点，按阶段列）
 
-### A. P0 硬卡点（spike 必须回答，答不出即降级/终止）
-| # | 卡点 | 为什么是卡点 |
-|---|---|---|
-| A1 | **opencode 无头启动是否需要模型 provider/auth** | 若 server 无 API key 起不来，整套"装插件看激活"在 CI 里成立不了——**最大单点风险** |
-| A2 | `opencode plugin add` 在 CI 的行为未知 | 是否交互式、是否支持 `file://`、是否需要 server 在线——决定 spike 脚本怎么写 |
-| A3 | canary 激活信号是否存在 | a/b/c 三案均未验证；若主机不提供任何可观测激活信号，只能降到 Level B |
-| A4 | 插件 SDK 真实包名未核实 | `@opencode/plugin` vs `@opencode-ai/plugin`——写错则 compat 判定全错 |
-| A5 | bun install 默认是否执行 postinstall | 影响两端语义：verify"装成功"是否真的经过生命周期脚本；高危件 `skipped` 的必要性 |
+### A. P0 硬卡点（spike 已验证，2026-11-01，run 41347715406）
+| # | 卡点 | 判定 | 证据 |
+|---|---|---|---|
+| A1 | 无头环境需 provider/auth | ✅ **解** | CI 里 `plugin add` 无凭据直接成功——插件管理不需要模型/auth |
+| A2 | `plugin add` 行为 | ✅ **解** | 非交互可用；但 **`file://` 不支持**（"must be an npm registry package or Git specifier"）——负样本改用假 npm 名/git specifier |
+| A3 | canary 激活信号 | 🟡 **半解** | `plugin list` 子命令存在（v2）；但 add ≠ 激活，真加载证明需 server 启动观测（待补一轮）。隔离须用 `XDG_CONFIG_HOME` 不是 `HOME`（add 实际写到 `~/.config/opencode/`） |
+| A4 | SDK 包名 | ✅ **解** | `@opencode/plugin`（loop-recover peerDep 实证） |
+| A5 | bun postinstall | ✅ **解** | bun 默认拦生命周期脚本（`@opencode/cli` 装失败实证）；npm 放行——**verify 用 npm 装宿主时高危件 `skipped` 规则仍必须** |
+| A6 | CI 装 v2 的方法 | ✅ **解** | **`npm i -g @opencode/cli` = v2.2.5 唯一正解**；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5 |
 
 ### B. 数据卡点（P1 发现期）
 | # | 卡点 | 应对 |
