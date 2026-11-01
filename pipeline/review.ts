@@ -39,8 +39,8 @@ export function renderReview(r: Review): string {
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,
     `Downloads (30d): ${r.downloads30d ?? 'unknown'}`,
     '',
-    r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.map(f => `- ${f}`).join('\n')}` : '### Red flags: none',
-    r.findings.length ? `\n### Findings (${r.findings.length})\n${r.findings.map(f => `- ${f}`).join('\n')}` : '\n### Findings: none — this does not mean safe.',
+    r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',
+    r.findings.length ? `\n### Findings (${r.findings.length})\n${r.findings.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.findings.length > 30 ? `\n- … +${r.findings.length - 30} more (truncated)` : ''}` : '\n### Findings: none — this does not mean safe.',
   ]
   return lines.join('\n')
 }
