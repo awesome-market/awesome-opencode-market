@@ -72,3 +72,12 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 - 🔴 **verify canary 缺陷**：隔离 XDG env 里 `opencode run` 因无 provider 配置在 server 启动前退出 → 无 loading plugin 行 → 全量误报 failed。
   修法候选：①隔离 env 配 opencode zen 免费模型 provider ②找不需要模型的激活触发点（plugin check/serve+请求）
   → verify.yml 真跑结果将受同一问题影响，合并数据预期大量 failed 是误报，勿信
+
+## P5a GUI/TUI 插件实测坑（2026-11-02）
+- TUI 插件配置在 `cli.json` 不是 `opencode.json`（桌面提示原文）；TUI 插件需重启客户端热载
+- TUI 命令注册：`ctx.keymap.layer(() => ({mode:'global', commands:[{id,title,palette:true,slash:{name},run}]}))`
+- TUI `dialog.show` 收 Solid 组件工厂；纯文本用 `dialog.alert({title,message})`
+- GUI bundle 白名单 require：solid-js/solid-js\/web/solid-js\/store/@opencode-*/effect/@opencode/client——**无 jsx-runtime**，JSX 不可用；且 solid-js/h 属性非响应式（急切求值）
+- GUI 取数必须走 Ipc：window 沙箱无网络；`ctx.main(Token)` ↔ `main(ctx) ctx.provide(Token, impl)`；Ipc.define({id,methods:{m:{input?,output?}}})
+- `effect`/`solid-js` 必须 external 进 bundle——内嵌实例与宿主 Schema 不匹配 → "Desktop IPC handler failed"
+- GUI 视图用纯 DOM builder（无 JSX 无响应式），数据用 setup 预取快照
