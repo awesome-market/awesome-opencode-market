@@ -76,6 +76,8 @@ jobs:
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
       - run: git fetch origin catalog && git show origin/catalog:index.json > /tmp/index.json
       - run: npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
+      - name: rebuild Pages site   # must run BEFORE checkout switches tree to catalog
+        run: npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
       - name: commit to catalog
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -87,8 +89,6 @@ jobs:
           git add index.json
           git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
           git push origin catalog
-      - name: rebuild Pages site
-        run: npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
