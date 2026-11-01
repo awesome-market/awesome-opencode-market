@@ -172,7 +172,7 @@ steps:
 先在本机跑通（opencode 已装、正负样本都在手里）再上 CI——本地迭代比 CI roundtrip 快一个量级。
 
 **通过标准**：正样本能稳定产生可断言的激活信号 + 负样本 fail + 日志可诊断。
-**当前判定**：P0 通过——落 Level B：canary=add 退出0 + config 含包名 + 包落盘；激活级验证（level: load）P2 用免费模型探路，探不通就停 install 级。
+**当前判定**：P0 通过——Level A 可达：canary=`opencode run` 后 grep 日志文件 `loading plugin id=<name>`（本地 oh-my-opencode 实证）。CI 侧仅需确认无模型时 run 仍能走到插件加载（大概率是，server 先加载插件再做模型解析）。
 **降级预案**：Level B（只验证 install 成功，不验证激活）→ 标 `level: install`；Level C（纯静态目录）→ 项目按约定重评。
 
 正式验证设计：
@@ -302,7 +302,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 |---|---|---|---|
 | A1 | 无头环境需 provider/auth | ✅ **解** | CI 里 `plugin add` 无凭据直接成功——插件管理不需要模型/auth |
 | A2 | `plugin add` 行为 | ✅ **解** | 非交互可用；但 **`file://` 不支持**（"must be an npm registry package or Git specifier"）——负样本用假 npm 名（`NpmInstallFailedError`+404 可断言） |
-| A3 | canary 激活信号 | ✅ **解（有结论）** | 主机侧**无现成激活信号**：`plugin list` 不读全局 config（装后仍报 none），`serve --print-logs` 无插件行（懒加载）。**canary=组合判据**：add 退出0 + opencode.json 含包名 + 包目录落盘（level: install）；真激活需 `opencode run` 真 session → P2 用 zen 免费模型探路或停 install 级。隔离用 `XDG_CONFIG_HOME` 非 `HOME`（实证） |
+| A3 | canary 激活信号 | ✅ **解（真信号找到）** | 本地实装 oh-my-opencode 实证：`opencode run` 起 server 即加载插件，信号在 **`$XDG_DATA_HOME/opencode/log/opencode.log`**：`msg="loading plugin" id=<name> entrypoint=<path>`（--print-logs 不转发，须读日志文件）。负信号：WARN `configured plugin path must be a directory`。隔离用 `XDG_*` 三件套 |
 | A4 | SDK 包名 | ✅ **解** | `@opencode/plugin`（loop-recover peerDep 实证） |
 | A5 | bun postinstall | ✅ **解** | bun 默认拦生命周期脚本（`@opencode/cli` 装失败实证）；npm 放行——**verify 用 npm 装宿主时高危件 `skipped` 规则仍必须** |
 | A6 | CI 装 v2 的方法 | ✅ **解** | **`npm i -g @opencode/cli` = v2.2.5 唯一正解**；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5 |
