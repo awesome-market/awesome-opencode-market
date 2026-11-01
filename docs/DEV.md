@@ -32,8 +32,9 @@
 │   5. publish    — 生成 index.json → commit 到 catalog 分支 │
 │                   （索引 diff 历史 = 公开审计轨迹 +         │
 │                    自带仓库活性，化解定时workflow 60天禁用）│
-│                   → 防损闸：新索引条目数 <上次的 80%        │
-│                     或为空 → 拒发并告警（dsh-market 同款）  │
+│                   → 防损闸：新索引为空拒发（dsh-market      │
+│                     build-site.mjs 同款）+ 条目数         │
+│                     骤降 >20% 告警人工确认（自定义加固）    │
 │                   → Pages 用 actions/deploy-pages 发布     │
 │                     + jsdelivr 代理 catalog 分支做镜像     │
 │                   → concurrency: 同名 workflow 串行，      │
