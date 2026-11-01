@@ -79,7 +79,10 @@ export function MarketView(props: { api: Api }) {
   return (
     <div style={{ padding: '12px', 'overflow-y': 'auto', height: '100%' }} data-scrollable>
       <h3 style={{ margin: '0 0 8px' }}>opencode market</h3>
-      <Show when={idx()} fallback={<p>loading…</p>}>
+      <Show when={idx.error} fallback={<Show when={idx()} fallback={<p>loading…</p>}>
+        {(err) => <p style={{ color: '#c66' }}>resource error: {String(err())}</p>}
+      </Show>
+      <Show when={idx()}>
         {(r) => (
           <Show when={r().ok} fallback={<p style={{ color: '#c66' }}>fetch failed: {(r() as {err: string}).err}</p>}>
             <p style={{ opacity: 0.6, 'font-size': '12px' }}>
