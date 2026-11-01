@@ -9,10 +9,11 @@ export default Plugin.define({
   id: 'opencode-market',
   setup(ctx) {
     ctx.keymap.layer(() => ({
-      id: 'opencode-market',
+      mode: 'global',
       commands: [{
         id: 'opencode-market.open',
         title: 'Open plugin market',
+        palette: true,
         slash: { name: 'market' },
         run: () => {
           fetchIndex()

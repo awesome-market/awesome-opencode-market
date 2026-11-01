@@ -20,7 +20,15 @@ type Api = { index(): Promise<MarketIndex> }
 
 export default Plugin.define({
   setup(ctx) {
-    const api = ctx.main(Market) as unknown as Api
+    // defensive: surface Ipc failure in-page instead of crashing setup
+    let api: Api
+    try {
+      api = ctx.main(Market) as unknown as Api
+      if (!api) throw new Error('ctx.main returned no client')
+    } catch (e) {
+      const err = e as Error
+      api = { index: () => Promise.reject(err) }
+    }
     ctx.add(Panel, () => ({
       id: 'market',
       region: 'side' as const,
@@ -41,7 +49,8 @@ export default Plugin.define({
   },
   /** Main-process entry: real network lives here. */
   main(ctx) {
-    ctx.provide(Market, {
+    const anyCtx = ctx as unknown as { provide?: (t: unknown, i: unknown) => void }
+    anyCtx.provide?.(Market, {
       index: () => fetchIndex() as Promise<MarketIndex>,
     })
   },
