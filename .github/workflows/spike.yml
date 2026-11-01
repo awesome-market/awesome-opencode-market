@@ -8,14 +8,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: bun install -g @opencode/cli && bun pm trust @opencode/cli
+      - run: curl -fsSL https://opencode.ai/install | bash && export PATH="$HOME/.opencode/bin:$PATH" && opencode --version
       - run: mkdir -p "$SPIKE_HOME/.config/opencode"
         env: { SPIKE_HOME: /tmp/spikehome }
       # A2: plugin add 非交互装正样本
-      - run: HOME=/tmp/spikehome opencode plugin add opencode-loop-recover 2>&1 | tee add.log
+      - run: export PATH="$HOME/.opencode/bin:$PATH" && HOME=/tmp/spikehome opencode plugin add opencode-loop-recover 2>&1 | tee add.log
       - run: cat add.log
       # A1/A3: server 能否无头起 + 有无激活信号
       - run: HOME=/tmp/spikehome timeout 30 opencode plugin list 2>&1 | tee list.log || true
       # A2-neg: file:// 负样本
-      - run: HOME=/tmp/spikehome opencode plugin add file://$PWD/test/fixtures/broken-plugin 2>&1 | tee bad.log || true
+      - run: export PATH="$HOME/.opencode/bin:$PATH" && HOME=/tmp/spikehome opencode plugin add file://$PWD/test/fixtures/broken-plugin 2>&1 | tee bad.log || true
       - run: cat list.log bad.log
