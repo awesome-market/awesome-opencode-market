@@ -157,19 +157,21 @@ steps:
   - 装 v2：npm i -g @opencode/cli          # ← 实测唯一正解：官方脚本/bun 都装 v1.19.5
     # 实证：opencode-ai 包装的是 v1（CLI 语义不同会把参数当包名装）；v2 是 @opencode/cli。
     # bun 会拦 postinstall（"postinstall script was not run"），npm 放行——故用 npm 装宿主
-  - 隔离用 XDG_CONFIG_HOME（不带真实凭据）   # ← HOME 不够：add 实际写 ~/.config/opencode/
+  - 隔离用 XDG_CONFIG_HOME+XDG_DATA_HOME+XDG_CACHE_HOME 三件套（不带真实凭据）
+    # 实证：不设 XDG 时 add 写真实 ~/.config/opencode/；设了才进隔离目录
   - opencode plugin add opencode-loop-recover   # 正样本（已实证成功）
-  - 启动 opencode server，抓 canary 信号          # ← 不是"看日志"这么虚
-  - opencode plugin add nonexistent-pkg-xyz     # 负样本：file:// 不支持，用假名/git specifier
-  - 断言：正→pass + 负→fail + 日志可诊断
+  - opencode run "hi"（模型挂了无所谓，server 启动即加载插件）
+  - grep $XDG_DATA_HOME/opencode/log/opencode.log → 'msg="loading plugin" id=<name>'  # ← 激活信号实证位
+  - opencode plugin add nonexistent-pkg-xyz     # 负样本：file:// 不支持，NpmInstallFailedError+404 可断言
+  - 断言：正→loading 行出现 + 负→fail + 日志可诊断
 ```
 
-**canary 信号怎么拿（spike 的核心不确定项，三选一实测出哪个可靠就用哪个）**：
-- a) 插件 setup() 里写一行固定 marker 到 stderr/日志——用我们自己的 loop-recover 加一个 `OPENCODE_PLUGIN_LOADED` 打印（最可靠，但要插件配合）
-- b) `opencode plugin list` / `plugin check` 输出里能不能看到激活状态（不依赖插件配合，通用）
-- c) 起一个需要插件 hook 的 session 看 hook 有没有被调（最强证据但最重）
-
-先在本机跑通（opencode 已装、正负样本都在手里）再上 CI——本地迭代比 CI roundtrip 快一个量级。
+**canary 信号（已实测定案，本地 oh-my-opencode 实证）**：
+- 信号在**日志文件** `$XDG_DATA_HOME/opencode/log/opencode.log`：`msg="loading plugin" id=<name> entrypoint=<path>`（role=server）
+- `--print-logs` 在 run 模式不转发 server 日志——**必须读文件不是 stdout**
+- 排除项：`plugin list` 不读全局 config；`serve` 干等无插件行
+- 负信号格式：WARN `configured plugin path must be a directory`
+- 插件落盘位：`$XDG_CACHE_HOME/opencode/npm/<pkg>@latest/<ts>/node_modules/`
 
 **通过标准**：正样本能稳定产生可断言的激活信号 + 负样本 fail + 日志可诊断。
 **当前判定**：P0 通过——Level A 可达：canary=`opencode run` 后 grep 日志文件 `loading plugin id=<name>`（本地 oh-my-opencode 实证）。CI 侧仅需确认无模型时 run 仍能走到插件加载（大概率是，server 先加载插件再做模型解析）。
@@ -265,7 +267,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 - **测试覆盖率必须 ≥90%**——vitest `--coverage` 硬门槛写进 CI：`lines/functions/branches/statements ≥ 90`，不达标 fail 合入；只有 workflow glue（yml、发布脚本）豁免，业务代码全算基数
 - **所有功能带单测**——vitest，规则/解析/schema/搜索全覆盖
 - **真实样本回归**：fixtures 存已知坏包（缺 main、.ts 入口、含 postinstall、混淆、字面 IP），断言 findings 命中
-- **负样本管线测试**：verify 断言 fail 而非 false-pass——`test/fixtures/broken-plugin` 为本地坏件，走 `file://` 协议喂给 verify，**不用为测试专门发 npm 包**
+- **负样本管线测试**：verify 断言 fail 而非 false-pass——`plugin add` 不支持 file://（A2 实证），负样本用假 npm 名（`NpmInstallFailedError`+404）或 git specifier 坏包；scan 层 fixture 仍用本地 tarball/包目录（scan 不经 opencode）
 - verify 链路本身只能 CI 侧验证（本机不跑陌生装测）——本地单测覆盖到 scan/fetch/schema，verify 的行为验证放在 workflow 自测 job
 - **无 mock 原则**：扫描用真 tarball fixture，装测用真 CI job
 - **CI 自检**：workflow 里 lint+typecheck+test 三关
