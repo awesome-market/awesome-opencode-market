@@ -14,7 +14,8 @@ jobs:
       - run: npm ci
       - name: extract candidate + static scan
         id: scan
-        env: { ISSUE_BODY: ${{ github.event.issue.body }} }
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           PKG=$(echo "$ISSUE_BODY" | grep -oE '[a-zA-Z0-9@/_.-]+' | grep -m1 -E '^(@[a-z0-9-]+/)?[a-z0-9-]+$' || true)
           echo "pkg=$PKG" >> "$GITHUB_OUTPUT"
