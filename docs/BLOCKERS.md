@@ -24,3 +24,18 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 ## Spike #3 发现
 - 官方安装脚本 `opencode.ai/install` 默认也装 **v1.19.5**——v2 是独立轨道
 - 下一步试 `npm i -g @opencode/cli`（npm 默认放行 postinstall，bun 才拦）
+
+## Spike #4（run 41347715406）——P0 基本判定通过
+
+✅ **A1**：`plugin add` 无 provider/auth 也能跑（v2 装好即用）
+✅ **A2**：`plugin add` 非交互可用；但 **file:// 不支持**——"must be an npm registry package or Git specifier"。负样本改用假 npm 名或 git 源
+✅ **A4**：`@opencode/plugin` 确认
+✅ **A5**：bun 默认拦 postinstall（`@opencode/cli` 在 bun 下装失败实证）——npm i -g 才放行
+✅ **A6（新增）**：v2 正确装法 = `npm i -g @opencode/cli`（v2.2.5）；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5
+
+🟡 **残留**：
+- `plugin list` 报 "No plugins found" 但 add 明明成功——add 写到 `~/.config/opencode/opencode.json`，说明隔离要用 `XDG_CONFIG_HOME` 不是 `HOME`（下一轮验证）
+- 真激活信号：add 只写 config+装包，"插件是否真被加载"还需 server 启动观测——canary 路径 b/c 待验
+- file:// 不支持 → 负样本 fixture 策略改：用不存在的 npm 名 / git specifier 或本地起 registry stub
+
+**P0 初步结论：可行**——v2 在 CI 能装、能 add 插件、无需凭据；剩余是信号细节不是可行性问题。
