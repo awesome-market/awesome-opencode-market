@@ -33,12 +33,12 @@ export default Plugin.define({
       id: 'market',
       region: 'side' as const,
       list: () => [{ id: 'market', title: 'Market' } as never],
-      render: () => MarketView(api),
+      render: () => MarketView({ api }),
     }))
     ctx.add(SettingsPage, () => ({
       id: 'market',
       title: 'Market',
-      render: () => MarketView(api),
+      render: () => MarketView({ api }),
     }))
     ctx.add(Command, () => ({
       id: 'open-market',
