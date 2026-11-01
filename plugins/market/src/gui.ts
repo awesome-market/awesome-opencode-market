@@ -56,18 +56,7 @@ export default Plugin.define({
   /** Main-process entry: real network lives here. */
   main(ctx) {
     ctx.provide(Market, {
-      // SPIKE: stub data first — proves Ipc connect independent of fetch-in-main
-      index: () => Promise.resolve({
-        version: '1', generatedAt: 'stub', categories: {},
-        plugins: [
-          { name: 'ipc-stub-verified', slug: 's/a', type: 'plugin',
-            verification: { status: 'verified' }, capabilities: { redFlags: [], findings: [], scannedAt: 't' },
-            description: { en: 'ipc channel works' } } as unknown as MarketEntry,
-          { name: 'ipc-stub-flagged', slug: 's/b', type: 'plugin',
-            verification: { status: 'skipped' }, capabilities: { redFlags: ['x'], findings: [], scannedAt: 't' },
-            description: { en: 'if you see this, fetch-in-main is the bug' } } as unknown as MarketEntry,
-        ],
-      }),
+      index: () => fetchIndex() as Promise<MarketIndex>,
     })
   },
 })
