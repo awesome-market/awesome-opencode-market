@@ -20,9 +20,16 @@ export const DEFAULT_INDEX_URL =
   'https://terry2010.github.io/opencode-market-spike/index.json'
 
 export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
-  return (await res.json()) as MarketIndex
+  // timeout guard — a sandboxed webview fetch that never settles must surface as an error
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), 10_000)
+  try {
+    const res = await fetch(url, { signal: ctrl.signal })
+    if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
+    return (await res.json()) as MarketIndex
+  } finally {
+    clearTimeout(t)
+  }
 }
 
 /** Sorted rows for UI views (verified first, then unverified, redFlag last). */
