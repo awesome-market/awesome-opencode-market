@@ -1,8 +1,7 @@
 name: spike-verify
 on:
-  workflow_dispatch:
   push:
-    paths: [.github/workflows/spike.yml]
+  workflow_dispatch:
 permissions: {}
 jobs:
   spike:
@@ -23,7 +22,8 @@ jobs:
       - run: echo "=== config dir ===" && find /tmp/spikehome -type f && cat "$XDG_CONFIG_HOME/opencode/opencode.json" || true
       # A3: plugin list 是否显示已装插件（隔离语义验证）
       - run: opencode plugin list 2>&1 | tee list.log
-      - run: grep -q "loop-recover" list.log && echo "LIST-SHOWS-PLUGIN: yes" || echo "LIST-SHOWS-PLUGIN: no"
+      - run: |
+          grep -q "loop-recover" list.log && echo "LIST-SHOWS-PLUGIN yes" || echo "LIST-SHOWS-PLUGIN no"
       # 负样本：假 npm 名应 fail
       - run: opencode plugin add nonexistent-pkg-zzz-404 2>&1 | tee bad.log; echo "exit=$?"
       - run: cat bad.log
