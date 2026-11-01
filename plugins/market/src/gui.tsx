@@ -70,7 +70,7 @@ export default Plugin.define({
 export function MarketView(props: { api: Api }) {
   const timeout = <T,>(p: Promise<T>) => Promise.race([
     p,
-    new Promise<T>((_, rj) => setTimeout(() => rj(new Error('ipc timeout 8s — main never answered')), 8000)),
+    new Promise<T>((_, rj) => setTimeout(() => rj(new Error('ipc timeout 8s - main never answered')), 8000)),
   ])
   const [idx] = createResource(() => timeout(props.api.index()).then(
     (i) => ({ ok: true as const, i }),
@@ -79,20 +79,21 @@ export function MarketView(props: { api: Api }) {
   return (
     <div style={{ padding: '12px', 'overflow-y': 'auto', height: '100%' }} data-scrollable>
       <h3 style={{ margin: '0 0 8px' }}>opencode market</h3>
-      <Show when={idx.error} fallback={<Show when={idx()} fallback={<p>loading…</p>}>
+      <Show when={idx.error} fallback={
+        <Show when={idx()} fallback={<p>loading…</p>}>
+          {(r) => (
+            <Show when={r().ok} fallback={<p style={{ color: '#c66' }}>fetch failed: {(r() as {err: string}).err}</p>}>
+              <p style={{ opacity: 0.6, 'font-size': '12px' }}>
+                {(r() as {i: MarketIndex}).i.plugins.length} entries · not affiliated · findings ≠ proof of safety
+              </p>
+              <For each={rows((r() as {i: MarketIndex}).i.plugins)}>
+                {(e) => <EntryRow e={e} />}
+              </For>
+            </Show>
+          )}
+        </Show>
+      }>
         {(err) => <p style={{ color: '#c66' }}>resource error: {String(err())}</p>}
-      </Show>
-      <Show when={idx()}>
-        {(r) => (
-          <Show when={r().ok} fallback={<p style={{ color: '#c66' }}>fetch failed: {(r() as {err: string}).err}</p>}>
-            <p style={{ opacity: 0.6, 'font-size': '12px' }}>
-              {(r() as {i: MarketIndex}).i.plugins.length} entries · not affiliated · findings ≠ proof of safety
-            </p>
-            <For each={rows((r() as {i: MarketIndex}).i.plugins)}>
-              {(e) => <EntryRow e={e} />}
-            </For>
-          </Show>
-        )}
       </Show>
     </div>
   )
