@@ -57,8 +57,9 @@ function readLog(home: string): string {
 
 /** The A3-verified canary: `msg="loading plugin" id=<name>` in the log file. */
 export function loadedSignal(logText: string, name: string): boolean {
-  return logText.includes(`msg="loading plugin" id=${name}`) ||
-    new RegExp(`loading plugin" id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(logText)
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`loading plugin"\\s+id=${esc}`).test(logText) ||
+    logText.includes(`loading plugin id=${name}`)
 }
 
 export async function verifyPackage(
