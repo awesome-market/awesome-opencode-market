@@ -29,7 +29,10 @@
 │   2. fetch      — 元数据 + tarball 下载                   │
 │   3. scan       — 静态扫描（不执行代码）                  │
 │   4. verify     — 沙箱装测（见 §4 P0 gate）               │
-│   5. publish    — 生成 index.json → commit 到 catalog 分支 │
+│   5. publish    — 先 checkout catalog 分支旧索引做基        │
+│                     底，逐条 merge（条目未变则保留旧的      │
+│                     验证/扫描结果 = 增量缓存载体）→          │
+│                   生成新 index.json → commit 到 catalog 分支 │
 │                   （索引 diff 历史 = 公开审计轨迹 +         │
 │                    自带仓库活性，化解定时workflow 60天禁用）│
 │                   → 防损闸：新索引为空拒发（dsh-market      │
@@ -79,6 +82,11 @@
       "description": { "en": "...", "zh": "..." },
       "category": ["safety", "context"],   // 功能分类，多个按序
       "license": "MIT",
+      "deprecated": false,                  // 弃用标记（dsh-market 同款）
+      "replacement": null,                  // 弃用时建议替代条目名
+      "firstSeenAt": "2026-10-15T00:00:00Z",// 首次收录时间（≠创建时间，"new this week" 依赖它）
+      "latestVersion": "0.3.4",
+      "publishedAt": "2026-10-28T00:00:00Z",// 最新版发布时间（将来 minimumReleaseAge/更新提示的原料）
       "metrics": {
         "stars": 12,
         "npmDownloads30d": 1039,            // 字段名如实，不冒充"装机量"
@@ -180,6 +188,8 @@ steps:
 
 npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 opencode 就算"：
 
+**来源可审计**：每条候选记录本轮发现渠道（keyword/topic/code-search/topic-list），写进条目 `discoveredVia`——索引可信度的一部分是"你从哪来"可追溯。
+
 **准入（满足其一即候选）**：
 - npm 包：`keywords` 含 opencode-plugin **且** package.json/入口文件存在插件证据（`exports`/`main` 指向 v2 `{ id, setup }` 形态入口、或 README 声明 `opencode.json` `plugin` 安装方式）——**证据信号不只看 keyword，爬虫要实际拉取 package.json 和入口文件**
 - GitHub 仓库：根目录或 `.opencode/plugins/` 下有 v2 `{ id, setup }` 入口文件、或 `opencode.json` 引用了该包
@@ -198,6 +208,22 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 **身份去重**（同一插件多渠道发布时）：
 - 规范身份 = GitHub repo URL；npm 包名作为别名挂在 `source.id`
 - npm↔repo 映射：优先 package.json `repository` 字段，其次 README 链接，再次同名启发式（需人工白名单确认，防误并）
+
+---
+
+## 4.6 索引演进、slug 与作者契约
+
+**schema 演进策略**：`version` 只升不回头；**字段只加不改不删**——消费端（站/MCP/官方 source）不许因新字段崩；破坏性变更必须 bump `version` 并保留旧版索引一份（`index.v1.json` 并存一个周期）。
+
+**slug 规范**（URL 稳定是资产）：`owner/repo`；monorepo 子包 → `owner/repo--<subpath 转 -`>`（dsh-market `slugOf` 同款）；无 repo 的 npm-only → `@scope/name` 原样。slug 一生成即不可变，改名只加 `aliases` 数组。
+
+**作者契约**（插件作者怎么配合目录）：
+- 兼容声明：`package.json` 写 `engines.opencode: ">=2.0.0"` 或 peerDep `@opencode/plugin` 范围
+- 可选元数据：`icon` / `screenshots` / 自述分类建议（目录侧保留最终决定权）
+- 过验证：无 postinstall 等高危脚本 → 自动装测；有则进人工队列
+- 条目元数据约定文件（可选）：仓库根放 `.opencode-market.json` 声明 category/description 补充——目录爬虫读到即采用，缺失也不影响收录
+
+**README**：仓库根需 `README.md`（项目自述+索引地址+方法论一页）——对外第一张脸，随 P1 一起交付。
 
 ---
 

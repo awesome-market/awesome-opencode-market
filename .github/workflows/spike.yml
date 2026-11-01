@@ -5,17 +5,27 @@ jobs:
   spike:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      XDG_CONFIG_HOME: /tmp/spikehome/.config
+      XDG_DATA_HOME: /tmp/spikehome/.local/share
+      XDG_CACHE_HOME: /tmp/spikehome/.cache
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
       - run: npm i -g @opencode/cli && opencode --version
-      - run: mkdir -p "$SPIKE_HOME/.config/opencode"
-        env: { SPIKE_HOME: /tmp/spikehome }
-      # A2: plugin add 非交互装正样本
-      - run: HOME=/tmp/spikehome opencode plugin add opencode-loop-recover 2>&1 | tee add.log
-      - run: cat add.log
-      # A1/A3: server 能否无头起 + 有无激活信号
-      - run: HOME=/tmp/spikehome timeout 30 opencode plugin list 2>&1 | tee list.log || true
-      # A2-neg: file:// 负样本
-      - run: HOME=/tmp/spikehome opencode plugin add file://$PWD/test/fixtures/broken-plugin 2>&1 | tee bad.log || true
-      - run: cat list.log bad.log
+      - run: mkdir -p "$XDG_CONFIG_HOME" && ls -la /tmp/spikehome
+      # A2: add 正样本 → 配置应落在 XDG 隔离目录
+      - run: opencode plugin add opencode-loop-recover 2>&1 | tee add.log
+      - run: echo "=== config dir ===" && find /tmp/spikehome -type f && cat "$XDG_CONFIG_HOME/opencode/opencode.json" || true
+      # A3: plugin list 是否显示已装插件（隔离语义验证）
+      - run: opencode plugin list 2>&1 | tee list.log
+      - run: grep -q "loop-recover" list.log && echo "LIST-SHOWS-PLUGIN: yes" || echo "LIST-SHOWS-PLUGIN: no"
+      # 负样本：假 npm 名应 fail
+      - run: opencode plugin add nonexistent-pkg-zzz-404 2>&1 | tee bad.log; echo "exit=$?"
+      - run: cat bad.log
+      # A1/A3 核心：无头起 server，--print-logs 抓插件加载信号（无 provider key）
+      - run: timeout 30 opencode serve --port 4099 --print-logs 2>&1 | tee server.log || true
+      - run: |
+          echo "=== server log plugin lines ==="
+          grep -iE "plugin|loop-recover|load|activat" server.log | head -30 || echo "no plugin lines"
