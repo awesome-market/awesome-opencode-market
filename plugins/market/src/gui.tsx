@@ -49,6 +49,9 @@ export default Plugin.define({
   },
   /** Main-process entry: real network lives here. */
   main(ctx) {
+    // BISECT: if main runs, Extensions shows this error; silent → main never invoked
+    throw new Error('opencode-market main entry ran')
+    // eslint-disable-next-line no-unreachable
     ctx.provide(Market, {
       // SPIKE: stub data first — proves Ipc connect independent of fetch-in-main
       index: () => Promise.resolve({
