@@ -24,7 +24,8 @@ jobs:
               p.verification.status === "unverified" && !(p.capabilities.redFlags||[]).length
             ).map(p => p.name)
             const shards = []
-            for (let i = 0; i < cap.length; i += 12) shards.push(todo.slice(i, i + 50))
+            const cap = todo.slice(0, 48)
+            for (let i = 0; i < cap.length; i += 12) shards.push(cap.slice(i, i + 12))
             console.log("todo:", todo.length, "shards:", shards.length)
             shards.forEach((s, i) => fs.writeFileSync(`/tmp/shard-${i}.json`, JSON.stringify(s)))
             fs.appendFileSync(process.env.GITHUB_OUTPUT,
