@@ -254,9 +254,9 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 |---|---|---|---|
 | **P0 spike** | ~~CI 里 headless opencode 装/验正负样本~~ **✅ 已完成**（6 轮：5×CI+1×本地实锤） | 全过：v2 装法/XDG 隔离/正负样本/canary 判据全部钉死。**结论：Level A 可达**（激活信号在 opencode.log 实证） | — |
 | **P1** | repo 骨架（ts+vitest）+ discover（npm keyword+GH topic 去水）+ fetch + scan 规则集 + index.json schema + Pages 发布 | `index.json` 上线，≥50 条真实收录，扫描字段正确区分 scanned/not | ~1.5 周 |
-| **P2** | verify 矩阵 job（隔离/超时/日志抓取）+ 结果入索引 | 全量条目有 verification.status，失败条带日志 | ~1-2 周 |
+| **P2** | verify 矩阵 job（plan→50包/片×8 verify job `permissions:{}`→merge `contents:write`）+ dummy-provider canary | 全量条目有 verification.status | 🔄 CI 首跑中 |
 | **P3** | Astro 收录站（列表/搜索/详情/风险标记/about） | 上线可浏览，诚实文案过审 | ~1-2 周 |
-| **P4** | 投稿审核 workflow（PR→CI→AI 诊断→人终审） | 模拟 PR 走通全链 | 后置 |
+| **P4** | 投稿审核 workflow（issue→CI 扫描→报告评论→人终审） | ✅ 真验（issue #1/#2：正样本/不存在/编辑重投三环全通；findings 截断 30） | ✅ |
 | **P5** | **应用内市场插件（解冻，用户要求必做）**：opencode 插件，TUI + Desktop 双端 | 插件装得上、面板能开、搜到条目、装得动 | P2 数据面稳了之后；**P5a spike 先行**（见下） |
 
 **每阶段交付物即增量资产**：P1 后目录已上线，P2 后验证数据开始积累——**任何阶段停了，已交付部分仍有独立价值**。
