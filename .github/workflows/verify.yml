@@ -1,0 +1,84 @@
+name: verify
+on:
+  schedule: [{ cron: '47 4 * * *' }]
+  workflow_dispatch:
+concurrency: verify
+permissions: {}
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs: { shards: ${{ steps.shards.outputs.list }} }
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch origin catalog 2>/dev/null || true
+      - run: git show origin/catalog:index.json > /tmp/index.json 2>/dev/null || echo '{"plugins":[]}' > /tmp/index.json
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: shards
+        run: |
+          node -e '
+            const fs = require("fs")
+            const idx = JSON.parse(fs.readFileSync("/tmp/index.json","utf8"))
+            const todo = idx.plugins.filter(p =>
+              p.verification.status === "unverified" && !(p.capabilities.redFlags||[]).length
+            ).map(p => p.name)
+            const shards = []
+            for (let i = 0; i < todo.length; i += 50) shards.push(todo.slice(i, i + 50))
+            console.log("todo:", todo.length, "shards:", shards.length)
+            shards.forEach((s, i) => fs.writeFileSync(`/tmp/shard-${i}.json`, JSON.stringify(s)))
+            fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              `list=${JSON.stringify(shards.map((_, i) => i))}\n`)
+          '
+      - uses: actions/upload-artifact@v4
+        with: { name: shards, path: /tmp/shard-*.json, retention-days: 1 }
+
+  verify:
+    needs: plan
+    if: ${{ fromJSON(needs.plan.outputs.shards) != '[]' && fromJSON(needs.plan.outputs.shards) != 'null' }}
+    strategy:
+      fail-fast: false
+      matrix: { shard: ${{ fromJSON(needs.plan.outputs.shards) }} }
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm i -g @opencode/cli && opencode --version   # A6-verified v2 install
+      - uses: actions/download-artifact@v4
+        with: { name: shards, path: /tmp }
+      - name: verify shard
+        env:
+          XDG_CONFIG_HOME: /tmp/vhome/.config
+          XDG_DATA_HOME: /tmp/vhome/data
+          XDG_CACHE_HOME: /tmp/vhome/cache
+        run: npx tsx pipeline/verify/verify.ts /tmp/shard-${{ matrix.shard }}.json /tmp/results-${{ matrix.shard }}.json
+      - uses: actions/upload-artifact@v4
+        with: { name: results-${{ matrix.shard }}, path: /tmp/results-${{ matrix.shard }}.json, retention-days: 7 }
+
+  merge:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions: { contents: write }    # only job that writes — never executes untrusted code
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
+      - run: git fetch origin catalog && git show origin/catalog:index.json > /tmp/index.json
+      - run: npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
+      - name: commit to catalog
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        run: |
+          git config user.email "market-bot@users.noreply.github.com"
+          git config user.name "market-bot"
+          git checkout -B catalog
+          cp /tmp/index.new.json index.json
+          git add index.json
+          git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+          git push origin catalog
