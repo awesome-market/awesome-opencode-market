@@ -24,7 +24,7 @@ jobs:
               p.verification.status === "unverified" && !(p.capabilities.redFlags||[]).length
             ).map(p => p.name)
             const shards = []
-            for (let i = 0; i < todo.length; i += 50) shards.push(todo.slice(i, i + 50))
+            for (let i = 0; i < todo.length; i += 12) shards.push(todo.slice(i, i + 50))
             console.log("todo:", todo.length, "shards:", shards.length)
             shards.forEach((s, i) => fs.writeFileSync(`/tmp/shard-${i}.json`, JSON.stringify(s)))
             fs.appendFileSync(process.env.GITHUB_OUTPUT,
@@ -40,7 +40,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       - uses: actions/checkout@v4

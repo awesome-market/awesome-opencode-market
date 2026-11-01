@@ -69,7 +69,7 @@ export async function verifyPackage(
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
   writeDummyProvider(home)
   const env = xdgEnv(home)
-  const timeout = opts.timeoutMs ?? 120_000
+  const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
 
   // install (plugin add writes config + fetches package)
