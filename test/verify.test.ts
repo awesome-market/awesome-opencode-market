@@ -96,7 +96,7 @@ describe('verifyPackage (injected exec)', () => {
     const home = vHome()
     const fake = (async (_c: string, args: string[]) => {
       if (args[0] === '--version') return { stdout: 'opencode v2.2.5', stderr: '' }
-      if (args[1] === 'serve') throw new Error('no model') // tolerated
+      if (args[0] === '-c') throw new Error('serve boot failed') // tolerated
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
     const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake })

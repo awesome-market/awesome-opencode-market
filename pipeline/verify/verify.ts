@@ -84,13 +84,26 @@ export async function verifyPackage(
     }
   }
 
-  // activation: `serve` loads plugins at boot — no provider needed, no service
-  // machinery (`run`'s spawned `serve --service` hangs in CI). serve never exits
-  // on its own, so the exec timeout-kill is the expected end state.
+  // activation: plugins load lazily on first API request (evidenced by
+  // http.span on `loading plugin` log lines), so: boot `serve` in background,
+  // wait for its listening+password lines, hit /api/plugin + /api/session to
+  // force the load, then kill. No provider needed; `run`'s service machinery
+  // hangs in CI so it isn't used.
+  const boot = [
+    `opencode serve --port 0 > serve.out 2>&1 &`,
+    `SPID=$!`,
+    `for i in $(seq 1 30); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done`,
+    `PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1)`,
+    `PW=$(sed -n 's/server password //p' serve.out | head -1)`,
+    `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/plugin"`,
+    `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/session"`,
+    `sleep 1`,
+    `kill $SPID 2>/dev/null; true`,
+  ].join('\n')
   try {
-    await run('opencode', ['serve', '--port', '0'], { env, timeout: 15_000 })
+    await run('sh', ['-c', boot], { env, cwd: home, timeout: 25_000 })
   } catch {
-    // timeout kill is expected — plugins already logged their load lines
+    // boot/curl failure still leaves whatever log was written — the canary decides
   }
   const log = readLog(home)
   const ok = loadedSignal(log, name)
