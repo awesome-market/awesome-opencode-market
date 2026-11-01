@@ -172,7 +172,7 @@ steps:
 先在本机跑通（opencode 已装、正负样本都在手里）再上 CI——本地迭代比 CI roundtrip 快一个量级。
 
 **通过标准**：正样本能稳定产生可断言的激活信号 + 负样本 fail + 日志可诊断。
-**当前判定**：P0 实质通过——add 无凭据可用已实证；残留仅"add≠激活"的信号钉死（XDG_CONFIG_HOME + server 启动观测），属实现细节非可行性。
+**当前判定**：P0 通过——落 Level B：canary=add 退出0 + config 含包名 + 包落盘；激活级验证（level: load）P2 用免费模型探路，探不通就停 install 级。
 **降级预案**：Level B（只验证 install 成功，不验证激活）→ 标 `level: install`；Level C（纯静态目录）→ 项目按约定重评。
 
 正式验证设计：
@@ -249,7 +249,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 | 阶段 | 内容 | 验收 | 估时 |
 |---|---|---|---|
-| **P0 spike** | spike.yml：CI 里 headless opencode 装/验正负样本 | 正 pass + 负 fail + 日志可读。**不过即停** | 0.5-1 天 |
+| **P0 spike** | ~~CI 里 headless opencode 装/验正负样本~~ **✅ 已完成**（5 轮，run 41348320405） | 全过：v2 装法/XDG 隔离/正负样本/canary 判据全部钉死。**结论：Level B 保底可行** | — |
 | **P1** | repo 骨架（ts+vitest）+ discover（npm keyword+GH topic 去水）+ fetch + scan 规则集 + index.json schema + Pages 发布 | `index.json` 上线，≥50 条真实收录，扫描字段正确区分 scanned/not | ~1.5 周 |
 | **P2** | verify 矩阵 job（隔离/超时/日志抓取）+ 结果入索引 | 全量条目有 verification.status，失败条带日志 | ~1-2 周 |
 | **P3** | Astro 收录站（列表/搜索/详情/风险标记/about） | 上线可浏览，诚实文案过审 | ~1-2 周 |
@@ -297,12 +297,12 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 ## 11. 卡点清单（所有已知阻塞点，按阶段列）
 
-### A. P0 硬卡点（spike 已验证，2026-11-01，run 41347715406）
+### A. P0 硬卡点（spike 5 轮全部验证完，2026-11-01，run 41348320405）
 | # | 卡点 | 判定 | 证据 |
 |---|---|---|---|
 | A1 | 无头环境需 provider/auth | ✅ **解** | CI 里 `plugin add` 无凭据直接成功——插件管理不需要模型/auth |
-| A2 | `plugin add` 行为 | ✅ **解** | 非交互可用；但 **`file://` 不支持**（"must be an npm registry package or Git specifier"）——负样本改用假 npm 名/git specifier |
-| A3 | canary 激活信号 | 🟡 **半解** | `plugin list` 子命令存在（v2）；但 add ≠ 激活，真加载证明需 server 启动观测（待补一轮）。隔离须用 `XDG_CONFIG_HOME` 不是 `HOME`（add 实际写到 `~/.config/opencode/`） |
+| A2 | `plugin add` 行为 | ✅ **解** | 非交互可用；但 **`file://` 不支持**（"must be an npm registry package or Git specifier"）——负样本用假 npm 名（`NpmInstallFailedError`+404 可断言） |
+| A3 | canary 激活信号 | ✅ **解（有结论）** | 主机侧**无现成激活信号**：`plugin list` 不读全局 config（装后仍报 none），`serve --print-logs` 无插件行（懒加载）。**canary=组合判据**：add 退出0 + opencode.json 含包名 + 包目录落盘（level: install）；真激活需 `opencode run` 真 session → P2 用 zen 免费模型探路或停 install 级。隔离用 `XDG_CONFIG_HOME` 非 `HOME`（实证） |
 | A4 | SDK 包名 | ✅ **解** | `@opencode/plugin`（loop-recover peerDep 实证） |
 | A5 | bun postinstall | ✅ **解** | bun 默认拦生命周期脚本（`@opencode/cli` 装失败实证）；npm 放行——**verify 用 npm 装宿主时高危件 `skipped` 规则仍必须** |
 | A6 | CI 装 v2 的方法 | ✅ **解** | **`npm i -g @opencode/cli` = v2.2.5 唯一正解**；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5 |
