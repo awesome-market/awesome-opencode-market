@@ -1,28 +1,37 @@
 /**
- * GUI entry — exports["./gui-experimental"], evaluated by desktop windows.
- * Real implementation per packages/plugin/src/gui/registries.ts Panel contract.
+ * GUI entry — exports["./gui-experimental"], evaluated by desktop windows + main process.
+ * Data path: window ctx.main(Market) → main ctx.provide impl → fetchIndex (main has network).
  * Whitelist: only solid-js, @opencode/*, effect, @opencode/client requireable.
  */
-import { Plugin, Panel, Command, SettingsPage } from '@opencode/plugin/gui'
+import { Plugin, Panel, Command, SettingsPage, Ipc } from '@opencode/plugin/gui'
+import { Schema } from 'effect'
 import { createResource, For, Show } from 'solid-js'
-import { fetchIndex, rows, type MarketEntry } from './catalog.js'
+import { fetchIndex, rows, type MarketEntry, type MarketIndex } from './catalog.js'
+
+/** Contract: window calls index(), main process serves it. */
+const Market = Ipc.define({
+  id: 'opencode-market',
+  methods: {
+    index: { output: Schema.Unknown },
+  },
+})
+
+type Api = { index(): Promise<MarketIndex> }
 
 export default Plugin.define({
   setup(ctx) {
-    // Side-region panel tab
+    const api = ctx.main(Market) as unknown as Api
     ctx.add(Panel, () => ({
       id: 'market',
       region: 'side' as const,
       list: () => [{ id: 'market', title: 'Market' } as never],
-      render: () => MarketView(),
+      render: () => MarketView(api),
     }))
-    // Settings sidebar nav page — the left-list entry the user asked for
     ctx.add(SettingsPage, () => ({
       id: 'market',
       title: 'Market',
-      render: () => MarketView(),
+      render: () => MarketView(api),
     }))
-    // Command palette + /market slash command
     ctx.add(Command, () => ({
       id: 'open-market',
       title: 'Open Market',
@@ -30,11 +39,17 @@ export default Plugin.define({
       run: () => {},
     }))
   },
+  /** Main-process entry: real network lives here. */
+  main(ctx) {
+    ctx.provide(Market, {
+      index: () => fetchIndex() as Promise<MarketIndex>,
+    })
+  },
 })
 
-/** The market list view — verified first, red-flagged last, honest status per row. */
-export function MarketView() {
-  const [idx] = createResource(() => fetchIndex().then(
+/** The market list view — data via Ipc, honest status per row. */
+export function MarketView(props: { api: Api }) {
+  const [idx] = createResource(() => props.api.index().then(
     (i) => ({ ok: true as const, i }),
     (e: unknown) => ({ ok: false as const, err: String(e) }),
   ))
@@ -45,9 +60,9 @@ export function MarketView() {
         {(r) => (
           <Show when={r().ok} fallback={<p style={{ color: '#c66' }}>fetch failed: {(r() as {err: string}).err}</p>}>
             <p style={{ opacity: 0.6, 'font-size': '12px' }}>
-              {(r() as {i: {plugins: MarketEntry[]}}).i.plugins.length} entries · not affiliated · findings ≠ proof of safety
+              {(r() as {i: MarketIndex}).i.plugins.length} entries · not affiliated · findings ≠ proof of safety
             </p>
-            <For each={rows((r() as {i: {plugins: MarketEntry[]}}).i.plugins)}>
+            <For each={rows((r() as {i: MarketIndex}).i.plugins)}>
               {(e) => <EntryRow e={e} />}
             </For>
           </Show>
