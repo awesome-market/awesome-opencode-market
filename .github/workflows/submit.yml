@@ -1,0 +1,32 @@
+name: submission-review
+on:
+  issues: { types: [opened, edited] }
+permissions: {}
+jobs:
+  review:
+    if: contains(github.event.issue.labels.*.name || 'submission', 'submission') || startsWith(github.event.issue.title, '[submit]')
+    runs-on: ubuntu-latest
+    permissions: { issues: write }     # comments only; pipeline runs in this job but nothing executes plugin code
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: extract candidate + static scan
+        id: scan
+        env: { ISSUE_BODY: ${{ github.event.issue.body }} }
+        run: |
+          PKG=$(echo "$ISSUE_BODY" | grep -oE '[a-zA-Z0-9@/_.-]+' | grep -m1 -E '^(@[a-z0-9-]+/)?[a-z0-9-]+$' || true)
+          echo "pkg=$PKG" >> "$GITHUB_OUTPUT"
+          test -n "$PKG" || exit 1
+          npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
+      - name: post review comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## Automated review\n\n${fs.readFileSync('/tmp/review.md','utf8')}\n\n_Human maintainer makes the final call._`
+            })

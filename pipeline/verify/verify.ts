@@ -85,10 +85,10 @@ async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
 }
 
 /** Shard driver: verify a slice of names, write results JSON. */
-export async function verifyShard(names: string[], outPath: string): Promise<VerifyResult[]> {
+export async function verifyShard(names: string[], outPath: string, opts: { execFn?: ExecFn } = {}): Promise<VerifyResult[]> {
   const results: VerifyResult[] = []
   for (const n of names) {
-    results.push(await verifyPackage(n))
+    results.push(await verifyPackage(n, opts))
     console.log(`verify ${n}: ${results.at(-1)!.status}`)
   }
   mkdirSync(join(outPath, '..'), { recursive: true })
