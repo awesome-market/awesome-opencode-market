@@ -66,7 +66,7 @@ jobs:
   merge:
     needs: verify
     runs-on: ubuntu-latest
-    permissions: { contents: write }    # only job that writes — never executes untrusted code
+    permissions: { contents: write, pages: write, id-token: write }    # only job that writes — never executes untrusted code
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,3 +87,9 @@ jobs:
           git add index.json
           git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
           git push origin catalog
+      - name: rebuild Pages site
+        run: npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: /tmp/site }
+      - uses: actions/deploy-pages@v4
+        continue-on-error: true
