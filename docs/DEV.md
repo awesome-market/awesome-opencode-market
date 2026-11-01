@@ -297,7 +297,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 **P5 形态（upstream 源码实证，2026-11-02）**：
 - **TUI 端**：`@opencode/plugin/tui` — `context.ts` 暴露 panel(`ui.panel.open`)/dialog/command palette/slash 命令/keymap/toast。形态：`/market` 命令 + 面板浏览/搜索 index.json + 选中即 `opencode plugin add`
 - **Desktop 端**：`@opencode/plugin/gui` — 完整 SolidJS 组件面，`registries.ts` 有 PanelTab/`session.panel` 菜单/server 菜单/commands/MobileView；宿主加载插件包 `./gui-experimental` 入口；样板：`packages/plugin-browser`
-- **P5a spike（先行验证项）**：①第三方 `plugin add` 装的包能否被桌面宿主加载 `./gui-experimental`（AGENTS.md 注明 "built-ins 是主要用户"，第三方 GUI 加载未实证）②SolidJS+vite 构建链跑通 ③TUI panel 渲染最小 demo。spike 不过 → TUI-only 降级（TUI 面已实证存在）
+- **P5a spike（先行验证项）**：①~~第三方 GUI 加载~~ ✅ 已实证（2026-11-02 源码链路确认：`plugin add` 装的包带 `exports["./gui-experimental"]` → core 解析→service 下发→app evaluatePluginBundle；白名单 require：solid-js/@opencode-*/effect/client，其余依赖须打进 bundle）②SolidJS+vite 单文件构建链跑通 ③面板最小 demo 真机渲染。不过 → TUI-only 降级
 - **风险**：两个 SDK 都是 v2 实验面（`./gui-experimental` 命名自带警告），跟随上游变动——P5 代码与 SDK 版本探测解耦（C4 同款处理）
 - 不做遥测（信任原则，沿用 dsh-market "No telemetry"）
 - 不做付费层（占位期不考虑）
@@ -338,7 +338,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | D1 | quarantine 积压无人兜底 → 合法件永 pending | 申诉通道（issue 模板）+ 每月人工清队 |
 | D2 | AI 诊断需 LLM API key（P4 才引入 secret） | key 只进 P4 job，verify job 永无 secret。**本地开发端点**：`http://localhost:8001`，key `sk-omlx-IwR34vV1H4dzFvIX0EA510Ra`，模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（仅本地可达，用户授权记录；CI 无法访问，上线需另配托管 key） |
 | D3 | 官方市场（dobord PR）落地时点未知 | P5 已解冻（用户裁定必做）；catalog 按 source 格式设计，官方落地时可转为其数据源而非废弃 |
-| D5 | GUI SDK `./gui-experimental` 第三方加载未实证 | P5a spike 先验：装一个最小 GUI 插件包看宿主是否加载；不过则 TUI-only |
+| D5 | ~~GUI SDK 第三方加载~~ ✅ 已实证可行 | 剩风险：`experimental` 面随上游变 + 依赖必须全打进 bundle（白名单 require） |
 | D4 | spam/恶意投稿 | P4 才开投稿；此前目录全由爬虫决定 |
 
 ### E. 信任卡点
