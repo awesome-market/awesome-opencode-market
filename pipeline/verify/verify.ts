@@ -68,7 +68,6 @@ export async function verifyPackage(
 ): Promise<VerifyResult> {
   const run = opts.execFn ?? exec
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
-  writeDummyProvider(home)
   const env = xdgEnv(home)
   const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
@@ -85,11 +84,13 @@ export async function verifyPackage(
     }
   }
 
-  // activation: run spins up the server which loads plugins at boot (A3 evidence)
+  // activation: `serve` loads plugins at boot — no provider needed, no service
+  // machinery (`run`'s spawned `serve --service` hangs in CI). serve never exits
+  // on its own, so the exec timeout-kill is the expected end state.
   try {
-    await run('opencode', ['run', 'hi'], { env, timeout })
+    await run('opencode', ['serve', '--port', '0'], { env, timeout: 15_000 })
   } catch {
-    // model failure is fine — plugin loading happens before model resolution
+    // timeout kill is expected — plugins already logged their load lines
   }
   const log = readLog(home)
   const ok = loadedSignal(log, name)
