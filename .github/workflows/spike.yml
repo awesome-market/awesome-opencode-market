@@ -27,16 +27,11 @@ jobs:
       # 负样本：假 npm 名应 fail
       - run: opencode plugin add nonexistent-pkg-zzz-404 2>&1 | tee bad.log; echo "exit=$?"
       - run: cat bad.log
-      # A1/A3 核心：后台起 serve → curl API 端点拿插件可见性（比日志更客观的信号）
+      # A3 真激活：免费模型起 session——plugin 在 session 创建时懒加载
+      - run: opencode models 2>&1 | tee models.log | head -30
+      - run: timeout 90 opencode run "say ok" --print-logs --log-level debug 2>&1 | tee run.log || true
       - run: |
-          opencode serve --hostname 127.0.0.1 --port 4099 --print-logs --log-level debug > server.log 2>&1 &
-          sleep 5
-          PW=$(grep "server password" server.log | awk '{print $NF}')
-          echo "password=$PW"
-          for ep in plugin config app project provider experimental; do
-            echo "=== GET /$ep ==="
-            curl -s -u "opencode:$PW" "http://127.0.0.1:4099/$ep" | head -c 2000; echo
-          done
-          echo "=== plugin log lines ==="
-          grep -iE "plugin|loop.recover|loaded|init" server.log | head -30 || true
-          kill %1 2>/dev/null || true
+          echo "=== run log plugin lines ==="
+          grep -iE "plugin|loop.recover|load|setup|activat|error|panic" run.log | head -40 || echo "no plugin lines"
+          echo "=== run log tail ==="
+          tail -20 run.log
