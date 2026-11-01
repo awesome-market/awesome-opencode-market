@@ -49,9 +49,6 @@ export default Plugin.define({
   },
   /** Main-process entry: real network lives here. */
   main(ctx) {
-    // BISECT: if main runs, Extensions shows this error; silent → main never invoked
-    throw new Error('opencode-market main entry ran')
-    // eslint-disable-next-line no-unreachable
     ctx.provide(Market, {
       // SPIKE: stub data first — proves Ipc connect independent of fetch-in-main
       index: () => Promise.resolve({
@@ -71,7 +68,11 @@ export default Plugin.define({
 
 /** The market list view — data via Ipc, honest status per row. */
 export function MarketView(props: { api: Api }) {
-  const [idx] = createResource(() => props.api.index().then(
+  const timeout = <T,>(p: Promise<T>) => Promise.race([
+    p,
+    new Promise<T>((_, rj) => setTimeout(() => rj(new Error('ipc timeout 8s — main never answered')), 8000)),
+  ])
+  const [idx] = createResource(() => timeout(props.api.index()).then(
     (i) => ({ ok: true as const, i }),
     (e: unknown) => ({ ok: false as const, err: String(e) }),
   ))
