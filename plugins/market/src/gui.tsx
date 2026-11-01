@@ -3,18 +3,31 @@
  * Real implementation per packages/plugin/src/gui/registries.ts Panel contract.
  * Whitelist: only solid-js, @opencode/*, effect, @opencode/client requireable.
  */
-import { Plugin, Panel } from '@opencode/plugin/gui'
+import { Plugin, Panel, Command, SettingsPage } from '@opencode/plugin/gui'
 import { createResource, For, Show } from 'solid-js'
 import { fetchIndex, rows, type MarketEntry } from './catalog.js'
 
 export default Plugin.define({
   setup(ctx) {
+    // Side-region panel tab
     ctx.add(Panel, () => ({
       id: 'market',
       region: 'side' as const,
-      // one launcher tab; content fetched lazily in render
-      list: () => [{ id: 'market', title: 'Market', transient: true } as never],
+      list: () => [{ id: 'market', title: 'Market' } as never],
       render: () => MarketView(),
+    }))
+    // Settings sidebar nav page — the left-list entry the user asked for
+    ctx.add(SettingsPage, () => ({
+      id: 'market',
+      title: 'Market',
+      render: () => MarketView(),
+    }))
+    // Command palette + /market slash command
+    ctx.add(Command, () => ({
+      id: 'open-market',
+      title: 'Open Market',
+      slash: { name: 'market' },
+      run: () => {},
     }))
   },
 })
