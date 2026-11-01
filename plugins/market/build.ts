@@ -3,7 +3,7 @@ import { build } from 'esbuild'
 
 const shared = {
   bundle: true,
-  external: ['@opencode/plugin', '@opencode/plugin/*'],
+  external: ['@opencode/plugin', '@opencode/plugin/*', 'effect', 'effect/*', 'solid-js', 'solid-js/*'],
   target: 'es2022',
   logLevel: 'warning' as const,
 }
