@@ -132,7 +132,8 @@ RULES = [
 ```
 
 - `findings` 全量写入 index（透明）
-- `redFlags` = `high` 级命中 —— **两个后果：①强制进入人工队列（quarantine），无论 AI 说什么；②verify 阶段标记 `skipped`，不在沙箱执行**——postinstall 这类包在 CI 里"装"就等于跑，高危件连 beacon 的机会都不给
+- `redFlags` = `high` 级命中 —— **两个后果：①强制进入人工队列（quarantine），无论 AI 说什么；②verify 阶段标记 `skipped`，不在沙箱执行**——高危件连 beacon 的机会都不给
+- **spike 实证修正**：opencode v2 经 bun 安装，**bun 默认不执行 postinstall/prepare（需显式 trust）**——spike run 41347310893 实锤 `@opencode/cli's postinstall script was not run`。含义两面：①CI 装恶意包时 postinstall 大概率根本跑不起来，攻击面比预想小；②"装测成功"≠"生命周期脚本跑过"，verify 语义要分清"包文件落盘"和"脚本执行"两层
 - `medium` 级件照常执行（runner 是一次性的、无凭据，装它就是采信号）
 - 单元测试：每规则正反样本 + 已知恶意样本 fixture（仿 ua-parser-js 投毒模式）
 
@@ -145,7 +146,9 @@ RULES = [
 ```yaml
 # .github/workflows/spike.yml（一次性验证脚本，非正式管线）
 steps:
-  - 安装 bun + opencode（CI 环境，无头）
+  - 安装 bun + v2 CLI：bun install -g @opencode/cli && bun pm trust @opencode/cli
+    # 实证：opencode-ai 包装的是 v1（CLI 语义不同会把参数当包名装）；
+    # v2 是 @opencode/cli，且 postinstall 必须显式 trust 否则报 "postinstall script was not run"
   - 造隔离 HOME（不带真实凭据）
   - opencode plugin add opencode-loop-recover   # 正样本（canary 见下）
   - 启动 opencode server，抓 canary 信号          # ← 不是"看日志"这么虚

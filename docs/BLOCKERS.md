@@ -20,3 +20,7 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 | **新 A6** | **CI 装对 v2 二进制** | 🔴→需修 | `opencode-ai`=v1；v2 需 `@opencode/cli` 或官方安装脚本 |
 
 下一步：改用 v2 安装方式重跑 spike。
+
+## Spike #3 发现
+- 官方安装脚本 `opencode.ai/install` 默认也装 **v1.19.5**——v2 是独立轨道
+- 下一步试 `npm i -g @opencode/cli`（npm 默认放行 postinstall，bun 才拦）
