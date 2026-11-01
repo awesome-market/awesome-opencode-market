@@ -39,3 +39,17 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 - file:// 不支持 → 负样本 fixture 策略改：用不存在的 npm 名 / git specifier 或本地起 registry stub
 
 **P0 初步结论：可行**——v2 在 CI 能装、能 add 插件、无需凭据；剩余是信号细节不是可行性问题。
+
+## Spike #5（run 41348320405）——A3 最终判定
+
+✅ **XDG_CONFIG_HOME 隔离确认**：add 写 `/tmp/spikehome/.config/opencode/opencode.json`，`plugin` 数组含包名——隔离装测的正确姿势
+✅ **负样本信号**：假 npm 名 → `NpmInstallFailedError` + 404 cause，文本可断言
+❌ **plugin list ≠ canary**：config 里明明有插件，`plugin list` 仍报 "No plugins found"——它读的不是全局 config（可能只读项目级/已加载集合），不能当激活信号
+❌ **serve 日志无插件行**：`opencode serve --print-logs` 30s 无任何 plugin/loop-recover 日志行——插件加载不在 server 启动路径上（可能在 session 懒加载，或需 --standalone）
+
+**A3 最终结论**：主机侧**没有现成的"插件已激活"可观测信号**。可行 canary 收敛为组合判据：
+1. `plugin add` 退出 0 + opencode.json 出现包名（装测通过）
+2. 插件包目录落盘存在（XDG_DATA_HOME 下 node_modules）
+3. 真激活需 `opencode run` 触发 session——但需 provider key → 留 P2 用免费模型（opencode zen/free tier）或降级 `level: install`
+
+**P0 正式判定：通过（Level B 保底可用，激活级验证待 P2 探路）**
