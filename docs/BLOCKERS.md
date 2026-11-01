@@ -53,3 +53,16 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 3. 真激活需 `opencode run` 触发 session——但需 provider key → 留 P2 用免费模型（opencode zen/free tier）或降级 `level: install`
 
 **P0 正式判定：通过（Level B 保底可用，激活级验证待 P2 探路）**
+
+## Spike #6 本地验证（opencode v2.2.5 + oh-my-opencode 实装）——A3 真信号找到
+
+**激活信号存在且可靠**：`$XDG_DATA_HOME/opencode/log/opencode.log` 里
+`msg="loading plugin" id=<name> entrypoint=<path>`（role=server）
+- `opencode run` 起嵌入式 server → server 启动即加载插件（非 session 懒加载，之前判断有误）
+- oh-my-opencode 实装后第一次 run 即出现 loading 行 ✅
+- 负信号也有现成格式：WARN `configured plugin path must be a directory`
+- 插件落盘：`$XDG_CACHE_HOME/opencode/npm/<pkg>@latest/<ts>/node_modules/`
+- --print-logs 在 run 模式不转发 server 日志 → 必须读日志文件
+
+**canary 最终方案（Level A）**：run 任意 prompt → grep 日志文件 `loading plugin id=<name>`
+残留小问题：CI 无模型时 run 是否走到插件加载后才失败——大概率是（加载在模型解析前），一轮 CI 收尾确认。
