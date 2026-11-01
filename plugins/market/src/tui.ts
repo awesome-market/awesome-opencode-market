@@ -21,7 +21,7 @@ export default Plugin.define({
               const lines = idx.plugins
                 .slice(0, 50)
                 .map(p => `${p.name.padEnd(36)} ${p.verification?.status ?? '?'}  ${p.description?.en ?? ''}`)
-              ctx.ui.dialog.show({ title: `Market (${idx.plugins.length})`, body: lines.join('\n') })
+              ctx.ui.dialog.alert({ title: `Market (${idx.plugins.length})`, message: lines.join('\n') })
             })
             .catch(e => ctx.ui.toast(`market fetch failed: ${(e as Error).message}`))
         },
