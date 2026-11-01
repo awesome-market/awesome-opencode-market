@@ -24,3 +24,10 @@ export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> 
   if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
   return (await res.json()) as MarketIndex
 }
+
+/** Sorted rows for UI views (verified first, then unverified, redFlag last). */
+export function rows(entries: MarketEntry[]): MarketEntry[] {
+  const rank = (e: MarketEntry) =>
+    e.verification?.status === 'verified' ? 0 : e.capabilities?.redFlags.length ? 2 : 1
+  return [...entries].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+}

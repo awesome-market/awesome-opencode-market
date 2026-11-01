@@ -19,7 +19,7 @@ await Promise.all([
     format: 'cjs',
     platform: 'browser',
     jsx: 'automatic',
-    jsxImportSource: 'solid-js',
+    jsxImportSource: 'solid-js/h',
   }),
 ])
 console.log('dist/: server.js tui.js gui.cjs')

@@ -3,8 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { fetchIndex, DEFAULT_INDEX_URL } from '../src/catalog.ts'
-import { rows } from '../src/gui.tsx'
+import { fetchIndex, rows, DEFAULT_INDEX_URL } from '../src/catalog.ts'
 import type { MarketEntry } from '../src/catalog.ts'
 
 const dir = dirname(fileURLToPath(import.meta.url))
