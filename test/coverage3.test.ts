@@ -71,3 +71,24 @@ describe('coverage round 3', () => {
     expect(list).toContain('verification failed')
   })
 })
+
+describe('coverage round 4', () => {
+  it('verifyPackage: version parse failure → unknown', async () => {
+    const fake = (async (_c: string, args: string[]) => {
+      if (args[0] === '--version') throw new Error('no oc')
+      if (args[1] === 'add') throw Object.assign(new Error('x'), { stderr: 'err' })
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const { verifyPackage } = await import('../pipeline/verify/verify.ts')
+    const r = await verifyPackage('x', { execFn: fake })
+    expect(r.opencodeVersion).toBe('unknown')
+  })
+  it('writeDummyProvider writes parseable config', async () => {
+    const { writeDummyProvider } = await import('../pipeline/verify/verify.ts')
+    const home = mkdtempSync(join(tmpdir(), 'dp-'))
+    writeDummyProvider(home)
+    const cfg = JSON.parse(readFileSync(join(home, '.config', 'opencode', 'opencode.json'), 'utf8'))
+    expect(cfg.provider.fake.options.baseURL).toContain('127.0.0.1')
+    expect(cfg.model).toBe('fake/fake-model')
+  })
+})

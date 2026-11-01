@@ -27,6 +27,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json
+      - name: stage Pages site
+        run: npx tsx pipeline/site/build.ts /tmp/index.json /tmp/site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: /tmp/site }
       - name: commit index to catalog branch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,9 +42,5 @@ jobs:
           git add index.json
           git commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
           git push origin catalog
-      - name: stage Pages site
-        run: npx tsx pipeline/site/build.ts /tmp/index.json /tmp/site
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
         id: deploy

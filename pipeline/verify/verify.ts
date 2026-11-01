@@ -1,6 +1,6 @@
 /** Install/activation verification (DEV §4). Runs in a permissions:{} CI job — never sees secrets. */
 import { execFile } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -28,6 +28,28 @@ export function xdgEnv(home: string): NodeJS.ProcessEnv {
   }
 }
 
+/**
+ * Dummy provider config — `opencode run` exits before server start when no provider
+ * exists (end-to-end finding, see BLOCKERS.md). A dead localhost endpoint gets past
+ * the provider check; plugin loading happens before the model call so no AI is used.
+ */
+export function writeDummyProvider(home: string): void {
+  const dir = join(home, '.config', 'opencode')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'opencode.json'), JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    provider: {
+      fake: {
+        npm: '@ai-sdk/openai-compatible',
+        name: 'fake',
+        options: { baseURL: 'http://127.0.0.1:9/v1' },
+        models: { 'fake-model': { name: 'fake' } },
+      },
+    },
+    model: 'fake/fake-model',
+  }))
+}
+
 function readLog(home: string): string {
   const p = join(home, 'data', LOG_REL)
   return existsSync(p) ? readFileSync(p, 'utf8') : ''
@@ -45,6 +67,7 @@ export async function verifyPackage(
 ): Promise<VerifyResult> {
   const run = opts.execFn ?? exec
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
+  writeDummyProvider(home)
   const env = xdgEnv(home)
   const timeout = opts.timeoutMs ?? 120_000
   const tail = (s: string) => s.slice(-2048)
