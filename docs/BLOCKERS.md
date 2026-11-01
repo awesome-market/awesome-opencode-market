@@ -66,3 +66,9 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 
 **canary 最终方案（Level A）**：run 任意 prompt → grep 日志文件 `loading plugin id=<name>`
 残留小问题：CI 无模型时 run 是否走到插件加载后才失败——大概率是（加载在模型解析前），一轮 CI 收尾确认。
+
+## 端到端实测发现（2026-11-02 本地全流程）
+- seed 入库链跑通：--seed 清单注入 + 爬取合并去重 → 39 条
+- 🔴 **verify canary 缺陷**：隔离 XDG env 里 `opencode run` 因无 provider 配置在 server 启动前退出 → 无 loading plugin 行 → 全量误报 failed。
+  修法候选：①隔离 env 配 opencode zen 免费模型 provider ②找不需要模型的激活触发点（plugin check/serve+请求）
+  → verify.yml 真跑结果将受同一问题影响，合并数据预期大量 failed 是误报，勿信

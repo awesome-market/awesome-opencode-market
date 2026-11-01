@@ -12,6 +12,7 @@ import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
 
 export interface RunOptions {
+  seedPath?: string | undefined
   oldIndexPath?: string | undefined
   outPath?: string | undefined
   ghToken?: string | undefined
@@ -34,11 +35,21 @@ export async function run(opts: RunOptions = {}) {
   const now = opts.now ?? new Date().toISOString()
   const old = loadOldIndex(opts.oldIndexPath)
 
-  // 1. discover
+  // 1. discover (+ optional seed file: one npm name or github:owner/repo per line)
   const [npmCands, ghCands] = await Promise.all([
     discoverNpm(undefined, { fetchFn: f }),
     discoverGithub(undefined, { token: opts.ghToken, fetchFn: f }),
   ])
+  if (opts.seedPath) {
+    const lines = readFileSync(opts.seedPath, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
+    for (const name of lines.filter(l => !l.startsWith('github:'))) {
+      if (!npmCands.has(name)) npmCands.set(name, {
+        name, version: '', description: '', keywords: [], repoUrl: null, publishedAt: null,
+        discoveredVia: ['submission' as const],
+      } as never)
+    }
+    console.log(`seed: ${lines.length} entries injected`)
+  }
   console.log(`discover: ${npmCands.size} npm + ${ghCands.size} github candidates`)
 
   // 2. cheap admission filters
@@ -143,6 +154,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ghToken: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN,
     outPath: arg('--out'),
     oldIndexPath: arg('--old'),
+    seedPath: arg('--seed'),
     ...(arg('--max') ? { maxEntries: Number(arg('--max')) } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }
