@@ -1,0 +1,28 @@
+{
+  "name": "opencode-market",
+  "version": "0.0.1",
+  "type": "module",
+  "license": "MIT",
+  "description": "Browse and install verified opencode plugins without leaving the app",
+  "exports": {
+    ".": "./dist/server.js",
+    "./server": "./dist/server.js",
+    "./tui": "./dist/tui.js",
+    "./gui-experimental": "./dist/gui.cjs"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsx build.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": "^2.2.5"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "^2.2.5",
+    "esbuild": "^0.25.0",
+    "solid-js": "^1.9.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
