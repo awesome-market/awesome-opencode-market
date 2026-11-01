@@ -34,20 +34,23 @@ export default Plugin.define({
 
 /** The market list view — verified first, red-flagged last, honest status per row. */
 export function MarketView() {
-  const [idx] = createResource(() => fetchIndex().catch(() => null))
+  const [idx] = createResource(() => fetchIndex().then(
+    (i) => ({ ok: true as const, i }),
+    (e: unknown) => ({ ok: false as const, err: String(e) }),
+  ))
   return (
     <div style={{ padding: '12px', 'overflow-y': 'auto', height: '100%' }} data-scrollable>
       <h3 style={{ margin: '0 0 8px' }}>opencode market</h3>
       <Show when={idx()} fallback={<p>loading…</p>}>
-        {(i) => (
-          <>
+        {(r) => (
+          <Show when={r().ok} fallback={<p style={{ color: '#c66' }}>fetch failed: {(r() as {err: string}).err}</p>}>
             <p style={{ opacity: 0.6, 'font-size': '12px' }}>
-              {i().plugins.length} entries · not affiliated · findings ≠ proof of safety
+              {(r() as {i: {plugins: MarketEntry[]}}).i.plugins.length} entries · not affiliated · findings ≠ proof of safety
             </p>
-            <For each={rows(i().plugins)}>
+            <For each={rows((r() as {i: {plugins: MarketEntry[]}}).i.plugins)}>
               {(e) => <EntryRow e={e} />}
             </For>
-          </>
+          </Show>
         )}
       </Show>
     </div>
