@@ -76,6 +76,7 @@
       "name": "opencode-loop-recover",
       "type": "plugin",                    // plugin|skill|agent|command|mcp|theme|bundle|rule
       "contains": ["skill"],                // bundle 类必填：包内装了什么（skill|mcp|command|agent|hook）
+      "discoveredVia": ["npm-keyword", "github-topic"],  // 发现渠道审计（§4.5 要求，schema 必须有）
       "source": { "kind": "npm",            // npm|github——GitHub-only 条目无 npm 字段
                   "id": "opencode-loop-recover",
                   "repo": "terry2010/opencode-loop-recover" },
@@ -128,7 +129,7 @@ tarball 解包 → 逐文件规则匹配。**只读不执行**。
 ```ts
 // 规则集（v1）
 RULES = [
-  { id: 'postinstall',     sev: 'high',   match: /"(pre|post)install"/ },
+  { id: 'postinstall',     sev: 'high',   match: /"(pre|post)?install"/ },  // 含裸 "install"（同族生命周期，之前漏了）
   { id: 'prepare-script',  sev: 'high',   match: /"prepare"\s*:/ },
   { id: 'network-call',    sev: 'medium', match: /fetch\(|http\.request|curl|wget|axios/ },
   { id: 'literal-ip',      sev: 'medium', match: /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/ },
@@ -141,7 +142,7 @@ RULES = [
 
 - `findings` 全量写入 index（透明）
 - `redFlags` = `high` 级命中 —— **两个后果：①强制进入人工队列（quarantine），无论 AI 说什么；②verify 阶段标记 `skipped`，不在沙箱执行**——高危件连 beacon 的机会都不给
-- **spike 实证修正**：opencode v2 经 bun 安装，**bun 默认不执行 postinstall/prepare（需显式 trust）**——spike run 41347310893 实锤 `@opencode/cli's postinstall script was not run`。含义两面：①CI 装恶意包时 postinstall 大概率根本跑不起来，攻击面比预想小；②"装测成功"≠"生命周期脚本跑过"，verify 语义要分清"包文件落盘"和"脚本执行"两层
+- **spike 实证**：bun 默认不执行 postinstall/prepare（需显式 trust）——run 41347310893 实锤 `@opencode/cli's postinstall script was not run`。**注意证据边界**：该实证是"我们用 bun 装 CLI"被拦，opencode 内部 `plugin add` 的装包引擎是否放行生命周期脚本**未单独验证**——所以高危件 `skipped` 规则继续有效，不因 bun 结论放松
 - `medium` 级件照常执行（runner 是一次性的、无凭据，装它就是采信号）
 - 单元测试：每规则正反样本 + 已知恶意样本 fixture（仿 ua-parser-js 投毒模式）
 
@@ -182,7 +183,7 @@ steps:
 - **高危件不执行**：scan 命中 redFlag → `status: skipped`（§3 已定，这里呼应）
 - **增量验证**（防全量重跑超时）：缓存 key = `name@version + opencodeVersion`，只有新版本或宿主升级才重验；全量重验只在缓存失效时发生
 - **matrix 分片**：GH matrix 上限 256 job，按 50 包/片分批串行；每片超时 5min/包
-- 抓 `opencode plugin check`（v2 自带）+ 启动日志双重信号；失败写 `logExcerpt`（≤2KB）+ `runUrl`
+- **激活信号取日志文件**（A3 定案）：`opencode run` 后 grep `$XDG_DATA_HOME/opencode/log/opencode.log` 的 `msg="loading plugin" id=<name>`；`plugin check` 只查更新不是激活信号，不用它；失败写 `logExcerpt`（≤2KB）+ `runUrl`
 
 ---
 
@@ -193,7 +194,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 **来源可审计**：每条候选记录本轮发现渠道（keyword/topic/code-search/topic-list），写进条目 `discoveredVia`——索引可信度的一部分是"你从哪来"可追溯。
 
 **准入（满足其一即候选）**：
-- npm 包：`keywords` 含 opencode-plugin **且** package.json/入口文件存在插件证据（`exports`/`main` 指向 v2 `{ id, setup }` 形态入口、或 README 声明 `opencode.json` `plugin` 安装方式）——**证据信号不只看 keyword，爬虫要实际拉取 package.json 和入口文件**
+- npm 包：`keywords` 命中可配置关键词集（`opencode-plugin`/`opencode`/`opencode-ai` 等，宁可宽收后面证据筛）**且** package.json/入口文件存在插件证据（`exports`/`main` 指向 v2 `{ id, setup }` 形态入口、或 README 声明 `opencode.json` `plugin` 安装方式）——**证据信号不只看 keyword，爬虫要实际拉取 package.json 和入口文件**
 - GitHub 仓库：根目录或 `.opencode/plugins/` 下有 v2 `{ id, setup }` 入口文件、或 `opencode.json` 引用了该包
 - skill 类：仓库含 `SKILL.md` 且 frontmatter `name`+`description` 合法（来源：GitHub topic `opencode-skill`/`agent-skills` + code search，注意 code search 限流见 §11-B2）
 - mcp 类：含 `.mcp.json` 且声明可解析；bundle 类：含 marketplace 清单
@@ -217,7 +218,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 **schema 演进策略**：`version` 只升不回头；**字段只加不改不删**——消费端（站/MCP/官方 source）不许因新字段崩；破坏性变更必须 bump `version` 并保留旧版索引一份（`index.v1.json` 并存一个周期）。
 
-**slug 规范**（URL 稳定是资产）：`owner/repo`；monorepo 子包 → `owner/repo--<subpath 转 -`>`（dsh-market `slugOf` 同款）；无 repo 的 npm-only → `@scope/name` 原样。slug 一生成即不可变，改名只加 `aliases` 数组。
+**slug 规范**（URL 稳定是资产）：`owner/repo`；monorepo 子包 → `owner/repo--<subpath 转 - 连字符>`（dsh-market `slugOf` 同款）；无 repo 的 npm-only → `@scope/name` 原样。slug 一生成即不可变，改名只加 `aliases` 数组。
 
 **作者契约**（插件作者怎么配合目录）：
 - 兼容声明：`package.json` 写 `engines.opencode: ">=2.0.0"` 或 peerDep `@opencode/plugin` 范围
@@ -251,7 +252,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 | 阶段 | 内容 | 验收 | 估时 |
 |---|---|---|---|
-| **P0 spike** | ~~CI 里 headless opencode 装/验正负样本~~ **✅ 已完成**（5 轮，run 41348320405） | 全过：v2 装法/XDG 隔离/正负样本/canary 判据全部钉死。**结论：Level B 保底可行** | — |
+| **P0 spike** | ~~CI 里 headless opencode 装/验正负样本~~ **✅ 已完成**（6 轮：5×CI+1×本地实锤） | 全过：v2 装法/XDG 隔离/正负样本/canary 判据全部钉死。**结论：Level A 可达**（激活信号在 opencode.log 实证） | — |
 | **P1** | repo 骨架（ts+vitest）+ discover（npm keyword+GH topic 去水）+ fetch + scan 规则集 + index.json schema + Pages 发布 | `index.json` 上线，≥50 条真实收录，扫描字段正确区分 scanned/not | ~1.5 周 |
 | **P2** | verify 矩阵 job（隔离/超时/日志抓取）+ 结果入索引 | 全量条目有 verification.status，失败条带日志 | ~1-2 周 |
 | **P3** | Astro 收录站（列表/搜索/详情/风险标记/about） | 上线可浏览，诚实文案过审 | ~1-2 周 |
@@ -299,7 +300,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 ## 11. 卡点清单（所有已知阻塞点，按阶段列）
 
-### A. P0 硬卡点（spike 5 轮全部验证完，2026-11-01，run 41348320405）
+### A. P0 硬卡点（spike 6 轮全部验证完：5×CI 至 run 41348320405 + 1×本地 oh-my-opencode 实锤）
 | # | 卡点 | 判定 | 证据 |
 |---|---|---|---|
 | A1 | 无头环境需 provider/auth | ✅ **解** | CI 里 `plugin add` 无凭据直接成功——插件管理不需要模型/auth |
@@ -351,11 +352,11 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 
 ## 12. 起步清单（下一步具体动作）
 
-1. `git init` + `.gitignore` + `package.json`（type:module, vitest）
-2. 目录骨架：`pipeline/{discover,fetch,scan,verify,publish}/`、`site/`、`test/fixtures/`、`.github/workflows/`
-3. **先写 spike.yml 推上去跑**——这是唯一硬门槛
-4. spike 通过后按 P1 顺序开工
+1. ~~`git init` + `.gitignore` + `package.json`~~ ✅ 已做（骨架+spike.yml 在 spike 仓库已验）
+2. ~~先写 spike.yml 推上去跑~~ ✅ **P0 已过**（6 轮，全卡点有结论）
+3. **进 P1**：把 spike 仓库骨架转正——ts+vitest 项目结构、coverage ≥90% 门槛写进 vitest.config + CI、然后开始 discover 模块
+4. P1 顺序：schema/types 先行 → discover（npm keyword+去水）→ fetch → scan 规则集 → index.json 生成 → Pages 发布
 
 ---
 
-*立项就绪。第一步 spike 是项目存续与否的判定门。*
+*P0 判定门已过（Level A 可达）。下一步 P1：骨架转正 + discover 模块。*
