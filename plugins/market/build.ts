@@ -14,7 +14,7 @@ await Promise.all([
   // GUI must be CJS text the host evaluates (host.ts: entry only accepted if .cjs/.js + CommonJS-evaluable)
   build({
     ...shared,
-    entryPoints: ['src/gui.tsx'],
+    entryPoints: ['src/gui.ts'],
     outfile: 'dist/gui.cjs',
     format: 'cjs',
     platform: 'browser',

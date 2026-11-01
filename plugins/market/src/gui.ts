@@ -5,7 +5,6 @@
  */
 import { Plugin, Panel, Command, SettingsPage, Ipc } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
-import { createResource, For, Show } from 'solid-js'
 import { fetchIndex, rows, type MarketEntry, type MarketIndex } from './catalog.js'
 
 /** Contract: window calls index(), main process serves it. */
@@ -73,40 +72,57 @@ export default Plugin.define({
   },
 })
 
-/** The market list view — reads prefetched snapshot (h-props are eager). */
+/** The market list view — DOM builder (whitelist has no jsx-runtime; h props are eager anyway). */
 export function MarketView(props: { api: Api }) {
   void props
+  const root = document.createElement('div')
+  root.style.cssText = 'padding:12px;overflow-y:auto;height:100%'
+  root.dataset.scrollable = ''
+  const h3 = document.createElement('h3')
+  h3.textContent = 'opencode market'
+  h3.style.margin = '0 0 8px'
+  root.appendChild(h3)
   const r = snapshot
-  return (
-    <div style={{ padding: '12px', 'overflow-y': 'auto', height: '100%' }} data-scrollable>
-      <h3 style={{ margin: '0 0 8px' }}>opencode market</h3>
-      {r === null
-        ? <p>loading… (revisit after data arrives)</p>
-        : !r.ok
-          ? <p style={{ color: '#c66' }}>fetch failed: {r.err}</p>
-          : <>
-              <p style={{ opacity: 0.6, 'font-size': '12px' }}>
-                {r.i.plugins.length} entries · not affiliated · findings ≠ proof of safety
-              </p>
-              <For each={rows(r.i.plugins)}>
-                {(e) => <EntryRow e={e} />}
-              </For>
-            </>}
-    </div>
-  )
+  if (r === null) {
+    const p = document.createElement('p')
+    p.textContent = 'loading… (revisit after data arrives)'
+    root.appendChild(p)
+    return root
+  }
+  if (!r.ok) {
+    const p = document.createElement('p')
+    p.style.color = '#c66'
+    p.textContent = `fetch failed: ${r.err}`
+    root.appendChild(p)
+    return root
+  }
+  const meta = document.createElement('p')
+  meta.style.cssText = 'opacity:.6;font-size:12px'
+  meta.textContent = `${r.i.plugins.length} entries · not affiliated · findings ≠ proof of safety`
+  root.appendChild(meta)
+  for (const e of rows(r.i.plugins)) root.appendChild(entryRow(e))
+  return root
 }
 
-function EntryRow(props: { e: MarketEntry }) {
-  const e = props.e
-  const flag = () => (e.capabilities?.redFlags.length ? '⚠' : '')
-  const v = () => e.verification?.status ?? 'unverified'
-  const color = () =>
-    v() === 'verified' ? '#4a4' : e.capabilities?.redFlags.length ? '#c66' : '#888'
-  return (
-    <div style={{ padding: '6px 0', 'border-bottom': '1px solid #3333', 'font-size': '13px' }}>
-      <b>{e.name}</b> {flag()} <span style={{ color: color(), 'font-size': '11px' }}>{v()}</span>
-      <div style={{ opacity: 0.7, 'font-size': '12px' }}>{e.description?.en ?? ''}</div>
-      <code style={{ 'font-size': '11px', opacity: 0.6 }}>opencode plugin add {e.name}</code>
-    </div>
-  )
+function entryRow(e: MarketEntry): HTMLElement {
+  const v = e.verification?.status ?? 'unverified'
+  const flag = e.capabilities?.redFlags.length ? ' ⚠' : ''
+  const color = v === 'verified' ? '#4a4' : e.capabilities?.redFlags.length ? '#c66' : '#888'
+  const div = document.createElement('div')
+  div.style.cssText = 'padding:6px 0;border-bottom:1px solid #3333;font-size:13px'
+  const b = document.createElement('b')
+  b.textContent = e.name + flag
+  const span = document.createElement('span')
+  span.style.cssText = `color:${color};font-size:11px;margin-left:6px`
+  span.textContent = v
+  const desc = document.createElement('div')
+  desc.style.cssText = 'opacity:.7;font-size:12px'
+  desc.textContent = e.description?.en ?? ''
+  const code = document.createElement('code')
+  code.style.cssText = 'font-size:11px;opacity:.6'
+  code.textContent = `opencode plugin add ${e.name}`
+  div.append(b, span, desc, code)
+  return div
 }
+
+
