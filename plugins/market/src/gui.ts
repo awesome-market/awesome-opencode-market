@@ -63,6 +63,7 @@ export default Plugin.define({
     const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
     const [favOnly, setFavOnly] = createSignal(false)
     const [groupFilter, setGroupFilter] = createSignal('')
+    const [typeFilter, setTypeFilter] = createSignal('all')
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const put = (patch: Partial<LocalState>) => {
@@ -87,7 +88,10 @@ export default Plugin.define({
     const filtered = () => {
       const all = data()?.plugins ?? []
       const c = cat(); const s = state()
+      const tf = typeFilter()
       let list = c ? all.filter(p => p.category?.includes(c)) : all
+      if (tf === 'skills') list = list.filter(p => p.contains?.includes('skill'))
+      if (tf === 'plugins') list = list.filter(p => !p.contains?.includes('skill'))
       if (favOnly()) list = list.filter(p => s.favorites[p.name])
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
