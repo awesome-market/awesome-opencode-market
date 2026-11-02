@@ -27,8 +27,8 @@ type Api = {
 type View = { kind: 'list' } | { kind: 'detail'; e: MarketEntry }
 const sorts = ['verified', 'downloads', 'stars', 'name'] as const
 
-export default (Plugin.define as any)('opencode-market', {
-  setup: (ctx: any) => {
+export default Plugin.define({
+  setup(ctx: any): any {
     let api: Api | null = null
     try { api = ctx.main(Market) as Api } catch { /* diagnosed below */ }
     if (!api?.index) return {}
