@@ -96,8 +96,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 /** HTTP skill catalog (opencode docs/skills): site/skills/index.json + per-skill files
  *  pulled from npm tarballs, so `skills: ["<site>/skills/"]` makes the whole
  *  catalog's skills loadable — files update whenever version bumps. */
-function buildSkillCatalog(index: any, outDir: string): void {
-  const skills = index.plugins.filter((p: any) => p.type === 'skill')
+export function buildSkillCatalog(index: CatalogIndex, outDir: string,
+  tarballOf: (name: string) => string | null =
+    (name) => { try { return execSync(`npm view "${name}" dist.tarball`, { encoding: 'utf8', timeout: 20_000 }).trim() || null } catch { return null } }): void {
+  const skills = index.plugins.filter((p) => p.type === 'skill')
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
   const entries: { name: string; version: string; files: string[] }[] = []
@@ -105,17 +107,17 @@ function buildSkillCatalog(index: any, outDir: string): void {
     const id = s.name.split('/').pop()!.replace(/^@/, '') || s.slug
     const dest = join(dir, id)
     try {
+      const tb = tarballOf(s.name)
+      if (!tb) continue
       const res = execSync(
-        `T=$(npm view "${s.name}" dist.tarball 2>/dev/null); [ -z "$T" ] && exit 2; ` +
-        `rm -rf "${dest}.tmp" && mkdir -p "${dest}.tmp" && curl -fsSL "$T" | tar xz -C "${dest}.tmp" 2>/dev/null; ` +
+        `rm -rf "${dest}.tmp" && mkdir -p "${dest}.tmp" && curl -fsSL "${tb.replace(/'/g, "'\''")}" | tar xz -C "${dest}.tmp" --strip-components=1 2>/dev/null; ` +
         `find "${dest}.tmp" -name 'SKILL.md' -o -name '*.md' | head -20`,
         { encoding: 'utf8', timeout: 30_000 })
-      const files = res.split('\n').filter(Boolean).map((f: string) => f.replace(`${dest}.tmp/`, ''))
+      const files = res.split('\n').filter(Boolean).map((f) => f.replace(`${dest}.tmp/`, ''))
       if (!files.length) continue
       rmSync(dest, { recursive: true, force: true })
       renameSync(`${dest}.tmp`, dest)
-      // strip tarball top-level (package/) from file list
-      const stripped = files.map((f: string) => f.replace(/^package\//, ''))
+      const stripped = files.map((f) => f.replace(/^package\//, ''))
       entries.push({ name: id, version: s.latestVersion ?? '1', files: stripped })
     } catch { /* tarball fetch failed — skip skill */ }
   }

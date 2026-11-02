@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { scanLabel, verifyLabel, buildSite, listPage, detailPage } from '../pipeline/site/build.ts'
@@ -58,3 +58,40 @@ describe('site honest labels', () => {
     expect(cat.skills).toHaveLength(0)   // npm view fails → skipped, no crash
     rmSync(out, { recursive: true, force: true })
   }, 60000)
+  it('buildSkillCatalog success path: extracts SKILL.md from real tgz', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { execSync } = await import('node:child_process')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# demo skill')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-real', type: 'skill', latestVersion: '2' })] }
+    buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills).toHaveLength(1)
+    expect(cat.skills[0].name).toBe('sk-real')
+    expect(cat.skills[0].files).toContain('SKILL.md')
+    expect(existsSync(join(out, 'skills', 'sk-real', 'SKILL.md'))).toBe(true)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+  it('buildSkillCatalog edge: slug fallback, version default, empty md skip', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { execSync } = await import('node:child_process')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    execSync(`cd "${src}" && tar czf empty.tgz package`)   // tarball with no .md
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    execSync(`cd "${src}" && tar czf ok.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: '', slug: 'fb-slug', type: 'skill', latestVersion: null }),   // id falls back to slug, version → '1'
+      mk({ name: 'sk-empty', type: 'skill' }),                                  // empty md → skipped
+    ] }
+    buildSkillCatalog(idx, out, (n) => n === 'sk-empty' ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}`)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills).toHaveLength(1)
+    expect(cat.skills[0].version).toBe('1')
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
