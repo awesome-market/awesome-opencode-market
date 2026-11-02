@@ -193,3 +193,13 @@ describe('catalog helpers', () => {
       expect(typeof t(k)).toBe('string'); expect(t(k).length).toBeGreaterThan(0)
     }
   })
+  it('categoriesOf classifier hits/miss + allCategories', async () => {
+    const { categoriesOf, allCategories } = await import('../src/catalog.ts')
+    const mk = (name: string, en = '', cat: string[] = []): MarketEntry => ({ name, slug: name, type: 'p', category: cat, description: { en } })
+    expect(categoriesOf(mk('x', '', ['显式']))).toEqual(['显式'])           // declared wins
+    expect(categoriesOf(mk('theme-packer', 'colors fonts'))).toEqual(['主题与外观'])
+    expect(categoriesOf(mk('token-usage', 'llm pricing'))).toContain('模型与接入')
+    expect(categoriesOf(mk('zzz', 'nothing matches'))).toEqual(['其他'])   // fallback
+    const all = allCategories([mk('a', 'git review'), mk('b', 'slack qq')])
+    expect(all).toContain('开发流程'); expect(all).toContain('集成与移动')
+  })
