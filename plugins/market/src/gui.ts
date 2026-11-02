@@ -110,7 +110,7 @@ export default Plugin.define({
     }
     const badge = (e: MarketEntry) => {
       const s = statusOf(e)
-      const b = el('span', 'margin-left:8px;font-size:11px;padding:1px 6px;border-radius:4px', s)
+      const b = el('span', 'margin-left:8px;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0', s)
       b.style.color = '#fff'
       b.style.background = s.startsWith(t('installed')) ? '#1a7' : s === t('verified') || s === 'verified' ? '#1a7' : s === 'failed' ? '#c33' : s === 'skipped' ? '#885' : '#666'
       return b
@@ -119,7 +119,7 @@ export default Plugin.define({
       const ver = installed()[e.name]
       const isSkill = e.contains?.includes('skill')
       const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
-      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#333;border:1px solid #555;border-radius:4px;padding:1px 8px', label) as HTMLButtonElement
+      const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
@@ -146,15 +146,20 @@ export default Plugin.define({
     const row = (e: MarketEntry) => {
       const d = el('div', 'padding:6px 2px;border-bottom:1px solid #ffffff14;cursor:pointer')
       d.onclick = () => setView({ kind: 'detail', e })
-      const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:center')
-      const star = el('span', 'cursor:pointer;margin-right:4px', state().favorites[e.name] ? '★' : '☆')
+      const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:flex-start;gap:6px')
+      const star = el('span', 'cursor:pointer;flex-shrink:0;line-height:1.4', state().favorites[e.name] ? '★' : '☆')
       star.style.color = '#da3'
       star.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); star.textContent = state().favorites[e.name] ? '★' : '☆' }
-      title.append(star, el('span', '', e.name), badge(e))
-      const btn = installBtn(e); btn.style.marginLeft = 'auto'
+      const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
+      nameBox.append(e.name, badge(e))
+      title.append(star, nameBox)
+      const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
-      meta.textContent = `v${e.latestVersion ?? '?'} · ↓${fmtN(e.metrics?.npmDownloads30d)} · ★${fmtN(e.metrics?.stars)}`
+      const dl = e.metrics?.npmDownloads30d, st = e.metrics?.stars
+      meta.textContent = [`v${e.latestVersion ?? '?'}`,
+        dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
+        .filter(Boolean).join(' · ')
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
       const tags = el('div', 'margin-top:6px;display:flex;gap:5px;flex-wrap:wrap')
       for (const ct of categoriesOf(e)) {
