@@ -1,45 +1,52 @@
-# opencode-market vs dsh-market 功能对比与缺口
+# opencode-market vs dsh-market 功能对比与缺口（实测版）
 
 > 2026-11-02 · dsh-market @ latest HEAD · 本项目 = `/Volumes/2t/code/opencode-market`
-> dsh-market 是成熟产品（收藏/分组/主题/备注全套本地状态 + 热挂载 + 错误诊断链），本项目刚走完"收录→验证→安装"主链。差距按"用户感知价值"排序。
+> ⚠️ 第一版错误已修：dsh `IMPROVEMENT-PLAN.md` 是**待办清单**不是功能清单——以下只列**代码实证存在**的能力。
 
-## 本项目独有的能力（dsh-market 没有）
+## 本项目独有（dsh-market 代码里没有的）
 
-| 能力 | 说明 |
+| 能力 | 实证 |
 |---|---|
-| **静态安全扫描** | 8 条规则扫 tarball（凭据读取/生命周期脚本/eval/外发 IP……），redFlag + findings 分级，写进目录元数据——dsh-market 是纯策展注册表，无自动扫描 |
-| **安装前真实验证** | 每包在隔离 XDG env 真装+真起 `serve`+curl API 触发懒加载，看 `loading plugin` 日志行；366/366 全量跑完（309 verified / 57 真 failed / 130 redFlag-skipped）——dsh-market 只有装后校验，没有目录级预验证 |
-| **权限隔离执行** | verify 分片 `permissions:{}` 跑不可信代码、merge 单点有写权——dsh-market 无此分层 |
-| **投稿自动化** | issue→静态扫描+证据报告→verdict→自动 label/close——dsh-market 投稿走人工审 registry PR |
-| **冷启动 discovery** | npm keyword + GitHub topic + awesome README→star 过滤三路自动入库 |
+| **静态安全扫描** | 8 条 tarball 规则（凭据/生命周期脚本/eval/外发 IP），redFlag+findings 进目录元数据。dsh `src/` 无 scan/security 模块，registry 是纯策展快照 |
+| **目录级预验证** | 366/366 隔离 env 真装真加载（serve+API 触发懒加载+`loading plugin` canary）。dsh 只有**装后**校验思路，目录发布前不验证 |
+| **权限隔离执行** | verify 分片 `permissions:{}` 跑不可信包、merge 单点写权 |
+| **投稿自动化** | issue→扫描+证据评论→verdict→自动 label/close。dsh 投稿是 registry PR 人工审 |
+| **冷启动 discovery** | npm keyword+GitHub topic+awesome README→star 三路自动入库。dsh registry 是手工 curated snapshot |
 
-## 缺口（dsh-market 有、我们没有）——按价值排序
+## dsh-market 实证有、我们没有的缺口
 
-| # | 缺口 | dsh-market 的做法 | 优先级 |
+| # | 缺口 | 实证位置 | 优先级 |
 |---|---|---|---|
-| 1 | **装后生效确认** | 装完读 `dsh.profile.bundles` 验证真生效，列出"装了但没生效的原因"（hot mount / 需重启 / build 脚本没放） | **P0**——我们现在装完只看到 "installed"，用户不知道要不要重启、装没装对 |
-| 2 | **安装进度+取消** | ndjson 结构化进度事件 + 取消按钮 + 阶段提示 | **P0**——现在 add 按钮转圈直到出结果，慢包像死了 |
-| 3 | **错误诊断链** | stderr 关键行解析 + 错误旁"导出日志"（脱敏） | **P0**——现在装失败只有按钮变红，没有原因 |
-| 4 | **构建脚本放行** | `allowBuilds` 一键批准+重试（pnpm 安全机制） | **P0**——opencode `plugin add` 也会撞 preinstall 拦截，现在没有出路 |
-| 5 | **收藏/分组/备注** | 三件本地状态都写 profile `state.json`，分组带批量开关 | **P1**——366 条目录逛起来的核心组织手段，我们没有 |
-| 6 | **主题支持** | 一键装+热切换+一组最多一个主题 | P1（opencode 主题机制还没验过） |
-| 7 | **更新链** | `name@latest` re-add + before/after 版本对比 + `minimumReleaseAge` 感知 | P1——现在装了就没法管更新 |
-| 8 | **假更新识别** | 明确告诉用户"上游 npm 没发新版"而不是静默成功 | P1（同上） |
-| 9 | **目录过期提示+手动刷新** | TTL 缓存+快照回退+页头"数据是 X 小时的" | P1——现在我们每次 fetch 不缓存，也无新鲜度标识 |
-| 10 | **i18n（en+zh）** | `site/locales.mjs` 全量双语 | P2 |
-| 11 | **npm CDN 分发目录** | index.json 挂 npm+jsdelivr，比 GitHub Pages 快且稳 | P2（我们现在只 Pages 单点） |
-| 12 | **monorepo subpath 解析** | 安装目标校验"这个包真的含插件入口"再装 | P2——我们 `plugin add` 成功≠插件可用，还没做入口预检 |
-| 13 | **注册表格式校验** | `validate-registry.mjs` schema gate | P2（我们有 zod schema 但无独立 validate 脚本） |
-| 14 | **e2e 宿主冒烟** | restart-smoke / install-e2e-host / check-web-auth-capture | P2——我们宿主侧只有手动真机验 |
-| 15 | **隐私页/健康检查** | privacy.en/zh + check-site-health | P3 |
-| 16 | **卸载/启用开关** | 分组开关+单插件 toggle | P3（opencode 插件管理机制待查） |
+| 1 | **收藏/分组/备注本地状态** | README：收藏书签+具名分组（批量开关）+自定义备注，写 profile `state.json`。我们 366 条目录无组织手段 | **P0** |
+| 2 | **安装进度+取消** | `/dsh-market/status` 轮询 ndjson 进度 + 取消按钮（plan 里标"已有"）。我们 add 按钮干转圈 | **P0** |
+| 3 | **错误日志导出（脱敏）** | `/dsh-market/logs` 导出 + `log-redaction.ts`。我们装失败只按钮变红 | **P0** |
+| 4 | **主题体系** | 一键装+热切换+一组一主题。opencode 主题机制未验 | P1 |
+| 5 | **更新路由** | `/dsh-market/update` re-add `name@latest`。我们装了没法更新 | P1 |
+| 6 | **目录 TTL 缓存+快照回退** | `registry.ts` 1h TTL + snapshot 兜底+新鲜度。我们每次全量 fetch | P1 |
+| 7 | **i18n（en+zh）** | `site/locales.mjs`。我们纯英文技术串 | P1 |
+| 8 | **npm CDN 分发** | index.json 挂 npm+jsdelivr（15s 源时限优化）。我们只 Pages | P2 |
+| 9 | **注册表格式校验** | `scripts/validate-registry.mjs` 独立 schema gate | P2 |
+| 10 | **e2e 宿主冒烟** | `restart-smoke`/`install-e2e-host`/`check-web-auth-capture` 脚本。我们宿主侧只手动验 | P2 |
+| 11 | **评论/隐私页/健康检查** | `comments.mjs`、privacy 双语、`check-site-health.mjs` | P3 |
+| 12 | **热挂载** | `src/hot.ts` hotMount 装完即生效不重启。opencode `plugin add` 后 server 插件需服务重启 | P1（宿主机制差异，查 opencode 是否有等价物） |
 
-## 产品哲学差距（AGENTS.md 那套）
+## 双方都没有（dsh 官方自己的 PLAN 里认账的缺口）
 
-dsh-market 的 AGENTS.md 是本项目的**产品规约**——"自然/好理解/面向普通用户"三原则 + 八条验收清单 + 真实犯过的错清单。我们当前市场 UI 的文案是纯技术串（`verified`/`skipped`/`redFlags`），没有翻译成人话、没有"所以呢→怎么办"的报错三件套、没有渐进披露（findings 默认展开）。**本项目没有自己的 AGENTS.md 产品约束**——照抄它那条框架是对的。
+这些是 dsh `IMPROVEMENT-PLAN.md` 自列的**待补**项，我们也缺——**不重复造轮子，可直接参考它的设计**：
+
+- **装后生效确认**（dsh P0-2：读 `bundles` 验证真生效+列出没生效的原因）——我们装完只显示 installed，连"要不要重启"都不说
+- **更新版本对比+假更新识别**（dsh P0-3：before/after 版本、minimumReleaseAge 导致的假更新）——我们没更新链自然也谈不上
+- **构建脚本放行 UI**（dsh P0-4：allowBuilds 一键批准+重试）——pnpm/preinstall 拦截撞上没有出路
+- **monorepo subpath/安装目标预检**（dsh P0-1：装之前先验证这个包真的含插件入口）——我们 `plugin add` 成功≠能用
+- **stderr 关键行解析**（dsh P1-5：错误码/关键行而不是 600 字符一坨）——我们日志原样甩
+
+## 产品哲学差距
+
+dsh `AGENTS.md` 是产品规约（自然/好理解/普通用户三原则+验收清单+真实犯过的错）。本项目 UI 文案是纯技术串，`verified/skipped/redFlags` 没人话翻译，报错没有"发生了啥→为啥→咋办"三件套。**本项目应有自己的 AGENTS.md**（可直接借用它的框架）。
 
 ## 结论
 
-- **安全验证链**：我们 > dsh-market（自动扫描+隔离执行+预验证是他们没有的深度）
-- **用户侧体验链**：dsh-market >> 我们（装后确认/进度/错误/收藏分组这些"用着爽"的东西我们基本没做）
-- **最值得先补的**：P0 四项（装后生效确认、进度、错误诊断、build 放行）——都是"装"这个核心动作的确定性保障，和我们 verify 管线的哲学一脉相承
+- **安全纵深**：我们 > dsh（自动扫描+隔离执行+预验证，他们没有）
+- **用户侧体验**：dsh >> 我们（本地状态/进度/更新/i18n/主题全套）
+- **共同短板**：装后生效确认、假更新、build 放行、安装目标预检——两家都没做，是插件市场普遍痛点的**真空区**，谁先做谁赢
+- **先补顺序**：P0 三件（本地状态、进度+取消、错误导出）是"用着爽"的地板；然后是"装后生效确认"这个两家共同缺口——和我们 verify 哲学一脉相承
