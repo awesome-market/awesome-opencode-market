@@ -253,7 +253,7 @@ export default Plugin.define({
       const tabs = el('div', 'display:flex;gap:2px;margin-bottom:10px')
       const TABS: [typeof tab extends () => infer V ? V : never, string][] = [
         ['discover', '发现'], ['plugins', '插件'], ['skills', 'skill'],
-        ['favorites', '收藏'], ['installed', '已安装'], ['advanced', '高级']]
+        ['favorites', '收藏'], ['installed', '已安装'], ['advanced', '设置']]
       for (const [id, label] of TABS) {
         const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
         const sync = () => { const on = tab() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
@@ -332,6 +332,7 @@ export default Plugin.define({
       // category chips row (dsh style)
       const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
       insert(chips, () => {
+        if (tab() === 'advanced') return []
         const pool = (data()?.plugins ?? []).filter(p =>
           tab() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
         const mk = (id: string, label: string) => {
@@ -401,6 +402,37 @@ export default Plugin.define({
       return root
     }
 
+    const settingsPanel = () => {
+      const root = el('div', 'padding:8px 12px;max-width:520px')
+      root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
+      const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', '收藏、分组、备注存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。')
+      root.appendChild(desc)
+      const status = el('div', 'font-size:11px;opacity:.6;margin-top:8px')
+      const exp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-right:8px', '导出备份') as HTMLButtonElement
+      exp.onclick = () => {
+        const blob = new Blob([JSON.stringify(state(), null, 2)], { type: 'application/json' })
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob); a.download = 'opencode-market-backup.json'; a.click()
+        status.textContent = '已导出 opencode-market-backup.json'
+      }
+      const ta = document.createElement('textarea')
+      ta.placeholder = '粘贴备份 JSON…'
+      ta.style.cssText = 'width:100%;height:80px;margin-top:8px;font-size:11px;box-sizing:border-box;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid rgba(128,128,128,.3);border-radius:6px;padding:6px'
+      const imp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '恢复') as HTMLButtonElement
+      imp.onclick = () => {
+        try {
+          const s = JSON.parse(ta.value)
+          if (typeof s !== 'object' || s === null) throw new Error('bad json')
+          put({ favorites: s.favorites ?? {}, groups: s.groups ?? {}, notes: s.notes ?? {} })
+          status.textContent = '已恢复'
+        } catch { status.textContent = '恢复失败：不是有效的备份 JSON' }
+      }
+      const clr = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(200,50,50,.5);border-radius:6px;background:transparent;color:#c55;margin-top:6px;margin-left:8px', '清空数据') as HTMLButtonElement
+      clr.onclick = () => { if (confirm('清空所有收藏/分组/备注？')) { put(EMPTY_STATE); status.textContent = '已清空' } }
+      root.append(exp, ta, imp, clr, status)
+      return root
+    }
+
     const mount = (parent: HTMLElement) => {
       const shell = el('div', 'overflow:auto;height:100%')
       const head = chrome()          // built ONCE — signal reads here don't get tracked
@@ -413,6 +445,7 @@ export default Plugin.define({
         if (err()) return el('div', 'padding:12px;color:#c66', `error: ${err()}`)
         if (!data()) return el('div', 'padding:12px;opacity:.6', t('loading'))
         const v = view()
+        if (tab() === 'advanced') return settingsPanel()
         const n = v.kind === 'detail' ? detailView(v.e) : listView()
         n.style.padding = '0 12px 12px'
         return n
