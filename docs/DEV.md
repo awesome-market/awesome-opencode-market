@@ -367,3 +367,15 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 ---
 
 *P0 判定门已过（Level A 可达）。下一步 P1：骨架转正 + discover 模块。*
+
+## 验收结果（2026-11-02 全绿）
+
+| 阶段 | 结果 |
+|---|---|
+| P1 管线 | 496 条目收录、index.json + 详情页 Pages 上线 |
+| P2 verify | **366/366 全量真验完成**：309 verified、57 failed（真失败=装不上/加载挂）、130 redFlag skipped；plan→8 分片（permissions:{}）→artifact→merge→catalog→site→Pages 全链实测通过 |
+| P3 站 | 列表+详情页，验证状态实时展示（serve+API 懒加载触发方案） |
+| P4 投稿链 | issue 开/改→自动 review 评论→重评，三场景真验 |
+| P5a 市场插件 | TUI `/market` + Desktop Market 面板双端真数据、搜索+安装 |
+
+verify 关键坑（见 BLOCKERS.md）：插件懒加载需 API 请求触发；run 的 service 派生在 CI 卡死换 serve；macOS 不吃 XDG；分片 96/8 片适配并发。
