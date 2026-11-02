@@ -36,6 +36,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
+          gh label create "submission:approved" --color 0e8a16 -d "review passed" --force 2>/dev/null || true
+          gh label create "submission:needs-work" --color d93f0b -d "red flags present" --force 2>/dev/null || true
+          gh label create "submission:invalid" --color 6e5494 -d "package not found" --force 2>/dev/null || true
           V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
           case "$V" in
             clean)   gh issue edit "$ISSUE" --add-label "submission:approved" --remove-label "submission:needs-work" --remove-label "submission:invalid"; gh issue close "$ISSUE" ;;
