@@ -7,6 +7,8 @@ export interface MarketEntry {
   description?: { en?: string; zh?: string }
   category: string[]
   latestVersion?: string | null
+  publishedAt?: string | null
+  firstSeenAt?: string
   capabilities?: { scannedAt: string | null; findings: string[]; redFlags: string[] }
   verification?: { status: string; level?: string; verifiedAt?: string; opencodeVersion?: string }
   metrics?: { stars: number | null; npmDownloads30d: number | null }
@@ -184,4 +186,10 @@ export function allCategories(entries: MarketEntry[]): string[] {
   const s = new Set<string>()
   for (const e of entries) for (const c of categoriesOf(e)) s.add(c)
   return [...s].sort()
+}
+
+/** Entries published within N days (publishedAt ?? firstSeenAt). */
+export function inDays(e: MarketEntry, days: number): boolean {
+  const at = Date.parse(e.publishedAt ?? e.firstSeenAt ?? '')
+  return !isNaN(at) && Date.now() - at < days * 86400_000
 }

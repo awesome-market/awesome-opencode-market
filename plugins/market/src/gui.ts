@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -65,6 +65,8 @@ export default Plugin.define({
     const [groupFilter, setGroupFilter] = createSignal('')
     const [tab, setTab] = createSignal<'discover'|'plugins'|'skills'|'favorites'|'installed'|'advanced'>('discover')
     const [filterOpen, setFilterOpen] = createSignal(false)
+    const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
+    const [rangeDays, setRangeDays] = createSignal(0)
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const put = (patch: Partial<LocalState>) => {
@@ -100,7 +102,9 @@ export default Plugin.define({
       if (favOnly()) list = list.filter(p => s.favorites[p.name])
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
-      return sortEntries(search(list, query()), sort())
+      if (rangeDays()) list = list.filter(p => inDays(p, rangeDays()))
+      const srt = sortEntries(search(list, query()), sort())
+      return sortDir() === 'asc' ? [...srt].reverse() : srt
     }
     const statusOf = (e: MarketEntry) =>
       installed()[e.name] ? `${t('installed')} v${installed()[e.name]}`
@@ -261,19 +265,57 @@ export default Plugin.define({
       const controls = el('div', 'display:flex;align-items:center;margin-bottom:8px')
       const q = document.createElement('input')
       q.placeholder = t('search')
-      q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
+      q.style.cssText = 'flex:1;padding:6px 10px;margin-right:6px;box-sizing:border-box;font-size:13px;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid var(--v2-border-border-base,rgba(128,128,128,.35));border-radius:8px;outline:none'
       q.oninput = () => setQuery(q.value)
       controls.appendChild(q)
       const filt = el('button', 'font-size:12px;cursor:pointer;padding:4px 12px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', '筛选') as HTMLButtonElement
       filt.onclick = () => setFilterOpen(!filterOpen())
       controls.appendChild(filt)
       root.appendChild(controls)
-      const filterPanel = el('div', 'margin-bottom:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:8px')
-      filterPanel.style.display = 'none'
-      filterPanel.append(sel(allGroups(state()), groupFilter, setGroupFilter, t('allGroups')),
-        sel([...sorts], sort, setSort))
-      createEffect(() => { filterPanel.style.display = filterOpen() ? '' : 'none' })
-      root.appendChild(filterPanel)
+      // sectioned dropdown menu (dsh filter style)
+      const menu = el('div', 'position:absolute;right:12px;top:96px;z-index:50;min-width:210px;padding:6px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.18)')
+      menu.style.background = 'var(--v2-background-bg-layer-01, Canvas)'
+      menu.style.border = '1px solid var(--v2-border-border-muted, rgba(128,128,128,.3))'
+      menu.style.display = 'none'
+      const section = (title: string, items: [string, () => boolean, () => void][]) => {
+        const s = el('div', 'padding:4px 2px')
+        s.appendChild(el('div', 'font-size:10px;opacity:.5;padding:2px 8px 4px', title))
+        for (const [label, on, act] of items) {
+          const it = el('div', 'font-size:12px;padding:4px 10px;cursor:pointer;border-radius:6px;display:flex;justify-content:space-between')
+          it.onmouseenter = () => { it.style.background = 'rgba(128,128,128,.12)' }
+          it.onmouseleave = () => { it.style.background = 'transparent' }
+          it.onclick = () => act()
+          const check = el('span', 'opacity:.9', '')
+          insert(check, () => on() ? '✓' : '')
+          it.append(el('span', '', label), check)
+          s.appendChild(it)
+        }
+        return s
+      }
+      menu.append(
+        section('排序字段', [
+          ['npm 下载量（近 30 天）', () => sort() === 'downloads', () => setSort('downloads')],
+          ['Star 数', () => sort() === 'stars', () => setSort('stars')],
+          ['名称', () => sort() === 'name', () => setSort('name')],
+          ['验证状态', () => sort() === 'verified', () => setSort('verified')],
+        ]),
+        section('排序方向', [
+          ['降序', () => sortDir() === 'desc', () => setSortDir('desc')],
+          ['升序', () => sortDir() === 'asc', () => setSortDir('asc')],
+        ]),
+        section('发布时间范围', [
+          ['全部时间', () => rangeDays() === 0, () => setRangeDays(0)],
+          ['最近 1 天', () => rangeDays() === 1, () => setRangeDays(1)],
+          ['最近 7 天', () => rangeDays() === 7, () => setRangeDays(7)],
+          ['最近 30 天', () => rangeDays() === 30, () => setRangeDays(30)],
+          ['最近 90 天', () => rangeDays() === 90, () => setRangeDays(90)],
+          ['最近 1 年', () => rangeDays() === 365, () => setRangeDays(365)],
+        ]),
+      )
+      createEffect(() => { menu.style.display = filterOpen() ? '' : 'none' })
+      filt.onclick = () => setFilterOpen(!filterOpen())
+      document.addEventListener('click', ev => { if (!menu.contains(ev.target as Node) && ev.target !== filt) setFilterOpen(false) })
+      root.appendChild(menu)
       // category chips row (dsh style)
       const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
       insert(chips, () => {
