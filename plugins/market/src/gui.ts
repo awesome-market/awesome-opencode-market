@@ -284,7 +284,10 @@ export default Plugin.define({
       for (const [id, label] of TABS) {
         const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
         const sync = () => { const on = tab() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
-        sync(); tb.onclick = () => {
+        sync()
+        tb.onmouseenter = () => { if (tab() !== id) tb.style.background = 'var(--v2-overlay-simple-overlay-hover, rgba(128,128,128,.1))' }
+        tb.onmouseleave = () => { if (tab() !== id) tb.style.background = 'transparent' }
+        tb.onclick = () => {
           setTab(id); setFavOnly(id === 'favorites')
           for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; x.style.fontWeight = on ? '600' : '400' }
         }
