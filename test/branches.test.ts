@@ -145,7 +145,13 @@ describe('branch coverage', () => {
         versions: { '1': { repository: 'https://github.com/o/k', keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/k.tgz' } } },
         time: {},
       })
-      if (url.includes('x/k.tgz')) return mkRes({}, 200, 'data:application/gzip;base64,H4sIAAAAAAAAA2Nsz8vPAwMDhQMDEGRgANCt9vQUAAAA')
+      if (url.includes('x/k.tgz')) {
+        const pkg = mkdtempSync(join(tmpdir(), 'kp-'))
+        mkdirSync(join(pkg, 'pkg'), { recursive: true })
+        writeFileSync(join(pkg, 'pkg', 'i.js'), 'export default {}')
+        execFileSync('tar', ['-czf', pkg + '/k.tgz', '-C', pkg, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+        return new Response(readFileSync(pkg + '/k.tgz'), { status: 200 })
+      }
       if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
       return mkRes({}, 404)
     }) as typeof fetch
