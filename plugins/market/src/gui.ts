@@ -151,7 +151,10 @@ export default Plugin.define({
           const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
           if (!url) throw new Error('no tarball')
           const buf = await (await fetch(url)).arrayBuffer()
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+          const u8 = new Uint8Array(buf)
+          let bin = ''
+          for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768))
+          const b64 = btoa(bin)
           return safe.writeSkill({ name: e.name, b64 })
         }
         const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => safe.install(e.name)
