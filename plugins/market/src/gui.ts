@@ -118,7 +118,10 @@ export default Plugin.define({
     const installBtn = (e: MarketEntry) => {
       const ver = installed()[e.name]
       const isSkill = e.contains?.includes('skill')
-      const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
+      // dsh parity: installed & no update → text badge only, no dead button
+      if (ver && !hasUpdate(e, ver))
+        return el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
+      const label = ver ? `update → v${e.latestVersion}` : 'add'
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
