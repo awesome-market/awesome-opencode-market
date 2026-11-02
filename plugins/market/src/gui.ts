@@ -63,7 +63,7 @@ export default Plugin.define({
     const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
     const [favOnly, setFavOnly] = createSignal(false)
     const [groupFilter, setGroupFilter] = createSignal('')
-    const [typeFilter, setTypeFilter] = createSignal('all')
+    const [typeFilter, setTypeFilter] = createSignal<'plugins' | 'skills'>('plugins')
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const put = (patch: Partial<LocalState>) => {
@@ -91,7 +91,7 @@ export default Plugin.define({
       const tf = typeFilter()
       let list = c ? all.filter(p => p.category?.includes(c)) : all
       if (tf === 'skills') list = list.filter(p => p.contains?.includes('skill'))
-      if (tf === 'plugins') list = list.filter(p => !p.contains?.includes('skill'))
+      else list = list.filter(p => !p.contains?.includes('skill'))
       if (favOnly()) list = list.filter(p => s.favorites[p.name])
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
@@ -146,14 +146,18 @@ export default Plugin.define({
     const row = (e: MarketEntry) => {
       const d = el('div', 'padding:6px 2px;border-bottom:1px solid #ffffff14;cursor:pointer')
       d.onclick = () => setView({ kind: 'detail', e })
-      const title = el('div', 'font-weight:600')
+      const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:center')
       const star = el('span', 'cursor:pointer;margin-right:4px', state().favorites[e.name] ? '★' : '☆')
       star.style.color = '#da3'
       star.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); star.textContent = state().favorites[e.name] ? '★' : '☆' }
-      title.append(star, el('span', '', e.name), badge(e), installBtn(e))
-      const desc = el('div', 'opacity:.6;font-size:12px', (e.description?.en ?? '').slice(0, 120))
+      title.append(star, el('span', '', e.name), badge(e))
+      const btn = installBtn(e); btn.style.marginLeft = 'auto'
+      title.appendChild(btn)
+      const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
+      meta.textContent = `v${e.latestVersion ?? '?'} · ↓${fmtN(e.metrics?.npmDownloads30d)} · ★${fmtN(e.metrics?.stars)}`
+      const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px', (e.description?.en ?? '').slice(0, 160))
       const note = state().notes[e.name]
-      d.append(title, desc)
+      d.append(title, meta, desc)
       if (note) d.appendChild(el('div', 'font-size:11px;opacity:.55;font-style:italic', `📝 ${note}`))
       const p = prog()[e.name]
       if (p && !p.done) {
@@ -178,6 +182,8 @@ export default Plugin.define({
       }
       return d
     }
+    const fmtN = (n: number | null | undefined) =>
+      n == null ? '—' : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
     const sel = (opts: string[], cur: () => string, set: (v: string) => void, label = '') => {
       const s = document.createElement('select')
       s.style.cssText = 'margin-right:6px;font-size:12px'
@@ -193,12 +199,7 @@ export default Plugin.define({
       const list = el('div')
       insert(list, () => {
         const items = filtered()
-        const plugins = items.filter(e => !e.contains?.includes('skill'))
-        const skills = items.filter(e => e.contains?.includes('skill'))
-        const out: HTMLElement[] = []
-        if (plugins.length) out.push(el('h4', 'margin:10px 0 6px;opacity:.55;font-weight:600', `plugins (${plugins.length})`), ...plugins.map(row))
-        if (skills.length) out.push(el('h4', 'margin:14px 0 6px;opacity:.55;font-weight:600', `skills (${skills.length})`), ...skills.map(row))
-        return out.length ? out : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
+        return items.length ? items.map(row) : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
       })
       root.appendChild(list)
       return root
