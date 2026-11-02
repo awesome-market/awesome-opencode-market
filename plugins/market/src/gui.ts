@@ -4,7 +4,7 @@
  * (function children become reactive computations). No h()/JSX — the host
  * module whitelist only exposes solid-js, solid-js/web, solid-js/store.
  */
-import { Plugin, Ipc, Panel, SettingsPage, Command } from '@opencode/plugin/gui'
+import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
@@ -180,9 +180,18 @@ export default Plugin.define({
       list: () => [{ id: 'market', title: 'Market' }],
       render: () => { const host = el('div', 'height:100%'); mount(host); return host },
     })
+    const openMarket = () => {
+      const s = ctx.sessions.current()
+      if (s) ctx.layout.open('opencode-market:market', s as any)
+    }
     ctx.add(Command, {
       id: 'open', title: 'Open Market', palette: true,
-      slash: { name: 'market' }, run: () => {},
+      slash: { name: 'market' }, run: openMarket,
+    })
+    ctx.add(MenuItem, {
+      menu: 'session.panel' as const, id: 'market', title: 'Market',
+      icon: 'marketplace' as any, description: 'browse verified plugins',
+      run: openMarket,
     })
     return {}
   },
