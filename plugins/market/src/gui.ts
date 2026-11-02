@@ -63,7 +63,8 @@ export default Plugin.define({
     const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
     const [favOnly, setFavOnly] = createSignal(false)
     const [groupFilter, setGroupFilter] = createSignal('')
-    const [typeFilter, setTypeFilter] = createSignal<'plugins' | 'skills'>('plugins')
+    const [tab, setTab] = createSignal<'discover'|'plugins'|'skills'|'favorites'|'installed'|'advanced'>('discover')
+    const [filterOpen, setFilterOpen] = createSignal(false)
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const put = (patch: Partial<LocalState>) => {
@@ -88,10 +89,14 @@ export default Plugin.define({
     const filtered = () => {
       const all = data()?.plugins ?? []
       const c = cat(); const s = state()
-      const tf = typeFilter()
       let list = c ? all.filter(p => categoriesOf(p).includes(c)) : all
-      if (tf === 'skills') list = list.filter(p => p.contains?.includes('skill'))
-      else list = list.filter(p => !p.contains?.includes('skill'))
+      switch (tab()) {
+        case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
+        case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
+        case 'installed': list = list.filter(p => installed()[p.name]); break
+        case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
+        case 'discover': default: break
+      }
       if (favOnly()) list = list.filter(p => s.favorites[p.name])
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
@@ -229,35 +234,51 @@ export default Plugin.define({
     // reactive re-render (the insert below only owns the body region)
     const chrome = () => {
       const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
-      // header: title + top-level 插件/skill tabs (dsh style)
+      // header: title + pkg version + far-right 全部更新 (hardcoded placeholder)
       const head = el('div', 'display:flex;align-items:baseline;margin-bottom:10px')
       head.appendChild(el('h3', 'margin:0;font-size:15px;font-weight:600', 'opencode market'))
-      const tabs = el('div', 'margin-left:16px;display:flex')
-      for (const [id, label] of [['plugins', '插件'], ['skills', 'skill']] as const) {
+      head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', 'opencode-market v0.0.3'))
+      const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', '全部更新') as HTMLButtonElement
+      updAll.onclick = () => { updAll.textContent = '暂无更新' }   // placeholder per spec
+      head.appendChild(updAll)
+      root.appendChild(head)
+      // functional tabs: 发现/插件/skill/收藏/已安装/高级 (dsh top-nav style)
+      const tabs = el('div', 'display:flex;gap:2px;margin-bottom:10px')
+      const TABS: [typeof tab extends () => infer V ? V : never, string][] = [
+        ['discover', '发现'], ['plugins', '插件'], ['skills', 'skill'],
+        ['favorites', '收藏'], ['installed', '已安装'], ['advanced', '高级']]
+      for (const [id, label] of TABS) {
         const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
-        const sync = () => { const on = typeFilter() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
-        sync(); tb.onclick = () => { setTypeFilter(id); for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; x.style.fontWeight = on ? '600' : '400' } }
+        const sync = () => { const on = tab() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
+        sync(); tb.onclick = () => {
+          setTab(id); setFavOnly(id === 'favorites')
+          for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; x.style.fontWeight = on ? '600' : '400' }
+        }
         tabs.appendChild(tb)
       }
-      head.appendChild(tabs)
-      root.appendChild(head)
+      root.appendChild(tabs)
       // search row
-      const controls = el('div', 'display:flex;margin-bottom:8px')
+      const controls = el('div', 'display:flex;align-items:center;margin-bottom:8px')
       const q = document.createElement('input')
       q.placeholder = t('search')
       q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
       q.oninput = () => setQuery(q.value)
-      const favChip = el('button', 'font-size:11px;cursor:pointer;margin-right:6px', favOnly() ? '★ favorites' : '☆ favorites')
-      favChip.onclick = () => { setFavOnly(!favOnly()); favChip.textContent = favOnly() ? '★ favorites' : '☆ favorites' }
-      controls.append(q,
-        sel(allGroups(state()), groupFilter, setGroupFilter, t('allGroups')),
-        sel([...sorts], sort, setSort), favChip)
+      controls.appendChild(q)
+      const filt = el('button', 'font-size:12px;cursor:pointer;padding:4px 12px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', '筛选') as HTMLButtonElement
+      filt.onclick = () => setFilterOpen(!filterOpen())
+      controls.appendChild(filt)
       root.appendChild(controls)
+      const filterPanel = el('div', 'margin-bottom:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:8px')
+      filterPanel.style.display = 'none'
+      filterPanel.append(sel(allGroups(state()), groupFilter, setGroupFilter, t('allGroups')),
+        sel([...sorts], sort, setSort))
+      createEffect(() => { filterPanel.style.display = filterOpen() ? '' : 'none' })
+      root.appendChild(filterPanel)
       // category chips row (dsh style)
       const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
       insert(chips, () => {
         const pool = (data()?.plugins ?? []).filter(p =>
-          typeFilter() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
+          tab() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
         const mk = (id: string, label: string) => {
           const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
           if (cat() === id || (id === '' && !cat())) { c.style.background = '#556'; c.style.color = '#fff' }
