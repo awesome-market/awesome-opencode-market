@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, search, sortEntries, categoriesOf, type MarketEntry, type MarketIndex } from './catalog.js'
+import { fetchIndex, search, sortEntries, categoriesOf, redactLog, keyLines, loadState, saveState, allGroups, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -16,12 +16,18 @@ const Market = Ipc.define({
     index: { output: Schema.Unknown },
     installed: { output: Schema.Unknown },
     install: { input: Schema.String, output: Schema.String },
+    cancelInstall: { input: Schema.String, output: Schema.String },
+  },
+  events: {
+    progress: Schema.Unknown,   // { name, line, done, ok }
   },
 })
 type Api = {
   index(): Promise<MarketIndex>
   installed(): Promise<Record<string, string>>
   install(name: string): Promise<string>
+  cancelInstall(name: string): Promise<string>
+  on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
 type View = { kind: 'list' } | { kind: 'detail'; e: MarketEntry }
@@ -40,14 +46,38 @@ export default Plugin.define({
     const [cat, setCat] = createSignal('')
     const [sort, setSort] = createSignal<string>('verified')
     const [view, setView] = createSignal<View>({ kind: 'list' })
+    const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
+    const [favOnly, setFavOnly] = createSignal(false)
+    const [groupFilter, setGroupFilter] = createSignal('')
+    const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
+    try { setState(loadState()) } catch { /* storage unavailable */ }
+    const put = (patch: Partial<LocalState>) => {
+      const s = { ...state(), ...patch }
+      setState(s); try { saveState(s) } catch { /* noop */ }
+    }
+    const toggleFav = (n: string) => {
+      const f = { ...state().favorites }
+      f[n] ? delete f[n] : f[n] = true
+      put({ favorites: f })
+    }
+    try {
+      safe.on?.('progress', (d) => {
+        const cur = prog()[d.name] ?? { lines: [] }
+        setProg({ ...prog(), [d.name]: d.done ? { ...cur, done: true, ok: d.ok } : { lines: [...cur.lines, d.line].slice(-20) } })
+      })
+    } catch { /* older host: no events */ }
 
     safe.index().then(i => setData(i), e => setErr(String(e)))
     safe.installed?.().then(s => setInstalled(s ?? {}), () => {})
 
     const filtered = () => {
       const all = data()?.plugins ?? []
-      const c = cat()
-      return sortEntries(search(c ? all.filter(p => p.category?.includes(c)) : all, query()), sort())
+      const c = cat(); const s = state()
+      let list = c ? all.filter(p => p.category?.includes(c)) : all
+      if (favOnly()) list = list.filter(p => s.favorites[p.name])
+      const g = groupFilter()
+      if (g) list = list.filter(p => s.groups[p.name] === g)
+      return sortEntries(search(list, query()), sort())
     }
     const statusOf = (e: MarketEntry) =>
       installed()[e.name] ? `installed v${installed()[e.name]}`
@@ -82,9 +112,35 @@ export default Plugin.define({
       const d = el('div', 'padding:6px 2px;border-bottom:1px solid #ffffff14;cursor:pointer')
       d.onclick = () => setView({ kind: 'detail', e })
       const title = el('div', 'font-weight:600')
-      title.append(el('span', '', e.name), badge(e), installBtn(e))
+      const star = el('span', 'cursor:pointer;margin-right:4px', state().favorites[e.name] ? '★' : '☆')
+      star.style.color = '#da3'
+      star.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); star.textContent = state().favorites[e.name] ? '★' : '☆' }
+      title.append(star, el('span', '', e.name), badge(e), installBtn(e))
       const desc = el('div', 'opacity:.6;font-size:12px', (e.description?.en ?? '').slice(0, 120))
+      const note = state().notes[e.name]
       d.append(title, desc)
+      if (note) d.appendChild(el('div', 'font-size:11px;opacity:.55;font-style:italic', `📝 ${note}`))
+      const p = prog()[e.name]
+      if (p && !p.done) {
+        const bar = el('div', 'font-size:11px;opacity:.6;max-height:60px;overflow:hidden')
+        bar.textContent = p.lines[p.lines.length - 1] ?? 'installing…'
+        const cx = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', 'cancel')
+        cx.onclick = ev => { ev.stopPropagation(); void safe.cancelInstall(e.name) }
+        bar.appendChild(cx)
+        d.appendChild(bar)
+      }
+      if (p?.done && p.ok === false) {
+        const errBox = el('div', 'font-size:11px;color:#c66')
+        errBox.textContent = keyLines(p.lines.join('\n')).join(' · ').slice(0, 200) || 'install failed'
+        const ex = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', 'export log')
+        ex.onclick = ev => {
+          ev.stopPropagation()
+          const txt = redactLog(p.lines.join('\n'))
+          void navigator.clipboard?.writeText(txt).catch(() => {})
+        }
+        errBox.appendChild(ex)
+        d.appendChild(errBox)
+      }
       return d
     }
     const sel = (opts: string[], cur: () => string, set: (v: string) => void, label = '') => {
@@ -115,9 +171,12 @@ export default Plugin.define({
       q.placeholder = 'search…'
       q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
       q.oninput = () => setQuery(q.value)
+      const favChip = el('button', 'font-size:11px;cursor:pointer;margin-right:6px', favOnly() ? '★ favorites' : '☆ favorites')
+      favChip.onclick = () => { setFavOnly(!favOnly()); favChip.textContent = favOnly() ? '★ favorites' : '☆ favorites' }
       controls.append(q,
         sel(categoriesOf(data()?.plugins ?? []), cat, setCat, 'all categories'),
-        sel([...sorts], sort, setSort))
+        sel(allGroups(state()), groupFilter, setGroupFilter, 'all groups'),
+        sel([...sorts], sort, setSort), favChip)
       root.appendChild(controls)
       return root
     }
@@ -149,6 +208,19 @@ export default Plugin.define({
       }
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
+      // local state: group + note
+      root.appendChild(el('h4', 'margin:14px 0 4px', 'group'))
+      const gi = document.createElement('input')
+      gi.placeholder = 'group name…'; gi.value = state().groups[e.name] ?? ''
+      gi.style.cssText = 'padding:4px;font-size:12px;width:200px'
+      gi.onchange = () => { const gr = { ...state().groups }; gi.value ? gr[e.name] = gi.value : delete gr[e.name]; put({ groups: gr }) }
+      root.appendChild(gi)
+      root.appendChild(el('h4', 'margin:14px 0 4px', 'note'))
+      const ni = document.createElement('input')
+      ni.placeholder = 'why did you install this…'; ni.value = state().notes[e.name] ?? ''
+      ni.style.cssText = 'padding:4px;font-size:12px;width:100%;box-sizing:border-box'
+      ni.onchange = () => { const ns = { ...state().notes }; ni.value ? ns[e.name] = ni.value : delete ns[e.name]; put({ notes: ns }) }
+      root.appendChild(ni)
       return root
     }
 
@@ -196,6 +268,7 @@ export default Plugin.define({
     return {}
   },
   main(m: any) {
+    const jobs = new Map<string, import('node:child_process').ChildProcess>()
     m.provide(Market, {
         index: () => fetchIndex() as Promise<MarketIndex>,
         installed: async () => {
@@ -211,10 +284,23 @@ export default Plugin.define({
         },
         install: (name: string) =>
           new Promise<string>((resolve, reject) => {
-            const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            execFile('opencode', ['plugin', 'add', name], { timeout: 60_000 },
-              (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'installed'))
+            const { spawn } = require('node:child_process') as typeof import('node:child_process')
+            const p = spawn('opencode', ['plugin', 'add', name], { env: process.env })
+            jobs.set(name, p)
+            const push = (line: string) => m.emit?.('progress', { name, line })
+            p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+            p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+            const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
+            p.on('close', code => {
+              clearTimeout(kill); jobs.delete(name)
+              m.emit?.('progress', { name, line: '', done: true, ok: code === 0 })
+              code === 0 ? resolve('installed') : reject(new Error(`exit ${code}`))
+            })
+            p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
           }),
+        cancelInstall: async (name: string) => {
+          jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
+        },
       })
   },
 })

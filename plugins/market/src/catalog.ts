@@ -73,3 +73,38 @@ export function sortEntries(entries: MarketEntry[], key: string): MarketEntry[] 
     return ka < kb ? -1 : ka > kb ? 1 : a.name.localeCompare(b.name)
   })
 }
+
+/** Redact secrets/home paths from process output for export (dsh-style). */
+export function redactLog(text: string): string {
+  return text
+    .replace(/([A-Za-z]:)?[\\/](Users|home)[\\/][^\\/\s:]+/g, '<home>')
+    .replace(/(token|apikey|api[_-]?key|secret|password|passwd|authorization)[=:]\s*\S+/gi, '$1=<redacted>')
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-<redacted>')
+}
+
+/** Pick the informative lines out of a stderr blob (dsh P1-5 key-lines idea). */
+export function keyLines(text: string, max = 8): string[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const interesting = lines.filter(l =>
+    /error|err!|e404|eacces|enoent|not found|denied|timeout|failed|npm error|certificate|network/i.test(l))
+  return (interesting.length ? interesting : lines).slice(-max)
+}
+
+export interface LocalState {
+  favorites: Record<string, true>
+  groups: Record<string, string>      // plugin name → group name
+  notes: Record<string, string>       // plugin name → note
+}
+export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
+
+const LS_KEY = 'opencode-market.state.v1'
+export function loadState(): LocalState {
+  try { return { ...EMPTY_STATE, ...(JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')) } }
+  catch { return { ...EMPTY_STATE } }
+}
+export function saveState(s: LocalState): void {
+  localStorage.setItem(LS_KEY, JSON.stringify(s))
+}
+export function allGroups(s: LocalState): string[] {
+  return [...new Set(Object.values(s.groups))].sort()
+}
