@@ -149,7 +149,7 @@ export function t(key: I18nKey): string {
 
 /** Latest-version compare for the update button. */
 export function hasUpdate(e: MarketEntry, installedVer?: string): boolean {
-  if (!installedVer || !e.latestVersion) return false
+  if (!installedVer || installedVer === 'local' || !e.latestVersion) return false   // local dir installs can't compare
   return e.latestVersion !== installedVer
 }
 
