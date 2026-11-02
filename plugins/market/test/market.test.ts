@@ -203,17 +203,20 @@ describe('catalog helpers', () => {
     const all = allCategories([mk('a', 'git review'), mk('b', 'slack qq')])
     expect(all).toContain('开发流程'); expect(all).toContain('集成与移动')
   })
-  it('scanSkillKeys: dirs w/ SKILL.md, md files, skips hidden+staging', async () => {
+  it('scanSkillKeys: dirs w/ content, md files, skips hidden+staging', async () => {
     const { scanSkillKeys } = await import('../src/catalog.ts')
     const fs = {
-      '/s': ['proj-suite-semantic-commit', 'proj-suite', 'review.md', '.hidden', '_dl', 'empty-dir'],
+      '/s': ['proj-suite', 'semantic-commit', 'review.md', '.hidden', '_dl', 'empty-dir'],
+      '/s/proj-suite': ['scripts', 'README.md'],       // package marker dir, no SKILL.md
+      '/s/semantic-commit': ['SKILL.md'],
+      '/s/empty-dir': [],
     }
     const ls = (d: string) => fs[d as keyof typeof fs] ?? (() => { throw new Error('ENOENT') })()
-    const hasFile = (p: string) => p === '/s/proj-suite-semantic-commit/SKILL.md' || p === '/s/proj-suite/SKILL.md'
+    const hasFile = (p: string) => p === '/s/semantic-commit/SKILL.md'
     const m = scanSkillKeys(['/s', '/missing'], ls, hasFile)
-    expect(m['__skill_proj-suite-semantic-commit']).toBe('local')
-    expect(m['__skill_proj-suite']).toBe('local')
-    expect(m['__skill_review']).toBe('local')
+    expect(m['__skill_proj-suite']).toBe('local')        // non-empty pkg dir = installed
+    expect(m['__skill_semantic-commit']).toBe('local')   // lifted skill dir, author ID
+    expect(m['__skill_review']).toBe('local')            // file-skill
     expect(m['__skill_.hidden']).toBeUndefined()
     expect(m['__skill__dl']).toBeUndefined()
     expect(m['__skill_empty-dir']).toBeUndefined()

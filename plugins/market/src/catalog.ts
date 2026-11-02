@@ -194,8 +194,10 @@ export function inDays(e: MarketEntry, days: number): boolean {
 // ── installed skill detection ────────────────────────────────────────────
 /** Scan skill source dirs → `__skill_<id>` keys. `ls`/`hasFile` are injected so
  *  this stays environment-neutral (main injects node:fs; tests inject fakes).
- *  A dir counts only when it contains SKILL.md; top-level .md files are
- *  file-skills. Hidden dirs and _dl staging are skipped (opencode semantics). */
+ *  A dir counts when it has any non-hidden content — marketplace packages keep
+ *  their `<basename>` dir as an install marker even after skills are lifted to
+ *  the source root. Top-level .md files are file-skills. Hidden dirs and _dl
+ *  staging are skipped (opencode semantics). */
 export function scanSkillKeys(bases: string[], ls: (dir: string) => string[], hasFile: (p: string) => boolean): Record<string, string> {
   const map: Record<string, string> = {}
   for (const base of bases) {
@@ -204,7 +206,9 @@ export function scanSkillKeys(bases: string[], ls: (dir: string) => string[], ha
     for (const d of names) {
       if (d.startsWith('.') || d.startsWith('_')) continue
       if (d.endsWith('.md')) { map[`__skill_${d.slice(0, -3)}`] = 'local'; continue }
-      if (hasFile(`${base}/${d}/SKILL.md`)) map[`__skill_${d}`] = 'local'
+      let kids: string[] = []
+      try { kids = ls(`${base}/${d}`).filter(k => !k.startsWith('.')) } catch { /* a file */ }
+      if (kids.length || hasFile(`${base}/${d}/SKILL.md`)) map[`__skill_${d}`] = 'local'
     }
   }
   return map
