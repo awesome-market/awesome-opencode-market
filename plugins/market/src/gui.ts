@@ -211,10 +211,13 @@ export default Plugin.define({
     const listView = () => {
       const root = el('div', '')
       const list = el('div')
-      list.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start'
+      list.style.cssText = 'border:1px solid rgba(128,128,128,.25);border-radius:10px;overflow:hidden'
       insert(list, () => {
         const items = filtered()
-        return items.length ? items.map(row) : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
+        if (!items.length) return [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
+        const rows = items.map(row)
+        ;(rows[rows.length - 1] as HTMLElement).style.borderBottom = 'none'
+        return rows
       })
       root.appendChild(list)
       return root
@@ -226,12 +229,12 @@ export default Plugin.define({
       const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
       // header: title + top-level 插件/skill tabs (dsh style)
       const head = el('div', 'display:flex;align-items:baseline;margin-bottom:10px')
-      head.appendChild(el('h3', 'margin:0;font-size:15px', `opencode market · ${indexAge(data())}`))
+      head.appendChild(el('h3', 'margin:0;font-size:15px;font-weight:600', 'opencode market'))
       const tabs = el('div', 'margin-left:16px;display:flex')
       for (const [id, label] of [['plugins', '插件'], ['skills', 'skill']] as const) {
-        const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 14px;border:1px solid #555', label) as HTMLButtonElement
-        const sync = () => { const on = typeFilter() === id; tb.style.background = on ? '#36c' : 'transparent'; tb.style.color = on ? '#fff' : 'inherit'; tb.style.borderRadius = '4px' }
-        sync(); tb.onclick = () => { setTypeFilter(id); for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? '#36c' : 'transparent'; x.style.color = on ? '#fff' : 'inherit' } }
+        const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
+        const sync = () => { const on = typeFilter() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
+        sync(); tb.onclick = () => { setTypeFilter(id); for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; x.style.fontWeight = on ? '600' : '400' } }
         tabs.appendChild(tb)
       }
       head.appendChild(tabs)
