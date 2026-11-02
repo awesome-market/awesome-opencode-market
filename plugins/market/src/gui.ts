@@ -211,13 +211,10 @@ export default Plugin.define({
     const listView = () => {
       const root = el('div', '')
       const list = el('div')
-      list.style.cssText = 'border:1px solid rgba(128,128,128,.25);border-radius:10px;overflow:hidden'
+      list.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start'
       insert(list, () => {
         const items = filtered()
-        if (!items.length) return [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
-        const rows = items.map(row)
-        ;(rows[rows.length - 1] as HTMLElement).style.borderBottom = 'none'
-        return rows
+        return items.length ? items.map(row) : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
       })
       root.appendChild(list)
       return root
