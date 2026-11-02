@@ -267,12 +267,11 @@ export default Plugin.define({
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
       const move = (d: number) => setSel(i => Math.max(0, Math.min(pool().length - 1, i + d)))
 
-      // dialogs own their input mode — plugin keymap layers don't dispatch
-      // there, so navigation binds go through the component-level useKeyboard
+      // dialogs run in the "modal" input mode — a plugin keymap layer must
+      // target it explicitly or binds never dispatch (upstream btw.tsx pattern);
+      // useKeyboard stays as fallback for hosts that route raw keys instead
       const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat('') }
-      useKeyboard((ev) => {
-        if (searchOn()) return  // input consumes keys while searching
-        const k = ev.name
+      const act = (k: string): void => {
         if (k === 'escape') {
           if (findingsOpen()) { setFindingsOpen(false); return }
           if (detail()) { setDetail(null); return }
@@ -300,7 +299,14 @@ export default Plugin.define({
         if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
         const d = Number(k)
         if (d >= 1 && d <= TABS.length) toTab(d - 1)
-      })
+      }
+      const BINDS = 'escape up k down j left h right l return / f c i u * g n x r q tab 1 2 3 4 5 6 7'
+      ctx.keymap.layer(() => ({
+        mode: 'modal',
+        enabled: () => !searchOn(),
+        commands: BINDS.split(' ').map(b => ({ bind: b, run: () => act(b) })),
+      }))
+      useKeyboard((ev) => { if (!searchOn()) act(ev.name) })
 
       const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s
       const Card = (props: { e: MarketEntry; i: number }) => {
@@ -341,14 +347,16 @@ export default Plugin.define({
             </box>
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
-                <text fg={id === tab() ? theme.text.base : theme.text.faint}>
+                <text fg={id === tab() ? theme.text.base : theme.text.faint}
+                      onMouseUp={() => toTab(i())}>
                   {id === tab() ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
                 </text>
               )}</For>
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <text fg={theme.text.muted}>/ </text>
+                <text fg={theme.text.muted}
+                      onMouseUp={() => { setSearchOn(true); searchInput?.focus() }}>/ </text>
                 <input
                   flexGrow={1}
                   placeholder={t('search')}
@@ -359,13 +367,13 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <text fg={theme.text.muted}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                <text fg={theme.text.muted} onMouseUp={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <text fg={theme.text.muted}>[c] </text>
-                <text fg={!cat() ? theme.text.base : theme.text.muted}>全部({pool().length}) </text>
+                <text fg={theme.text.muted} onMouseUp={pickCategory}>[c] </text>
+                <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseUp={() => setCat('')}>全部({pool().length}) </text>
                 <For each={cats().slice(0, 6)}>{(c) => (
-                  <text fg={cat() === c ? theme.text.base : theme.text.muted}>{c} </text>
+                  <text fg={cat() === c ? theme.text.base : theme.text.muted} onMouseUp={() => setCat(c)}>{c} </text>
                 )}</For>
               </box>
             </Show>
@@ -388,7 +396,7 @@ export default Plugin.define({
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
                     <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()}</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
-                    <scrollbox flexGrow={1} minHeight={0}>
+                    <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}>
                       <box flexDirection="column" paddingLeft={1}>
                         <For each={grid()}>{(pair, ri) => (
                           <box flexDirection="row" marginTop={ri() === 0 ? 0 : 1}>
