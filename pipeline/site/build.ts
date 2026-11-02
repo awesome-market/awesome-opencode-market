@@ -1,5 +1,6 @@
 /** Thin static site generator — renders index.json to plain HTML. Astro can replace this later without changing data. */
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync, renameSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import type { CatalogIndex, PluginEntry } from '../../src/schema.ts'
 
@@ -75,6 +76,7 @@ export function buildSite(index: CatalogIndex, outDir: string): void {
   // privacy note + health endpoint (dsh parity)
   writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
   writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: index.plugins.length, generatedAt: index.generatedAt }))
+  buildSkillCatalog(index, outDir)
   writeFileSync(join(outDir, 'index.html'), listPage(index))
   for (const e of index.plugins) {
     const p = join(outDir, 'p', `${e.slug}.html`)
@@ -89,4 +91,33 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const idx = JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8'))
   buildSite(idx, process.argv[3] ?? 'dist-site')
   console.log('site built')
+}
+
+/** HTTP skill catalog (opencode docs/skills): site/skills/index.json + per-skill files
+ *  pulled from npm tarballs, so `skills: ["<site>/skills/"]` makes the whole
+ *  catalog's skills loadable — files update whenever version bumps. */
+function buildSkillCatalog(index: any, outDir: string): void {
+  const skills = index.plugins.filter((p: any) => p.type === 'skill')
+  const dir = join(outDir, 'skills')
+  mkdirSync(dir, { recursive: true })
+  const entries: { name: string; version: string; files: string[] }[] = []
+  for (const s of skills) {
+    const id = s.name.split('/').pop()!.replace(/^@/, '') || s.slug
+    const dest = join(dir, id)
+    try {
+      const res = execSync(
+        `T=$(npm view "${s.name}" dist.tarball 2>/dev/null); [ -z "$T" ] && exit 2; ` +
+        `rm -rf "${dest}.tmp" && mkdir -p "${dest}.tmp" && curl -fsSL "$T" | tar xz -C "${dest}.tmp" 2>/dev/null; ` +
+        `find "${dest}.tmp" -name 'SKILL.md' -o -name '*.md' | head -20`,
+        { encoding: 'utf8', timeout: 30_000 })
+      const files = res.split('\n').filter(Boolean).map((f: string) => f.replace(`${dest}.tmp/`, ''))
+      if (!files.length) continue
+      rmSync(dest, { recursive: true, force: true })
+      renameSync(`${dest}.tmp`, dest)
+      // strip tarball top-level (package/) from file list
+      const stripped = files.map((f: string) => f.replace(/^package\//, ''))
+      entries.push({ name: id, version: s.latestVersion ?? '1', files: stripped })
+    } catch { /* tarball fetch failed — skip skill */ }
+  }
+  writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries }))
 }

@@ -21,6 +21,9 @@ const Market = Ipc.define({
     uninstall: { input: Schema.String, output: Schema.String },
     installSkill: { input: Schema.String, output: Schema.String },
     uninstallSkill: { input: Schema.String, output: Schema.String },
+    installSkillDir: { input: Schema.Unknown, output: Schema.String },
+    skillSource: { output: Schema.Unknown },
+    skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -35,6 +38,9 @@ type Api = {
   uninstall(name: string): Promise<string>
   installSkill(name: string): Promise<string>
   uninstallSkill(name: string): Promise<string>
+  installSkillDir(p: { name: string; scope: 'global' | 'project' }): Promise<string>
+  skillSource(): Promise<{ url: string; enabled: boolean }>
+  skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -373,6 +379,42 @@ export default Plugin.define({
               const dest = join(dir, name.split('/').pop()!, 'SKILL.md')
               resolve(existsSync(dest) ? 'installed' : 'installed (no SKILL.md at root)')
             })
+          }),
+        installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
+          new Promise<string>((resolve, reject) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            const { homedir } = require('node:os') as typeof import('node:os')
+            const { join } = require('node:path') as typeof import('node:path')
+            const base = p.scope === 'project' ? join(process.cwd(), '.opencode', 'skills')
+                                                 : join(homedir(), '.config', 'opencode', 'skills')
+            const id = p.name.split('/').pop()!
+            const script = `mkdir -p "${base}/_dl" && cd "${base}/_dl" && T=$(npm view "${p.name}" dist.tarball 2>/dev/null) && curl -fsSL "$T" -o p.tgz && mkdir -p "${base}/${id}" && tar xzf p.tgz -C "${base}/${id}" --strip-components=1`
+            execFile('sh', ['-c', script], { timeout: 45_000 }, e => e ? reject(new Error(String(e))) : resolve(`installed → ${base}/${id}`))
+          }),
+        skillSource: async () => {
+          const { readFileSync, writeFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
+          const { homedir } = require('node:os') as typeof import('node:os')
+          const { join } = require('node:path') as typeof import('node:path')
+          const url = 'https://terry2010.github.io/opencode-market-spike/skills/'
+          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+          const d = existsSync(cfg) ? JSON.parse(readFileSync(cfg, 'utf8')) : {}
+          const list: string[] = d.skills ?? []
+          if (!list.includes(url)) { d.skills = [...list, url]; writeFileSync(cfg, JSON.stringify(d, null, 2)) }
+          return { url, enabled: true }
+        },
+        skillPermission: (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) =>
+          new Promise(resolve => {
+            const { readFileSync, writeFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
+            const { homedir } = require('node:os') as typeof import('node:os')
+            const { join } = require('node:path') as typeof import('node:path')
+            const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+            const d = existsSync(cfg) ? JSON.parse(readFileSync(cfg, 'utf8')) : {}
+            const perms: { action: string; resource: string; effect: string }[] = d.permissions ?? []
+            const rest = perms.filter(r => !(r.action === 'skill' && r.resource === p.id))
+            if (p.mode) rest.push({ action: 'skill', resource: p.id, effect: p.mode })
+            d.permissions = rest
+            writeFileSync(cfg, JSON.stringify(d, null, 2))
+            resolve(Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect])))
           }),
         uninstallSkill: (name: string) =>
           new Promise<string>((resolve, reject) => {

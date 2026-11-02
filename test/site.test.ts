@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { scanLabel, verifyLabel, buildSite, listPage, detailPage } from '../pipeline/site/build.ts'
@@ -48,3 +48,13 @@ describe('site honest labels', () => {
     expect(listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()] })).toContain('id=q')
   })
 })
+  it('buildSite writes skills/index.json even when skill tarball unavailable', () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'definitely-not-a-real-pkg-zz9', type: 'skill' }), mk({ name: 'b' })] }
+    buildSite(idx, out)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(Array.isArray(cat.skills)).toBe(true)
+    expect(cat.skills).toHaveLength(0)   // npm view fails → skipped, no crash
+    rmSync(out, { recursive: true, force: true })
+  }, 60000)
