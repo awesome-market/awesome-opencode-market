@@ -7,7 +7,7 @@
  * click opens detail.
  */
 import { Plugin } from '@opencode/plugin/tui'
-import { useTerminalDimensions } from '@opentui/solid'
+import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, For, Show, onMount, type JSX } from 'solid-js'
 import { spawn, execFile } from 'node:child_process'
 import { readdirSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs'
@@ -267,58 +267,47 @@ export default Plugin.define({
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
       const move = (d: number) => setSel(i => Math.max(0, Math.min(pool().length - 1, i + d)))
 
-      ctx.keymap.layer(() => ({
-        enabled: () => !searchOn(),
-        commands: [
-          { bind: 'escape', title: 'back', group: 'Market', run: () => {
-            if (findingsOpen()) { setFindingsOpen(false); return }
-            if (detail()) { setDetail(null); return }
-            ctx.ui.dialog.clear()
-          } },
-          { bind: 'up,k', title: 'up', group: 'Market', run: () => {
-            if (tab() === 'settings') setSettingsSel(i => Math.max(0, i - 1)); else move(-2)
-          } },
-          { bind: 'down,j', title: 'down', group: 'Market', run: () => {
-            if (tab() === 'settings') setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)); else move(2)
-          } },
-          { bind: 'left,h', title: 'left', group: 'Market', run: () => { if (tab() !== 'settings') move(-1) } },
-          { bind: 'right,l', title: 'right', group: 'Market', run: () => { if (tab() !== 'settings') move(1) } },
-          { bind: 'return', title: 'detail/run', group: 'Market', run: () => {
-            if (tab() === 'settings') { settingsItems[settingsSel()]?.run(); return }
-            const e = pick(); if (e) openDetail(e)
-          } },
-          { bind: '/', title: 'search', group: 'Market', run: () => { setSearchOn(true); searchInput?.focus() } },
-          { bind: 'f', title: 'filter', group: 'Market', run: pickFilter },
-          { bind: 'c', title: 'category', group: 'Market', run: pickCategory },
-          { bind: 'i', title: 'install', group: 'Market', run: () => { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) install(e) } },
-          { bind: 'u', title: 'uninstall', group: 'Market', run: () => { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e) } },
-          { bind: '*', title: 'favorite', group: 'Market', run: () => { const e = detail() ?? pick(); if (e) toggleFav(e) } },
-          { bind: 'g', title: 'group', group: 'Market', run: () => { const e = detail() ?? pick(); if (e) editGroup(e) } },
-          { bind: 'n', title: 'note', group: 'Market', run: () => { const e = detail() ?? pick(); if (e) editNote(e) } },
-          { bind: 'x', title: 'findings', group: 'Market', run: () => { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()) } },
-          { bind: 'r', title: 'refresh', group: 'Market', run: () => { setIdxErr(''); fetchIndexCached().then(setIdx, e => setIdxErr(String(e))); void refreshInstalled() } },
-          { bind: 'U', title: '全部更新', group: 'Market', run: () => setStatus('暂无更新（占位）') },
-          { bind: 'q', title: 'quit', group: 'Market', run: () => ctx.ui.dialog.clear() },
-          ...TABS.map(([id, label], i) => ({
-            bind: String(i + 1), title: label, group: 'Market',
-            run: () => { setTab(id); setSel(0); setDetail(null); setCat('') },
-          })),
-          { bind: 'tab', title: 'next tab', group: 'Market', run: () => {
-            const i = TABS.findIndex(([id]) => id === tab())
-            const [id] = TABS[(i + 1) % TABS.length]
-            setTab(id); setSel(0); setDetail(null); setCat('')
-          } },
-        ],
-      }))
+      // dialogs own their input mode — plugin keymap layers don't dispatch
+      // there, so navigation binds go through the component-level useKeyboard
+      const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat('') }
+      useKeyboard((ev) => {
+        if (searchOn()) return  // input consumes keys while searching
+        const k = ev.name
+        if (k === 'escape') {
+          if (findingsOpen()) { setFindingsOpen(false); return }
+          if (detail()) { setDetail(null); return }
+          ctx.ui.dialog.clear(); return
+        }
+        if (k === 'up' || k === 'k') { tab() === 'settings' ? setSettingsSel(i => Math.max(0, i - 1)) : move(-2); return }
+        if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)) : move(2); return }
+        if ((k === 'left' || k === 'h') && tab() !== 'settings') { move(-1); return }
+        if ((k === 'right' || k === 'l') && tab() !== 'settings') { move(1); return }
+        if (k === 'return') {
+          if (tab() === 'settings') { settingsItems[settingsSel()]?.run(); return }
+          const e = pick(); if (e) openDetail(e); return
+        }
+        if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
+        if (k === 'f') { pickFilter(); return }
+        if (k === 'c') { pickCategory(); return }
+        if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) install(e); return }
+        if (k === 'u') { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e); return }
+        if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }
+        if (k === 'g') { const e = detail() ?? pick(); if (e) editGroup(e); return }
+        if (k === 'n') { const e = detail() ?? pick(); if (e) editNote(e); return }
+        if (k === 'x') { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()); return }
+        if (k === 'r') { setIdxErr(''); fetchIndexCached().then(setIdx, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        if (k === 'q') { ctx.ui.dialog.clear(); return }
+        if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
+        const d = Number(k)
+        if (d >= 1 && d <= TABS.length) toTab(d - 1)
+      })
 
-      const w = () => dims().width
       const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s
-      const cardW = () => Math.floor((w() - 10) / 2)
       const Card = (props: { e: MarketEntry; i: number }) => {
         const e = props.e
         const active = () => props.i === sel() && !detail()
         return (
-          <box flexDirection="column" width={cardW()}
+          <box flexDirection="column" flexGrow={1} flexBasis={0}
                border={['top', 'right', 'bottom', 'left']}
                borderColor={active() ? theme.text.base : theme.border.base}
                paddingLeft={1} paddingRight={1} marginRight={1}
@@ -327,17 +316,22 @@ export default Plugin.define({
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
-              <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
+              <text fg={verOf(e) ? theme.text.base : theme.text.muted}
+                    onMouseUp={(ev) => {
+                      ev.stopPropagation?.()
+                      const ver = verOf(e)
+                      if (ver) void uninstall(e); else install(e)
+                    }}>{actionLabel(e)}</text>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
-            <text fg={theme.text.muted}>{clip(e.description?.en ?? '', cardW() - 4)}</text>
+            <text fg={theme.text.muted}>{clip(e.description?.en ?? '', 44)}</text>
             <text fg={theme.text.faint}>{categoriesOf(e).join('  ')}</text>
           </box>
         )
       }
 
       return (
-        <box width={w()} height={dims().height} flexDirection="column" backgroundColor={theme.background.base}>
+        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background.base}>
           <box flexDirection="column" flexShrink={0}>
             <box flexDirection="row" paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>opencode market</b></text>
