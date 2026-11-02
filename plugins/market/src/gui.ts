@@ -19,6 +19,8 @@ const Market = Ipc.define({
     cancelInstall: { input: Schema.String, output: Schema.String },
     verifyActivation: { input: Schema.String, output: Schema.String },
     uninstall: { input: Schema.String, output: Schema.String },
+    installSkill: { input: Schema.String, output: Schema.String },
+    uninstallSkill: { input: Schema.String, output: Schema.String },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -31,6 +33,8 @@ type Api = {
   cancelInstall(name: string): Promise<string>
   verifyActivation(name: string): Promise<string>
   uninstall(name: string): Promise<string>
+  installSkill(name: string): Promise<string>
+  uninstallSkill(name: string): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -103,21 +107,26 @@ export default Plugin.define({
     }
     const installBtn = (e: MarketEntry) => {
       const ver = installed()[e.name]
+      const isSkill = e.type === 'skill'
       const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
       const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#333;border:1px solid #555;border-radius:4px;padding:1px 8px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
-        safe.install(e.name).then(
+        const doInstall: () => Promise<string> = isSkill ? () => safe.installSkill(e.name) : () => safe.install(e.name)
+        doInstall().then(
           async () => {
             // effectiveness re-check: reload installed list, flag restart need
             const fresh = await safe.installed?.().catch(() => installed())
             if (fresh) setInstalled(fresh)
             const okNow = (fresh ?? installed())[e.name]
-            b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
-            const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
-            b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
-            b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
+            if (isSkill) { b.textContent = `${t('installed')}`; b.style.color = '#4a4' }
+            else {
+              b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
+              const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
+              b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
+              b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
+            }
           },
           (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
         )
@@ -172,7 +181,15 @@ export default Plugin.define({
     const listView = () => {
       const root = el('div', '')
       const list = el('div')
-      insert(list, () => filtered().map(row))
+      insert(list, () => {
+        const items = filtered()
+        const plugins = items.filter(e => e.type !== 'skill')
+        const skills = items.filter(e => e.type === 'skill')
+        const out: HTMLElement[] = []
+        if (plugins.length) out.push(el('h4', 'margin:10px 0 6px;opacity:.55;font-weight:600', `plugins (${plugins.length})`), ...plugins.map(row))
+        if (skills.length) out.push(el('h4', 'margin:14px 0 6px;opacity:.55;font-weight:600', `skills (${skills.length})`), ...skills.map(row))
+        return out.length ? out : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
+      })
       root.appendChild(list)
       return root
     }
@@ -229,7 +246,7 @@ export default Plugin.define({
         const un = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#633;border:1px solid #855;border-radius:4px;padding:1px 8px', 'uninstall') as HTMLButtonElement
         un.onclick = () => {
           un.disabled = true; un.textContent = '…'
-          safe.uninstall(e.name).then(
+          ;(e.type === 'skill' ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
             async () => { const f = await safe.installed?.().catch(() => ({})); if (f) setInstalled(f); un.textContent = 'removed' },
             (x: unknown) => { un.textContent = 'failed'; un.title = String(x) },
           )
@@ -334,6 +351,36 @@ export default Plugin.define({
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
             execFile('opencode', ['plugin', 'remove', name], { timeout: 30_000 },
               (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'removed'))
+          }),
+        // skills are file-system installs: fetch tarball → extract into config/skills/<name>
+        installSkill: (name: string) =>
+          new Promise<string>((resolve, reject) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            const { homedir } = require('node:os') as typeof import('node:os')
+            const { join } = require('node:path') as typeof import('node:path')
+            const { existsSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
+            const dir = join(homedir(), '.config', 'opencode', 'skills')
+            const script = `set -e; mkdir -p "${dir}/_dl"; cd "${dir}/_dl"; ` +
+              `TARBALL=$(npm view "${name}" dist.tarball 2>/dev/null); ` +
+              `[ -z "$TARBALL" ] && TARBALL=$(npm view "${name.split('/').pop()}" dist.tarball); ` +
+              `curl -fsSL "$TARBALL" -o p.tgz; ` +
+              `mkdir -p "${dir}/${name.split('/').pop()}"; ` +
+              `tar xzf p.tgz -C "${dir}/${name.split('/').pop()}" --strip-components=1 2>/dev/null || ` +
+              `{ mkdir -p "${dir}/${name.split('/').pop()}" && tar xzf p.tgz -C "${dir}/${name.split('/').pop()}"; }; ` +
+              `test -f "${dir}/${name.split('/').pop()}/SKILL.md" || find "${dir}/${name.split('/').pop()}" -name SKILL.md | head -1`
+            execFile('sh', ['-c', script], { timeout: 45_000 }, (e, out, er) => {
+              if (e) return reject(new Error(er || e.message))
+              const dest = join(dir, name.split('/').pop()!, 'SKILL.md')
+              resolve(existsSync(dest) ? 'installed' : 'installed (no SKILL.md at root)')
+            })
+          }),
+        uninstallSkill: (name: string) =>
+          new Promise<string>((resolve, reject) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            const { homedir } = require('node:os') as typeof import('node:os')
+            const { join } = require('node:path') as typeof import('node:path')
+            execFile('rm', ['-rf', join(homedir(), '.config', 'opencode', 'skills', name.split('/').pop()!)],
+              { timeout: 10_000 }, e => e ? reject(e) : resolve('removed'))
           }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict
         verifyActivation: (name: string) =>
