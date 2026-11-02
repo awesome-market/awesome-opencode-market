@@ -519,28 +519,35 @@ export default Plugin.define({
               (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'removed'))
           }),
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
-        installSkill: (name: string) =>
-          new Promise<string>((resolve, reject) => {
-            const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            const { homedir } = require('node:os') as typeof import('node:os')
-            const { join } = require('node:path') as typeof import('node:path')
-            const { existsSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
-            const dir = join(homedir(), '.config', 'opencode', 'skills')
-            const id = name.split('/').pop()!
-            const script = `mkdir -p "${dir}/_dl" && cd "${dir}/_dl" && ` +
-              `T=$(npm view "${name}" dist.tarball 2>/dev/null); ` +
-              `if [ -z "$T" ]; then T=$(npm view "${id}" dist.tarball 2>/dev/null); fi; ` +
-              `if [ -z "$T" ]; then echo "no-tarball" >&2; exit 2; fi; ` +
-              `curl -fsSL "$T" -o p.tgz || exit 3; ` +
-              `rm -rf "${dir}/${id}" && mkdir -p "${dir}/${id}"; ` +
-              `tar xzf p.tgz -C "${dir}/${id}" --strip-components=1 2>/dev/null || tar xzf p.tgz -C "${dir}/${id}"; ` +
-              `find "${dir}/${id}" -name SKILL.md -o -name '*.md' | head -1`
-            execFile('sh', ['-c', script], { timeout: 45_000 }, (e, out, er) => {
-              if (e) return reject(new Error(er || e.message))
-              const dest = join(dir, name.split('/').pop()!, 'SKILL.md')
-              resolve(existsSync(dest) ? 'installed' : 'installed (no SKILL.md at root)')
-            })
-          }),
+        installSkill: async (name: string) => {
+          // pure-Node: no PATH deps — fetch packument/tarball, gunzip, parse tar
+          const { gunzipSync } = require('node:zlib') as typeof import('node:zlib')
+          const { homedir } = require('node:os') as typeof import('node:os')
+          const { join, dirname } = require('node:path') as typeof import('node:path')
+          const { writeFileSync, mkdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
+          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`)).json() as { 'dist-tags': { latest: string }; versions: Record<string, { dist: { tarball: string } }> }
+          const url = pk.versions[pk['dist-tags'].latest]?.dist?.tarball
+          if (!url) throw new Error('no tarball')
+          const tar = gunzipSync(Buffer.from(await (await fetch(url)).arrayBuffer()))
+          const dest = join(homedir(), '.config', 'opencode', 'skills', name.split('/').pop()!)
+          mkdirSync(dest, { recursive: true })
+          let off = 0, wrote = 0
+          while (off + 512 <= tar.length) {
+            const f = tar.toString('utf8', off, off + 100).replace(/ .*$/, '')
+            if (!f) break
+            const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
+            const type = tar.toString('utf8', off + 156, off + 157)
+            const body = off + 512
+            const rel = f.replace(/^(\.\/)?(package\/)?/, '')
+            if (rel && type === '5') mkdirSync(join(dest, rel), { recursive: true })
+            if (rel && (type === '0' || type === '' || type === ' ')) {
+              const p = join(dest, rel); mkdirSync(dirname(p), { recursive: true })
+              writeFileSync(p, tar.subarray(body, body + size)); wrote++
+            }
+            off = body + Math.ceil(size / 512) * 512
+          }
+          return wrote ? 'installed' : 'installed (empty)'
+        },
         installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
           new Promise<string>((resolve, reject) => {
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
