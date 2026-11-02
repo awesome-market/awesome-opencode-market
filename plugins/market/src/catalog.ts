@@ -98,6 +98,7 @@ export interface LocalState {
   groups: Record<string, string>      // plugin name → group name
   notes: Record<string, string>       // plugin name → note
   devlog?: boolean                    // write detailed debug logs (default off)
+  skillVers?: Record<string, string>  // pkg name → version installed via market (enables real update checks)
 }
 export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
 

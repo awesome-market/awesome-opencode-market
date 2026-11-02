@@ -130,7 +130,7 @@ export default Plugin.define({
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const ver = installed()[e.name] ?? installed()[`__skill_${e.name.split('/').pop()}`]
+      const ver = installed()[e.name] ?? state().skillVers?.[e.name] ?? installed()[`__skill_${e.name.split('/').pop()}`]
       const isSkill = e.contains?.includes('skill')
       // dsh parity: installed & no update → text badge only, no dead button
       if (ver && !hasUpdate(e, ver))
@@ -161,8 +161,10 @@ export default Plugin.define({
         try { doInstall().then(
           async () => {
             if (isSkill) {
-              // optimistic: writeSkill succeeded → mark basename local immediately
-              setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: 'local' })
+              // optimistic + version bookkeeping → real update detection later
+              const v = e.latestVersion ?? 'local'
+              setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: v })
+              put({ skillVers: { ...state().skillVers, [e.name]: v } })
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
               // effectiveness re-check: reload installed list, flag restart need
