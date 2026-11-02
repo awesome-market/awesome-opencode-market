@@ -396,3 +396,15 @@ failed 数据已留档 catalog；本地复查 `pipeline/verify` 可在隔离 env
 - catalog.yml cron `0 3 * * *` 已配置，自然触发未观察（均手动 dispatch 实证）
 - macOS 本地 verify 读真实 `~/.config`（opencode 不吃 XDG）——仅本地，CI Linux 正常，见 BLOCKERS.md
 - npm 包 `oc-market-quail-zephyr-72a0`（随机名实测分发链）：0.0.1 已转正可装，hex 随机名触发 npm spam 检测须用词组名
+
+## 仓库定位（用户指示 2026-11-02）
+
+`terry2010/opencode-market-spike` = **测试专用库**——每天跑测试数据（verify/投稿/管线 CI 全在这过）。
+真实上线库 = 另一个库（只有真实数据、无测试数据）。spike 库不改名、不移正。
+
+## load-failed 逐包归因（51 条）
+
+- 7 条 `NpmInstallFailedError`（404/装不上——真不存在或私有）
+- 44 条装好但 server 无 `loading plugin` 行：eval 崩/入口缺/opencode 版本不兼容
+  （抽样核对：日志无 id 误杀、无网络挂——server 正常 boot 仅该包静默）
+- 全部已留档 catalog `verification.logExcerpt`，逐包可查
