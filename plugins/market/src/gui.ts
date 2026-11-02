@@ -63,7 +63,7 @@ export default Plugin.define({
     const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
     const [favOnly, setFavOnly] = createSignal(false)
     const [groupFilter, setGroupFilter] = createSignal('')
-    const [tab, setTab] = createSignal<'discover'|'plugins'|'skills'|'favorites'|'installed'|'advanced'>('discover')
+    const [tab, setTab] = createSignal<'discover'|'plugins'|'skills'|'favorites'|'installed'|'mySkills'|'advanced'>('discover')
     const [filterOpen, setFilterOpen] = createSignal(false)
     const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
     const [rangeDays, setRangeDays] = createSignal(0)
@@ -95,7 +95,8 @@ export default Plugin.define({
       switch (tab()) {
         case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
-        case 'installed': list = list.filter(p => installed()[p.name]); break
+        case 'installed': list = list.filter(p => installed()[p.name] && !p.contains?.includes('skill')); break
+        case 'mySkills': list = list.filter(p => installed()[p.name] && p.contains?.includes('skill')); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
         case 'discover': default: break
       }
@@ -252,8 +253,8 @@ export default Plugin.define({
       // functional tabs: 发现/插件/skill/收藏/已安装/高级 (dsh top-nav style)
       const tabs = el('div', 'display:flex;gap:2px;margin-bottom:10px')
       const TABS: [typeof tab extends () => infer V ? V : never, string][] = [
-        ['discover', '发现'], ['plugins', '插件'], ['skills', 'skill'],
-        ['favorites', '收藏'], ['installed', '已安装'], ['advanced', '设置']]
+        ['discover', '发现'], ['plugins', '插件'], ['skills', '技能'],
+        ['favorites', '收藏'], ['installed', '我的插件'], ['mySkills', '我的技能'], ['advanced', '设置']]
       for (const [id, label] of TABS) {
         const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
         const sync = () => { const on = tab() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
