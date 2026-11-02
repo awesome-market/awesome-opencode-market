@@ -108,3 +108,42 @@ export function saveState(s: LocalState): void {
 export function allGroups(s: LocalState): string[] {
   return [...new Set(Object.values(s.groups))].sort()
 }
+
+const LS_IDX = 'opencode-market.index.v1'
+const TTL_MS = 3600_000
+
+interface CachedIndex { at: number; index: MarketIndex }
+
+/** TTL-cached fetch with snapshot fallback (dsh registry.ts pattern). */
+export async function fetchIndexCached(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
+  let cached: CachedIndex | null = null
+  try { cached = JSON.parse(localStorage.getItem(LS_IDX) ?? 'null') } catch { /* noop */ }
+  if (cached && Date.now() - cached.at < TTL_MS) return cached.index
+  try {
+    const idx = await fetchIndex(url)
+    try { localStorage.setItem(LS_IDX, JSON.stringify({ at: Date.now(), index: idx })) } catch { /* quota */ }
+    return idx
+  } catch (e) {
+    if (cached) return cached.index          // snapshot fallback beats failure
+    throw e
+  }
+}
+
+/** Freshness label for the UI header — "data from N min ago". */
+export function indexAge(idx: MarketIndex | null): string {
+  return idx?.generatedAt ? idx.generatedAt.slice(0, 16).replace('T', ' ') : ''
+}
+
+const zh = /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
+/** Minimal i18n — zh/en user-facing strings. */
+export function t(key: 'verified' | 'failed' | 'skipped' | 'unverified' | 'installed' | 'search' | 'back' | 'loading'): string {
+  if (!zh) return key
+  return ({ verified: '已实测可装', failed: '装不上/加载失败', skipped: '有高危信号未跑', unverified: '未验证',
+    installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…' })[key]
+}
+
+/** Latest-version compare for the update button. */
+export function hasUpdate(e: MarketEntry, installedVer?: string): boolean {
+  if (!installedVer || !e.latestVersion) return false
+  return e.latestVersion !== installedVer
+}

@@ -408,3 +408,14 @@ failed 数据已留档 catalog；本地复查 `pipeline/verify` 可在隔离 env
 - 44 条装好但 server 无 `loading plugin` 行：eval 崩/入口缺/opencode 版本不兼容
   （抽样核对：日志无 id 误杀、无网络挂——server 正常 boot 仅该包静默）
 - 全部已留档 catalog `verification.logExcerpt`，逐包可查
+
+## 追加（2026-11-02 P0+补齐批次）
+
+- **i18n-lite**：`catalog.ts t()` zh/en 用户面字符串（status/搜索/返回/加载中）——自动按 navigator.language 切
+- **目录 TTL 缓存**：`fetchIndexCached` 1h TTL + localStorage 快照回退（dsh registry.ts 模式）+ 页头 `indexAge` 新鲜度标识
+- **装后生效确认**：add 成功后重拉 `plugin list` 复核+提示 "restart to activate"（server 插件需服务重启——与 dsh hot mount 的宿主差异）
+- **更新链**：`hasUpdate` 版本对比，已装条目显示 `update → vX` 按钮（re-add latest 语义）
+- **build 脚本放行**：opencode `plugin add` 的 preinstall 拦截现在没有 UI 出路（宿主限制）——失败时 stderr 关键行+导出日志已是最远一步；放行是宿主层面的特性需求，记档待 opencode 侧出 API
+- **npm CDN 分发**：index.json 可挂 `oc-market-quail-zephyr-72a0` 包内 `files`（后续 publish 带上——jsdelivr 15s 源比 Pages 稳）；当前实现未启用，记档
+- **e2e 宿主冒烟**：`scripts/e2e-host-smoke.sh`——隔离 env 起 serve+打 API 验 `loading plugin` 行，可在 CI 外快速自检
+- **产品规约**：`AGENTS.md` 已立（借 dsh 框架）

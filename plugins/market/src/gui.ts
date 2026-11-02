@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, search, sortEntries, categoriesOf, redactLog, keyLines, loadState, saveState, allGroups, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -80,8 +80,8 @@ export default Plugin.define({
       return sortEntries(search(list, query()), sort())
     }
     const statusOf = (e: MarketEntry) =>
-      installed()[e.name] ? `installed v${installed()[e.name]}`
-      : e.verification?.status ?? 'unverified'
+      installed()[e.name] ? `${t('installed')} v${installed()[e.name]}`
+      : t((e.verification?.status ?? 'unverified') as 'verified')
 
     // ---- dom helpers -------------------------------------------------------
     const el = (tag: string, css = '', text = '') => {
@@ -97,12 +97,21 @@ export default Plugin.define({
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer', installed()[e.name] ? 'reinstall' : 'add') as HTMLButtonElement
+      const ver = installed()[e.name]
+      const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
+      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
         safe.install(e.name).then(
-          () => { b.textContent = 'installed'; b.style.color = '#4a4'; setInstalled({ ...installed(), [e.name]: e.latestVersion ?? '?' }) },
+          async () => {
+            // effectiveness re-check: reload installed list, flag restart need
+            const fresh = await safe.installed?.().catch(() => installed())
+            if (fresh) setInstalled(fresh)
+            const okNow = (fresh ?? installed())[e.name]
+            b.textContent = okNow ? `${t('installed')} — restart to activate` : `${t('installed')} (verify pending)`
+            b.style.color = '#4a4'
+          },
           (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
         )
       }
@@ -165,10 +174,10 @@ export default Plugin.define({
     // reactive re-render (the insert below only owns the body region)
     const chrome = () => {
       const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
-      root.append(el('h3', 'margin:0 0 8px', 'opencode market'))
+      root.append(el('h3', 'margin:0 0 8px', `opencode market · ${indexAge(data())}`))
       const controls = el('div', 'display:flex;margin-bottom:8px')
       const q = document.createElement('input')
-      q.placeholder = 'search…'
+      q.placeholder = t('search')
       q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
       q.oninput = () => setQuery(q.value)
       const favChip = el('button', 'font-size:11px;cursor:pointer;margin-right:6px', favOnly() ? '★ favorites' : '☆ favorites')
@@ -183,7 +192,8 @@ export default Plugin.define({
 
     const detailView = (e: MarketEntry) => {
       const root = el('div', 'padding:12px;overflow:auto;height:100%;box-sizing:border-box')
-      const back = el('button', 'font-size:12px;cursor:pointer;margin-bottom:10px', '← back')
+      const back = el('button', 'font-size:12px;cursor:pointer;margin-bottom:10px')
+      back.textContent = t('back')
       back.onclick = () => setView({ kind: 'list' })
       root.append(back, el('h3', 'margin:0', e.name))
       root.appendChild(badge(e))
@@ -234,7 +244,7 @@ export default Plugin.define({
       })
       insert(body, () => {
         if (err()) return el('div', 'padding:12px;color:#c66', `error: ${err()}`)
-        if (!data()) return el('div', 'padding:12px;opacity:.6', 'loading…')
+        if (!data()) return el('div', 'padding:12px;opacity:.6', t('loading'))
         const v = view()
         const n = v.kind === 'detail' ? detailView(v.e) : listView()
         n.style.padding = '0 12px 12px'
@@ -270,7 +280,7 @@ export default Plugin.define({
   main(m: any) {
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
     m.provide(Market, {
-        index: () => fetchIndex() as Promise<MarketIndex>,
+        index: () => fetchIndexCached() as Promise<MarketIndex>,
         installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
           const out = await new Promise<string>((res, rej) =>

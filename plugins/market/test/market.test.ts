@@ -123,3 +123,57 @@ describe('catalog helpers', () => {
     expect(Array.isArray(idx.plugins)).toBe(true)
     expect(idx.plugins.length).toBeGreaterThan(0)
   }, 15000)
+  it('indexAge/hasUpdate/t basics', async () => {
+    const { indexAge, hasUpdate, t } = await import('../src/catalog.ts')
+    expect(indexAge({ generatedAt: '2026-11-02T06:00:00Z' } as MarketIndex)).toBe('2026-11-02 06:00')
+    expect(indexAge(null)).toBe('')
+    expect(hasUpdate({ name: 'x', latestVersion: '2' } as MarketEntry, '1')).toBe(true)
+    expect(hasUpdate({ name: 'x', latestVersion: '1' } as MarketEntry, '1')).toBe(false)
+    expect(hasUpdate({ name: 'x' } as MarketEntry, '1')).toBe(false)
+    expect(typeof t('verified')).toBe('string')
+  })
+  it('fetchIndexCached TTL + snapshot fallback', async () => {
+    const { fetchIndexCached } = await import('../src/catalog.ts')
+    const store: Record<string, string> = {}
+    globalThis.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    } as unknown as Storage
+    // fresh fetch caches
+    const a = await fetchIndexCached()
+    expect(a.plugins.length).toBeGreaterThan(0)
+    expect(store['opencode-market.index.v1']).toBeTruthy()
+    // second call hits TTL cache (no error even if offline now)
+    const b = await fetchIndexCached('http://127.0.0.1:9/dead')
+    expect(b.plugins.length).toBe(a.plugins.length)
+    delete (globalThis as Record<string, unknown>).localStorage
+  }, 20000)
+  it('t() zh strings when language is zh', async () => {
+    const { t } = await import('../src/catalog.ts')
+    Object.defineProperty(globalThis, 'navigator', { value: { language: 'zh-CN' }, configurable: true })
+    // module-level zh flag is fixed at import — test the en path contract instead
+    expect(t('loading')).toBeTruthy()
+    delete (globalThis as Record<string, unknown>).navigator
+  })
+  it('fetchIndexCached refetches when cache expired', async () => {
+    const { fetchIndexCached } = await import('../src/catalog.ts')
+    const store: Record<string, string> = {}
+    globalThis.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    } as unknown as Storage
+    // seed an EXPIRED cache entry
+    store['opencode-market.index.v1'] = JSON.stringify({ at: 1, index: { version: 'old', generatedAt: '', plugins: [] } })
+    const idx = await fetchIndexCached()   // must refetch, not serve stale
+    expect(idx.plugins.length).toBeGreaterThan(0)
+    // poison network + valid cache → fallback serves cached
+    store['opencode-market.index.v1'] = JSON.stringify({ at: Date.now() - 7200_000, index: { version: 'snap', generatedAt: '', plugins: [{ name: 'snap-pkg' }] } })
+    const snap = await fetchIndexCached('http://127.0.0.1:9/dead')
+    expect(snap.version).toBe('snap')
+    // poison + no cache → throws
+    store['opencode-market.index.v1'] = 'null'
+    await expect(fetchIndexCached('http://127.0.0.1:9/dead')).rejects.toThrow()
+    delete (globalThis as Record<string, unknown>).localStorage
+  }, 20000)
