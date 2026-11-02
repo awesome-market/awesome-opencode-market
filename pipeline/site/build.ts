@@ -72,6 +72,9 @@ export function detailPage(e: PluginEntry): string {
 export function buildSite(index: CatalogIndex, outDir: string): void {
   mkdirSync(join(outDir, 'p'), { recursive: true })
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index))
+  // privacy note + health endpoint (dsh parity)
+  writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
+  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: index.plugins.length, generatedAt: index.generatedAt }))
   writeFileSync(join(outDir, 'index.html'), listPage(index))
   for (const e of index.plugins) {
     const p = join(outDir, 'p', `${e.slug}.html`)

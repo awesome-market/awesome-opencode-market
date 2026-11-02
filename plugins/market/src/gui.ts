@@ -17,6 +17,7 @@ const Market = Ipc.define({
     installed: { output: Schema.Unknown },
     install: { input: Schema.String, output: Schema.String },
     cancelInstall: { input: Schema.String, output: Schema.String },
+    verifyActivation: { input: Schema.String, output: Schema.String },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -27,6 +28,7 @@ type Api = {
   installed(): Promise<Record<string, string>>
   install(name: string): Promise<string>
   cancelInstall(name: string): Promise<string>
+  verifyActivation(name: string): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -110,8 +112,10 @@ export default Plugin.define({
             const fresh = await safe.installed?.().catch(() => installed())
             if (fresh) setInstalled(fresh)
             const okNow = (fresh ?? installed())[e.name]
-            b.textContent = okNow ? `${t('installed')} — restart to activate` : `${t('installed')} (verify pending)`
-            b.style.color = '#4a4'
+            b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
+            const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
+            b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — restart to activate` : `${t('installed')} (verify pending)`
+            b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
           },
           (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
         )
@@ -312,6 +316,24 @@ export default Plugin.define({
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
+        // self-confirm: isolated serve + API hit → real "did it load" verdict
+        verifyActivation: (name: string) =>
+          new Promise<string>((resolve) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
+            const { tmpdir } = require('node:os') as typeof import('node:os')
+            const { join } = require('node:path') as typeof import('node:path')
+            const home = mkdtempSync(join(tmpdir(), 'mkt-verify-'))
+            mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+            writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [name] }))
+            const env = { ...process.env, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') }
+            const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/plugin"; sleep 1; kill $SPID 2>/dev/null; true`
+            execFile('sh', ['-c', boot], { env, cwd: home, timeout: 25_000 }, () => {
+              const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
+              const ok = existsSync(log) && new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
+              resolve(ok ? 'activated' : 'not-loaded')
+            })
+          }),
       })
   },
 })
