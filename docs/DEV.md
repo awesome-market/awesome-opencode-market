@@ -379,3 +379,20 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | P5a 市场插件 | TUI `/market` + Desktop Market 面板双端真数据、搜索+安装 |
 
 verify 关键坑（见 BLOCKERS.md）：插件懒加载需 API 请求触发；run 的 service 派生在 CI 卡死换 serve；macOS 不吃 XDG；分片 96/8 片适配并发。
+
+## verify 失败归类（2026-11-02，366 全量）
+
+| 类别 | 数量 | 说明 |
+|---|---|---|
+| install 失败 | 6 | `NpmInstallFailedError`/404——包不存在或装不上，真负样本 |
+| load 失败 | 51 | 装好但无 `loading plugin` 日志行：eval 崩/入口坏/opencode 版本不兼容；日志核对无 id 误杀 |
+| verified | 309 | 真装上+真加载 |
+| skipped | 130 | redFlag 跳过执行（安全设计） |
+
+failed 数据已留档 catalog；本地复查 `pipeline/verify` 可在隔离 env 重跑单包定位。
+
+## 运维备注
+
+- catalog.yml cron `0 3 * * *` 已配置，自然触发未观察（均手动 dispatch 实证）
+- macOS 本地 verify 读真实 `~/.config`（opencode 不吃 XDG）——仅本地，CI Linux 正常，见 BLOCKERS.md
+- npm 包 `oc-market-quail-zephyr-72a0`（随机名实测分发链）：0.0.1 已转正可装，hex 随机名触发 npm spam 检测须用词组名
