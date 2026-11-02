@@ -24,6 +24,7 @@ const Market = Ipc.define({
     installSkillDir: { input: Schema.Unknown, output: Schema.String },
     skillSource: { output: Schema.Unknown },
     skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
+    devlog: { input: Schema.String, output: Schema.String },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -41,6 +42,7 @@ type Api = {
   installSkillDir(p: { name: string; scope: 'global' | 'project' }): Promise<string>
   skillSource(): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
+  devlog(line: string): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -70,7 +72,7 @@ export default Plugin.define({
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const devlog = () => !!state().devlog
-    const log = (msg: string) => { if (devlog()) appendLog(msg) }
+    const log = (msg: string) => { if (devlog()) { appendLog(msg); void safe.devlog?.(msg).catch(() => {}) } }
     const put = (patch: Partial<LocalState>) => {
       const s = { ...state(), ...patch }
       setState(s); try { saveState(s) } catch { /* noop */ }
@@ -617,6 +619,11 @@ export default Plugin.define({
             writeFileSync(cfg, JSON.stringify(d, null, 2))
             resolve(Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect])))
           }),
+        devlog: async (line: string) => {
+          const { appendFileSync } = require('node:fs') as typeof import('node:fs')
+          appendFileSync('/tmp/opencode-market.log', `${new Date().toISOString()} ${line}\n`)
+          return 'ok'
+        },
         uninstallSkill: (name: string) =>
           new Promise<string>((resolve, reject) => {
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
