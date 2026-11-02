@@ -520,15 +520,26 @@ export default Plugin.define({
           }),
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
         installSkill: async (name: string) => {
-          // pure-Node: no PATH deps — fetch packument/tarball, gunzip, parse tar
+          // pure-Node https+zlib+tar — no PATH deps, works in Electron main sandbox
           const { gunzipSync } = require('node:zlib') as typeof import('node:zlib')
+          const { get } = require('node:https') as typeof import('node:https')
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join, dirname } = require('node:path') as typeof import('node:path')
-          const { writeFileSync, mkdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`)).json() as { 'dist-tags': { latest: string }; versions: Record<string, { dist: { tarball: string } }> }
-          const url = pk.versions[pk['dist-tags'].latest]?.dist?.tarball
-          if (!url) throw new Error('no tarball')
-          const tar = gunzipSync(Buffer.from(await (await fetch(url)).arrayBuffer()))
+          const { writeFileSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
+          const getBuf = (url: string): Promise<Buffer> =>
+            new Promise((res, rej) => get(url, (r) => {
+              if (r.statusCode && r.statusCode >= 300 && r.statusCode < 400 && r.headers.location)
+                return getBuf(r.headers.location).then(res, rej)
+              if (r.statusCode !== 200) return rej(new Error(`HTTP ${r.statusCode}`))
+              const c: Buffer[] = []; r.on('data', d => c.push(d)); r.on('end', () => res(Buffer.concat(c)))
+            }).on('error', rej))
+          const push = (line: string) => m.emit?.('progress', { name, line })
+          push('fetching packument')
+          const pk = JSON.parse((await getBuf(`https://registry.npmjs.org/${encodeURIComponent(name)}`)).toString())
+          const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
+          if (!url) throw new Error('no tarball in packument')
+          push('downloading tarball')
+          const tar = gunzipSync(await getBuf(url))
           const dest = join(homedir(), '.config', 'opencode', 'skills', name.split('/').pop()!)
           mkdirSync(dest, { recursive: true })
           let off = 0, wrote = 0
@@ -546,7 +557,9 @@ export default Plugin.define({
             }
             off = body + Math.ceil(size / 512) * 512
           }
-          return wrote ? 'installed' : 'installed (empty)'
+          push(`extracted ${wrote} files`)
+          if (!wrote) throw new Error('empty tarball')
+          return 'installed'
         },
         installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
           new Promise<string>((resolve, reject) => {
