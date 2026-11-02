@@ -318,15 +318,19 @@ export default Plugin.define({
         ],
       }))
 
+      const w = () => dims().width
+      const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}\u2026` : s
       const Header = (): JSX.Element => (
-        <box flexDirection="column" paddingLeft={1}>
-          <box flexDirection="row">
+        <box flexDirection="column" flexShrink={0}>
+          <box flexDirection="row" paddingLeft={1} paddingRight={1}>
             <text fg={theme.text.base}><b>opencode market</b></text>
-            <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v0.0.3   {indexAge(idx())}   [U] 全部更新</text>
+            <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v0.0.3 · {indexAge(idx())}</text>
+            <box flexGrow={1} />
+            <text fg={theme.text.muted}>[U] 全部更新</text>
           </box>
-          <box flexDirection="row">
+          <box flexDirection="row" paddingLeft={1}>
             <For each={TABS}>{([id, label], i) => (
-              <text fg={id === tab() ? theme.text.base : theme.text.muted}>
+              <text fg={id === tab() ? theme.text.base : theme.text.faint}>
                 {id === tab() ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
               </text>
             )}</For>
@@ -336,20 +340,21 @@ export default Plugin.define({
 
       const List = (): JSX.Element => (
         <box flexDirection="column" flexGrow={1} minHeight={0}>
-          <box flexDirection="row" paddingLeft={1}>
+          <box flexDirection="row" paddingLeft={1} paddingRight={1} flexShrink={0}>
+            <text fg={theme.text.muted}>/ </text>
             <input
               flexGrow={1}
               placeholder={t('search')}
               value={query()}
               onInput={(v: string) => setQuery(v)}
               ref={(r) => { searchInput = r as unknown as typeof searchInput }}
-              onKeyDown={(ev) => {
+              onKeyDown={(ev: { name: string }) => {
                 if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
               }}
             />
             <text fg={theme.text.muted}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
           </box>
-          <box flexDirection="row" paddingLeft={1}>
+          <box flexDirection="row" paddingLeft={1} flexShrink={0}>
             <text fg={theme.text.muted}>[c] </text>
             <text fg={!cat() ? theme.text.base : theme.text.muted}>全部({pool().length}) </text>
             <For each={cats().slice(0, 6)}>{(c) => (
@@ -363,15 +368,18 @@ export default Plugin.define({
               <For each={pool()}>{(e, i) => {
                 const active = () => i() === sel() && !detail()
                 return (
-                  <box flexDirection="column" marginTop={i() === 0 ? 0 : 1} border={active() ? ['left'] : undefined} borderColor={theme.text.base} paddingLeft={1}>
+                  <box flexDirection="column" marginTop={i() === 0 ? 0 : 1}
+                       border={['top', 'right', 'bottom', 'left']}
+                       borderColor={active() ? theme.text.base : theme.border.base}
+                       paddingLeft={1} paddingRight={1}>
                     <box flexDirection="row">
-                      <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'}</text>
-                      <text fg={active() ? theme.text.base : theme.text.muted}> {e.name} {badge(e)}</text>
+                      <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
                       <box flexGrow={1} />
                       <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
                     </box>
-                    <text fg={theme.text.muted}>    {[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}   {categoriesOf(e).join(' ')}</text>
-                    <text fg={theme.text.muted}>    {(e.description?.en ?? '').slice(0, 100)}</text>
+                    <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
+                    <text fg={theme.text.muted}>{clip(e.description?.en ?? '', w() - 8)}</text>
+                    <text fg={theme.text.faint}>{categoriesOf(e).join('  ')}</text>
                   </box>
                 )
               }}</For>
@@ -386,15 +394,19 @@ export default Plugin.define({
         const caps = e.capabilities
         return (
           <scrollbox flexGrow={1} minHeight={0}>
-            <box flexDirection="column" paddingLeft={1}>
-              <text fg={theme.text.base}><b>{store.favorites[e.name] ? '★ ' : '☆ '}{e.name}</b> {badge(e)}</text>
+            <box flexDirection="column" paddingLeft={1} paddingRight={1}>
+              <box flexDirection="row">
+                <text fg={theme.text.base}><b>{store.favorites[e.name] ? '★ ' : '☆ '}{e.name}</b> {badge(e)}</text>
+                <box flexGrow={1} />
+                <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
+              </box>
               <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : '', categoriesOf(e).join(' ')].filter(Boolean).join(' · ')}</text>
               <box height={1} />
               <text fg={theme.text.base}>{e.description?.en ?? ''}</text>
               <Show when={e.description?.zh}><text fg={theme.text.muted}>{e.description?.zh}</text></Show>
               <box height={1} />
               <text fg={theme.text.muted}>{t('group')}: {store.groups[e.name] || '—'}   {t('note')}: {store.notes[e.name] || '—'}</text>
-              <text fg={theme.text.base}>action: {actionLabel(e)}   [i] install/update   [u] {t('uninstall')}   [*] {t('favorites')}   [g] {t('group')}   [n] {t('note')}</text>
+              <text fg={theme.text.base}>[i] install/update   [u] {t('uninstall')}   [*] {t('favorites')}   [g] {t('group')}   [n] {t('note')}</text>
               <Show when={caps?.redFlags?.length}>
                 <box height={1} />
                 <text fg={theme.text.base}>{t('redFlags')} ({caps!.redFlags.length}){!findingsOpen() ? '  [x] 展开' : ''}</text>
@@ -428,7 +440,7 @@ export default Plugin.define({
         <box width={dims().width} height={dims().height} flexDirection="column" backgroundColor={theme.background.base}>
           <Header />
           <Show when={detail()} fallback={tab() === 'settings' ? <Settings /> : <List />}><Detail /></Show>
-          <box flexDirection="row" paddingLeft={1}>
+          <box flexDirection="row" paddingLeft={1} flexShrink={0}>
             <text fg={theme.text.muted}>
               {status() || '↑↓/jk 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · 1-7/tab 切页 · esc 返回'}
             </text>
