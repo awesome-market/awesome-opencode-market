@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { fetchIndex, rows, DEFAULT_INDEX_URL } from '../src/catalog.ts'
-import type { MarketEntry } from '../src/catalog.ts'
+import type { MarketEntry, MarketIndex } from '../src/catalog.ts'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(dir, '../package.json'), 'utf8'))

@@ -93,13 +93,14 @@ export default Plugin.define({
     const badge = (e: MarketEntry) => {
       const s = statusOf(e)
       const b = el('span', 'margin-left:8px;font-size:11px;padding:1px 6px;border-radius:4px', s)
-      b.style.background = s.startsWith('installed') ? '#2a5' : s === 'verified' ? '#274' : s === 'failed' ? '#a33' : s === 'skipped' ? '#554' : '#555'
+      b.style.color = '#fff'
+      b.style.background = s.startsWith(t('installed')) ? '#1a7' : s === t('verified') || s === 'verified' ? '#1a7' : s === 'failed' ? '#c33' : s === 'skipped' ? '#885' : '#666'
       return b
     }
     const installBtn = (e: MarketEntry) => {
       const ver = installed()[e.name]
       const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
-      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer', label) as HTMLButtonElement
+      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#333;border:1px solid #555;border-radius:4px;padding:1px 8px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
