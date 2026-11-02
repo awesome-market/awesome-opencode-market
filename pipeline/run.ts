@@ -98,7 +98,10 @@ export async function run(opts: RunOptions = {}) {
 
       const repoMeta = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
       const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
-      const hasSkill = repo ? await repoFileExists(repo, 'SKILL.md', { token: opts.ghToken, fetchFn: f }) : false
+      const hasSkill = repo
+        ? (await repoFileExists(repo, 'SKILL.md', { token: opts.ghToken, fetchFn: f })) ||
+          (await repoFileExists(repo, '.opencode/skills', { token: opts.ghToken, fetchFn: f }))
+        : false
 
       const entry: PluginEntry = {
         name: cand.name,
