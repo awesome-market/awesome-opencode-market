@@ -129,13 +129,48 @@ export default Plugin.define({
       b.style.background = s.startsWith(t('installed')) ? '#1a7' : s === t('verified') || s === 'verified' ? '#1a7' : s === 'failed' ? '#c33' : s === 'skipped' ? '#885' : '#666'
       return b
     }
+    // two-step confirm: first click arms (3s window), second click executes
+    const uninstallBtn = (e: MarketEntry) => {
+      const isSkill = e.contains?.includes('skill')
+      const b = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', t('uninstall')) as HTMLButtonElement
+      let armed = false
+      let timer = 0
+      b.onclick = ev => {
+        ev.stopPropagation()
+        if (!armed) {
+          armed = true; b.textContent = t('confirmUninstall'); b.style.borderColor = '#c66'
+          timer = window.setTimeout(() => { armed = false; b.textContent = t('uninstall'); b.style.borderColor = 'rgba(200,80,80,.5)' }, 3000)
+          return
+        }
+        window.clearTimeout(timer)
+        b.disabled = true; b.textContent = '…'
+        ;(isSkill ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
+          async () => {
+            log(`uninstall ${e.name}`)
+            // drop every key this entry could own: plugin id, skill dir, <base>-* lifts
+            const base = `__skill_${e.name.split('/').pop()}`
+            const next = { ...installed() }
+            delete next[e.name]
+            for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
+            const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
+            put({ skillVers: sv }); setInstalled(next)
+            const fresh = await safe.installed?.().catch(() => null)
+            if (fresh) setInstalled(fresh)
+          },
+          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = 'failed'; b.title = String(x) },
+        )
+      }
+      return b
+    }
     const installBtn = (e: MarketEntry) => {
       const disk = skillInstalledVer(installed(), e.name)
       const ver = disk ? (state().skillVers?.[e.name] ?? disk) : undefined
       const isSkill = e.contains?.includes('skill')
-      // dsh parity: installed & no update → text badge only, no dead button
+      // manage tabs get a real uninstall action; other tabs keep the quiet badge
       if (ver && !hasUpdate(e, ver))
-        return el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
+        return tab() === 'installed' || tab() === 'mySkills'
+          ? uninstallBtn(e)
+          : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
       const label = ver ? `update → v${e.latestVersion}` : 'add'
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
@@ -406,15 +441,8 @@ export default Plugin.define({
       }
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
-      if (installed()[e.name]) {
-        const un = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#633;border:1px solid #855;border-radius:4px;padding:1px 8px', 'uninstall') as HTMLButtonElement
-        un.onclick = () => {
-          un.disabled = true; un.textContent = '…'
-          ;(e.contains?.includes('skill') ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
-            async () => { const f = await safe.installed?.().catch(() => ({})); if (f) setInstalled(f); un.textContent = 'removed' },
-            (x: unknown) => { un.textContent = 'failed'; un.title = String(x) },
-          )
-        }
+      if (skillInstalledVer(installed(), e.name)) {
+        const un = uninstallBtn(e); un.style.marginLeft = '8px'
         root.appendChild(un)
       }
       // local state: group + note
