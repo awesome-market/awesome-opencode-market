@@ -1,146 +1,192 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * GUI entry — exports["./gui-experimental"], evaluated by desktop windows + main process.
- * Data path: window ctx.main(Market) → main ctx.provide impl → fetchIndex (main has network).
- * Whitelist: only solid-js, @opencode/*, effect, @opencode/client requireable.
+ * Desktop GUI — real SolidJS reactivity via `insert()` from solid-js/web
+ * (function children become reactive computations). No h()/JSX — the host
+ * module whitelist only exposes solid-js, solid-js/web, solid-js/store.
  */
-import { Plugin, Panel, Command, SettingsPage, Ipc } from '@opencode/plugin/gui'
+import { Plugin, Ipc } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
-import { fetchIndex, rows, search, type MarketEntry, type MarketIndex } from './catalog.js'
+import { createSignal } from 'solid-js'
+import { insert } from 'solid-js/web'
+import { fetchIndex, search, sortEntries, categoriesOf, type MarketEntry, type MarketIndex } from './catalog.js'
 
-/** Contract: window calls index(), main process serves it. */
 const Market = Ipc.define({
   id: 'opencode-market',
   methods: {
     index: { output: Schema.Unknown },
+    installed: { output: Schema.Unknown },
     install: { input: Schema.String, output: Schema.String },
   },
 })
+type Api = {
+  index(): Promise<MarketIndex>
+  installed(): Promise<Record<string, string>>
+  install(name: string): Promise<string>
+}
 
-type Api = { index(): Promise<MarketIndex>; install(name: string): Promise<string> }
+type View = { kind: 'list' } | { kind: 'detail'; e: MarketEntry }
+const sorts = ['verified', 'downloads', 'stars', 'name'] as const
 
-let snapshot: { ok: true; i: MarketIndex } | { ok: false; err: string } | null = null
+export default (Plugin.define as any)('opencode-market', {
+  setup: (ctx: any) => {
+    let api: Api | null = null
+    try { api = ctx.main(Market) as Api } catch { /* diagnosed below */ }
+    if (!api?.index) return {}
+    const safe = api as Api
+    const [data, setData] = createSignal<MarketIndex | null>(null)
+    const [installed, setInstalled] = createSignal<Record<string, string>>({})
+    const [err, setErr] = createSignal('')
+    const [query, setQuery] = createSignal('')
+    const [cat, setCat] = createSignal('')
+    const [sort, setSort] = createSignal<string>('verified')
+    const [view, setView] = createSignal<View>({ kind: 'list' })
 
-export default Plugin.define({
-  setup(ctx) {
-    // defensive: surface Ipc failure in-page instead of crashing setup
-    let api: Api
-    try {
-      api = ctx.main(Market) as unknown as Api
-      if (!api) throw new Error('ctx.main returned no client')
-    } catch (e) {
-      const err = e as Error
-      api = { index: () => Promise.reject(err) }
+    safe.index().then(i => setData(i), e => setErr(String(e)))
+    safe.installed?.().then(s => setInstalled(s ?? {}), () => {})
+
+    const filtered = () => {
+      const all = data()?.plugins ?? []
+      const c = cat()
+      return sortEntries(search(c ? all.filter(p => p.category?.includes(c)) : all, query()), sort())
     }
-    // solid-js/h props are eager — prefetch into snapshot; view reads it on mount
-    api.index().then(
-      (i) => { snapshot = { ok: true, i: i as MarketIndex } },
-      (e: unknown) => { snapshot = { ok: false, err: String(e) } },
-    )
-    ctx.add(Panel, () => ({
-      id: 'market',
-      region: 'side' as const,
-      list: () => [{ id: 'market', title: 'Market' } as never],
-      render: () => MarketView({ api }),
-    }))
-    ctx.add(SettingsPage, () => ({
-      id: 'market',
-      title: 'Market',
-      render: () => MarketView({ api }),
-    }))
-    ctx.add(Command, () => ({
-      id: 'open-market',
-      title: 'Open Market',
-      slash: { name: 'market' },
-      run: () => {},
-    }))
-  },
-  /** Main-process entry: real network lives here. */
-  main(ctx) {
-    ctx.provide(Market, {
-      index: () => fetchIndex() as Promise<MarketIndex>,
-      install: (name: string) =>
-        new Promise<string>((resolve, reject) => {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const statusOf = (e: MarketEntry) =>
+      installed()[e.name] ? `installed v${installed()[e.name]}`
+      : e.verification?.status ?? 'unverified'
+
+    // ---- dom helpers -------------------------------------------------------
+    const el = (tag: string, css = '', text = '') => {
+      const n = document.createElement(tag)
+      if (css) n.style.cssText = css
+      if (text) n.textContent = text
+      return n
+    }
+    const badge = (e: MarketEntry) => {
+      const s = statusOf(e)
+      const b = el('span', 'margin-left:8px;font-size:11px;padding:1px 6px;border-radius:4px', s)
+      b.style.background = s.startsWith('installed') ? '#2a5' : s === 'verified' ? '#274' : s === 'failed' ? '#a33' : s === 'skipped' ? '#554' : '#555'
+      return b
+    }
+    const installBtn = (e: MarketEntry) => {
+      const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer', installed()[e.name] ? 'reinstall' : 'add') as HTMLButtonElement
+      b.onclick = ev => {
+        ev.stopPropagation()
+        b.disabled = true; b.textContent = '…'
+        safe.install(e.name).then(
+          () => { b.textContent = 'installed'; b.style.color = '#4a4'; setInstalled({ ...installed(), [e.name]: e.latestVersion ?? '?' }) },
+          (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
+        )
+      }
+      return b
+    }
+    const row = (e: MarketEntry) => {
+      const d = el('div', 'padding:6px 2px;border-bottom:1px solid #ffffff14;cursor:pointer')
+      d.onclick = () => setView({ kind: 'detail', e })
+      const title = el('div', 'font-weight:600')
+      title.append(el('span', '', e.name), badge(e), installBtn(e))
+      const desc = el('div', 'opacity:.6;font-size:12px', (e.description?.en ?? '').slice(0, 120))
+      d.append(title, desc)
+      return d
+    }
+    const sel = (opts: string[], cur: () => string, set: (v: string) => void, label = '') => {
+      const s = document.createElement('select')
+      s.style.cssText = 'margin-right:6px;font-size:12px'
+      if (label) s.append(new Option(label, ''))
+      for (const o of opts) s.append(new Option(o, o))
+      s.value = cur()
+      s.onchange = () => set(s.value)
+      return s
+    }
+
+    const listView = () => {
+      const root = el('div', 'padding:12px;overflow:auto;height:100%;box-sizing:border-box')
+      root.append(el('h3', 'margin:0 0 8px', 'opencode market'))
+      const controls = el('div', 'display:flex;margin-bottom:8px')
+      const q = document.createElement('input')
+      q.placeholder = 'search…'; q.value = query()
+      q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
+      q.oninput = () => setQuery(q.value)
+      controls.append(q,
+        sel(categoriesOf(data()?.plugins ?? []), cat, setCat, 'all categories'),
+        sel([...sorts], sort, setSort))
+      root.appendChild(controls)
+      const list = el('div')
+      insert(list, () => filtered().map(row))
+      root.appendChild(list)
+      return root
+    }
+
+    const detailView = (e: MarketEntry) => {
+      const root = el('div', 'padding:12px;overflow:auto;height:100%;box-sizing:border-box')
+      const back = el('button', 'font-size:12px;cursor:pointer;margin-bottom:10px', '← back')
+      back.onclick = () => setView({ kind: 'list' })
+      root.append(back, el('h3', 'margin:0', e.name))
+      root.appendChild(badge(e))
+      const v = e.verification
+      const info = el('div', 'font-size:12px;opacity:.8;margin:10px 0')
+      const caps = e.capabilities
+      info.innerHTML = [
+        `version: ${e.latestVersion ?? '?'}`,
+        `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
+        `findings: ${caps?.findings.length ?? 0} · redFlags: ${caps?.redFlags.length ?? 0}`,
+        `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
+      ].join('<br>')
+      root.appendChild(info)
+      root.appendChild(el('p', 'font-size:13px;line-height:1.5', e.description?.en ?? ''))
+      if (caps?.redFlags.length) {
+        root.appendChild(el('h4', 'color:#c66;margin:12px 0 4px', 'red flags'))
+        for (const f of caps.redFlags.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', `⚠ ${f}`))
+      }
+      if (caps?.findings.length) {
+        root.appendChild(el('h4', 'margin:12px 0 4px', 'findings'))
+        for (const f of caps.findings.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', f))
+      }
+      const btn = installBtn(e); btn.style.marginLeft = '0'
+      root.appendChild(btn)
+      return root
+    }
+
+    const mount = (parent: HTMLElement) => {
+      insert(parent, () => {
+        if (err()) return el('div', 'padding:12px;color:#c66', `error: ${err()}`)
+        if (!data()) return el('div', 'padding:12px;opacity:.6', 'loading…')
+        const v = view()
+        return v.kind === 'detail' ? detailView(v.e) : listView()
+      })
+    }
+
+    return {
+      main: (m: any) => m.provide(Market, {
+        index: () => fetchIndex() as Promise<MarketIndex>,
+        installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
-          execFile('opencode', ['plugin', 'add', name], { timeout: 60_000 },
-            (e, out, err) => e ? reject(new Error(err || e.message)) : resolve(out || 'installed'))
-        }),
-    })
+          const out = await new Promise<string>((res, rej) =>
+            execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
+          const map: Record<string, string> = {}
+          for (const ln of out.split('\n').slice(1)) {
+            const [id, ver, src] = ln.trim().split(/\s{2,}/)
+            if (id) { map[id] = ver ?? '?'; if (src) map[src] = ver ?? '?' }
+          }
+          return map
+        },
+        install: (name: string) =>
+          new Promise<string>((resolve, reject) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            execFile('opencode', ['plugin', 'add', name], { timeout: 60_000 },
+              (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'installed'))
+          }),
+      }),
+      'session.panel': () => [{
+        id: 'market', title: 'Market', region: 'side' as const, transient: true,
+        render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+      }],
+      'settings.page': () => [{
+        id: 'market', title: 'Market', icon: 'marketplace',
+        render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+      }],
+      commands: () => [{
+        id: 'opencode-market.open', title: 'Open Market', palette: true,
+        slash: { name: 'market' }, run: () => {},
+      }],
+    }
   },
 })
-
-/** The market list view — DOM builder (whitelist has no jsx-runtime; h props are eager anyway). */
-export function MarketView(props: { api: Api }) {
-  void props
-  const root = document.createElement('div')
-  root.style.cssText = 'padding:12px;overflow-y:auto;height:100%'
-  root.dataset.scrollable = ''
-  const h3 = document.createElement('h3')
-  h3.textContent = 'opencode market'
-  h3.style.margin = '0 0 8px'
-  root.appendChild(h3)
-  const r = snapshot
-  if (r === null) {
-    const p = document.createElement('p')
-    p.textContent = 'loading… (revisit after data arrives)'
-    root.appendChild(p)
-    return root
-  }
-  if (!r.ok) {
-    const p = document.createElement('p')
-    p.style.color = '#c66'
-    p.textContent = `fetch failed: ${r.err}`
-    root.appendChild(p)
-    return root
-  }
-  const meta = document.createElement('p')
-  meta.style.cssText = 'opacity:.6;font-size:12px'
-  meta.textContent = `${r.i.plugins.length} entries · not affiliated · findings ≠ proof of safety`
-  root.appendChild(meta)
-  const q = document.createElement('input')
-  q.placeholder = 'search…'
-  q.style.cssText = 'width:100%;padding:6px;margin:6px 0;box-sizing:border-box'
-  const list = document.createElement('div')
-  const renderList = (entries: MarketEntry[]) => {
-    list.replaceChildren()
-    for (const e of rows(entries)) list.appendChild(entryRow(e, props.api))
-  }
-  q.oninput = () => renderList(search(r.i.plugins, q.value))
-  root.appendChild(q)
-  root.appendChild(list)
-  renderList(r.i.plugins)
-  return root
-}
-
-function entryRow(e: MarketEntry, api: Api): HTMLElement {
-  const v = e.verification?.status ?? 'unverified'
-  const flag = e.capabilities?.redFlags.length ? ' ⚠' : ''
-  const color = v === 'verified' ? '#4a4' : e.capabilities?.redFlags.length ? '#c66' : '#888'
-  const div = document.createElement('div')
-  div.style.cssText = 'padding:6px 0;border-bottom:1px solid #3333;font-size:13px'
-  const b = document.createElement('b')
-  b.textContent = e.name + flag
-  const span = document.createElement('span')
-  span.style.cssText = `color:${color};font-size:11px;margin-left:6px`
-  span.textContent = v
-  const desc = document.createElement('div')
-  desc.style.cssText = 'opacity:.7;font-size:12px'
-  desc.textContent = e.description?.en ?? ''
-  const code = document.createElement('code')
-  code.style.cssText = 'font-size:11px;opacity:.6'
-  code.textContent = `opencode plugin add ${e.name}`
-  const btn = document.createElement('button')
-  btn.textContent = 'add'
-  btn.style.cssText = 'margin-left:8px;font-size:11px;cursor:pointer'
-  btn.onclick = () => {
-    btn.disabled = true; btn.textContent = '…'
-    api.install(e.name).then(
-      () => { btn.textContent = 'installed'; btn.style.color = '#4a4' },
-      (x: unknown) => { btn.textContent = 'failed'; btn.title = String(x); btn.style.color = '#c66' },
-    )
-  }
-  div.append(b, span, desc, code, btn)
-  return div
-}
-
-

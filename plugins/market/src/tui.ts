@@ -24,12 +24,12 @@ export default Plugin.define({
                 value: p.name,
                 description: p.description?.en ?? '',
               }))
-              if (!options.length) { ctx.ui.toast(`market: no match for "${input}"`); return }
+              if (!options.length) { ctx.ui.toast.show({ message: `market: no match for "${input}"` }); return }
               void ctx.ui.dialog.select<string>({ title: `Market (${hits.length})`, options })
-                .then(name => name && ctx.ui.dialog.alert({
-                  title: name, message: `install: opencode plugin add ${name}` }))
+                .then(name => { if (name) void ctx.ui.dialog.alert({
+                  title: name, message: `install: opencode plugin add ${name}` }) })
             })
-            .catch(e => ctx.ui.toast(`market fetch failed: ${(e as Error).message}`))
+            .catch(e => ctx.ui.toast.show({ message: `market fetch failed: ${(e as Error).message}` }))
         },
       }],
     }))

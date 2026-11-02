@@ -10,7 +10,7 @@ const dir = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(dir, '../package.json'), 'utf8'))
 
 const mkEntry = (name: string, status: string, red = 0): MarketEntry => ({
-  name, slug: name, type: 'plugin',
+  name, slug: name, type: 'plugin', category: [],
   capabilities: { scannedAt: 't', findings: [], redFlags: Array(red).fill('x') },
   verification: { status },
 })
