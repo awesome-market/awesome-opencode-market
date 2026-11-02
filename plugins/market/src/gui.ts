@@ -96,7 +96,7 @@ export default Plugin.define({
         case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
         case 'installed': list = list.filter(p => installed()[p.name] && !p.contains?.includes('skill')); break
-        case 'mySkills': list = list.filter(p => installed()[p.name] && p.contains?.includes('skill')); break
+        case 'mySkills': list = list.filter(p => (installed()[p.name] ?? installed()[`__skill_${p.name.split('/').pop()}`]) && p.contains?.includes('skill')); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
         case 'discover': default: break
       }
@@ -126,7 +126,7 @@ export default Plugin.define({
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const ver = installed()[e.name]
+      const ver = installed()[e.name] ?? installed()[`__skill_${e.name.split('/').pop()}`]
       const isSkill = e.contains?.includes('skill')
       // dsh parity: installed & no update → text badge only, no dead button
       if (ver && !hasUpdate(e, ver))
@@ -526,14 +526,15 @@ export default Plugin.define({
             const { join } = require('node:path') as typeof import('node:path')
             const { existsSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
             const dir = join(homedir(), '.config', 'opencode', 'skills')
-            const script = `set -e; mkdir -p "${dir}/_dl"; cd "${dir}/_dl"; ` +
-              `TARBALL=$(npm view "${name}" dist.tarball 2>/dev/null); ` +
-              `[ -z "$TARBALL" ] && TARBALL=$(npm view "${name.split('/').pop()}" dist.tarball); ` +
-              `curl -fsSL "$TARBALL" -o p.tgz; ` +
-              `mkdir -p "${dir}/${name.split('/').pop()}"; ` +
-              `tar xzf p.tgz -C "${dir}/${name.split('/').pop()}" --strip-components=1 2>/dev/null || ` +
-              `{ mkdir -p "${dir}/${name.split('/').pop()}" && tar xzf p.tgz -C "${dir}/${name.split('/').pop()}"; }; ` +
-              `test -f "${dir}/${name.split('/').pop()}/SKILL.md" || find "${dir}/${name.split('/').pop()}" -name SKILL.md | head -1`
+            const id = name.split('/').pop()!
+            const script = `mkdir -p "${dir}/_dl" && cd "${dir}/_dl" && ` +
+              `T=$(npm view "${name}" dist.tarball 2>/dev/null); ` +
+              `if [ -z "$T" ]; then T=$(npm view "${id}" dist.tarball 2>/dev/null); fi; ` +
+              `if [ -z "$T" ]; then echo "no-tarball" >&2; exit 2; fi; ` +
+              `curl -fsSL "$T" -o p.tgz || exit 3; ` +
+              `rm -rf "${dir}/${id}" && mkdir -p "${dir}/${id}"; ` +
+              `tar xzf p.tgz -C "${dir}/${id}" --strip-components=1 2>/dev/null || tar xzf p.tgz -C "${dir}/${id}"; ` +
+              `find "${dir}/${id}" -name SKILL.md -o -name '*.md' | head -1`
             execFile('sh', ['-c', script], { timeout: 45_000 }, (e, out, er) => {
               if (e) return reject(new Error(er || e.message))
               const dest = join(dir, name.split('/').pop()!, 'SKILL.md')
