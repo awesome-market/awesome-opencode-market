@@ -3,14 +3,22 @@ import { build } from 'esbuild'
 
 const shared = {
   bundle: true,
-  external: ['@opencode/plugin', '@opencode/plugin/*', 'effect', 'effect/*', 'solid-js', 'solid-js/*', 'node:*'],
+  external: ['@opencode/plugin', '@opencode/plugin/*', '@opentui/*', 'effect', 'effect/*', 'solid-js', 'solid-js/*', 'node:*'],
   target: 'es2022',
   logLevel: 'warning' as const,
 }
 
 await Promise.all([
   build({ ...shared, entryPoints: ['src/server.ts'], outfile: 'dist/server.js', format: 'esm', platform: 'node' }),
-  build({ ...shared, entryPoints: ['src/tui.ts'], outfile: 'dist/tui.js', format: 'esm', platform: 'node' }),
+  build({
+    ...shared,
+    entryPoints: ['src/tui.tsx'],
+    outfile: 'dist/tui.js',
+    format: 'esm',
+    platform: 'node',
+    jsx: 'automatic',
+    jsxImportSource: '@opentui/solid',
+  }),
   // GUI must be CJS text the host evaluates (host.ts: entry only accepted if .cjs/.js + CommonJS-evaluable)
   build({
     ...shared,

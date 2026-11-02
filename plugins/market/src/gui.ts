@@ -9,6 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { installSkillTar, uninstallSkillDir } from './skill-install.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -598,62 +599,10 @@ export default Plugin.define({
           }),
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
         writeSkill: async (p: { name: string; b64: string }) => {
-          const { gunzipSync } = require('node:zlib') as typeof import('node:zlib')
           const { homedir } = require('node:os') as typeof import('node:os')
-          const { join, dirname } = require('node:path') as typeof import('node:path')
-          const { writeFileSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
-          const tar = gunzipSync(Buffer.from(p.b64, 'base64'))
-          const dest = join(homedir(), '.config', 'opencode', 'skills', p.name.split('/').pop()!)
-          mkdirSync(dest, { recursive: true })
-          let off = 0, wrote = 0
-          while (off + 512 <= tar.length) {
-            const f = tar.toString('utf8', off, off + 100).replace(/ .*$/, '')
-            if (!f) break
-            const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
-            const type = tar.toString('utf8', off + 156, off + 157)
-            const body = off + 512
-            const rel = f.replace(/^(\.\/)?(package\/)?/, '')
-            if (rel && type === '5') mkdirSync(join(dest, rel), { recursive: true })
-            if (rel && (type === '0' || type === '' || type === ' ')) {
-              const fp = join(dest, rel); mkdirSync(dirname(fp), { recursive: true })
-              writeFileSync(fp, tar.subarray(body, body + size)); wrote++
-            }
-            off = body + Math.ceil(size / 512) * 512
-          }
-          if (!wrote) throw new Error('empty tarball')
-          // normalize: hidden nests are skipped by opencode discovery, and a
-          // `skills/` nest under a root-level SKILL.md is masked (a dir holding
-          // SKILL.md is one skill — no deeper search). Lift nested skills to
-          // the source root preserving author IDs; prefix with the package
-          // basename only on collision. Manifest records what we created.
-          const { readdirSync, readFileSync, renameSync, rmSync, existsSync } = require('node:fs') as typeof import('node:fs')
-          const root = dirname(dest)
-          const id = p.name.split('/').pop()!
-          // paths we created on a previous install may be overwritten in place;
-          // a foreign dir at the same name forces the <id>- prefix instead
-          const owned = new Set<string>()
-          try {
-            const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
-            for (const rel of prev.paths ?? []) owned.add(rel)
-          } catch { /* first install */ }
-          const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
-            ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
-          const paths: string[] = []
-          for (const nest of nests) {
-            const nd = join(dest, nest)
-            let subs: string[]
-            try { subs = readdirSync(nd) } catch { continue }
-            for (const sub of subs) {
-              if (sub.startsWith('.')) continue
-              let rel = sub
-              if (existsSync(join(root, rel)) && !owned.has(rel)) rel = `${id}-${sub}`
-              rmSync(join(root, rel), { recursive: true, force: true })
-              renameSync(join(nd, sub), join(root, rel)); paths.push(rel)
-            }
-            rmSync(nd, { recursive: true, force: true })
-          }
-          writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ paths }))
-          return `wrote ${wrote}, lifted ${paths.length}`
+          const { join } = require('node:path') as typeof import('node:path')
+          return installSkillTar({ name: p.name, gzipped: Buffer.from(p.b64, 'base64'),
+            root: join(homedir(), '.config', 'opencode', 'skills') })
         },
         installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
           new Promise<string>((resolve, reject) => {
@@ -698,28 +647,10 @@ export default Plugin.define({
         },
         uninstallSkill: (name: string) =>
           new Promise<string>((resolve, reject) => {
-            const { readFileSync, existsSync, rmSync, readdirSync } = require('node:fs') as typeof import('node:fs')
             const { homedir } = require('node:os') as typeof import('node:os')
             const { join } = require('node:path') as typeof import('node:path')
-            const base = join(homedir(), '.config', 'opencode', 'skills')
-            const id = name.split('/').pop()!
-            const dest = join(base, id)
-            try {
-              const mf = join(dest, '.market-skills.json')
-              if (existsSync(mf)) {
-                // manifest of lifted paths — remove exactly what writeSkill created
-                const m = JSON.parse(readFileSync(mf, 'utf8')) as { paths?: string[] }
-                for (const rel of m.paths ?? []) {
-                  const t = join(base, rel)
-                  if (t.startsWith(`${base}/`)) rmSync(t, { recursive: true, force: true })
-                }
-              } else for (const d of readdirSync(base)) {
-                // legacy layout: lifted dirs were named <id>-*
-                if (d.startsWith(`${id}-`)) rmSync(join(base, d), { recursive: true, force: true })
-              }
-              rmSync(dest, { recursive: true, force: true })
-              resolve('removed')
-            } catch (e) { reject(e instanceof Error ? e : new Error(String(e))) }
+            try { resolve(uninstallSkillDir(name, join(homedir(), '.config', 'opencode', 'skills'))) }
+            catch (e) { reject(e instanceof Error ? e : new Error(String(e))) }
           }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict
         verifyActivation: (name: string) =>

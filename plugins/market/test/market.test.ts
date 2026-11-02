@@ -258,3 +258,103 @@ describe('catalog helpers', () => {
     expect(readLog()).toEqual([])
     delete (globalThis as Record<string, unknown>).localStorage
   })
+
+describe('skill-install', () => {
+  const mk = (files: Record<string, string>) => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require('node:fs') as typeof import('node:fs')
+    const { tmpdir } = require('node:os') as typeof import('node:os')
+    const src = mkdtempSync(join(tmpdir(), 'skt-'))
+    for (const [p, c] of Object.entries(files)) {
+      const fp = join(src, 'package', p)
+      mkdirSync(dirname(fp), { recursive: true })
+      writeFileSync(fp, c)
+    }
+    const tgz = join(src, 'p.tgz')
+    execFileSync('tar', ['czf', tgz, '-C', src, 'package'])
+    return { src, tgz, out: mkdtempSync(join(tmpdir(), 'sko-')) }
+  }
+
+  it('installSkillTar: lifts hidden nests preserving author IDs + manifest; uninstall removes them', async () => {
+    const { installSkillTar, uninstallSkillDir } = await import('../src/skill-install.ts')
+    const { readdirSync, readFileSync, existsSync } = await import('node:fs')
+    const { tgz, out } = mk({
+      'README.md': '# pkg',
+      '.opencode/skills/semantic-commit/SKILL.md': '---\ndescription: x\n---\nbody',
+      '.opencode/skills/review.md': 'file skill',
+      '.claude/skills/helper/SKILL.md': '---\n---\nx',
+      'skills/nested-stays/SKILL.md': '---\n---\ny',   // non-hidden nest, no root SKILL.md → stays
+    })
+    const msg = installSkillTar({ name: '@p/suite', gzipped: readFileSync(tgz), root: out })
+    expect(msg).toMatch(/wrote \d+/)
+    // author IDs preserved at source root
+    expect(existsSync(join(out, 'semantic-commit', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(out, 'helper', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(out, 'review.md'))).toBe(true)
+    // non-hidden skills/ nest stays inside the package dir (discoverable at depth 3)
+    expect(existsSync(join(out, 'suite', 'skills', 'nested-stays', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(out, 'suite', '.market-skills.json'))).toBe(true)
+    const mf = JSON.parse(readFileSync(join(out, 'suite', '.market-skills.json'), 'utf8')) as { paths: string[] }
+    expect(mf.paths.sort()).toEqual(['helper', 'review.md', 'semantic-commit'])
+    uninstallSkillDir('@p/suite', out)
+    expect(existsSync(join(out, 'suite'))).toBe(false)
+    expect(existsSync(join(out, 'semantic-commit'))).toBe(false)
+    expect(existsSync(join(out, 'review.md'))).toBe(false)
+    expect(existsSync(join(out, 'helper'))).toBe(false)
+  })
+
+  it('installSkillTar: masked skills/ nest lifted when root SKILL.md exists; collision gets prefix', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+    const { tgz, out } = mk({
+      'SKILL.md': '---\n---\nroot skill',                  // masks nested search
+      'skills/inner/SKILL.md': '---\n---\ninner',
+      '.opencode/skills/taken/SKILL.md': '---\n---\nmine',
+    })
+    // foreign dir occupying the author ID forces the <pkg>- prefix
+    mkdirSync(join(out, 'taken'), { recursive: true }); writeFileSync(join(out, 'taken', 'SKILL.md'), 'foreign')
+    installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })
+    expect(existsSync(join(out, 'inner', 'SKILL.md'))).toBe(true)             // masked → lifted
+    expect(existsSync(join(out, 'suite-taken', 'SKILL.md'))).toBe(true)       // collision → prefixed
+    expect(readFileSync(join(out, 'taken', 'SKILL.md'), 'utf8')).toBe('foreign') // foreign untouched
+  })
+  it('installSkillTar: reinstall overwrites owned paths in place; empty tarball throws', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, writeFileSync, existsSync } = await import('node:fs')
+    const { tgz, out } = mk({ '.opencode/skills/alpha/SKILL.md': 'v1' })
+    installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })
+    expect(existsSync(join(out, 'alpha', 'SKILL.md'))).toBe(true)
+    // reinstall: owned 'alpha' overwritten in place — no suite-alpha duplicate
+    installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })
+    expect(existsSync(join(out, 'alpha', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(out, 'suite-alpha'))).toBe(false)
+    const { gzipSync } = await import('node:zlib')
+    expect(() => installSkillTar({ name: 'x', gzipped: gzipSync(Buffer.alloc(0)), root: out })).toThrow('empty tarball')
+  })
+
+  it('installSkillTar: skips hidden entries inside nests', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, existsSync, readdirSync } = await import('node:fs')
+    const { tgz, out } = mk({
+      '.opencode/skills/.secret/SKILL.md': 'x',
+      '.opencode/skills/visible/SKILL.md': 'y',
+    })
+    installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })
+    expect(existsSync(join(out, 'visible', 'SKILL.md'))).toBe(true)
+    expect(readdirSync(out)).not.toContain('.secret')
+  })
+
+  it('uninstallSkillDir: legacy <id>-* cleanup when no manifest', async () => {
+    const { uninstallSkillDir } = await import('../src/skill-install.ts')
+    const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const out = mkdtempSync(join(tmpdir(), 'skl-'))
+    mkdirSync(join(out, 'suite'), { recursive: true })
+    mkdirSync(join(out, 'suite-alpha'), { recursive: true })
+    mkdirSync(join(out, 'other'), { recursive: true })
+    writeFileSync(join(out, 'other', 'SKILL.md'), 'keep')
+    uninstallSkillDir('suite', out)
+    expect(existsSync(join(out, 'suite'))).toBe(false)
+    expect(existsSync(join(out, 'suite-alpha'))).toBe(false)
+    expect(existsSync(join(out, 'other'))).toBe(true)
+  })
+})
