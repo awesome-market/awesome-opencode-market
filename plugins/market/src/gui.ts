@@ -576,6 +576,22 @@ export default Plugin.define({
             off = body + Math.ceil(size / 512) * 512
           }
           if (!wrote) throw new Error('empty tarball')
+          // normalize: packages nest skills under .opencode/skills/ or skills/ —
+          // hidden dirs are skipped by discovery, so lift skill dirs to top level
+          const { readdirSync, renameSync, rmSync } = require('node:fs') as typeof import('node:fs')
+          for (const nest of ['.opencode/skills', 'skills']) {
+            const nd = join(dest, nest)
+            try {
+              for (const sub of readdirSync(nd)) {
+                const src = join(nd, sub)
+                if (sub === 'SKILL.md' || sub.endsWith('.md')) { /* flat files stay */ }
+                else {
+                  const target = join(dirname(dest), `${p.name.split('/').pop()}-${sub}`)
+                  rmSync(target, { recursive: true, force: true }); renameSync(src, target)
+                }
+              }
+            } catch { /* no such nest */ }
+          }
           return `wrote ${wrote}`
         },
         installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
