@@ -81,3 +81,16 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 - GUI 取数必须走 Ipc：window 沙箱无网络；`ctx.main(Token)` ↔ `main(ctx) ctx.provide(Token, impl)`；Ipc.define({id,methods:{m:{input?,output?}}})
 - `effect`/`solid-js` 必须 external 进 bundle——内嵌实例与宿主 Schema 不匹配 → "Desktop IPC handler failed"
 - GUI 视图用纯 DOM builder（无 JSX 无响应式），数据用 setup 预取快照
+
+## verify canary saga (resolved 2026-11-02)
+
+真实激活信号的完整考古：
+1. `opencode run` 无 provider 早退 → dummy provider（`writeDummyProvider`，已留作工具）
+2. `run` 派生 `serve --service` 在 CI 上卡死（/api/info 503 后日志静默 45s）——run 的 service 机制不适用于验证
+3. 插件是**懒加载**：serve boot 不写 `loading plugin` 行，首个 API 请求才触发（log 行带 `http.span`）
+4. 最终方案：`plugin add` → `serve --port 0` 后台 → curl `/api/plugin`+`/api/session` → kill → 日志查 `msg="loading plugin" id=<pkg>`
+5. macOS 本地验证陷阱：opencode 不吃 XDG_CONFIG_HOME（config 读真实 ~/.config），只有 Linux CI 上 XDG 隔离才真生效
+6. canary 正则兼容 `msg=`/`message=` 两种字段名
+7. 分片 96 包/8 片（12/片）适配 GitHub 免费并发额度；merge 后重建 site 必须在 `checkout catalog` 之前（切分支后无 pipeline 代码）
+
+假失败重置：canary bug 期间产生的 152 个 failed 已重置为 unverified 重验。
