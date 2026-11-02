@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { reviewPackage, renderReview } from '../pipeline/review.ts'
+import { reviewPackage, renderReview, verdict } from '../pipeline/review.ts'
 
 const mkRes = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s })
 
@@ -29,5 +29,12 @@ describe('review', () => {
     const md = renderReview(r)
     expect(md).toContain('keyword')
     expect(md).toContain('does not mean safe')
+  })
+
+  it('verdict: clean/flagged/invalid', () => {
+    const base = { name: 'x', exists: true, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null }
+    expect(verdict(base)).toBe('clean')
+    expect(verdict({ ...base, redFlags: ['rf'] })).toBe('flagged')
+    expect(verdict({ ...base, exists: false })).toBe('invalid')
   })
 })
