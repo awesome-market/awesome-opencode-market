@@ -167,8 +167,10 @@ export default Plugin.define({
       id: 'open', title: 'Open Market', palette: true,
       slash: { name: 'market' }, run: () => {},
     })
-    return {
-      main: (m: any) => m.provide(Market, {
+    return {}
+  },
+  main(m: any) {
+    m.provide(Market, {
         index: () => fetchIndex() as Promise<MarketIndex>,
         installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
@@ -187,7 +189,6 @@ export default Plugin.define({
             execFile('opencode', ['plugin', 'add', name], { timeout: 60_000 },
               (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'installed'))
           }),
-      }),
-    }
+      })
   },
 })
