@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -100,7 +100,7 @@ export default Plugin.define({
         case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
         case 'installed': list = list.filter(p => installed()[p.name] && !p.contains?.includes('skill')); break
-        case 'mySkills': list = list.filter(p => (installed()[p.name] ?? installed()[`__skill_${p.name.split('/').pop()}`]) && p.contains?.includes('skill')); break
+        case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
         case 'discover': default: break
       }
@@ -130,7 +130,8 @@ export default Plugin.define({
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const ver = installed()[e.name] ?? state().skillVers?.[e.name] ?? installed()[`__skill_${e.name.split('/').pop()}`]
+      const disk = skillInstalledVer(installed(), e.name)
+      const ver = disk ? (state().skillVers?.[e.name] ?? disk) : undefined
       const isSkill = e.contains?.includes('skill')
       // dsh parity: installed & no update → text badge only, no dead button
       if (ver && !hasUpdate(e, ver))
@@ -525,13 +526,21 @@ export default Plugin.define({
         index: () => fetchIndexCached() as Promise<MarketIndex>,
         installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
-          const out = await new Promise<string>((res, rej) =>
-            execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
+          const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
+          const { homedir } = require('node:os') as typeof import('node:os')
+          const { join } = require('node:path') as typeof import('node:path')
           const map: Record<string, string> = {}
-          for (const ln of out.split('\n').slice(1)) {
-            const [id, ver, src] = ln.trim().split(/\s{2,}/)
-            if (id) { map[id] = ver ?? '?'; if (src) map[src] = ver ?? '?' }
-          }
+          try {
+            const out = await new Promise<string>((res, rej) =>
+              execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
+            for (const ln of out.split('\n').slice(1)) {
+              const [id, ver, src] = ln.trim().split(/\s{2,}/)
+              if (id) { map[id] = ver ?? '?'; if (src) map[src] = ver ?? '?' }
+            }
+          } catch { /* plugin list unavailable — skills are still reported */ }
+          Object.assign(map, scanSkillKeys(
+            [join(homedir(), '.config', 'opencode', 'skills'), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
+            d => readdirSync(d), p => existsSync(p)))
           return map
         },
         install: (name: string) =>
@@ -640,7 +649,7 @@ export default Plugin.define({
           }),
         devlog: async (line: string) => {
           const { appendFileSync } = require('node:fs') as typeof import('node:fs')
-          appendFileSync('/tmp/opencode-market.log', `${new Date().toISOString()} ${line}\n`)
+          appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} ${line}\n`)
           return 'ok'
         },
         uninstallSkill: (name: string) =>
@@ -648,7 +657,10 @@ export default Plugin.define({
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
             const { homedir } = require('node:os') as typeof import('node:os')
             const { join } = require('node:path') as typeof import('node:path')
-            execFile('rm', ['-rf', join(homedir(), '.config', 'opencode', 'skills', name.split('/').pop()!)],
+            const base = join(homedir(), '.config', 'opencode', 'skills')
+            const id = name.split('/').pop()!
+            // also remove normalized `<id>-*` sibling dirs lifted by writeSkill
+            execFile('sh', ['-c', `rm -rf "${base}/${id}" "${base}/${id}"-*/`],
               { timeout: 10_000 }, e => e ? reject(e) : resolve('removed'))
           }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict

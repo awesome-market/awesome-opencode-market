@@ -203,3 +203,55 @@ describe('catalog helpers', () => {
     const all = allCategories([mk('a', 'git review'), mk('b', 'slack qq')])
     expect(all).toContain('开发流程'); expect(all).toContain('集成与移动')
   })
+  it('scanSkillKeys: dirs w/ SKILL.md, md files, skips hidden+staging', async () => {
+    const { scanSkillKeys } = await import('../src/catalog.ts')
+    const fs = {
+      '/s': ['proj-suite-semantic-commit', 'proj-suite', 'review.md', '.hidden', '_dl', 'empty-dir'],
+    }
+    const ls = (d: string) => fs[d as keyof typeof fs] ?? (() => { throw new Error('ENOENT') })()
+    const hasFile = (p: string) => p === '/s/proj-suite-semantic-commit/SKILL.md' || p === '/s/proj-suite/SKILL.md'
+    const m = scanSkillKeys(['/s', '/missing'], ls, hasFile)
+    expect(m['__skill_proj-suite-semantic-commit']).toBe('local')
+    expect(m['__skill_proj-suite']).toBe('local')
+    expect(m['__skill_review']).toBe('local')
+    expect(m['__skill_.hidden']).toBeUndefined()
+    expect(m['__skill__dl']).toBeUndefined()
+    expect(m['__skill_empty-dir']).toBeUndefined()
+  })
+  it('skillInstalledVer: exact, dir key, promoted prefix, none', async () => {
+    const { skillInstalledVer } = await import('../src/catalog.ts')
+    expect(skillInstalledVer({ 'pkg/a': '1.0' }, 'pkg/a')).toBe('1.0')
+    expect(skillInstalledVer({ __skill_a: 'local' }, 'scope/a')).toBe('local')
+    expect(skillInstalledVer({ '__skill_suite-x': 'local', '__skill_suite-y': 'local' }, '@p/suite')).toBe('local')
+    expect(skillInstalledVer({ '__skill_other-x': 'local' }, '@p/suite')).toBeUndefined()
+    expect(skillInstalledVer({}, 'pkg/a')).toBeUndefined()
+  })
+  it('inDays: publishedAt/firstSeenAt window + unparseable', async () => {
+    const { inDays } = await import('../src/catalog.ts')
+    const recent = new Date(Date.now() - 3600_000).toISOString()
+    const old = new Date(Date.now() - 40 * 86400_000).toISOString()
+    const mk = (p?: string, f?: string): MarketEntry => ({ name: 'x', slug: 'x', type: 'p', category: [], publishedAt: p, firstSeenAt: f })
+    expect(inDays(mk(recent), 7)).toBe(true)
+    expect(inDays(mk(undefined, recent), 7)).toBe(true)   // falls back to firstSeenAt
+    expect(inDays(mk(old), 7)).toBe(false)
+    expect(inDays(mk('garbage'), 7)).toBe(false)          // unparseable → outside window
+  })
+  it('devlog ring buffer: append/read/clear + no-localStorage paths', async () => {
+    const { appendLog, readLog, clearLog } = await import('../src/catalog.ts')
+    const store: Record<string, string> = {}
+    ;(globalThis as Record<string, unknown>).localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    }
+    clearLog()
+    appendLog('first'); appendLog('second')
+    const lines = readLog()
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/first$/); expect(lines[1]).toMatch(/second$/)
+    clearLog(); expect(readLog()).toEqual([])
+    // corrupt stored json → readLog falls back
+    store['opencode-market.devlog.v1'] = '{bad'
+    expect(readLog()).toEqual([])
+    delete (globalThis as Record<string, unknown>).localStorage
+  })

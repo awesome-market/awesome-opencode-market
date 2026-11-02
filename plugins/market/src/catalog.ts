@@ -52,11 +52,6 @@ export function search(entries: MarketEntry[], q: string): MarketEntry[] {
     e.name.toLowerCase().includes(needle) || (e.description?.en ?? '').toLowerCase().includes(needle))
 }
 
-/** Distinct categories across entries, sorted. */
-function rawCategoriesOf(entries: MarketEntry[]): string[] {
-  return [...new Set(entries.flatMap(e => e.category))].sort()
-}
-
 const sortKey = (e: MarketEntry, k: string): number | string => {
   switch (k) {
     case 'downloads': return -(e.metrics?.npmDownloads30d ?? 0)
@@ -196,12 +191,42 @@ export function inDays(e: MarketEntry, days: number): boolean {
   return !isNaN(at) && Date.now() - at < days * 86400_000
 }
 
+// ── installed skill detection ────────────────────────────────────────────
+/** Scan skill source dirs → `__skill_<id>` keys. `ls`/`hasFile` are injected so
+ *  this stays environment-neutral (main injects node:fs; tests inject fakes).
+ *  A dir counts only when it contains SKILL.md; top-level .md files are
+ *  file-skills. Hidden dirs and _dl staging are skipped (opencode semantics). */
+export function scanSkillKeys(bases: string[], ls: (dir: string) => string[], hasFile: (p: string) => boolean): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const base of bases) {
+    let names: string[]
+    try { names = ls(base) } catch { continue }
+    for (const d of names) {
+      if (d.startsWith('.') || d.startsWith('_')) continue
+      if (d.endsWith('.md')) { map[`__skill_${d.slice(0, -3)}`] = 'local'; continue }
+      if (hasFile(`${base}/${d}/SKILL.md`)) map[`__skill_${d}`] = 'local'
+    }
+  }
+  return map
+}
+
+/** Installed-version lookup for a skill package: plugin key, `__skill_<basename>`
+ *  dir key, or any normalized `<basename>-*` sibling dir (multi-skill packages
+ *  are lifted to top level by writeSkill). */
+export function skillInstalledVer(installed: Record<string, string>, pkgName: string): string | undefined {
+  const base = `__skill_${pkgName.split('/').pop() ?? pkgName}`
+  if (installed[pkgName]) return installed[pkgName]
+  if (installed[base]) return installed[base]
+  const prefix = `${base}-`
+  return Object.keys(installed).some(k => k.startsWith(prefix)) ? 'local' : undefined
+}
+
 // ── dev log ring buffer (localStorage, opt-in) ─────────────────────────
 const LOG_KEY = 'opencode-market.devlog.v1'
 export function appendLog(line: string): void {
   try {
     const cur = JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]') as string[]
-    cur.push(`${new Date().toISOString().slice(11, 19)} ${line}`)
+    cur.push(`${new Date().toLocaleString('sv-SE')} ${line}`)
     localStorage.setItem(LOG_KEY, JSON.stringify(cur.slice(-300)))
   } catch { /* quota/no LS */ }
 }
