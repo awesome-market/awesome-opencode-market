@@ -263,11 +263,21 @@ export default Plugin.define({
       root.appendChild(tabs)
       // search row
       const controls = el('div', 'display:flex;align-items:center;margin-bottom:8px')
+      // official text-input-v2: leading magnifier icon inside, 32px height, muted icon
+      const wrap = el('div', 'position:relative;flex:1;margin-right:6px;display:flex;align-items:center')
       const q = document.createElement('input')
       q.placeholder = t('search')
-      q.style.cssText = 'flex:1;padding:6px 10px;margin-right:6px;box-sizing:border-box;font-size:13px;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid var(--v2-border-border-base,rgba(128,128,128,.35));border-radius:8px;outline:none'
+      q.style.cssText = 'flex:1;height:32px;padding:0 8px 0 28px;box-sizing:border-box;font-size:13px;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid var(--v2-border-border-base,rgba(128,128,128,.35));border-radius:8px;outline:none'
       q.oninput = () => setQuery(q.value)
-      controls.appendChild(q)
+      const mag = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      mag.setAttribute('width', '14'); mag.setAttribute('height', '14'); mag.setAttribute('viewBox', '0 0 24 24')
+      mag.setAttribute('fill', 'none'); mag.setAttribute('stroke', 'currentColor'); mag.setAttribute('stroke-width', '2')
+      mag.innerHTML = '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'
+      const ic = el('span', 'position:absolute;left:8px;display:flex;pointer-events:none')
+      ic.style.color = 'var(--v2-icon-icon-muted, rgba(128,128,128,.8))'
+      ic.appendChild(mag)
+      wrap.append(ic, q)
+      controls.appendChild(wrap)
       const filt = el('button', 'font-size:12px;cursor:pointer;padding:4px 12px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', '筛选') as HTMLButtonElement
       filt.onclick = () => setFilterOpen(!filterOpen())
       controls.appendChild(filt)
