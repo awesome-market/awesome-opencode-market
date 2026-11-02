@@ -6,7 +6,7 @@
  */
 import { Plugin, Ipc, Panel, SettingsPage, Command } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
-import { createSignal } from 'solid-js'
+import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { fetchIndex, search, sortEntries, categoriesOf, type MarketEntry, type MarketIndex } from './catalog.js'
 
@@ -98,20 +98,27 @@ export default Plugin.define({
     }
 
     const listView = () => {
-      const root = el('div', 'padding:12px;overflow:auto;height:100%;box-sizing:border-box')
+      const root = el('div', '')
+      const list = el('div')
+      insert(list, () => filtered().map(row))
+      root.appendChild(list)
+      return root
+    }
+
+    // static chrome — built ONCE so the search input never loses focus to a
+    // reactive re-render (the insert below only owns the body region)
+    const chrome = () => {
+      const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
       root.append(el('h3', 'margin:0 0 8px', 'opencode market'))
       const controls = el('div', 'display:flex;margin-bottom:8px')
       const q = document.createElement('input')
-      q.placeholder = 'search…'; q.value = query()
+      q.placeholder = 'search…'
       q.style.cssText = 'flex:1;padding:6px;margin-right:6px;box-sizing:border-box'
       q.oninput = () => setQuery(q.value)
       controls.append(q,
         sel(categoriesOf(data()?.plugins ?? []), cat, setCat, 'all categories'),
         sel([...sorts], sort, setSort))
       root.appendChild(controls)
-      const list = el('div')
-      insert(list, () => filtered().map(row))
-      root.appendChild(list)
       return root
     }
 
@@ -146,12 +153,22 @@ export default Plugin.define({
     }
 
     const mount = (parent: HTMLElement) => {
-      insert(parent, () => {
+      const shell = el('div', 'overflow:auto;height:100%')
+      const head = chrome()          // built ONCE — signal reads here don't get tracked
+      const body = el('div')
+      shell.append(head, body)
+      createEffect(() => {
+        head.style.display = (data() && view().kind === 'list') ? '' : 'none'
+      })
+      insert(body, () => {
         if (err()) return el('div', 'padding:12px;color:#c66', `error: ${err()}`)
         if (!data()) return el('div', 'padding:12px;opacity:.6', 'loading…')
         const v = view()
-        return v.kind === 'detail' ? detailView(v.e) : listView()
+        const n = v.kind === 'detail' ? detailView(v.e) : listView()
+        n.style.padding = '0 12px 12px'
+        return n
       })
+      parent.appendChild(shell)
     }
 
     ctx.add(SettingsPage, {
