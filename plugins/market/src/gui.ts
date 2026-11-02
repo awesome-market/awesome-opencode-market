@@ -190,7 +190,7 @@ export default Plugin.define({
     })
     ctx.add(MenuItem, {
       menu: 'session.panel' as const, id: 'market', title: 'Market',
-      icon: 'marketplace' as any, description: 'browse verified plugins',
+      icon: 'marketplace' as any, description: 'browse verified plugins', order: 1000,
       run: openMarket,
     })
     return {}
