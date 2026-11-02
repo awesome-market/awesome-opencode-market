@@ -51,7 +51,7 @@ describe('site honest labels', () => {
   it('buildSite writes skills/index.json even when skill tarball unavailable', () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: 'definitely-not-a-real-pkg-zz9', type: 'skill' }), mk({ name: 'b' })] }
+      mk({ name: 'definitely-not-a-real-pkg-zz9', contains: ['skill'] }), mk({ name: 'b' })] }
     buildSite(idx, out)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(Array.isArray(cat.skills)).toBe(true)
@@ -67,7 +67,7 @@ describe('site honest labels', () => {
     execSync(`cd "${src}" && tar czf s.tgz package`)
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: 'sk-real', type: 'skill', latestVersion: '2' })] }
+      mk({ name: 'sk-real', contains: ['skill'], latestVersion: '2' })] }
     buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)
@@ -86,8 +86,8 @@ describe('site honest labels', () => {
     execSync(`cd "${src}" && tar czf ok.tgz package`)
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: '', slug: 'fb-slug', type: 'skill', latestVersion: null }),   // id falls back to slug, version → '1'
-      mk({ name: 'sk-empty', type: 'skill' }),                                  // empty md → skipped
+      mk({ name: '', slug: 'fb-slug', contains: ['skill'], latestVersion: null }),   // id falls back to slug, version → '1'
+      mk({ name: 'sk-empty', contains: ['skill'] }),                                  // empty md → skipped
     ] }
     buildSkillCatalog(idx, out, (n) => n === 'sk-empty' ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}`)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))

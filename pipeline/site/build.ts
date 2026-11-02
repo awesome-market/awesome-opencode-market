@@ -99,7 +99,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   tarballOf: (name: string) => string | null =
     (name) => { try { return execSync(`npm view "${name}" dist.tarball`, { encoding: 'utf8', timeout: 20_000 }).trim() || null } catch { return null } }): void {
-  const skills = index.plugins.filter((p) => p.type === 'skill')
+  const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
   const entries: { name: string; version: string; files: string[] }[] = []

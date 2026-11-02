@@ -3,6 +3,7 @@ export interface MarketEntry {
   name: string
   slug: string
   type: string
+  contains?: ('plugin' | 'skill' | 'mcp' | 'command' | 'agent' | 'hook')[]
   description?: { en?: string; zh?: string }
   category: string[]
   latestVersion?: string | null

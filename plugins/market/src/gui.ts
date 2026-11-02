@@ -113,7 +113,7 @@ export default Plugin.define({
     }
     const installBtn = (e: MarketEntry) => {
       const ver = installed()[e.name]
-      const isSkill = e.type === 'skill'
+      const isSkill = e.contains?.includes('skill')
       const label = ver && hasUpdate(e, ver) ? `update → v${e.latestVersion}` : ver ? 'reinstall' : 'add'
       const b = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#333;border:1px solid #555;border-radius:4px;padding:1px 8px', label) as HTMLButtonElement
       b.onclick = ev => {
@@ -189,8 +189,8 @@ export default Plugin.define({
       const list = el('div')
       insert(list, () => {
         const items = filtered()
-        const plugins = items.filter(e => e.type !== 'skill')
-        const skills = items.filter(e => e.type === 'skill')
+        const plugins = items.filter(e => !e.contains?.includes('skill'))
+        const skills = items.filter(e => e.contains?.includes('skill'))
         const out: HTMLElement[] = []
         if (plugins.length) out.push(el('h4', 'margin:10px 0 6px;opacity:.55;font-weight:600', `plugins (${plugins.length})`), ...plugins.map(row))
         if (skills.length) out.push(el('h4', 'margin:14px 0 6px;opacity:.55;font-weight:600', `skills (${skills.length})`), ...skills.map(row))
@@ -252,7 +252,7 @@ export default Plugin.define({
         const un = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#633;border:1px solid #855;border-radius:4px;padding:1px 8px', 'uninstall') as HTMLButtonElement
         un.onclick = () => {
           un.disabled = true; un.textContent = '…'
-          ;(e.type === 'skill' ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
+          ;(e.contains?.includes('skill') ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
             async () => { const f = await safe.installed?.().catch(() => ({})); if (f) setInstalled(f); un.textContent = 'removed' },
             (x: unknown) => { un.textContent = 'failed'; un.title = String(x) },
           )
