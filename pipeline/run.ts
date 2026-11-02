@@ -10,6 +10,7 @@ import { scanTarball } from './scan/scan.ts'
 import { buildIndex } from './publish/merge.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
+import { classify } from '../src/categories.ts'
 
 export interface RunOptions {
   seedPath?: string | undefined
@@ -112,7 +113,7 @@ export async function run(opts: RunOptions = {}) {
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
         description: { en: cand.description },
-        category: [],
+        category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? ''),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
         replacement: null,

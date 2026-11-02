@@ -92,3 +92,13 @@ describe('pipeline/run seed injection', () => {
     expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg'])
   })
 })
+
+describe('classify', () => {
+  it('assigns categories by keywords, declared fallback 其他', async () => {
+    const { classify } = await import('../src/categories.ts')
+    expect(classify('theme-x', 'x', 'colors and fonts')).toContain('主题与外观')
+    expect(classify('x', 'x', 'git commit review')).toContain('开发流程')
+    expect(classify('x', 'x', 'zzz nothing')).toEqual(['其他'])
+    expect(classify('tok', 'x', 'llm pricing token').length).toBeLessThanOrEqual(2)
+  })
+})
