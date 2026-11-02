@@ -18,6 +18,7 @@ const Market = Ipc.define({
     install: { input: Schema.String, output: Schema.String },
     cancelInstall: { input: Schema.String, output: Schema.String },
     verifyActivation: { input: Schema.String, output: Schema.String },
+    uninstall: { input: Schema.String, output: Schema.String },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -29,6 +30,7 @@ type Api = {
   install(name: string): Promise<string>
   cancelInstall(name: string): Promise<string>
   verifyActivation(name: string): Promise<string>
+  uninstall(name: string): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -114,7 +116,7 @@ export default Plugin.define({
             const okNow = (fresh ?? installed())[e.name]
             b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
             const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
-            b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — restart to activate` : `${t('installed')} (verify pending)`
+            b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
             b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
           },
           (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
@@ -138,7 +140,7 @@ export default Plugin.define({
       if (p && !p.done) {
         const bar = el('div', 'font-size:11px;opacity:.6;max-height:60px;overflow:hidden')
         bar.textContent = p.lines[p.lines.length - 1] ?? 'installing…'
-        const cx = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', 'cancel')
+        const cx = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', t('cancel'))
         cx.onclick = ev => { ev.stopPropagation(); void safe.cancelInstall(e.name) }
         bar.appendChild(cx)
         d.appendChild(bar)
@@ -146,7 +148,7 @@ export default Plugin.define({
       if (p?.done && p.ok === false) {
         const errBox = el('div', 'font-size:11px;color:#c66')
         errBox.textContent = keyLines(p.lines.join('\n')).join(' · ').slice(0, 200) || 'install failed'
-        const ex = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', 'export log')
+        const ex = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', t('exportLog'))
         ex.onclick = ev => {
           ev.stopPropagation()
           const txt = redactLog(p.lines.join('\n'))
@@ -188,8 +190,8 @@ export default Plugin.define({
       const favChip = el('button', 'font-size:11px;cursor:pointer;margin-right:6px', favOnly() ? '★ favorites' : '☆ favorites')
       favChip.onclick = () => { setFavOnly(!favOnly()); favChip.textContent = favOnly() ? '★ favorites' : '☆ favorites' }
       controls.append(q,
-        sel(categoriesOf(data()?.plugins ?? []), cat, setCat, 'all categories'),
-        sel(allGroups(state()), groupFilter, setGroupFilter, 'all groups'),
+        sel(categoriesOf(data()?.plugins ?? []), cat, setCat, t('allCategories')),
+        sel(allGroups(state()), groupFilter, setGroupFilter, t('allGroups')),
         sel([...sorts], sort, setSort), favChip)
       root.appendChild(controls)
       return root
@@ -214,25 +216,36 @@ export default Plugin.define({
       root.appendChild(info)
       root.appendChild(el('p', 'font-size:13px;line-height:1.5', e.description?.en ?? ''))
       if (caps?.redFlags.length) {
-        root.appendChild(el('h4', 'color:#c66;margin:12px 0 4px', 'red flags'))
+        root.appendChild(el('h4', 'color:#c66;margin:12px 0 4px', t('redFlags')))
         for (const f of caps.redFlags.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', `⚠ ${f}`))
       }
       if (caps?.findings.length) {
-        root.appendChild(el('h4', 'margin:12px 0 4px', 'findings'))
+        root.appendChild(el('h4', 'margin:12px 0 4px', t('findings')))
         for (const f of caps.findings.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', f))
       }
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
+      if (installed()[e.name]) {
+        const un = el('button', 'margin-left:8px;font-size:11px;cursor:pointer;color:#eee;background:#633;border:1px solid #855;border-radius:4px;padding:1px 8px', 'uninstall') as HTMLButtonElement
+        un.onclick = () => {
+          un.disabled = true; un.textContent = '…'
+          safe.uninstall(e.name).then(
+            async () => { const f = await safe.installed?.().catch(() => ({})); if (f) setInstalled(f); un.textContent = 'removed' },
+            (x: unknown) => { un.textContent = 'failed'; un.title = String(x) },
+          )
+        }
+        root.appendChild(un)
+      }
       // local state: group + note
       root.appendChild(el('h4', 'margin:14px 0 4px', 'group'))
       const gi = document.createElement('input')
-      gi.placeholder = 'group name…'; gi.value = state().groups[e.name] ?? ''
+      gi.placeholder = t('group'); gi.value = state().groups[e.name] ?? ''
       gi.style.cssText = 'padding:4px;font-size:12px;width:200px'
       gi.onchange = () => { const gr = { ...state().groups }; gi.value ? gr[e.name] = gi.value : delete gr[e.name]; put({ groups: gr }) }
       root.appendChild(gi)
       root.appendChild(el('h4', 'margin:14px 0 4px', 'note'))
       const ni = document.createElement('input')
-      ni.placeholder = 'why did you install this…'; ni.value = state().notes[e.name] ?? ''
+      ni.placeholder = t('note'); ni.value = state().notes[e.name] ?? ''
       ni.style.cssText = 'padding:4px;font-size:12px;width:100%;box-sizing:border-box'
       ni.onchange = () => { const ns = { ...state().notes }; ni.value ? ns[e.name] = ni.value : delete ns[e.name]; put({ notes: ns }) }
       root.appendChild(ni)
@@ -316,6 +329,12 @@ export default Plugin.define({
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
+        uninstall: (name: string) =>
+          new Promise<string>((resolve, reject) => {
+            const { execFile } = require('node:child_process') as typeof import('node:child_process')
+            execFile('opencode', ['plugin', 'remove', name], { timeout: 30_000 },
+              (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'removed'))
+          }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict
         verifyActivation: (name: string) =>
           new Promise<string>((resolve) => {

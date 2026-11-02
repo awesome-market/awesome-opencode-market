@@ -136,14 +136,26 @@ export function indexAge(idx: MarketIndex | null): string {
 
 const zh = /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
 /** Minimal i18n — zh/en user-facing strings. */
-export function t(key: 'verified' | 'failed' | 'skipped' | 'unverified' | 'installed' | 'search' | 'back' | 'loading'): string {
-  if (!zh) return key
-  return ({ verified: '已实测可装', failed: '装不上/加载失败', skipped: '有高危信号未跑', unverified: '未验证',
-    installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…' })[key]
+export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'
+const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market' }
+const ZH: Record<I18nKey, string> = { verified: '已实测可装', failed: '装不上/加载失败', skipped: '有高危信号未跑', unverified: '未验证', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场' }
+export function t(key: I18nKey): string {
+  return (zh ? ZH : EN)[key]
 }
 
 /** Latest-version compare for the update button. */
 export function hasUpdate(e: MarketEntry, installedVer?: string): boolean {
   if (!installedVer || !e.latestVersion) return false
   return e.latestVersion !== installedVer
+}
+
+/** Does the packument look installable-as-plugin (has exports/opencode field)? */
+export function looksLikePlugin(pk: { exports?: Record<string, unknown>; opencode?: unknown; main?: string } | null): 'plugin' | 'maybe' | 'no' {
+  if (!pk) return 'maybe'
+  if (pk.opencode) return 'plugin'
+  const ex = pk.exports ?? {}
+  const keys = Object.keys(ex)
+  if (keys.some(k => /opencode|plugin|tui|gui|server/.test(k))) return 'plugin'
+  if (pk.main || keys.length) return 'maybe'
+  return 'no'
 }
