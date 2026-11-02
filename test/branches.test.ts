@@ -130,4 +130,27 @@ describe('branch coverage', () => {
     expect(idx.plugins[0]!.firstSeenAt).toBe('2020-01-01')
     expect(idx.categories.c!.en).toBe('C')
   })
+
+  it('run: archived github repo filtered by preAdmit', async () => {
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [
+        { package: { name: 'keeper', version: '1', description: '', keywords: ['opencode'], links: {}, date: 't' } },
+      ] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [
+        { full_name: 'a/archived', html_url: 'https://github.com/a/archived', description: 'opencode plugin', stargazers_count: 5, archived: true, fork: false, pushed_at: 't' },
+      ] })
+      if (url.includes('registry.npmjs.org/keeper')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { repository: 'https://github.com/o/k', keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/k.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/k.tgz')) return mkRes({}, 200, 'data:application/gzip;base64,H4sIAAAAAAAAA2Nsz8vPAwMDhQMDEGRgANCt9vQUAAAA')
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const dir = mkdtempSync(join(tmpdir(), 'rungh-'))
+    const idx = await run({ outPath: join(dir, 'i.json'), fetchFn: f, now: 't' })
+    expect(idx.plugins.map(p => p.name)).toEqual(['keeper'])
+  })
 })

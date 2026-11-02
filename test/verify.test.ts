@@ -103,4 +103,25 @@ describe('verifyPackage (injected exec)', () => {
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
   })
+
+  it('loading signal present → verified', async () => {
+    const home = vHome()
+    mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
+    writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
+      'ts level=INFO msg="loading plugin" id=goodpkg entrypoint=file:///x\n')
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    expect(r.status).toBe('verified')
+    expect(r.logExcerpt).toBeUndefined()
+  })
+
+  it('ocVersion failure → opencodeVersion "unknown"', async () => {
+    const home = vHome()
+    const fake = (async (_c: string, args: string[]) => {
+      if (args[0] === '--version') throw new Error('no version')
+      return { stdout: '', stderr: '' }
+    }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('p', { home, execFn: fake })
+    expect(r.opencodeVersion).toBe('unknown')
+  })
 })
