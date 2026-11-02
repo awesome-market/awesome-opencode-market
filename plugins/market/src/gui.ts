@@ -160,12 +160,15 @@ export default Plugin.define({
         const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => safe.install(e.name)
         try { doInstall().then(
           async () => {
-            // effectiveness re-check: reload installed list, flag restart need
-            const fresh = await safe.installed?.().catch(() => installed())
-            if (fresh) setInstalled(fresh)
-            const okNow = (fresh ?? installed())[e.name]
-            if (isSkill) { b.textContent = `${t('installed')}`; b.style.color = '#4a4' }
-            else {
+            if (isSkill) {
+              // optimistic: writeSkill succeeded → mark basename local immediately
+              setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: 'local' })
+              b.textContent = `${t('installed')}`; b.style.color = '#4a4'
+            } else {
+              // effectiveness re-check: reload installed list, flag restart need
+              const fresh = await safe.installed?.().catch(() => installed())
+              if (fresh) setInstalled(fresh)
+              const okNow = (fresh ?? installed())[e.name]
               b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
               const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
               b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
