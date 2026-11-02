@@ -4,7 +4,7 @@
  * (function children become reactive computations). No h()/JSX — the host
  * module whitelist only exposes solid-js, solid-js/web, solid-js/store.
  */
-import { Plugin, Ipc } from '@opencode/plugin/gui'
+import { Plugin, Ipc, Panel, SettingsPage, Command } from '@opencode/plugin/gui'
 import { Schema } from 'effect'
 import { createSignal } from 'solid-js'
 import { insert } from 'solid-js/web'
@@ -154,6 +154,19 @@ export default Plugin.define({
       })
     }
 
+    ctx.add(SettingsPage, {
+      id: 'market', title: 'Market', icon: 'marketplace' as any,
+      render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+    })
+    ctx.add(Panel, {
+      id: 'market', title: 'Market', region: 'side' as const, transient: true,
+      list: () => [{ id: 'market', title: 'Market' }],
+      render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+    })
+    ctx.add(Command, {
+      id: 'open', title: 'Open Market', palette: true,
+      slash: { name: 'market' }, run: () => {},
+    })
     return {
       main: (m: any) => m.provide(Market, {
         index: () => fetchIndex() as Promise<MarketIndex>,
@@ -175,18 +188,6 @@ export default Plugin.define({
               (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'installed'))
           }),
       }),
-      'session.panel': () => [{
-        id: 'market', title: 'Market', region: 'side' as const, transient: true,
-        render: () => { const host = el('div', 'height:100%'); mount(host); return host },
-      }],
-      'settings.page': () => [{
-        id: 'market', title: 'Market', icon: 'marketplace',
-        render: () => { const host = el('div', 'height:100%'); mount(host); return host },
-      }],
-      commands: () => [{
-        id: 'opencode-market.open', title: 'Open Market', palette: true,
-        slash: { name: 'market' }, run: () => {},
-      }],
     }
   },
 })
