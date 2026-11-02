@@ -1,5 +1,6 @@
 /** Build: server/tui → ESM dist/*.js; gui → single-file CJS bundle (host whitelist requires all deps inlined). */
 import { build } from 'esbuild'
+import { solidPlugin } from 'esbuild-plugin-solid'
 
 const shared = {
   bundle: true,
@@ -16,8 +17,9 @@ await Promise.all([
     outfile: 'dist/tui.js',
     format: 'esm',
     platform: 'node',
-    jsx: 'automatic',
-    jsxImportSource: '@opentui/solid',
+    // Solid needs its own transform: props must compile to getters or
+    // Show/For children and signal reads are eagerly evaluated (wrong + crashes)
+    plugins: [solidPlugin({ solid: { generate: 'universal', moduleName: '@opentui/solid' } })],
   }),
   // GUI must be CJS text the host evaluates (host.ts: entry only accepted if .cjs/.js + CommonJS-evaluable)
   build({
