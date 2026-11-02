@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -89,7 +89,7 @@ export default Plugin.define({
       const all = data()?.plugins ?? []
       const c = cat(); const s = state()
       const tf = typeFilter()
-      let list = c ? all.filter(p => p.category?.includes(c)) : all
+      let list = c ? all.filter(p => categoriesOf(p).includes(c)) : all
       if (tf === 'skills') list = list.filter(p => p.contains?.includes('skill'))
       else list = list.filter(p => !p.contains?.includes('skill'))
       if (favOnly()) list = list.filter(p => s.favorites[p.name])
@@ -155,9 +155,15 @@ export default Plugin.define({
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
       meta.textContent = `v${e.latestVersion ?? '?'} · ↓${fmtN(e.metrics?.npmDownloads30d)} · ★${fmtN(e.metrics?.stars)}`
-      const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px', (e.description?.en ?? '').slice(0, 160))
+      const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
+      const tags = el('div', 'margin-top:6px;display:flex;gap:5px;flex-wrap:wrap')
+      for (const ct of categoriesOf(e)) {
+        const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
+        tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
+        tags.appendChild(tg)
+      }
       const note = state().notes[e.name]
-      d.append(title, meta, desc)
+      d.append(title, meta, desc, tags)
       if (note) d.appendChild(el('div', 'font-size:11px;opacity:.55;font-style:italic', `📝 ${note}`))
       const p = prog()[e.name]
       if (p && !p.done) {
@@ -197,6 +203,7 @@ export default Plugin.define({
     const listView = () => {
       const root = el('div', '')
       const list = el('div')
+      list.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start'
       insert(list, () => {
         const items = filtered()
         return items.length ? items.map(row) : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
@@ -209,7 +216,19 @@ export default Plugin.define({
     // reactive re-render (the insert below only owns the body region)
     const chrome = () => {
       const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
-      root.append(el('h3', 'margin:0 0 8px', `opencode market · ${indexAge(data())}`))
+      // header: title + top-level 插件/skill tabs (dsh style)
+      const head = el('div', 'display:flex;align-items:baseline;margin-bottom:10px')
+      head.appendChild(el('h3', 'margin:0;font-size:15px', `opencode market · ${indexAge(data())}`))
+      const tabs = el('div', 'margin-left:16px;display:flex')
+      for (const [id, label] of [['plugins', '插件'], ['skills', 'skill']] as const) {
+        const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 14px;border:1px solid #555', label) as HTMLButtonElement
+        const sync = () => { const on = typeFilter() === id; tb.style.background = on ? '#36c' : 'transparent'; tb.style.color = on ? '#fff' : 'inherit'; tb.style.borderRadius = '4px' }
+        sync(); tb.onclick = () => { setTypeFilter(id); for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? '#36c' : 'transparent'; x.style.color = on ? '#fff' : 'inherit' } }
+        tabs.appendChild(tb)
+      }
+      head.appendChild(tabs)
+      root.appendChild(head)
+      // search row
       const controls = el('div', 'display:flex;margin-bottom:8px')
       const q = document.createElement('input')
       q.placeholder = t('search')
@@ -218,10 +237,23 @@ export default Plugin.define({
       const favChip = el('button', 'font-size:11px;cursor:pointer;margin-right:6px', favOnly() ? '★ favorites' : '☆ favorites')
       favChip.onclick = () => { setFavOnly(!favOnly()); favChip.textContent = favOnly() ? '★ favorites' : '☆ favorites' }
       controls.append(q,
-        sel(categoriesOf(data()?.plugins ?? []), cat, setCat, t('allCategories')),
         sel(allGroups(state()), groupFilter, setGroupFilter, t('allGroups')),
         sel([...sorts], sort, setSort), favChip)
       root.appendChild(controls)
+      // category chips row (dsh style)
+      const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
+      insert(chips, () => {
+        const pool = (data()?.plugins ?? []).filter(p =>
+          typeFilter() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
+        const mk = (id: string, label: string) => {
+          const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
+          if (cat() === id || (id === '' && !cat())) { c.style.background = '#556'; c.style.color = '#fff' }
+          c.onclick = () => setCat(id)
+          return c
+        }
+        return [mk('', `全部(${pool.length})`), ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
+      })
+      root.appendChild(chips)
       return root
     }
 

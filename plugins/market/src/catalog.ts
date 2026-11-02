@@ -51,7 +51,7 @@ export function search(entries: MarketEntry[], q: string): MarketEntry[] {
 }
 
 /** Distinct categories across entries, sorted. */
-export function categoriesOf(entries: MarketEntry[]): string[] {
+function rawCategoriesOf(entries: MarketEntry[]): string[] {
   return [...new Set(entries.flatMap(e => e.category))].sort()
 }
 
@@ -159,4 +159,29 @@ export function looksLikePlugin(pk: { exports?: Record<string, unknown>; opencod
   if (keys.some(k => /opencode|plugin|tui|gui|server/.test(k))) return 'plugin'
   if (pk.main || keys.length) return 'maybe'
   return 'no'
+}
+
+/** Keyword category classifier — catalog entries mostly ship category:[], so
+ *  the UI derives display categories at render time (dsh-style chips). */
+const CAT_RULES: [string, RegExp][] = [
+  ['主题与外观', /theme|color|icon|font|appearance|ui-|css|style/i],
+  ['模型与接入', /model|provider|llm|gpt|claude|deepseek|ollama|api[-_ ]key|pricing|token|usage|cost|billing/i],
+  ['会话与消息', /session|chat|conversation|message|history|compaction|context/i],
+  ['记忆', /memory|remember|recall|knowledge|note|persist/i],
+  ['通知', /notif|alert|toast|sound|remind|bell/i],
+  ['安全与权限', /secur|guard|permission|policy|audit|sandbox|auth|firewall|protect/i],
+  ['开发流程', /git|commit|review|test|lint|ci|deploy|release|debug|refactor|scaffold|spec/i],
+  ['工具与能力', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp/i],
+  ['集成与移动', /integrat|qq|wechat|slack|discord|telegram|feishu|mobile|remote|browser|chrome/i],
+]
+export function categoriesOf(e: MarketEntry): string[] {
+  if (e.category?.length) return e.category
+  const hay = `${e.name} ${e.slug ?? ''} ${e.description?.en ?? ''}`
+  const hits = CAT_RULES.filter(([, r]) => r.test(hay)).map(([c]) => c)
+  return hits.length ? hits.slice(0, 2) : ['其他']
+}
+export function allCategories(entries: MarketEntry[]): string[] {
+  const s = new Set<string>()
+  for (const e of entries) for (const c of categoriesOf(e)) s.add(c)
+  return [...s].sort()
 }

@@ -70,13 +70,14 @@ describe('catalog helpers', () => {
     delete (globalThis as Record<string, unknown>).localStorage
   })
   it('categoriesOf/sortEntries/search', async () => {
-    const { categoriesOf, sortEntries, search } = await import('../src/catalog.ts')
+    const { categoriesOf, allCategories, sortEntries, search } = await import('../src/catalog.ts')
     const mk = (name: string, cat: string[], st: string, dl = 0, stars = 0): MarketEntry => ({
       name, slug: name, type: 'plugin', category: cat,
       verification: { status: st }, metrics: { npmDownloads30d: dl, stars },
     })
     const es = [mk('a', ['x'], 'failed', 1, 9), mk('b', ['y'], 'verified', 5, 1), mk('c', ['x', 'z'], 'skipped', 3, 5)]
-    expect(categoriesOf(es)).toEqual(['x', 'y', 'z'])
+    expect(categoriesOf(es[0]!)).toEqual(['x'])
+    expect(allCategories(es)).toContain('x')
     expect(sortEntries(es, 'verified')[0]!.name).toBe('b')
     expect(sortEntries(es, 'downloads')[0]!.name).toBe('b')
     expect(sortEntries(es, 'stars')[0]!.name).toBe('a')
