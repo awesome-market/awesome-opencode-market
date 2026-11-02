@@ -19,7 +19,7 @@ const Market = Ipc.define({
     cancelInstall: { input: Schema.String, output: Schema.String },
     verifyActivation: { input: Schema.String, output: Schema.String },
     uninstall: { input: Schema.String, output: Schema.String },
-    installSkill: { input: Schema.String, output: Schema.String },
+    writeSkill: { input: Schema.Unknown, output: Schema.String },
     uninstallSkill: { input: Schema.String, output: Schema.String },
     installSkillDir: { input: Schema.Unknown, output: Schema.String },
     skillSource: { output: Schema.Unknown },
@@ -37,7 +37,7 @@ type Api = {
   cancelInstall(name: string): Promise<string>
   verifyActivation(name: string): Promise<string>
   uninstall(name: string): Promise<string>
-  installSkill(name: string): Promise<string>
+  writeSkill(p: { name: string; b64: string }): Promise<string>
   uninstallSkill(name: string): Promise<string>
   installSkillDir(p: { name: string; scope: 'global' | 'project' }): Promise<string>
   skillSource(): Promise<{ url: string; enabled: boolean }>
@@ -144,9 +144,17 @@ export default Plugin.define({
           b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66'
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
         }
-        if (isSkill && typeof safe.installSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing installSkill — plugin version mismatch') }
+        if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
         log(`install start ${e.name} skill=${isSkill}`)
-        const doInstall: () => Promise<string> = isSkill ? () => safe.installSkill(e.name) : () => safe.install(e.name)
+        const installSkillNet = async (): Promise<string> => {
+          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { 'dist-tags': { latest: string }; versions: Record<string, { dist: { tarball: string } }> }
+          const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
+          if (!url) throw new Error('no tarball')
+          const buf = await (await fetch(url)).arrayBuffer()
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)))
+          return safe.writeSkill({ name: e.name, b64 })
+        }
+        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => safe.install(e.name)
         try { doInstall().then(
           async () => {
             // effectiveness re-check: reload installed list, flag restart need
@@ -541,28 +549,13 @@ export default Plugin.define({
               (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'removed'))
           }),
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
-        installSkill: async (name: string) => {
-          // pure-Node https+zlib+tar — no PATH deps, works in Electron main sandbox
+        writeSkill: async (p: { name: string; b64: string }) => {
           const { gunzipSync } = require('node:zlib') as typeof import('node:zlib')
-          const { get } = require('node:https') as typeof import('node:https')
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join, dirname } = require('node:path') as typeof import('node:path')
           const { writeFileSync, mkdirSync } = require('node:fs') as typeof import('node:fs')
-          const getBuf = (url: string): Promise<Buffer> =>
-            new Promise((res, rej) => get(url, (r) => {
-              if (r.statusCode && r.statusCode >= 300 && r.statusCode < 400 && r.headers.location)
-                return getBuf(r.headers.location).then(res, rej)
-              if (r.statusCode !== 200) return rej(new Error(`HTTP ${r.statusCode}`))
-              const c: Buffer[] = []; r.on('data', d => c.push(d)); r.on('end', () => res(Buffer.concat(c)))
-            }).on('error', rej))
-          const push = (line: string) => m.emit?.('progress', { name, line })
-          push('fetching packument')
-          const pk = JSON.parse((await getBuf(`https://registry.npmjs.org/${encodeURIComponent(name)}`)).toString())
-          const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
-          if (!url) throw new Error('no tarball in packument')
-          push('downloading tarball')
-          const tar = gunzipSync(await getBuf(url))
-          const dest = join(homedir(), '.config', 'opencode', 'skills', name.split('/').pop()!)
+          const tar = gunzipSync(Buffer.from(p.b64, 'base64'))
+          const dest = join(homedir(), '.config', 'opencode', 'skills', p.name.split('/').pop()!)
           mkdirSync(dest, { recursive: true })
           let off = 0, wrote = 0
           while (off + 512 <= tar.length) {
@@ -574,14 +567,13 @@ export default Plugin.define({
             const rel = f.replace(/^(\.\/)?(package\/)?/, '')
             if (rel && type === '5') mkdirSync(join(dest, rel), { recursive: true })
             if (rel && (type === '0' || type === '' || type === ' ')) {
-              const p = join(dest, rel); mkdirSync(dirname(p), { recursive: true })
-              writeFileSync(p, tar.subarray(body, body + size)); wrote++
+              const fp = join(dest, rel); mkdirSync(dirname(fp), { recursive: true })
+              writeFileSync(fp, tar.subarray(body, body + size)); wrote++
             }
             off = body + Math.ceil(size / 512) * 512
           }
-          push(`extracted ${wrote} files`)
           if (!wrote) throw new Error('empty tarball')
-          return 'installed'
+          return `wrote ${wrote}`
         },
         installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
           new Promise<string>((resolve, reject) => {
