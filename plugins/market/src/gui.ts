@@ -8,7 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -69,6 +69,8 @@ export default Plugin.define({
     const [rangeDays, setRangeDays] = createSignal(0)
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
     try { setState(loadState()) } catch { /* storage unavailable */ }
+    const devlog = () => !!state().devlog
+    const log = (msg: string) => { if (devlog()) appendLog(msg) }
     const put = (patch: Partial<LocalState>) => {
       const s = { ...state(), ...patch }
       setState(s); try { saveState(s) } catch { /* noop */ }
@@ -136,8 +138,14 @@ export default Plugin.define({
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
+        const failOut = (x: unknown) => {
+          b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66'
+          setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
+        }
+        if (isSkill && typeof safe.installSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing installSkill — plugin version mismatch') }
+        log(`install start ${e.name} skill=${isSkill}`)
         const doInstall: () => Promise<string> = isSkill ? () => safe.installSkill(e.name) : () => safe.install(e.name)
-        doInstall().then(
+        try { doInstall().then(
           async () => {
             // effectiveness re-check: reload installed list, flag restart need
             const fresh = await safe.installed?.().catch(() => installed())
@@ -151,8 +159,8 @@ export default Plugin.define({
               b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
             }
           },
-          (x: unknown) => { b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66' },
-        )
+          (x: unknown) => { log(`install fail ${e.name}: ${String(x)}`); failOut(x) },
+        ) } catch (x) { log(`install throw ${e.name}: ${String(x)}`); failOut(x) }
       }
       return b
     }
@@ -431,6 +439,18 @@ export default Plugin.define({
       const clr = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(200,50,50,.5);border-radius:6px;background:transparent;color:#c55;margin-top:6px;margin-left:8px', '清空数据') as HTMLButtonElement
       clr.onclick = () => { if (confirm('清空所有收藏/分组/备注？')) { put(EMPTY_STATE); status.textContent = '已清空' } }
       root.append(exp, ta, imp, clr, status)
+      // 开发日志开关（默认关）
+      const dv = el('h4', 'margin:20px 0 6px;font-weight:600', '开发日志')
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = devlog()
+      cb.onchange = () => put({ devlog: cb.checked })
+      const cbL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      cbL.append(cb, document.createTextNode('记录调试日志（装包各阶段+错误，存本机）'))
+      const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap')
+      const refresh = () => { logBox.textContent = devlog() ? (readLog().slice(-80).join('\n') || '暂无日志') : '开关关闭中' }
+      refresh()
+      const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '清空日志') as HTMLButtonElement
+      clrL.onclick = () => { clearLog(); refresh() }
+      root.append(dv, cbL, logBox, clrL)
       return root
     }
 

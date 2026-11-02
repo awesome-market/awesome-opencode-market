@@ -97,6 +97,7 @@ export interface LocalState {
   favorites: Record<string, true>
   groups: Record<string, string>      // plugin name → group name
   notes: Record<string, string>       // plugin name → note
+  devlog?: boolean                    // write detailed debug logs (default off)
 }
 export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
 
@@ -193,3 +194,17 @@ export function inDays(e: MarketEntry, days: number): boolean {
   const at = Date.parse(e.publishedAt ?? e.firstSeenAt ?? '')
   return !isNaN(at) && Date.now() - at < days * 86400_000
 }
+
+// ── dev log ring buffer (localStorage, opt-in) ─────────────────────────
+const LOG_KEY = 'opencode-market.devlog.v1'
+export function appendLog(line: string): void {
+  try {
+    const cur = JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]') as string[]
+    cur.push(`${new Date().toISOString().slice(11, 19)} ${line}`)
+    localStorage.setItem(LOG_KEY, JSON.stringify(cur.slice(-300)))
+  } catch { /* quota/no LS */ }
+}
+export function readLog(): string[] {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]') } catch { return [] }
+}
+export function clearLog(): void { try { localStorage.removeItem(LOG_KEY) } catch { /* noop */ } }
