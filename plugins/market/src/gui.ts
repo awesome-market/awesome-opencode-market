@@ -147,12 +147,12 @@ export default Plugin.define({
       return b
     }
     const row = (e: MarketEntry) => {
-      const d = el('div', 'padding:12px 14px;cursor:pointer;border-radius:10px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box')
-      d.style.border = '1px solid color-mix(in srgb, CanvasText 14%, transparent)'
-      d.style.background = 'color-mix(in srgb, CanvasText 4%, Canvas)'
-      d.style.boxShadow = '0 1px 2px color-mix(in srgb, CanvasText 6%, transparent)'
-      d.onmouseenter = () => { d.style.background = 'color-mix(in srgb, CanvasText 7%, Canvas)' }
-      d.onmouseleave = () => { d.style.background = 'color-mix(in srgb, CanvasText 4%, Canvas)' }
+      const d = el('div', 'padding:12px 14px;cursor:pointer;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box')
+      // official [data-component=settings-list]: bg-layer-01 + 0.5px inset hairline via box-shadow
+      d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'
+      d.style.boxShadow = 'inset 0 0 0 0.5px var(--v2-border-border-muted, color-mix(in srgb, CanvasText 14%, transparent))'
+      d.onmouseenter = () => { d.style.background = 'var(--v2-background-bg-layer-02, color-mix(in srgb, CanvasText 7%, Canvas))' }
+      d.onmouseleave = () => { d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))' }
       d.onclick = () => setView({ kind: 'detail', e })
       const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:flex-start;gap:6px')
       const star = el('span', 'cursor:pointer;flex-shrink:0;line-height:1.4', state().favorites[e.name] ? '★' : '☆')
