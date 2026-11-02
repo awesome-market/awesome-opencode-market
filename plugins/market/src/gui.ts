@@ -164,12 +164,9 @@ export default Plugin.define({
       d.onmouseleave = () => { d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))' }
       d.onclick = () => setView({ kind: 'detail', e })
       const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:flex-start;gap:6px')
-      const star = el('span', 'cursor:pointer;flex-shrink:0;line-height:1.4', state().favorites[e.name] ? '★' : '☆')
-      star.style.color = '#da3'
-      star.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); star.textContent = state().favorites[e.name] ? '★' : '☆' }
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
-      title.append(star, nameBox)
+      title.append(nameBox)
       const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
@@ -178,14 +175,20 @@ export default Plugin.define({
         dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
         .filter(Boolean).join(' · ')
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
-      const tags = el('div', 'margin-top:6px;display:flex;gap:5px;flex-wrap:wrap')
+      const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
       for (const ct of categoriesOf(e)) {
         const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
-        tags.appendChild(tg)
+        bottom.appendChild(tg)
       }
+      // bottom-right favorite bookmark (dsh style) — localStorage state
+      const favBtn = el('button', 'margin-left:auto;font-size:14px;line-height:1;cursor:pointer;border:none;background:transparent;padding:2px 6px', state().favorites[e.name] ? '★' : '☆') as HTMLButtonElement
+      const syncFav = () => { favBtn.textContent = state().favorites[e.name] ? '★' : '☆'; favBtn.style.color = state().favorites[e.name] ? '#da3' : 'rgba(128,128,128,.7)' }
+      syncFav()
+      favBtn.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); syncFav() }
+      bottom.appendChild(favBtn)
       const note = state().notes[e.name]
-      d.append(title, meta, desc, tags)
+      d.append(title, meta, desc, bottom)
       if (note) d.appendChild(el('div', 'font-size:11px;opacity:.55;font-style:italic', `📝 ${note}`))
       const p = prog()[e.name]
       if (p && !p.done) {
