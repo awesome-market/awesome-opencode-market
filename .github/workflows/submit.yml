@@ -31,3 +31,14 @@ jobs:
               issue_number: context.issue.number,
               body: `## Automated review\n\n${fs.readFileSync('/tmp/review.md','utf8')}\n\n_Human maintainer makes the final call._`
             })
+      - name: label + close on verdict
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
+          case "$V" in
+            clean)   gh issue edit "$ISSUE" --add-label "submission:approved" --remove-label "submission:needs-work" --remove-label "submission:invalid"; gh issue close "$ISSUE" ;;
+            flagged) gh issue edit "$ISSUE" --add-label "submission:needs-work" --remove-label "submission:approved" --remove-label "submission:invalid" ;;
+            invalid) gh issue edit "$ISSUE" --add-label "submission:invalid" --remove-label "submission:approved" --remove-label "submission:needs-work" ;;
+          esac

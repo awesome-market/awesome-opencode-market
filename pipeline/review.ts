@@ -32,8 +32,14 @@ export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch
   }
 }
 
+/** Machine verdict driving the auto label/close in submit.yml. */
+export function verdict(r: Review): 'clean' | 'flagged' | 'invalid' {
+  if (!r.exists) return 'invalid'
+  return r.redFlags.length ? 'flagged' : 'clean'
+}
+
 export function renderReview(r: Review): string {
-  if (!r.exists) return `**${r.name}** — package not found on npm.`
+  if (!r.exists) return `**${r.name}** — package not found on npm.\n\n<!-- verdict: invalid -->`
   const lines = [
     `**${r.name}** — found on npm${r.repo ? `, repo: ${r.repo}` : ''}`,
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,
@@ -42,7 +48,7 @@ export function renderReview(r: Review): string {
     r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',
     r.findings.length ? `\n### Findings (${r.findings.length})\n${r.findings.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.findings.length > 30 ? `\n- … +${r.findings.length - 30} more (truncated)` : ''}` : '\n### Findings: none — this does not mean safe.',
   ]
-  return lines.join('\n')
+  return `${lines.join('\n')}\n\n<!-- verdict: ${verdict(r)} -->`
 }
 
 /* v8 ignore next 4 */
