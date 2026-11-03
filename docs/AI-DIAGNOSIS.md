@@ -50,8 +50,8 @@ verify run（钉装 pendingVersion/最新批准版测试）
 
 本地 AI（每小时，断网自动补）
    → 拉 pending 条目 + pendingVersion
-   → L0.5 注入检测分类器（专用小模型，产出信号非裁决；高分→直接 concern 转人工）
-   → 全量审（物料=包内容+scan+verify结果+信任信号+L0.5分数，去散文）
+   → L0.5 注入检测分类器【一期 mock：恒 pass，不产信号】
+   → 全量审（物料=包内容+scan+verify结果+信任信号，去散文）
    → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,source}）
 
 下一趟 catalog run 读 verdicts
@@ -124,7 +124,12 @@ user:   <data>
 
 **tarball sha 去重**：同内容重发/re-tag 跳过不重复审。
 
-### L0.5 注入检测分类器（专用模型，信号非裁决）
+### L0.5 注入检测分类器【一期 mock：恒 pass，不产信号】
+
+> **实现状态**：一期为 mock 实现——接口就位、流程串通，但恒返回
+> 无信号（score=0），不产生 finding、不影响任何裁决。具体模型
+> 选型待调研定夺后替换实现。接口签名与接入点按真实方案设计，
+> 换真模型时只改实现不改流程。
 
 通用 LLM 审核时必须语义"读懂"被审文本 = 可被说服；专用分类器只做
 模式打分、不执行指令——对注入的免疫是**结构性**的。它补的恰是 LLM
@@ -258,9 +263,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → L0.5 分类器
   → 全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
   needs-work/invalid issue → 草稿评论
-- 注入检测模型（可换插槽）：Galvanize-2 / Horizon 全量闸 + Granite
-  Guardian BYOC 第二判据 + PG2 第三票；皆信号源非裁决，
-  `modelId+version` 记入审计元数据
+- 注入检测模型（可换插槽，**一期 mock 恒 pass**）：选型待定——
+  候选 Galvanize-2 / Horizon 全量闸 + Granite Guardian BYOC 第二
+  判据 + PG2 第三票；皆信号源非裁决，`modelId+version` 记入审计
+  元数据
 - `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern 挂起）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
