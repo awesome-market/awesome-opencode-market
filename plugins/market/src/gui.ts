@@ -73,9 +73,11 @@ export default Plugin.define({
       s.has(k) ? s.delete(k) : s.add(k)
       setFeatFilter(s)
     }
-    const partChips = (compact = false) => {
+    const partChips = (compact = false, only?: string[]) => {
       const grp = el('span', `display:inline-flex;border:1px solid rgba(128,128,128,.4);border-radius:12px;overflow:hidden;${compact ? '' : 'margin-left:4px'}`)
-      for (const [i, [k, label]] of ([['server','server'],['tui','tui'],['gui','gui'],['rpc','rpc']] as const).entries()) {
+      const all = ([['server','server'],['tui','tui'],['gui','gui'],['rpc','rpc']] as const)
+      const segs = only ? all.filter(([k]) => only.includes(k)) : all
+      for (const [i, [k, label]] of segs.entries()) {
         const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;${i ? 'border-left:1px solid rgba(128,128,128,.35);' : ''}background:transparent;color:inherit;${featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
         seg.title = `${k} 部件（可多选）`
         seg.onclick = (ev) => { ev.stopPropagation(); toggleFeat(k) }
@@ -297,7 +299,7 @@ export default Plugin.define({
         .filter(Boolean).join(' · ')
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
       const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
-      if (featuresOf(e).length) bottom.appendChild(partChips(true))
+      if (featuresOf(e).length) bottom.appendChild(partChips(true, featuresOf(e)))
       for (const ct of categoriesOf(e)) {
         const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
