@@ -812,7 +812,7 @@ export default Plugin.define({
           }),
         readDevlog: async () => {
           try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
-            return readFileSync('/tmp/opencode-market.log', 'utf8').split('\n').filter(Boolean).slice(-120).join('\n')
+            return readFileSync('/tmp/opencode-market.log', 'utf8').split('\n').filter(Boolean).slice(-100).join('\n')
           } catch { return '' }
         },
         devlog: async (line: string) => {

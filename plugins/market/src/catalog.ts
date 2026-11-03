@@ -169,8 +169,8 @@ const CAT_RULES: [string, RegExp][] = [
   ['记忆', /memory|remember|recall|knowledge|note|persist/i],
   ['通知', /notif|alert|toast|sound|remind|bell/i],
   ['安全与权限', /secur|guard|permission|policy|audit|sandbox|auth|firewall|protect/i],
-  ['开发流程', /git|commit|review|test|lint|ci|deploy|release|debug|refactor|scaffold|spec/i],
-  ['工具与能力', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp/i],
+  ['开发流程', /git|commit|review|test|lint|ci|deploy|release|debug|refactor|scaffold|spec|project|template|starter|suite|kit|workflow|task[-_ ]?runner/i],
+  ['工具与能力', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp|manage|track|monitor|watch|dashboard|status|quota|limit|metric/i],
   ['集成与移动', /integrat|qq|wechat|slack|discord|telegram|feishu|mobile|remote|browser|chrome/i],
 ]
 export function categoriesOf(e: MarketEntry): string[] {
