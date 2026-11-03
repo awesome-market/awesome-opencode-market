@@ -591,7 +591,7 @@ export default Plugin.define({
               try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
               for (const p of res.data ?? []) {
                 if (p.source?.type === 'package' && p.source.target) {
-                  const clean = p.source.target.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1')
+                  const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = p.source.version ?? '?'
                   specByName[clean] = p.source.target
                 }
@@ -606,7 +606,7 @@ export default Plugin.define({
               if (id) {
                 map[id] = ver ?? '?'
                 if (src) {
-                  const clean = src.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1')
+                  const clean = src.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = ver ?? '?'
                   specByName[clean] = src
                 }
@@ -640,7 +640,7 @@ export default Plugin.define({
           const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${name}: ${s}\n`) } catch { /* */ } }
           lg('called')
           const spec = specByName[name] ?? name
-          const clean = spec.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1')
+          const clean = spec.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
           lg(`spec=${spec} clean=${clean} hasClient=${!!m.client?.plugin?.update}`)
           const push = (line: string) => m.emit?.('progress', { name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
@@ -656,8 +656,8 @@ export default Plugin.define({
               const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
               const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
               const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
-              const before = list.filter(s => s.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1') === clean)
-              d.plugins = [...list.filter(s => s.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1') !== clean), clean]
+              const before = list.filter(s => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1') === clean)
+              d.plugins = [...list.filter(s => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1') !== clean), clean]
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
               if (before.length !== 1 || before[0] !== clean) { push(`config deduped ${before.join(',')} → ${clean}`); lg(`config rewritten (${before.length} specs → ${clean})`) }
             }
