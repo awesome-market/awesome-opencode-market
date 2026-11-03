@@ -646,8 +646,15 @@ export default Plugin.define({
               if (before.length !== 1 || before[0] !== clean) { push(`config deduped ${before.join(',')} → ${clean}`); lg(`config rewritten (${before.length} specs → ${clean})`) }
             }
             if (!m.client?.plugin?.update) throw new Error('host plugin API unavailable')
-            push('plugin update (host api)')
-            await m.client.plugin.update({ targets: [clean] })
+            // config rewrite triggers a daemon rescan — the clean spec may not
+            // be in the inventory yet; retry a few times, then accept the
+            // outcome if plugin list already shows the new version
+            let lastErr: unknown
+            for (let i = 0; i < 6; i++) {
+              try { push('plugin update (host api)'); await m.client.plugin.update({ targets: [clean] }); lastErr = null; break }
+              catch (x) { lastErr = x; if (!String(x).includes('not in the current server inventory')) throw x; await new Promise(r => setTimeout(r, 1500)) }
+            }
+            if (lastErr) { lg(`inventory never caught up: ${String(lastErr)}`) }
             lg('host update ok'); done(true); return 'updated'
           } catch (x) { push(`update failed: ${String(x)}`); lg(`FAILED ${String(x)}`); done(false); throw x }
         },

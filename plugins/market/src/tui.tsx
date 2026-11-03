@@ -172,8 +172,12 @@ const specByName: Record<string, string> = {}
               d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
             }
-            await ctx.client.plugin.update({ targets: [clean] })
-            setStatus(`updated ${e.name}`); void refreshInstalled(); return
+            let lastErr: unknown
+            for (let i = 0; i < 6; i++) {
+              try { await ctx.client.plugin.update({ targets: [clean] }); lastErr = null; break }
+              catch (x) { lastErr = x; if (!String(x).includes('not in the current server inventory')) throw x; await new Promise(r => setTimeout(r, 1500)) }
+            }
+            setStatus(lastErr ? `updated (inventory lag) ${e.name}` : `updated ${e.name}`); void refreshInstalled(); return
           } catch (x) { setStatus(`update fail: ${String(x)}`); return }
         }
         const p = spawn('opencode', ['plugin', 'add', spec])
