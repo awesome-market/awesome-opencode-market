@@ -43,10 +43,18 @@ try {
   const refreshed = await page.locator('text=已刷新').first().isVisible({ timeout: 15_000 }).catch(() => false)
   t('更新数据 refreshes', refreshed)
 
-  // 我的插件 有卡
-  await page.getByRole('button', { name: '我的插件', exact: true }).click()
-  const cards = await page.locator('text=已安装').count()
-  t('我的插件 has installed cards', cards > 0)
+  // tab switching — every market tab renders its own content
+  for (const [tabName, marker] of [
+    ['我的插件', '已安装|未收录|安装'],
+    ['技能', '技能|skill|目录'],
+    ['发现', '全部|分类|插件'],
+    ['插件', '@'],
+    ['设置', '更新数据|开发日志'],
+  ]) {
+    await page.getByRole('button', { name: tabName, exact: true }).click()
+    const ok = await page.locator(`text=${marker.split('|')[0]}`).first().isVisible({ timeout: 8000 }).catch(() => false)
+    t(`tab ${tabName} switches`, ok)
+  }
 } catch (e) { t('smoke aborted', false); console.log(String(e).slice(0, 200)) }
 
 await cdp.close()
