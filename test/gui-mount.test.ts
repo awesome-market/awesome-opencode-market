@@ -31,14 +31,19 @@ describe('L3 mount: window-side behavior', () => {
     expect(api.refreshIndex.mock.calls.length + api.index.mock.calls.length + api.installed.mock.calls.length).toBeGreaterThan(0)
   })
 
-  it('全部更新 placeholder → api.update NEVER called (red case)', async () => {
+  // RED case: the button is still a placeholder (impl lives in 955be87, reverted).
+  // it.fails = expected red; when 全部更新 is implemented this flips green and
+  // vitest reports an unexpected pass — forcing the marker off.
+  it.fails('全部更新 updates every outdated plugin (placeholder must not pass)', async () => {
     const { root, api } = mount()
     await flush()
     const updAll = [...root.querySelectorAll('button')].find(b => b.textContent === '全部更新')!
     updAll.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     updAll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     await flush()
-    expect(api.update).not.toHaveBeenCalled()   // placeholder: never updates — this is the known gap
+    // fake index ships one outdated plugin (@x/old 1.0.0 → 2.0.0) — a real
+    // implementation must call update for it
+    expect(api.update).toHaveBeenCalledWith('@x/old')
   })
 
   it.fails('install button calls api.install on click (WIP: card render timing)', async () => {
