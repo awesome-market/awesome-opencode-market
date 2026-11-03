@@ -408,7 +408,7 @@ export default Plugin.define({
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
                 <text fg={id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? theme.text.base : theme.text.faint}
-                      onMouseDown={() => toTab(i())}>
+                      onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
                   {id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
                 </text>
               )}</For>
@@ -416,7 +416,7 @@ export default Plugin.define({
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
                 <text fg={zone() === 'chrome' && chromeSel() === 7 ? theme.text.base : theme.text.muted}
-                      onMouseDown={() => { setSearchOn(true); searchInput?.focus() }}>/ </text>
+                      onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
                 <input
                   flexGrow={1}
                   placeholder={t('search')}
@@ -428,11 +428,11 @@ export default Plugin.define({
                   }}
                 />
                 <text fg={zone() === 'chrome' && chromeSel() === 8 ? theme.text.base : theme.text.muted}
-                      onMouseDown={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                      onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
               </box>
               <box flexDirection="row" paddingLeft={1}>
                 <text fg={zone() === 'chrome' && chromeSel() === 9 ? theme.text.base : theme.text.muted}
-                      onMouseDown={pickCategory}>[c] </text>
+                      onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
                 <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
                 <For each={cats().slice(0, 6)}>{(c, i) => (
                   <text fg={cat() === c || (zone() === 'chrome' && chromeSel() === 10 + i()) ? theme.text.base : theme.text.muted}
@@ -451,7 +451,7 @@ export default Plugin.define({
                     <For each={settingsItems}>{(item, i) => (
                       <text fg={i() === settingsSel() ? theme.text.base : theme.text.muted}
                             onMouseOver={() => setSettingsSel(i())}
-                            onMouseDown={() => settingsItems[i()]?.run()}>
+                            onMouseDown={(ev) => { ev.stopPropagation(); settingsItems[i()]?.run() }}>
                         {i() === settingsSel() ? '› ' : '  '}{item.label}
                       </text>
                     )}</For>
@@ -513,6 +513,7 @@ export default Plugin.define({
           </box>
           <Show when={menu()}>{(m) => (
             <box position="absolute" top={5} right={3} zIndex={100} flexDirection="column" minWidth={38}
+                 onMouseDown={(ev) => ev.stopPropagation()}
                  border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
                  backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>{m().title}</b></text>
@@ -527,6 +528,7 @@ export default Plugin.define({
           )}</Show>
           <Show when={prompt()}>{(p) => (
             <box position="absolute" top={5} left={4} zIndex={101} flexDirection="column" minWidth={46}
+                 onMouseDown={(ev) => ev.stopPropagation()}
                  border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
                  backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>{p().title}</b>  (enter 确认 · esc 取消)</text>
