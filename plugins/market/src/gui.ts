@@ -239,7 +239,7 @@ export default Plugin.define({
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
       title.append(nameBox)
-      d.appendChild(el('span', 'font-size:10px;opacity:.7;border:1px solid rgba(128,128,128,.4);border-radius:4px;padding:0 5px;position:absolute;top:8px;right:10px', e.contains?.includes('skill') ? '技能' : '插件'))
+      d.appendChild(el('span', 'font-size:10px;opacity:.7;border:1px solid rgba(128,128,128,.4);border-radius:4px;padding:0 5px;position:absolute;top:-5px;right:10px;background:field;z-index:1', e.contains?.includes('skill') ? '技能' : '插件'))
       const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')

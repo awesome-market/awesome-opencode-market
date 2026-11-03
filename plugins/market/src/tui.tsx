@@ -473,7 +473,6 @@ export default Plugin.define({
                         if (ver) uninstall(e); else install(e)
                       }}>{actionLabel(e)}</text>
               </box>
-              <text fg={theme.text.faint}> {e.contains?.includes('skill') ? '技能' : '插件'}</text>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(e.description?.en ?? '', 42)}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
