@@ -619,8 +619,12 @@ export default Plugin.define({
             p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
           }),
         update: async (name: string) => {
+          const { appendFileSync } = require('node:fs') as typeof import('node:fs')
+          const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${name}: ${s}\n`) } catch { /* */ } }
+          lg('called')
           const spec = specByName[name] ?? name
           const clean = spec.replace(/@\d[^@]*$/, '')
+          lg(`spec=${spec} clean=${clean} hasClient=${!!m.client?.plugin?.update}`)
           const push = (line: string) => m.emit?.('progress', { name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
           try {
@@ -635,13 +639,13 @@ export default Plugin.define({
               const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
               d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-              push(`unpinned ${spec} → ${clean}`)
+              push(`unpinned ${spec} → ${clean}`); lg('config rewritten')
             }
             if (!m.client?.plugin?.update) throw new Error('host plugin API unavailable')
             push('plugin update (host api)')
             await m.client.plugin.update({ targets: [clean] })
-            done(true); return 'updated'
-          } catch (x) { push(`update failed: ${String(x)}`); done(false); throw x }
+            lg('host update ok'); done(true); return 'updated'
+          } catch (x) { push(`update failed: ${String(x)}`); lg(`FAILED ${String(x)}`); done(false); throw x }
         },
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
