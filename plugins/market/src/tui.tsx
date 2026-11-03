@@ -477,11 +477,13 @@ export default Plugin.define({
                     <text fg={theme.text.base}><b>设置</b></text>
                     <box height={1} />
                     <For each={settingsItems}>{(item, i) => (
-                      <text fg={i() === settingsSel() ? theme.text.base : theme.text.muted}
-                            onMouseOver={() => setSettingsSel(i())}
-                            onMouseDown={(ev) => { ev.stopPropagation(); settingsItems[i()]?.run() }}>
-                        {i() === settingsSel() ? '› ' : '  '}{item.label}
-                      </text>
+                      <box backgroundColor={i() === settingsSel() ? theme.background.action.primary.focused : undefined}>
+                        <text fg={i() === settingsSel() ? theme.text.action.primary.focused : theme.text.muted}
+                              onMouseOver={() => setSettingsSel(i())}
+                              onMouseDown={(ev) => { ev.stopPropagation(); settingsItems[i()]?.run() }}>
+                          {i() === settingsSel() ? '› ' : '  '}{item.label}
+                        </text>
+                      </box>
                     )}</For>
                   </box>
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
@@ -546,11 +548,13 @@ export default Plugin.define({
                  backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>{m().title}</b></text>
               <For each={m().options}>{(o, i) => (
-                <text fg={i() === m().sel ? theme.text.base : theme.text.muted}
-                      onMouseOver={() => setMenu({ ...m(), sel: i() })}
-                      onMouseDown={(ev) => { ev.stopPropagation(); const opt = m().options[i()]; setMenu(null); opt?.run() }}>
-                  {i() === m().sel ? '› ' : '  '}{o.label}
-                </text>
+                <box backgroundColor={i() === m().sel ? theme.background.action.primary.focused : undefined}>
+                  <text fg={i() === m().sel ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => setMenu({ ...m(), sel: i() })}
+                        onMouseDown={(ev) => { ev.stopPropagation(); const opt = m().options[i()]; setMenu(null); opt?.run() }}>
+                    {i() === m().sel ? '› ' : '  '}{o.label}
+                  </text>
+                </box>
               )}</For>
             </box>
           )}</Show>
