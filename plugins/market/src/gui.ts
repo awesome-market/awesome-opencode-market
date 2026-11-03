@@ -587,7 +587,8 @@ export default Plugin.define({
           // what catalog entries match on (CLI list reports internal ids)
           try {
             if (m.client?.plugin?.list) {
-              const res = await m.client.plugin.list({}) as { data?: { source?: { type?: string; target?: string; version?: string } }[] }
+              const res = await m.client.plugin.list() as { data?: { source?: { type?: string; target?: string; version?: string } }[] }
+              try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
               for (const p of res.data ?? []) {
                 if (p.source?.type === 'package' && p.source.target) {
                   const clean = p.source.target.replace(/@\d[^@]*$/, '')
@@ -612,6 +613,7 @@ export default Plugin.define({
               }
             }
           } catch { /* plugin list unavailable — skills are still reported */ }
+          try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): map keys ${JSON.stringify(Object.keys(map))}\n`) } catch { /* */ }
           Object.assign(map, scanSkillKeys(
             [join(homedir(), '.config', 'opencode', 'skills'), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
             d => readdirSync(d), p => existsSync(p)))
