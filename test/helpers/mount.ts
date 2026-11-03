@@ -22,7 +22,7 @@ export function fakeCtx(api: ReturnType<typeof makeApi>) {
     // insert/createEffect need an owner to track — wrap in createRoot
     const { createRoot } = require('solid-js') as typeof import('solid-js')
     let out!: HTMLElement
-    dispose = createRoot(() => { out = mounted.content!() })
+    createRoot(d => { dispose = d; out = mounted.content!() })
     return { el: out, dispose: dispose! }
   }
   const ctx = {
