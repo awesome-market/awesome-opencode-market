@@ -87,14 +87,7 @@ export default Plugin.define({
     const featuresOf = (e: MarketEntry): string[] => {
       const real = featMap()[e.name]
       if (real) return Object.keys(real)
-      const paths = (e.capabilities?.findings ?? []).map(f => String(f).split(':').slice(1).join(':'))
-      const has = (m: RegExp) => paths.some(p => m.test(p))
-      const out: string[] = []
-      if (has(/server|cli\.|agent|hook/)) out.push('server')
-      if (has(/tui/)) out.push('tui')
-      if (has(/gui/)) out.push('gui')
-      if (has(/rpc/)) out.push('rpc')
-      return out
+      return e.features ?? []
     }
     const [err, setErr] = createSignal('')
     const [query, setQuery] = createSignal('')
