@@ -1,217 +1,226 @@
 # AI 审核与上架管线设计
 
-> 状态：设计定稿 v2，待实现。
+> 状态：设计定稿 v3，待实现。
 >
-> v2 相对 v1 的关键变化：机械审查 clean 不再自动上架（原自动仅为开发期便利）；
-> AI 权限模型定为**二审否决权**（收窄任务、去语义化输入）而非放行特赦；
-> 增加每日上架日报 + 恒定否决窗口；版本风暴用 latest-only + delta-findings 限频。
+> v3 相对 v2 的关键变化：
+> - **队列统一**：取消 issue-label 上架池，改为 index 级 `approval` 字段 +
+>   `ai-verdicts.jsonl` 写回通道（投稿与发现条目走同一条路）
+> - **hold 是默认态**：版本 bump 自动挂起 `pendingVersion`，展示版本 =
+>   最后被批准的版本——不再有"先展示后追回"的毒版暴露窗
+> - **verify 钉装**：修复版本错位 bug + verify 测的就是用户将装的版本
+> - 客户端钉装 `name@approvedVersion`，把目录从咨询层变成真闸门
 
 ## 1. 目标与原则
 
-投稿审查要覆盖"大部分插件自动审核上架"，人只做两件事：**每天看明日上架
-日报**（可一票否决）+ **处理风险件**。设计假设人的注意力会退化到零
-（流于形式是常态）——安全底线必须由机械红线 + AI 客观判定构成，不能
-依赖人的认真。
+大部分插件自动审核上架；人只做两件事：**每天看日报**（可否决）+
+**处理风险件**。设计假设人的注意力会退化到零——安全底线由机械红线 +
+AI 客观判定构成。
 
-四条不变原则：
-
-- AI 输出（除结构化的二审判定外）永远只是评论，不进 verdict/label/ingest
-- 本机只跑文本推理，**绝不执行投稿包代码**（云端验证，DEV.md 同规）
-- 机械 redFlags 永远转人工——AI 不能替代"计划外发现"
-- 全程可审计：AI 判定理由留档、日报是公开上架日志
+核心语义：**用户能装到的版本 = 机械红线 + AI 都通过的版本**。
+展示的、被装的永远是"最后批准的"，不是"最新的"——滞后是 feature。
 
 ## 2. 验证深度现状（云端）
 
 | 层级 | 状态 | 做法 |
 |---|---|---|
-| 静态代码分析 | ✅ | `scanTarball` 规则集（findings/redFlags） |
+| 静态代码分析 | ✅ | `scanTarball` 规则集 |
 | 安装测试 | ✅ | `opencode plugin add` 真装进 XDG 隔离环境 |
-| 真实运行 | ✅ headless | `opencode serve` + API 触发懒加载 + `loading plugin` canary |
-| TUI 交互级 | ❌ 二期 | `tmux` 驱动真 TUI + `capture-pane` 断言无 panic（Linux runner，需 pty） |
-| Windows 兼容 | 可选 | public repo runner 免费；Windows 无 pty，只适合 serve headless 分片 |
+| 真实运行 | ✅ headless | `opencode serve` + API 触发懒加载 |
+| TUI 交互级 | ❌ 二期 | `tmux` 驱动 + `capture-pane` 断言（Linux runner） |
+| Windows 兼容 | 可选 | public repo runner 免费；无 pty，只跑 serve headless |
 
-安装/运行测试一律云端（GitHub Actions），本机不做任何装测。
+安装/运行测试一律云端，本机不做任何装测。
 
-## 3. 总体架构
+## 3. 总体架构（v3）
 
 ```
-投稿 issue
-   │
-   ▼ submit.yml review job（仅 opened/edited + 合格评论触发）
-机械初审 → verdict
-   ├─ clean   → submission:ai-review      ← 初审通过，等 AI 二审（不再自动上架）
-   ├─ flagged → submission:needs-work ──┐
-   └─ invalid → submission:invalid    ──┤
-                                        │  label = AI 队列（GitHub 侧，断网免疫）
-        本地 cron/launchd（每小时）      │
-   ┌────────────────────────────────────┘
-   ▼ pipeline/ai-diagnose.ts
-   ├─ ai-review 队列 → 二审（见 §4 任务收窄）
-   │    ├─ pass    → submission:ai-approved（明日上架池）
-   │    └─ concern → submission:needs-work + 疑虑草稿（转人工）
-   └─ needs-work/invalid → 诊断草稿帮人判断（不裁决）
+投稿/发现 → catalog run
+   ├─ 新条目      → entry { approval: pending }      （不进展示面）
+   ├─ 版本 bump   → entry { pendingVersion: 新版 }    （展示钉在旧批准版）
+   └─ 无变化      → 复用
 
-每日日报（本地 cron 21:00，固定 issue 盖楼）：
-   "明日上架 N 个 + 各件 AI 理由摘要；人工待定 M 个"
-   → 次日 07:00 publish 前 = 恒定 ~10h 人否决窗口
-   → 否决动作 = 摘掉 issue 的 ai-approved 标签（零新机制）
+verify run（钉装 pendingVersion/最新批准版测试）
+   → 装不上的版本直接 concern，不耗 AI token
 
-publish job（每日 07:00，catalog run 前）：
-   批量拉 ai-approved + approved（人工通道）标签 → ingest → submissions.txt
-   → 下一趟 catalog run 上架 → notify 评论+关闭 issue
+本地 AI（每小时，断网自动补）
+   → 拉 pending 条目 + pendingVersion
+   → 全量审（物料=包内容+scan+verify结果+信任信号，去散文）
+   → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,source}）
+
+下一趟 catalog run 读 verdicts
+   ├─ pass    → approval: approved / pendingVersion 释放为展示版
+   └─ concern → 保持 pending + finding（进人工队列）
+
+人工通道（等价二选一）
+   ├─ issue 评论 /approve（owner）
+   └─ issue 勾 submission:approved（triage+）
+   → approve job 往 ai-verdicts.jsonl 写 source:human 的 pass
+
+日报（本地 cron 21:00，固定 issue 盖楼）
+   ① 明日上架（verdict=pass 还没跑过 catalog）
+   ② pending 中（等 AI 审）
+   ③ concern 挂起（等人工）
+   → 否决动作 = 往 ai-verdicts.jsonl 写 source:human 的 concern / 人工改 verdict
 ```
 
-## 4. AI 二审：任务收窄 + 去语义化输入
+## 4. schema 变更（src/schema.ts）
+
+```ts
+// entry 新增字段
+approval: 'approved' | 'pending' | 'legacy'
+//   approved = AI/人工批准过，展示
+//   pending  = 未过审，站点过滤不展示
+//   legacy   = 存量迁移态：正常展示但标注"早于 AI 审"，backfill 逐批升级
+latestVersion: string           // 语义变为"最后批准版"（客户端钉装目标）
+pendingUpdate?: {
+  version: string               // 被挂起的新版本
+  capabilities: Capabilities    // 新版自己的扫描结果（与展示字段隔离）
+  verification: Verification    // 新版的装测结果
+  findings: string[]
+  reason?: string               // AI concern 理由 / awaiting-review
+  heldAt: string
+}
+```
+
+**release 语义**：`pendingUpdate` 获批 → `latestVersion = pendingUpdate.version`，
+capabilities/verification 提升为展示字段，`pendingUpdate` 清除。
+新版再被挂 → 独立重审（hold 按版本键控，不累积阻塞）。
+
+**写回通道**：catalog 分支 `ai-verdicts.jsonl`（同 submissions.txt 模式）
+`{name, version, verdict: pass|concern, reason, at, source: ai|human}`
+
+## 5. AI 二审：任务收窄 + 去语义化输入
 
 **权限模型：否决权，不是特赦权。**
 
-| 机械 verdict | AI 可判 | 注入攻击的最坏结果 |
+| 输入状态 | AI 可判 | 注入最坏结果 |
 |---|---|---|
-| clean → ai-review | pass / concern | 骗"pass" → 回到机械 clean 自动上架的旧基线，**不更差** |
-| flagged → needs-work | （只能出草稿，无裁决权） | 注入无法突破机械红线 |
-| invalid | 同上 | 同上 |
-
-AI 误判方向恒为保守：误拦 → 人看一眼；绝不误放。
-
-**输入面——只做安全判断，不读散文：**
+| pending（新条目/新版本） | pass / concern | 骗"pass" → 回到机械 clean 基线，不更差 |
+| 机械 redFlags | （只起草，无裁决） | 注入无法突破机械红线 |
 
 ```
-system: 你是安全审查员。对每个 finding 判定 true_positive 或
-        false_positive 并给一句技术理由。输出严格 JSON：
+system: 安全审查员。对物料判定 pass|concern，逐信号给技术理由。严格 JSON：
         { "verdict": "pass"|"concern",
           "signals": [{ "finding": "...", "tp": bool, "reason": "..." }] }
 user:   <data>
         - 结构化元数据（name/version/maintainers/createdAt/repoId 变更）
-        - 机械扫描的 findings + redFlags（规则:文件:命中行）
-        - 命中代码行摘录（≤80 字符/行，截断）
-        - 文件清单（路径名）
+        - 机械 findings/redFlags（规则:文件:命中行）+ 命中代码行摘录
+        - 包源码（限流：入口→生命周期脚本→源码到上限；跳 minified/bundled）
+        - verify 结果（装得上/加载通/日志摘录）
+        - 上下文信号：休眠 >30d 推版 / maintainer-changed / name-reused
         </data>
 ```
 
-不喂：描述、README、issue 散文、其他用户评论——连续叙述性文本是最大的
-注入面。残余注入只能藏在代码行/标识符里，且要先骗过机械规则命中才会
-被 AI 看到；最坏结果仍回落到基线，不更差。
+不喂：描述、README、issue 散文、他人评论——残余注入只能藏代码行里且
+要先骗过机械规则；最坏回落基线。**超限包默认 concern**（审不完走保守）。
+**输出校验**：严格 JSON schema；非 pass 一律 concern；解析失败也 concern。
 
-**输出校验**：严格 JSON schema；`verdict` 非 `pass` 一律当 concern 处理
-（含解析失败——失败不 retry 空转，贴一次"诊断暂不可用"出队）。
+**tarball sha 去重**：同内容重发/re-tag 跳过不重复审。
 
-**上架后复审（全量分析，防"上架后投毒"）**：
+## 6. 上架后复审（防"上架后投毒"）
 
-机械重扫是模式匹配——投毒者会针对规则集绕过，语义层恶件需要 AI。
-**每次版本更新 = 全量 AI 重审**（不用 diff——diff 审不到跨版本拆
-payload：v1.2 先塞无害休眠文件、v1.3 再加无害激活器，两次 diff 都
-干净，只有全量视角能看到组合语义）：
+版本 bump → `pendingVersion` 自动挂起（hold-by-default）→ verify 装测
+新版 → AI 全量重审 → pass 释放 / concern 挂起。休眠唤醒、维护者变更
+作为高疑信号进物料。**每版都过 AI，发包频率不产生额外工作量**（每条目
+每趟 ≤1 次，AI 审的是最新版，中间版永远轮不到）。
 
+github-kind 条目无版本号：用 `pushedAt`/tree-sha 变化做复审触发——
+近似语义（repo 无不可变快照），记录在案。
+
+## 7. 现网 bug：verify 版本错位（独立修复）
+
+`verify/merge.ts` 按 name 写回 verification——verify 装的是"测试时刻的
+npm latest"，条目记录的是"catalog 时刻的版本"：catalog 收录 v1.2 后 npm
+发了 v1.3，verify 测的是 v1.3 却把 verified 贴在 v1.2 条目上。
+
+**修法**：分片文件写 `{name, version}` 对，verify 装 `name@version`——
+测的就是用户（钉装后）会装的版本，错位在结构上消失。
+
+## 8. 客户端钉装
+
+```diff
+- opencode plugin add <name>          → npm latest
++ opencode plugin add <name>@<entry.latestVersion>  → 批准版
 ```
-版本变化（catalog run 检测 v旧 → v新）
-   ├─ 机械重扫照旧（每版必跑）
-   ├─ tarball sha 与上次审过的一致 → 跳过（re-tag/同内容重发不重复审）
-   ├─ AI 物料 = 全量包内容（限流策略见下）+ findings + 上下文信号
-   │    ├─ 休眠 >30 天突然推版 = 卖号/变节典型模式 → 高疑
-   │    ├─ maintainer-changed + 新版 = 过户后发包 → 高疑
-   │    └─ name-reused/repo-recreated + 新版 = 已有红旗直接人审不过 AI
-   │    → pass：条目正常升级展示
-   │    → concern：条目钉住旧版本 + 挂 update-under-review 标记，
-   │              新版只进审计面不进展示面 → 人终审放行或 blocklist
-   └─ 无版本变化：不触发（AI 工作量与变更挂钩而非时间）
-```
 
-**输入限流**（大包不逐字节喂）：入口文件 → 生命周期脚本 → 全部源码
-文件到上限；跳过 minified/bundled/binary/lock。**超限包默认 concern
-转人工**——"审不完"走保守方向。
+升级同理：`plugin.update` 若不支持版本 spec，改写 opencode.json spec +
+reload。skill 走 `installSkillTar` 独立路径，同步钉。
+`hasUpdate` 比较对象不变（catalog.latestVersion=批准版）——npm 有新版
+但目录未批准时更新按钮不亮，**滞后是 feature**。
 
-**hold 机制是关键**：没有它，投毒版在 AI 判 concern 前就已覆盖展示。
-`update-under-review` 让可疑更新永远停在审计面——用户看到的仍是
-上一个被认可的版本。
+**前置验证**（动手前必查）：`opencode plugin add name@x.y.z` 是否吃
+版本 spec。保护范围 = market 插件用户；手动 CLI 用户仍是咨询层。
 
-**成本**：仅版本有变化的条目（单趟典型 <5% → ~30-100 条/天）、
-每条目每趟 ≤1 次、单条 ~10k tokens → 本地模型 1-2h 机时/天。
-发包频率不产生额外 AI 工作量（每条目每趟限一次）。
-
-**存量债**：现 3300 条目从未被 AI 审过——上线后做一次性 backfill
-（~26M tokens 摊 30 天 ≈ 3h/天机时）。之后周期重审只跟随事件
-（版本变化/信任信号/规则集升级），不做定时轮询——同内容+同模型
-重跑只是重复采样，token 要花在"结论可能变"的地方。
-
-## 5. 标签状态机
-
-| label | 含义 | 谁贴的 | 下一状态 |
-|---|---|---|---|
-| `submission` | 投稿标记 | 表单模板 | → 初审 |
-| `submission:ai-review` | 机械初审过，待 AI 二审 | bot | → ai-approved / needs-work |
-| `submission:ai-approved` | AI 二胜过，明日上架池 | 本地脚本 | → publish 上架 |
-| `submission:approved` | 人工批准（label/approve） | triage+ 人 | → publish 上架 |
-| `submission:needs-work` | 人工队列（机械红旗+AI疑虑） | bot/AI | → 修复重审 / sweep |
-| `submission:invalid` | 待修正 | bot | → 修复重审 / sweep |
-| `submission:ai-diagnosed` | 已出草稿（幂等标记） | 本地脚本 | → 重审时清除重诊 |
-
-## 6. submit.yml 改动点
+## 9. submit.yml 改动点
 
 1. `issues.types` 加 `labeled`；review `if` 精确到 `opened|edited|合格评论`
-   （评论排除 bot、`ai-diag` 标记、`/approve` 开头）
-2. verdict 映射改三态：clean→`ai-review`（**不再 approved/ingest**）、
-   flagged→needs-work、invalid→invalid；贴 needs-work/invalid 时清
-   `ai-diagnosed`
-3. 新增 `approve` job：人工 labeled `submission:approved`（排除 bot sender）
-   或 owner `/approve` 评论 → 贴 approved + 确认评论
-4. 新增 `publish` job（`schedule` 每日 07:00 + `workflow_dispatch`）：
-   拉 `ai-approved`+`approved` open issues → 逐 issue 解析 subline →
-   批量 append submissions.txt（catalog 分支，共用 `catalog-branch` 锁）
-   → 给每件评论"已提交今日上架批"
-5. ingest job 删除（职能并入 publish）或保留为单件即时通道（人工急用）
+   （评论排除 bot、`ai-diag`、`/approve` 开头）
+2. verdict 映射：clean→`submission:ai-review`（初审过，等 AI，不自动 ingest）、
+   flagged→needs-work、invalid→invalid；needs-work/invalid 时清 ai-diagnosed
+3. 新增 `approve` job：labeled `submission:approved`（排除 bot sender）或
+   owner `/approve` → 往 ai-verdicts.jsonl 写 source:human pass + 确认评论
+4. ingest 保留（clean→ingest→条目落 pending），语义变为"进待审队列"
+5. notify-published 判定条件改：`approval === 'approved'` 才发"已收录"——
+   ingest 不等于上架
 
-## 7. 本地组件
+## 10. run.ts 改动点
 
-**pipeline/ai-diagnose.ts**（TS，可测试，~200 行）：
-队列拉取 → 物料组装（去语义化）→ localhost:8001 → JSON 校验 →
-贴草稿/标签。LLM key 从 `~/.config/opencode-market/ai-key` 读。
-lockfile 防并发。任何异常静默退出，下趟补。
+- 复用检查：`cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)`
+  ——挂起版不重复扫
+- 版本 bump → 写 `pendingUpdate` 而非覆盖展示字段
+- 读 ai-verdicts.jsonl：pass→释放/approved；concern→保持+reason
+- 新条目 → `approval: pending`；存量迁移 → `approval: 'legacy'`
 
-**pipeline/publish-digest.ts**（日报）：
-拉 ai-approved/approved issues → 渲染"明日上架清单 + AI 理由 +
-人工待定清单" → 在固定 digest issue 评论盖楼。
+## 11. 本地组件
 
-**launchd**：两档——ai-diagnose 每小时；digest 每日 21:00。
+- `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → 全量审 →
+  写 ai-verdicts.jsonl + 推 catalog 分支；needs-work/invalid issue → 草稿评论
+- `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern 挂起）
+- launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
+- AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
 
-## 8. 安全边界
+## 12. 安全边界
 
 | 边界 | 依据 |
 |---|---|
-| AI 无特赦权（flagged/invalid 只起草） | 注入不可突破机械红线；AI 误判方向恒保守 |
-| 输入去散文（无 README/描述/评论） | 注入面只剩代码行，且须先骗过机械规则 |
-| 输出严格 JSON schema | 无自由文本藏私货；解析失败=concern 兜底 |
-| 本地零执行 | 装测全在云端 runner（零 token、egress 白名单） |
-| 日报≠审批，是反悔窗口 | 人注意力归零时系统保底仍成立 |
-| `/approve` 限 owner + labeled 排除 bot | 人通道不被 AI/自身循环触发 |
-| LLM key 只进 `~/.config/` | 不进 git、workflow、日志 |
+| 展示=批准版，装=批准版 | hold-by-default + 钉装，毒版到不了用户 |
+| AI 无特赦权 | redFlags 只起草；误判方向恒保守 |
+| 输入去散文 + 严格 JSON 输出 | 注入面最小化，无自由文本藏私货 |
+| 本地零执行 | 装测全在云端零 token 沙箱 |
+| 日报≠审批，是反悔窗 | 人注意力归零时保底成立 |
+| AI 写回走 ai-verdicts.jsonl | index.json 仍是唯一事实源，verdict 只是输入 |
+| fail-closed 冻结 | 无 fail-open 后门 |
+| `/approve` 限 owner；labeled 排除 bot | 人通道不被 AI/自身循环触发 |
 
-## 9. 边界情况
+## 13. 边界情况
 
 | 场景 | 结果 |
 |---|---|
-| 批准不存在的包 | catalog packument 404 → 不落，无害 |
-| 误批 | blocklist.json 下架（tombstone `manual`） |
-| 日报后想拦某件 | 摘 ai-approved 标签即出批（label timeline 留痕） |
-| 版本风暴（一天 10 版） | 只扫 latest；无新信号静默；verify 每趟限频——成本与发版频率解耦 |
-| 上架后投毒（v1过审 v2藏毒） | 新 finding 出现 → delta 触发 → 进人审队列 |
-| AI/LLM 挂掉 | 队列堆积在 GitHub label，恢复后消化；单件诊断失败贴一次出队 |
-| 断网 | 队列零本地状态，下趟补 |
+| 批准不存在的包 | packument 404 → 不落，无害 |
+| 误批/事后发现毒版 | blocklist 下架（tombstone） |
+| 想拦 pending 中的 | 写 human concern 进 verdicts，或 AI 挂起时人工复核 |
+| 版本风暴 | 只审最新版；每趟限一次；中间版永不消耗 |
+| 休眠后投毒 | 高疑信号进物料；hold 保证毒版只进审计面 |
+| AI 挂掉 | 更新冻结 pending，存量不动，告警 |
+| 存量迁移 | legacy 展示标注，backfill 逐批升级，不清空站点 |
 
-## 10. 不做清单
+## 14. 不做清单
 
 - AI 不裁决 flagged/invalid（只起草）
-- AI 输入不含散文（README/描述/评论不进 prompt）
+- 不做定时轮询式重审（同内容+同模型=重复采样；只跟事件）
 - 不在本机执行投稿代码
-- 不做 TUI/desktop 实时测试（二期：tmux TUI 断言 + Windows headless 分片）
-- 不做 verify 失败 AI 归因（三期：logExcerpt 聚类周报）
+- 不做 TUI/desktop 实时测试（二期）
+- 不做 verify 失败 AI 归因（三期）
 
-## 11. 验收清单
+## 15. 验收清单
 
-- [ ] clean 投稿 → `ai-review` 标签，不自动 ingest
-- [ ] AI 二审 pass → `ai-approved` → 日报含此件 → 次日上架
-- [ ] AI 二审 concern → `needs-work` + 疑虑草稿
-- [ ] 人工勾 `approved` / 评论 `/approve` → 进明日批
-- [ ] 日报后摘 `ai-approved` → 该件不在次日上架
-- [ ] bot 贴的 label 不触发 approve job；AI 评论不触发重审
-- [ ] 断网时段脚本静默失败、恢复后补跑
-- [ ] 同包新版本无新 finding → 不进 AI 复审
+- [ ] `opencode plugin add name@x.y.z` 版本 spec 实测可用
+- [ ] clean 投稿 → entry 落 `pending`，不展示不安装
+- [ ] AI pass → 下趟 catalog 变 `approved` 展示
+- [ ] AI concern → 保持 pending + reason，进人工
+- [ ] 版本 bump → pendingVersion 挂起，展示钉旧版；pass 后升级
+- [ ] verify 测的版 == 条目批准版（无错位）
+- [ ] 客户端装/升级 = `name@latestVersion`（批准版）
+- [ ] 日报三节齐全；人工 verdict 写回生效
+- [ ] 存量条目 `approval: legacy` 正常展示
+- [ ] 断网时段静默，恢复补跑
