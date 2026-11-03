@@ -21,13 +21,19 @@ AI 客观判定构成。
 
 ## 2. 验证深度现状（云端）
 
-| 层级 | 状态 | 做法 |
+| 层 | 状态 | 做法 |
 |---|---|---|
-| 静态代码分析 | ✅ | `scanTarball` 规则集 |
-| 安装测试 | ✅ | `opencode plugin add` 真装进 XDG 隔离环境 |
-| 真实运行 | ✅ headless | `opencode serve` + API 触发懒加载 |
-| TUI 交互级 | ❌ 二期 | `tmux` 驱动 + `capture-pane` 断言（Linux runner） |
+| L1 静态分析+装+加载 | ✅ | `scanTarball` + `plugin add` XDG 隔离 + `serve` canary |
+| L2 TUI 交互级 | ❌ 二期 | `tmux` 驱动 + `capture-pane` 断言（Linux runner） |
+| L3a GUI 真实渲染（主） | ❌ 二期 | `serve` 自带 web UI + Playwright headless：断言插件 GUI 元素渲染/console 无插件报错/截图留证 |
+| L3b 真 Electron（兜底） | 可选 | xvfb + AppImage + `--no-sandbox` + CDP DOM 检查——仅当 L3a 与桌面表现出现分歧时启用；~200MB 下载、flaky 风险高 |
 | Windows 兼容 | 可选 | public repo runner 免费；无 pty，只跑 serve headless |
+
+**L3 设计依据**：desktop 是 Electron 套 serve 的 web UI，GUI 插件
+（`exports["./gui"]`）渲染目标是同一份 web 前端——Playwright 的
+headless Chromium 与 Electron renderer 同源，断言"插件 GUI 能不能
+渲染"几乎等价，且能拿结构化错误（console/network）而不只是截图。
+L3 按需触发：仅对有 `./gui` entrypoint 的包跑（绝大多数包没有）。
 
 安装/运行测试一律云端，本机不做任何装测。
 
@@ -238,7 +244,7 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - AI 不裁决 flagged/invalid（只起草）
 - 不做定时轮询式重审（同内容+同模型=重复采样；只跟事件）
 - 不在本机执行投稿代码
-- 不做 TUI/desktop 实时测试（二期）
+- 不做 TUI/GUI 实时测试（二期 L2/L3a；真 Electron L3b 仅兜底按需）
 - 不做 verify 失败 AI 归因（三期）
 
 ## 15. 验收清单
