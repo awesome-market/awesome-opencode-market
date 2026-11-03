@@ -15,6 +15,7 @@ const Market = Ipc.define({
   id: 'opencode-market',
   methods: {
     index: { output: Schema.Unknown },
+    refreshIndex: { output: Schema.Unknown },
     installed: { output: Schema.Unknown },
     install: { input: Schema.String, output: Schema.String },
     update: { input: Schema.String, output: Schema.String },
@@ -34,6 +35,7 @@ const Market = Ipc.define({
 })
 type Api = {
   index(): Promise<MarketIndex>
+  refreshIndex(): Promise<MarketIndex>
   installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
   install(name: string): Promise<string>
   update(name: string): Promise<string>
@@ -526,6 +528,19 @@ export default Plugin.define({
 
     const settingsPanel = () => {
       const root = el('div', 'padding:8px 12px;max-width:520px')
+      const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:14px', '更新数据（强制刷新索引）') as HTMLButtonElement
+      refBtn.onclick = () => void (async () => {
+        refBtn.disabled = true; refBtn.textContent = '刷新中…'
+        try {
+          const idx = await safe.refreshIndex?.()
+          if (idx) setData(idx)
+          const fresh = await safe.installed?.().catch(() => null)
+          if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
+          refBtn.textContent = `已刷新（${idx?.plugins?.length ?? '?'} 条）`
+        } catch (x) { refBtn.textContent = `刷新失败: ${String(x)}` }
+        setTimeout(() => { refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）' }, 3000)
+      })
+      root.appendChild(refBtn)
       root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
       const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', '收藏、分组、备注存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。')
       root.appendChild(desc)
@@ -618,6 +633,7 @@ export default Plugin.define({
       const featByName: Record<string, Record<string, true> | undefined> = {}
     m.provide(Market, {
         index: () => fetchIndexCached() as Promise<MarketIndex>,
+        refreshIndex: () => fetchIndexCached(undefined, true) as Promise<MarketIndex>,
         installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
           const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')

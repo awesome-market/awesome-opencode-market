@@ -115,10 +115,10 @@ const TTL_MS = 3600_000
 interface CachedIndex { at: number; index: MarketIndex }
 
 /** TTL-cached fetch with snapshot fallback (dsh registry.ts pattern). */
-export async function fetchIndexCached(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
+export async function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): Promise<MarketIndex> {
   let cached: CachedIndex | null = null
   try { cached = JSON.parse(localStorage.getItem(LS_IDX) ?? 'null') } catch { /* noop */ }
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.index
+  if (!force && cached && Date.now() - cached.at < TTL_MS) return cached.index
   try {
     const idx = await fetchIndex(url)
     try { localStorage.setItem(LS_IDX, JSON.stringify({ at: Date.now(), index: idx })) } catch { /* quota */ }
