@@ -94,17 +94,19 @@ jobs:
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
           git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
+          # catalog branch is data-only — keep pipeline sources reachable via a worktree
+          git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
           ok=0
           for i in 1 2 3 4; do
             git fetch origin catalog
+            git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
             npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
-            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
-            cp /tmp/index.new.json index.json
-            git add index.json
-            git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-            git push origin catalog && { ok=1; break; }
+            cp /tmp/index.new.json /tmp/cat/index.json
+            git -C /tmp/cat add index.json
+            git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
             echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
           done
           [ "$ok" = 1 ] || { echo "verify merge failed after retries"; exit 1; }
@@ -122,6 +124,7 @@ jobs:
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           gh issue create \

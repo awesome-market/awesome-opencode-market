@@ -53,10 +53,14 @@ jobs:
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
+          # catalog branch is data-only (no pipeline sources) — use a worktree so
+          # the main checkout keeps pipeline/*.ts runnable throughout the loop.
+          git fetch origin catalog 2>/dev/null || true
+          git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
           ok=0
           for i in 1 2 3 4; do
             git fetch origin catalog 2>/dev/null || true
-            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
+            git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
             # race happened → re-merge our fresh scan against the fresh remote index
             # (preserves remote's verification/removed state instead of clobbering it)
             git show origin/catalog:index.json > /tmp/remote-index.json 2>/dev/null || true
@@ -64,10 +68,10 @@ jobs:
               npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json
               mv /tmp/index.merged.json /tmp/index.json
             fi
-            cp /tmp/index.json index.json
-            git add index.json
-            git commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-            git push origin catalog && { ok=1; break; }
+            cp /tmp/index.json /tmp/cat/index.json
+            git -C /tmp/cat add index.json
+            git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
@@ -102,6 +106,7 @@ jobs:
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           gh issue create \
