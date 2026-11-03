@@ -187,6 +187,14 @@ plugins/market/
 | **状态持久化** | `loadState`/`saveState`/备份导出恢复 roundtrip | favorites/groups/notes 序列化↔反序列化、损坏 JSON 容错、TTL 过期→fetch 失败→snapshot fallback |
 | **管道** | `preAdmit`/`looksLikeTemplateSpam`/`hasPluginEvidence`/`merge`/`slugOf`/`detectFeatures`/`classify` | 三个发现通道、模板垃圾拒收、证据门、old-index merge 字段保留、exports 子路径部件 |
 | **安全脱敏** | `redactLog`/`keyLines` | home 路径/token/API key 不出现在导出日志、行过滤 |
+| **skill 权限/源** | `skillPermission`/`skillSource`/`installSkillDir` IPC | allow/deny/ask 模式读写、HTTP catalog 开关、global/project scope 选择落盘 |
+| **取消安装** | `cancelInstall` IPC + 卡片 × 按钮 | 安装中点 × 杀子进程、任务表清理、取消后状态复位 |
+| **导出日志** | `exportLog` 按钮 + `redactLog`+`keyLines` 链 | 点击导出→含脱敏文本、行数截断、无日志时空态 |
+| **插件形态推断** | `looksLikePlugin` | exports/main/opencode 字段 → plugin/maybe/no 三分支 |
+| **详情页** | `detailView` | findings/redFlags 默认收起、备注输入保存、版本/来源/分类完整展示 |
+| **i18n** | `t()` + EN/ZH 表 | 所有 I18nKey 双语齐全、缺 key 不崩 |
+| **数据时间** | `indexAge` | "x 分钟前/x 小时前" 格式化、无索引时空态 |
+| **TUI 弹层体系** | menu overlay/prompt/settingsItems | 筛选选中态、菜单项 hover/键盘一致、prompt 字符输入+esc 拦截、settings 焦点循环 |
 
 ### L3 jsdom 挂载补全（每个功能区块"能用→状态对→错处理"）
 
