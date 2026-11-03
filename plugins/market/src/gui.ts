@@ -167,6 +167,13 @@ export default Plugin.define({
       const disk = skillInstalledVer(installed(), e.name)
       const ver = disk ? (state().skillVers?.[e.name] ?? disk) : undefined
       const isSkill = e.contains?.includes('skill')
+      // progress-driven busy/failed states — a re-render during install must
+      // keep showing … instead of resetting the button back to add
+      const pr = prog()[e.name]
+      if (pr && !pr.done)
+        return el('button', 'font-size:12px;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px;opacity:.6;white-space:nowrap;flex-shrink:0', '…')
+      if (pr?.done && !pr.ok)
+        return el('button', 'font-size:12px;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `failed — ${pr.lines[pr.lines.length - 1] ?? ''}`)
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
       if (ver && !hasUpdate(e, ver))
         return tab() === 'installed' || tab() === 'mySkills'
@@ -177,6 +184,7 @@ export default Plugin.define({
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
+        setProg({ ...prog(), [e.name]: { lines: ['installing…'], done: false, ok: false } })
         const failOut = (x: unknown) => {
           b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66'
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
