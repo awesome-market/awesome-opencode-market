@@ -34,7 +34,7 @@ const Market = Ipc.define({
 })
 type Api = {
   index(): Promise<MarketIndex>
-  installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[] }>
+  installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
   install(name: string): Promise<string>
   update(name: string): Promise<string>
   cancelInstall(name: string): Promise<string>
@@ -61,6 +61,21 @@ export default Plugin.define({
     const [data, setData] = createSignal<MarketIndex | null>(null)
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
     const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
+    const [featMap, setFeatMap] = createSignal<Record<string, Record<string, true> | undefined>>({})
+    const [featFilter, setFeatFilter] = createSignal<string | null>(null)
+    // host inventory features when installed; otherwise infer from scanned file paths
+    const featuresOf = (e: MarketEntry): string[] => {
+      const real = featMap()[e.name]
+      if (real) return Object.keys(real)
+      const paths = (e.capabilities?.findings ?? []).map(f => String(f).split(':').slice(1).join(':'))
+      const has = (m: RegExp) => paths.some(p => m.test(p))
+      const out: string[] = []
+      if (has(/server|cli\.|agent|hook/)) out.push('server')
+      if (has(/tui/)) out.push('tui')
+      if (has(/gui/)) out.push('gui')
+      if (has(/rpc/)) out.push('rpc')
+      return out
+    }
     const [err, setErr] = createSignal('')
     const [query, setQuery] = createSignal('')
     const [cat, setCat] = createSignal('')
@@ -94,7 +109,7 @@ export default Plugin.define({
     } catch { /* older host: no events */ }
 
     safe.index().then(i => setData(i), e => setErr(String(e)))
-    safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []) }, () => {})
+    safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
 
     const filtered = () => {
       const all = data()?.plugins ?? []
@@ -115,6 +130,8 @@ export default Plugin.define({
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
       if (rangeDays()) list = list.filter(p => inDays(p, rangeDays()))
+      const ff = featFilter()
+      if (ff) list = list.filter(p => featuresOf(p).includes(ff))
       const srt = sortEntries(search(list, query()), sort())
       return sortDir() === 'asc' ? [...srt].reverse() : srt
     }
@@ -162,7 +179,7 @@ export default Plugin.define({
             const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
             put({ skillVers: sv }); setInstalled(next)
             const fresh = await safe.installed?.().catch(() => null)
-            if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras) }
+            if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           },
           (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = 'failed'; b.title = String(x) },
         )
@@ -229,7 +246,7 @@ export default Plugin.define({
             } else {
               // effectiveness re-check: reload installed list, flag restart need
               const fresh = await safe.installed?.().catch(() => null)
-              if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras) }
+              if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
               const okNow = (fresh?.versions ?? installed())[e.name]
               b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
               const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
@@ -267,6 +284,8 @@ export default Plugin.define({
         .filter(Boolean).join(' · ')
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
       const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
+      const feats = featuresOf(e)
+      if (feats.length) bottom.appendChild(el('span', 'font-size:10px;opacity:.5;letter-spacing:1px', feats.map(f => f === 'server' ? 'S' : f === 'tui' ? 'T' : f === 'gui' ? 'G' : 'R').join('·')))
       for (const ct of categoriesOf(e)) {
         const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
@@ -435,7 +454,15 @@ export default Plugin.define({
           c.onclick = () => setCat(id)
           return c
         }
-        return [mk('', `全部(${pool.length})`), ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
+        const cats = [mk('', `全部(${pool.length})`), ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
+        for (const k of ['server','tui','gui','rpc'] as const) {
+          const chip = mk('', k)
+          chip.title = `只看 ${k} 部件（再点取消）`
+          chip.onclick = () => setFeatFilter(featFilter() === k ? null : k)
+          if (featFilter() === k) { chip.style.background = '#556'; chip.style.color = '#fff' }
+          cats.push(chip)
+        }
+        return cats
       })
       root.appendChild(chips)
       return root
@@ -580,6 +607,7 @@ export default Plugin.define({
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
       const specByName: Record<string, string> = {}
       const idByName: Record<string, string> = {}
+      const featByName: Record<string, Record<string, true> | undefined> = {}
     m.provide(Market, {
         index: () => fetchIndexCached() as Promise<MarketIndex>,
         installed: async () => {
@@ -595,6 +623,8 @@ export default Plugin.define({
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
               try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
               for (const p of res.data ?? []) {
+                if ((p as { features?: Record<string, true> }).features)
+                  featByName[(p.source?.target ?? '').replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')] = (p as { features?: Record<string, true> }).features
                 if (p.source?.type === 'package' && p.source.target) {
                   const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = p.source.version ?? '?'
@@ -631,7 +661,7 @@ export default Plugin.define({
           const extras = Object.keys(specByName)
             .filter(k => !idxNames.has(k))
             .map(k => { const name = idByName[k] ?? k; map[name] = map[k]; return { name, version: map[k] } })
-          return { versions: map, extras }
+          return { versions: map, extras, features: featByName }
         },
         install: (name: string) =>
           new Promise<string>((resolve, reject) => {
