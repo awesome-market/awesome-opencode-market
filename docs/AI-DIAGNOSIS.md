@@ -1,6 +1,6 @@
 # AI 审核与上架管线设计
 
-> 状态：设计定稿 v3，待实现。
+> 状态：设计定稿 v3.1，待实现。
 >
 > v3 相对 v2 的关键变化：
 > - **队列统一**：取消 issue-label 上架池，改为 index 级 `approval` 字段 +
@@ -9,6 +9,13 @@
 >   最后被批准的版本——不再有"先展示后追回"的毒版暴露窗
 > - **verify 钉装**：修复版本错位 bug + verify 测的就是用户将装的版本
 > - 客户端钉装 `name@approvedVersion`，把目录从咨询层变成真闸门
+>
+> v3.1 实现级复审修正：
+> - pass verdict 设 **≥24h 成熟时间**——保证每个自动放行先在日报出现再上架
+> - 人批准按 `npm view` **解析当下 latest** 落 verdict——消除版本漂移死路
+> - 新条目挂起加 `approvalReason` 槽；客户端过滤 `pending`（不只站点）
+> - run.ts 对 redFlags 条目的 pass verdict 二次拦截（纵深防御）
+> - clean→ingest→pending 语义定死；非投稿条目的人通道=日报 issue
 
 ## 1. 目标与原则
 
@@ -42,48 +49,49 @@ L3 按需触发：仅对有 `./gui` entrypoint 的包跑（绝大多数包没有
 ```
 投稿/发现 → catalog run
    ├─ 新条目      → entry { approval: pending }      （不进展示面）
-   ├─ 版本 bump   → entry { pendingVersion: 新版 }    （展示钉在旧批准版）
+   ├─ 版本 bump   → entry { pendingUpdate: 新版 }     （展示钉在旧批准版）
    └─ 无变化      → 复用
 
-verify run（钉装 pendingVersion/最新批准版测试）
-   → 装不上的版本直接 concern，不耗 AI token
+verify run（钉装 pendingUpdate.version/latestVersion 测试）
+   → 装不上 → ai-diagnose 直接写 concern（source:ai），不调 LLM
 
 本地 AI（每小时，断网自动补）
-   → 拉 pending 条目 + pendingVersion
+   → 拉 pending 条目 + pendingUpdate
    → L0.5 注入检测分类器【一期 mock：恒 pass，不产信号】
    → 全量审（物料=包内容+scan+verify结果+信任信号，去散文）
-   → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,source}）
+   → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,at,source}）
 
 下一趟 catalog run 读 verdicts
-   ├─ pass    → approval: approved / pendingVersion 释放为展示版
-   └─ concern → 保持 pending + finding（进人工队列）
+   ├─ pass（且 at ≥24h 成熟）→ approved / pendingUpdate 释放为展示版
+   │     ※ 24h 成熟保证每个自动放行先在日报出现再上架 = 真实否决窗
+   ├─ pass 落在 redFlags 条目 → run.ts 二次拦截忽略（纵深防御）
+   └─ concern → 保持 pending + reason（立即生效，无窗口）
 
-人工通道（等价二选一）
-   ├─ issue 评论 /approve（owner）
-   └─ issue 勾 submission:approved（triage+）
-   → approve job 往 ai-verdicts.jsonl 写 source:human 的 pass
+人工通道
+   ├─ 投稿 issue：/approve（owner）或勾 submission:approved（triage+）
+   └─ 非投稿条目：日报 issue 评论 /approve <name>，或直接推 verdicts 文件
+   → approve 写入时用 npm view 解析当下 latest 再落 verdict（防版本漂移）
 
 日报（本地 cron 21:00，固定 issue 盖楼）
-   ① 明日上架（verdict=pass 还没跑过 catalog）
+   ① 明日上架（pass verdict 未满 24h / 已成熟未跑过 catalog）
    ② pending 中（等 AI 审）
    ③ concern 挂起（等人工）
-   → 否决动作 = 往 ai-verdicts.jsonl 写 source:human 的 concern / 人工改 verdict
 ```
 
 ## 4. schema 变更（src/schema.ts）
 
 ```ts
 // entry 新增字段
-approval: 'approved' | 'pending' | 'legacy'
+approval: 'approved' | 'pending' | 'legacy'   // 旧数据 parse 默认 'legacy'
 //   approved = AI/人工批准过，展示
-//   pending  = 未过审，站点过滤不展示
+//   pending  = 未过审，站点+客户端都过滤不展示
 //   legacy   = 存量迁移态：正常展示但标注"早于 AI 审"，backfill 逐批升级
+approvalReason?: string         // 新条目挂起理由（pendingUpdate 只管版本 bump）
 latestVersion: string           // 语义变为"最后批准版"（客户端钉装目标）
-pendingUpdate?: {
+pendingUpdate?: {               // 仅版本 bump 于已展示条目时使用
   version: string               // 被挂起的新版本
-  capabilities: Capabilities    // 新版自己的扫描结果（与展示字段隔离）
+  capabilities: Capabilities    // 新版自己的扫描结果（含 sec-delta 红旗，与展示字段隔离）
   verification: Verification    // 新版的装测结果
-  findings: string[]
   reason?: string               // AI concern 理由 / awaiting-review
   heldAt: string
 }
@@ -92,9 +100,15 @@ pendingUpdate?: {
 **release 语义**：`pendingUpdate` 获批 → `latestVersion = pendingUpdate.version`，
 capabilities/verification 提升为展示字段，`pendingUpdate` 清除。
 新版再被挂 → 独立重审（hold 按版本键控，不累积阻塞）。
+**展示字段钉住**：hold 期间 `latestVersion`/`capabilities`/`verification`/
+`source.version` 全是展示版的——merge 按展示版 cacheKey 找回 prevVer 的
+per-version 数据，这是本设计在 merge.ts 里的手术核心。
 
 **写回通道**：catalog 分支 `ai-verdicts.jsonl`（同 submissions.txt 模式）
 `{name, version, verdict: pass|concern, reason, at, source: ai|human}`
+- verdict 按 `name@version` 键控，append-only 无清理
+- `pass` 需 `at ≥24h` 成熟才生效；`concern` 立即生效
+- github-kind 无版本：`version: null` 匹配 `latestVersion: null` 的条目
 
 ## 5. AI 二审：任务收窄 + 去语义化输入
 
@@ -227,14 +241,22 @@ npm latest"，条目记录的是"catalog 时刻的版本"：catalog 收录 v1.2 
 skill 走 `installSkillTar` 独立路径，同步钉。
 保护范围 = market 插件用户；手动 CLI 用户仍是咨询层。
 
+**客户端必须过滤 `approval==='pending'`**——pending 条目的 latestVersion
+就是未审版，只过滤站点展示层等于闸门漏了：装/升级列表、搜索、详情
+都要过滤（站点 build 过滤是第二道）。已展示条目带 pendingUpdate 可挂
+"vX.Y 审核中"徽标——审计面本来就公开。
+
 ## 9. submit.yml 改动点
 
 1. `issues.types` 加 `labeled`；review `if` 精确到 `opened|edited|合格评论`
    （评论排除 bot、`ai-diag`、`/approve` 开头）
-2. verdict 映射：clean→`submission:ai-review`（初审过，等 AI，不自动 ingest）、
+2. verdict 映射：clean→`submission:ai-review`（初审过，**随后即 ingest**——
+   条目落 pending 进待审队列；label 仅是投稿人 UX 不是队列载体）、
    flagged→needs-work、invalid→invalid；needs-work/invalid 时清 ai-diagnosed
 3. 新增 `approve` job：labeled `submission:approved`（排除 bot sender）或
-   owner `/approve` → 往 ai-verdicts.jsonl 写 source:human pass + 确认评论
+   owner `/approve` → **先 `npm view <name> version` 解析当下 latest**，
+   再往 ai-verdicts.jsonl 写 source:human pass + 确认评论——版本键控
+   防止"批了 1.2 放出 1.3"，解析当下版本消除"批了却没上架"死路
 4. ingest 保留（clean→ingest→条目落 pending），语义变为"进待审队列"
 5. notify-published 判定条件改：`approval === 'approved'` 才发"已收录"——
    ingest 不等于上架
@@ -243,14 +265,23 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 - 复用检查：`cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)`
   ——挂起版不重复扫
-- 版本 bump → 写 `pendingUpdate` 而非覆盖展示字段
+- 版本 bump → 写 `pendingUpdate` 而非覆盖展示字段——**merge 手术核心**：
+  hold 存在时展示字段（latestVersion/capabilities/verification/source.version）
+  按展示版 cacheKey 找回 prevVer 的 per-version 数据钉住，新版的全部
+  per-version 数据进 pendingUpdate
+- `trustFlags` 的 sec-delta 红旗挂到 **pendingUpdate.capabilities**
+  （属新版不属展示层），release 提升时随走
 - 版本回退检测同样比 `pendingUpdate?.version ?? latestVersion`——挂起
   版存在时拿 npm latest 对钉住的展示版比较会每趟误报 rollback
-- 读 ai-verdicts.jsonl：pass→释放/approved；concern→保持+reason
+- 读 ai-verdicts.jsonl：
+  - `pass` 仅在 `at ≥24h` 成熟后生效；`concern` 立即生效
   - verdict 按 `name@version` 键控：v1.3 的 pass 不会误放 v1.4；
     旧 verdict 自然失效，文件 append-only 无清理需求
+  - **二次拦截**：pass 落在 capabilities（或 pendingUpdate.capabilities）
+    含 redFlags 的条目上 → 忽略（AI 写错也兜住；人批准可override=
+    人本来就能直接改文件）
   - 人可"预批准"：verdict 先于 pendingUpdate 落盘也无害——条目
-    落 pending 时 verdict 已在，同趟即释放（by design）
+    落 pending 时 verdict 已在，成熟后同趟释放（by design）
   - 两个写者（本地 AI 直推 + GitHub approve job）→ push 冲突时
     fetch+rebase 重试，同 ingest 现有模式
 - 新条目 → `approval: pending`；存量迁移 → `approval: 'legacy'`
@@ -260,9 +291,12 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 ## 11. 本地组件
 
-- `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → L0.5 分类器
-  → 全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
-  needs-work/invalid issue → 草稿评论
+- `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate →
+  verify-failed 短路（`verification.status==='failed'` → 直接写
+  concern，不调 LLM）→ L0.5 分类器 → 全量审 → 写 ai-verdicts.jsonl +
+  推 catalog 分支；needs-work/invalid issue → 草稿评论
+- 本地素材边界：`fetchTarball` **下载阅读允许**（数据非执行），
+  install/run/plugin add 永远禁止——与云端零执行不冲突
 - 注入检测模型（可换插槽，**一期 mock 恒 pass**）：选型待定——
   候选 Galvanize-2 / Horizon 全量闸 + Granite Guardian BYOC 第二
   判据 + PG2 第三票；皆信号源非裁决，`modelId+version` 记入审计
@@ -289,6 +323,7 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 | 场景 | 结果 |
 |---|---|
 | 批准不存在的包 | packument 404 → 不落，无害 |
+| 人批准时版本已漂移 | approve 按 `npm view` 解析当下 latest 落 verdict——批的就是当下版 |
 | 误批/事后发现毒版 | blocklist 下架（tombstone） |
 | 想拦 pending 中的 | 写 human concern 进 verdicts，或 AI 挂起时人工复核 |
 | 版本风暴 | 只审最新版；每趟限一次；中间版永不消耗 |
@@ -309,14 +344,17 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - [x] `opencode plugin add name@x.y.z` 版本 spec 实测可用（v2.2.5，
       wakatime@1.3.8 / oh-my-opencode@5.1.59 验证；精确 pin 为硬底，
       `plugin update` 无法越过；升级=改写 `plugins` spec 后 resolve）
-- [ ] clean 投稿 → entry 落 `pending`，不展示不安装
-- [ ] AI pass → 下趟 catalog 变 `approved` 展示
-- [ ] AI concern → 保持 pending + reason，进人工
-- [ ] 版本 bump → pendingVersion 挂起，展示钉旧版；pass 后升级
-- [ ] 挂起版不重复全量扫；rollback 检测不误报
+- [ ] clean 投稿 → ingest → entry 落 `pending`，不展示不安装
+- [ ] AI pass → **满 24h 后**下趟 catalog 变 `approved` 展示；
+      未满龄的不释放
+- [ ] AI concern → 立即保持 pending + reason，进人工
+- [ ] pass 落在 redFlags 条目 → run.ts 拦截忽略
+- [ ] 版本 bump → pendingUpdate 挂起，展示字段钉旧版；pass 后升级
+- [ ] 挂起版不重复全量扫；rollback 检测不误报；sec-delta 归 pendingUpdate
 - [ ] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
 - [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
-      `plugins` spec → reload（不用 `plugin update`）
-- [ ] 日报三节齐全；人工 verdict 写回生效（含预批准）
+      `plugins` spec → reload；**列表/搜索/详情过滤 pending**
+- [ ] 人批准按 npm view 解析当下版本落 verdict（含预批准）
+- [ ] 日报三节齐全；非投稿条目可在日报 issue `/approve <name>`
 - [ ] 存量条目 `approval: legacy` 正常展示
 - [ ] 断网时段静默，恢复补跑
