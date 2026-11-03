@@ -125,7 +125,9 @@ user:   <data>
 每趟 ≤1 次，AI 审的是最新版，中间版永远轮不到）。
 
 github-kind 条目无版本号：用 `pushedAt`/tree-sha 变化做复审触发——
-近似语义（repo 无不可变快照），记录在案。
+近似语义（repo 无不可变快照），记录在案。且其内容"活着"无法真钉
+版本：复审 concern 只能把 `approval` 打回 `pending` 事后撤下，不是
+gate——结构性限制如实写。
 
 ## 7. 现网 bug：verify 版本错位（独立修复）
 
@@ -136,20 +138,36 @@ npm latest"，条目记录的是"catalog 时刻的版本"：catalog 收录 v1.2 
 **修法**：分片文件写 `{name, version}` 对，verify 装 `name@version`——
 测的就是用户（钉装后）会装的版本，错位在结构上消失。
 
-## 8. 客户端钉装
+## 8. 客户端钉装（已实测，opencode v2.2.5）
 
 ```diff
 - opencode plugin add <name>          → npm latest
 + opencode plugin add <name>@<entry.latestVersion>  → 批准版
 ```
 
-升级同理：`plugin.update` 若不支持版本 spec，改写 opencode.json spec +
-reload。skill 走 `installSkillTar` 独立路径，同步钉。
+实测结论（隔离 XDG 环境）：
+
+- `plugin add name@x.y.z` **可用**：config `plugins` 数组写入全 spec，
+  装的就是该版（wakatime@1.3.8 验证）
+- **精确 pin = 硬底**：`oh-my-opencode@5.1.59` 钉住后 `plugin update`
+  报 "No updates available"（5.1.60 存在也装不上）——pin 挡住的
+  不只是我们客户端，`plugin update` 本身也越不过去，闸门是绝对的
+- **升级 = 改写 config spec**：手动把 `plugins` 里 `name@old` 改成
+  `name@new` + server 重启 → opencode 自动解析装新版。`plugin update`
+  在钉装下无关——它的 `<target>` 必须精确匹配配置 spec，裸名报
+  "not configured"
+- `plugin` / `plugins` 是两个键：`plugins`（复数）= 新 API 托管包
+  （`plugin add` 写入、`check`/`update` 管理）；`plugin`（单数）=
+  旧式 source 插件。客户端写配置用 **`plugins`**，与 `plugin add` 一致
+- `plugin add` 有 entrypoint 门：包需在 `exports` 声明
+  `./server`/`./tui`/`./gui` 之一，否则 add 直接拒绝——这意味着
+  verify 的 `plugin add` 路径只覆盖新 API 包，旧式包需走
+  `plugin:` 数组 + 加载测试的另一条 verify 路径（覆盖率差异，记录在案）
+
 `hasUpdate` 比较对象不变（catalog.latestVersion=批准版）——npm 有新版
 但目录未批准时更新按钮不亮，**滞后是 feature**。
-
-**前置验证**（动手前必查）：`opencode plugin add name@x.y.z` 是否吃
-版本 spec。保护范围 = market 插件用户；手动 CLI 用户仍是咨询层。
+skill 走 `installSkillTar` 独立路径，同步钉。
+保护范围 = market 插件用户；手动 CLI 用户仍是咨询层。
 
 ## 9. submit.yml 改动点
 
@@ -163,13 +181,24 @@ reload。skill 走 `installSkillTar` 独立路径，同步钉。
 5. notify-published 判定条件改：`approval === 'approved'` 才发"已收录"——
    ingest 不等于上架
 
-## 10. run.ts 改动点
+## 10. run.ts / merge.ts 改动点
 
 - 复用检查：`cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)`
   ——挂起版不重复扫
 - 版本 bump → 写 `pendingUpdate` 而非覆盖展示字段
+- 版本回退检测同样比 `pendingUpdate?.version ?? latestVersion`——挂起
+  版存在时拿 npm latest 对钉住的展示版比较会每趟误报 rollback
 - 读 ai-verdicts.jsonl：pass→释放/approved；concern→保持+reason
+  - verdict 按 `name@version` 键控：v1.3 的 pass 不会误放 v1.4；
+    旧 verdict 自然失效，文件 append-only 无清理需求
+  - 人可"预批准"：verdict 先于 pendingUpdate 落盘也无害——条目
+    落 pending 时 verdict 已在，同趟即释放（by design）
+  - 两个写者（本地 AI 直推 + GitHub approve job）→ push 冲突时
+    fetch+rebase 重试，同 ingest 现有模式
 - 新条目 → `approval: pending`；存量迁移 → `approval: 'legacy'`
+- verify plan 扩选：除 `unverified` 外补 `pendingUpdate` 目标与
+  `approval:'pending'` 条目；结果按 name@version 写入
+  `pendingUpdate.verification` 槽位（version 匹配时）
 
 ## 11. 本地组件
 
@@ -214,13 +243,17 @@ reload。skill 走 `installSkillTar` 独立路径，同步钉。
 
 ## 15. 验收清单
 
-- [ ] `opencode plugin add name@x.y.z` 版本 spec 实测可用
+- [x] `opencode plugin add name@x.y.z` 版本 spec 实测可用（v2.2.5，
+      wakatime@1.3.8 / oh-my-opencode@5.1.59 验证；精确 pin 为硬底，
+      `plugin update` 无法越过；升级=改写 `plugins` spec 后 resolve）
 - [ ] clean 投稿 → entry 落 `pending`，不展示不安装
 - [ ] AI pass → 下趟 catalog 变 `approved` 展示
 - [ ] AI concern → 保持 pending + reason，进人工
 - [ ] 版本 bump → pendingVersion 挂起，展示钉旧版；pass 后升级
-- [ ] verify 测的版 == 条目批准版（无错位）
-- [ ] 客户端装/升级 = `name@latestVersion`（批准版）
-- [ ] 日报三节齐全；人工 verdict 写回生效
+- [ ] 挂起版不重复全量扫；rollback 检测不误报
+- [ ] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
+- [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
+      `plugins` spec → reload（不用 `plugin update`）
+- [ ] 日报三节齐全；人工 verdict 写回生效（含预批准）
 - [ ] 存量条目 `approval: legacy` 正常展示
 - [ ] 断网时段静默，恢复补跑
