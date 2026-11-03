@@ -47,6 +47,7 @@ export const PluginEntry = z.object({
   aliases: z.array(z.string()).default([]),
   type: PluginType,
   contains: z.array(z.enum(['plugin', 'skill', 'mcp', 'command', 'agent', 'hook'])).optional(),
+  features: z.array(z.enum(['server', 'tui', 'gui', 'rpc'])).optional(),
   discoveredVia: z.array(DiscoveryChannel).default([]),
   source: Source,
   description: LocalizedText.partial().default({}),
