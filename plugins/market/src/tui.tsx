@@ -163,9 +163,12 @@ export default Plugin.define({
           setStatus(`${e.name} ${t('installed')} (${msg})`)
         } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); log(`install fail ${e.name}: ${String(x)}`) }
       }
-      const uninstall = async (e: MarketEntry) => {
-        const ok = await ctx.ui.dialog.confirm({ title: t('uninstall'), message: `${e.name} — ${t('confirmUninstall')}`, label: { confirm: t('uninstall') } })
-        if (!ok) return
+      const uninstall = (e: MarketEntry) =>
+        openMenu(`${e.name} — ${t('confirmUninstall')}`, [
+          { label: `✗ ${t('uninstall')}`, run: () => void doUninstall(e) },
+          { label: '取消', run: noop },
+        ])
+      const doUninstall = async (e: MarketEntry) => {
         const isSkill = e.contains?.includes('skill')
         log(`uninstall ${e.name}`)
         if (isSkill) {
@@ -186,42 +189,44 @@ export default Plugin.define({
       const toggleFav = (e: MarketEntry) =>
         void mutate(d => { if (d.favorites[e.name]) delete d.favorites[e.name]; else d.favorites[e.name] = true })
       const editGroup = (e: MarketEntry) =>
-        void ctx.ui.dialog.prompt({ title: t('group'), value: store.groups[e.name] ?? '' }).then(v => {
-          if (v === undefined) return
-          void mutate(d => { if (v) d.groups[e.name] = v; else delete d.groups[e.name] })
-        })
+        openPrompt(t('group'), store.groups[e.name] ?? '', v =>
+          void mutate(d => { if (v) d.groups[e.name] = v; else delete d.groups[e.name] }))
       const editNote = (e: MarketEntry) =>
-        void ctx.ui.dialog.prompt({ title: t('note'), value: store.notes[e.name] ?? '' }).then(v => {
-          if (v === undefined) return
-          void mutate(d => { if (v) d.notes[e.name] = v; else delete d.notes[e.name] })
-        })
+        openPrompt(t('note'), store.notes[e.name] ?? '', v =>
+          void mutate(d => { if (v) d.notes[e.name] = v; else delete d.notes[e.name] }))
+      // host dialogs are a single slot — dialog.select/confirm/prompt would
+      // replace (and on close, destroy) the market dialog. Inline overlays
+      // keep the market mounted under a floating panel instead.
+      interface MenuOpt { label: string; run: () => void }
+      const [menu, setMenu] = createSignal<{ title: string; options: MenuOpt[]; sel: number } | null>(null)
+      const openMenu = (title: string, options: MenuOpt[]) => setMenu({ title, options, sel: 0 })
+      const noop = () => {}
+      const [prompt, setPrompt] = createSignal<{ title: string; done: (v: string) => void } | null>(null)
+      const [promptVal, setPromptVal] = createSignal('')
+      let promptInput: { focus(): void } | undefined
+      const openPrompt = (title: string, initial: string, done: (v: string) => void) => {
+        setPromptVal(initial); setPrompt({ title, done }); setSearchOn(true)
+      }
+      const closePrompt = (v: string | null) => {
+        const p = prompt(); setPrompt(null); setSearchOn(false)
+        if (v !== null && p) p.done(v)
+      }
       const pickCategory = () =>
-        void ctx.ui.dialog.select<string>({
-          title: '分类',
-          options: [{ title: `全部`, value: '' }, ...cats().map(c => ({ title: c, value: c }))],
-          current: cat(),
-        }).then(v => { if (v !== undefined) setCat(v) })
+        openMenu('分类', [{ label: '全部', run: () => setCat('') },
+          ...cats().map(c => ({ label: c, run: () => setCat(c) }))])
       const pickFilter = () =>
-        void ctx.ui.dialog.select<string>({
-          title: '筛选',
-          options: [
-            ...SORTS.map(([k, label]) => ({ title: `${sortKey() === k ? '✓ ' : ''}${label}`, value: `sort:${k}` })),
-            { title: `${asc() ? '✓ ' : ''}升序`, value: 'asc' },
-            ...RANGES.map(([d, label]) => ({ title: `${days() === d ? '✓ ' : ''}${label}`, value: `days:${d}` })),
-          ],
-        }).then(v => {
-          if (v === undefined) return
-          if (v === 'asc') { setAsc(!asc()); return }
-          const [kind, x] = v.split(':')
-          if (kind === 'sort') setSortKey(x); else setDays(Number(x))
-        })
+        openMenu('筛选', [
+          ...SORTS.map(([k, label]) => ({ label: `${sortKey() === k ? '✓ ' : ''}${label}`, run: () => setSortKey(k) })),
+          { label: `${asc() ? '✓ ' : ''}升序`, run: () => setAsc(!asc()) },
+          ...RANGES.map(([d, label]) => ({ label: `${days() === d ? '✓ ' : ''}${label}`, run: () => setDays(d) })),
+        ])
 
       const settingsItems: { label: string; run: () => void }[] = [
         { label: '导出备份 → ~/opencode-market-backup.json', run: () => {
           const p = join(homedir(), 'opencode-market-backup.json')
           try { writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(`export fail: ${String(x)}`) }
         } },
-        { label: '恢复（输入备份文件路径）', run: () => void ctx.ui.dialog.prompt({ title: '恢复', placeholder: '~/opencode-market-backup.json' }).then(v => {
+        { label: '恢复（输入备份文件路径）', run: () => openPrompt('恢复', '~/opencode-market-backup.json', v => {
           if (!v) return
           try {
             const d = JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as MarketState
@@ -230,16 +235,17 @@ export default Plugin.define({
             setStatus('restored')
           } catch (x) { setStatus(`restore fail: ${String(x)}`) }
         }) },
-        { label: '清空数据（收藏/分组/备注）', run: () => void ctx.ui.dialog.confirm({ title: '清空数据', message: '不可撤销，确认？' }).then(ok => {
-          if (ok) void mutate(d => { d.favorites = {}; d.groups = {}; d.notes = {}; d.skillVers = {} })
-        }) },
+        { label: '清空数据（收藏/分组/备注）', run: () => openMenu('清空数据 — 不可撤销，确认？', [
+          { label: '✗ 清空', run: () => void mutate(d => { d.favorites = {}; d.groups = {}; d.notes = {}; d.skillVers = {} }) },
+          { label: '取消', run: noop },
+        ]) },
         { label: `开发日志: ${store.devlog ? '开' : '关'}（${LOG_FILE}）`, run: () => {
           void mutate(d => { d.devlog = !d.devlog })
           setStatus(`devlog ${store.devlog ? 'off' : 'on'} → ${LOG_FILE}`)
         } },
         { label: '查看日志', run: () => {
-          const tail = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, 'utf8').trim().split('\n').slice(-20).join('\n') : '(empty)'
-          void ctx.ui.dialog.alert({ title: '开发日志', message: tail })
+          const tail = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, 'utf8').trim().split('\n').slice(-15) : ['(empty)']
+          openMenu('开发日志（esc 关闭）', tail.map(line => ({ label: line, run: noop })))
         } },
         { label: `使用 HTTP catalog 源`, run: () => {
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
@@ -272,6 +278,14 @@ export default Plugin.define({
       // useKeyboard stays as fallback for hosts that route raw keys instead
       const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat('') }
       const act = (k: string): void => {
+        const m = menu()
+        if (m) {
+          if (k === 'escape' || k === 'q') { setMenu(null); return }
+          if (k === 'up' || k === 'k') { setMenu({ ...m, sel: Math.max(0, m.sel - 1) }); return }
+          if (k === 'down' || k === 'j') { setMenu({ ...m, sel: Math.min(m.options.length - 1, m.sel + 1) }); return }
+          if (k === 'return') { setMenu(null); m.options[m.sel]?.run(); return }
+          return  // swallow other keys while a menu is open
+        }
         if (k === 'escape') {
           if (findingsOpen()) { setFindingsOpen(false); return }
           if (detail()) { setDetail(null); return }
@@ -308,6 +322,21 @@ export default Plugin.define({
       }))
       useKeyboard((ev) => { if (!searchOn()) act(ev.name) })
 
+      const wrap2 = (s: string, w: number): string[] => {
+        const words = s.split(/\s+/)
+        const lines: string[] = ['']
+        for (const word of words) {
+          const cur = lines[lines.length - 1]
+          const next = cur ? `${cur} ${word}` : word
+          if (next.length > w && cur) lines.push(word)
+          else lines[lines.length - 1] = next
+          if (lines.length > 2) break
+        }
+        if (lines.length > 2 || words.join(' ').length > lines.join(' ').length)
+          lines[1] = `${lines[1].slice(0, Math.max(0, w - 1))}…`
+        return lines.slice(0, 2)
+      }
+
       const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s
       const Card = (props: { e: MarketEntry; i: number }) => {
         const e = props.e
@@ -318,19 +347,19 @@ export default Plugin.define({
                borderColor={active() ? theme.text.base : theme.border.base}
                paddingLeft={1} paddingRight={1} marginRight={1}
                onMouseOver={() => setSel(props.i)}
-               onMouseUp={() => { setSel(props.i); openDetail(e) }}>
+               onMouseDown={(ev) => { if (!ev.defaultPrevented) { setSel(props.i); openDetail(e) } }}>
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
               <text fg={verOf(e) ? theme.text.base : theme.text.muted}
-                    onMouseUp={(ev) => {
-                      ev.stopPropagation?.()
+                    onMouseDown={(ev) => {
+                      ev.stopPropagation(); ev.preventDefault()
                       const ver = verOf(e)
-                      if (ver) void uninstall(e); else install(e)
+                      if (ver) uninstall(e); else install(e)
                     }}>{actionLabel(e)}</text>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
-            <text fg={theme.text.muted}>{clip(e.description?.en ?? '', 44)}</text>
+            <For each={wrap2(e.description?.en ?? '', 42)}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
             <text fg={theme.text.faint}>{categoriesOf(e).join('  ')}</text>
           </box>
         )
@@ -348,7 +377,7 @@ export default Plugin.define({
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
                 <text fg={id === tab() ? theme.text.base : theme.text.faint}
-                      onMouseUp={() => toTab(i())}>
+                      onMouseDown={() => toTab(i())}>
                   {id === tab() ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
                 </text>
               )}</For>
@@ -356,7 +385,7 @@ export default Plugin.define({
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
                 <text fg={theme.text.muted}
-                      onMouseUp={() => { setSearchOn(true); searchInput?.focus() }}>/ </text>
+                      onMouseDown={() => { setSearchOn(true); searchInput?.focus() }}>/ </text>
                 <input
                   flexGrow={1}
                   placeholder={t('search')}
@@ -367,13 +396,13 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <text fg={theme.text.muted} onMouseUp={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                <text fg={theme.text.muted} onMouseDown={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <text fg={theme.text.muted} onMouseUp={pickCategory}>[c] </text>
-                <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseUp={() => setCat('')}>全部({pool().length}) </text>
+                <text fg={theme.text.muted} onMouseDown={pickCategory}>[c] </text>
+                <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
                 <For each={cats().slice(0, 6)}>{(c) => (
-                  <text fg={cat() === c ? theme.text.base : theme.text.muted} onMouseUp={() => setCat(c)}>{c} </text>
+                  <text fg={cat() === c ? theme.text.base : theme.text.muted} onMouseDown={() => setCat(c)}>{c} </text>
                 )}</For>
               </box>
             </Show>
@@ -388,7 +417,7 @@ export default Plugin.define({
                     <For each={settingsItems}>{(item, i) => (
                       <text fg={i() === settingsSel() ? theme.text.base : theme.text.muted}
                             onMouseOver={() => setSettingsSel(i())}
-                            onMouseUp={() => settingsItems[i()]?.run()}>
+                            onMouseDown={() => settingsItems[i()]?.run()}>
                         {i() === settingsSel() ? '› ' : '  '}{item.label}
                       </text>
                     )}</For>
@@ -448,6 +477,36 @@ export default Plugin.define({
               {status() || '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · 1-7/tab 切页 · esc 返回'}
             </text>
           </box>
+          <Show when={menu()}>{(m) => (
+            <box position="absolute" top={5} right={3} zIndex={100} flexDirection="column" minWidth={38}
+                 border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
+                 backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
+              <text fg={theme.text.base}><b>{m().title}</b></text>
+              <For each={m().options}>{(o, i) => (
+                <text fg={i() === m().sel ? theme.text.base : theme.text.muted}
+                      onMouseOver={() => setMenu({ ...m(), sel: i() })}
+                      onMouseDown={() => { const opt = m().options[i()]; setMenu(null); opt?.run() }}>
+                  {i() === m().sel ? '› ' : '  '}{o.label}
+                </text>
+              )}</For>
+            </box>
+          )}</Show>
+          <Show when={prompt()}>{(p) => (
+            <box position="absolute" top={5} left={4} zIndex={101} flexDirection="column" minWidth={46}
+                 border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
+                 backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
+              <text fg={theme.text.base}><b>{p().title}</b>  (enter 确认 · esc 取消)</text>
+              <input
+                value={promptVal()}
+                onInput={(v: string) => setPromptVal(v)}
+                ref={(r) => { promptInput = r; setTimeout(() => r.focus(), 50) }}
+                onKeyDown={(ev: { name: string }) => {
+                  if (ev.name === 'return') closePrompt(promptVal())
+                  if (ev.name === 'escape') closePrompt(null)
+                }}
+              />
+            </box>
+          )}</Show>
         </box>
       )
     }
