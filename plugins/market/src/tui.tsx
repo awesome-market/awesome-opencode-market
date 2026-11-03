@@ -157,20 +157,26 @@ const specByName: Record<string, string> = {}
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
         const spec = specByName[e.name] ?? e.name
-        const pinned = /@\d[^@]*$/.test(spec)
+        const clean = spec.replace(/@\d[^@]*$/, '')
         const updating = !!(ver && hasUpdate(e, ver))
-        if (updating && !pinned && ctx.client?.plugin?.update) {
+        if (updating) {
           setStatus(`updating ${e.name}…`)
           try {
-            await ctx.client.plugin.update({ targets: [spec] })
+            if (spec !== clean) {
+              const fs = await import('node:fs')
+              const { homedir } = await import('node:os')
+              const { join } = await import('node:path')
+              const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+              const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
+              const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+              d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
+              fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+            }
+            await ctx.client.plugin.update({ targets: [clean] })
             setStatus(`updated ${e.name}`); void refreshInstalled(); return
           } catch (x) { setStatus(`update fail: ${String(x)}`); return }
         }
-        if (updating && pinned) {
-          const cp = await import('node:child_process')
-          await new Promise<void>(res => cp.execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, () => res()))
-        }
-        const p = spawn('opencode', ['plugin', updating ? (pinned ? 'add' : 'update') : 'add', pinned ? spec.replace(/@\d[^@]*$/, '') : spec])
+        const p = spawn('opencode', ['plugin', 'add', spec])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)

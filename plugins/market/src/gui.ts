@@ -620,36 +620,28 @@ export default Plugin.define({
           }),
         update: async (name: string) => {
           const spec = specByName[name] ?? name
-          const pinned = /@\d[^@]*$/.test(spec)
+          const clean = spec.replace(/@\d[^@]*$/, '')
           const push = (line: string) => m.emit?.('progress', { name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
-          // host API path — the daemon does the work, no CLI subprocess
-          if (!pinned && m.client?.plugin?.update) {
-            try { push('plugin update (host api)'); await m.client.plugin.update({ targets: [spec] }); done(true); return 'updated' }
-            catch (x) { push(`host update failed: ${String(x)}`); done(false); throw x }
-          }
-          // pinned spec or no host API: remove the pinned spec, then add the
-          // clean name (add alone would leave a duplicate ID)
-          const cp = require('node:child_process') as typeof import('node:child_process')
-          return new Promise<string>((resolve, reject) => {
-            const go = () => {
-              const p = cp.spawn('opencode', ['plugin', pinned ? 'add' : 'update', pinned ? spec.replace(/@\d[^@]*$/, '') : spec], { env: process.env })
-              jobs.set(name, p)
-              p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-              p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-              const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
-              p.on('close', code => {
-                clearTimeout(kill); jobs.delete(name); done(code === 0)
-                code === 0 ? resolve('updated') : reject(new Error(`exit ${code}`))
-              })
-              p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); done(false); reject(e) })
+          try {
+            // pinned spec → rewrite config to the clean name first; the CLI
+            // remove path was unreliable in the Electron main process
+            if (spec !== clean) {
+              const fs = require('node:fs') as typeof import('node:fs')
+              const { homedir } = require('node:os') as typeof import('node:os')
+              const { join } = require('node:path') as typeof import('node:path')
+              const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+              const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
+              const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+              d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
+              fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+              push(`unpinned ${spec} → ${clean}`)
             }
-            if (!pinned) return go()
-            cp.execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, (e, o, er) => {
-              if (e) push(`remove ${spec} failed: ${er || e.message}`)
-              go()
-            })
-          })
+            if (!m.client?.plugin?.update) throw new Error('host plugin API unavailable')
+            push('plugin update (host api)')
+            await m.client.plugin.update({ targets: [clean] })
+            done(true); return 'updated'
+          } catch (x) { push(`update failed: ${String(x)}`); done(false); throw x }
         },
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
