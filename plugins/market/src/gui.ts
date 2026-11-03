@@ -583,7 +583,21 @@ export default Plugin.define({
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join } = require('node:path') as typeof import('node:path')
           const map: Record<string, string> = {}
+          // host API first — source.target is the npm package name, which is
+          // what catalog entries match on (CLI list reports internal ids)
           try {
+            if (m.client?.plugin?.list) {
+              const res = await m.client.plugin.list({}) as { data?: { source?: { type?: string; target?: string; version?: string } }[] }
+              for (const p of res.data ?? []) {
+                if (p.source?.type === 'package' && p.source.target) {
+                  const clean = p.source.target.replace(/@\d[^@]*$/, '')
+                  map[clean] = p.source.version ?? '?'
+                  specByName[clean] = p.source.target
+                }
+              }
+            }
+          } catch { /* host api unavailable */ }
+          if (!Object.keys(map).length) try {
             const out = await new Promise<string>((res, rej) =>
               execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
             for (const ln of out.split('\n').slice(1)) {
