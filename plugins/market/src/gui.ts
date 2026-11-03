@@ -268,9 +268,16 @@ export default Plugin.define({
               put({ skillVers: { ...state().skillVers, [e.name]: v } })
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
-              // effectiveness re-check: reload installed list, flag restart need
+              // optimistic mark — daemon rescans config async; refresh after a
+              // beat and keep the mark if the inventory still lags
+              const expect = e.latestVersion ?? '?'
+              setInstalled({ ...installed(), [e.name]: expect })
+              await new Promise(r => setTimeout(r, 2000))
               const fresh = await safe.installed?.().catch(() => null)
-              if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
+              if (fresh) {
+                if (!fresh.versions[e.name]) fresh.versions[e.name] = expect
+                setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features)
+              }
               const okNow = (fresh?.versions ?? installed())[e.name]
               b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
               const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
