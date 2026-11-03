@@ -573,6 +573,7 @@ export default Plugin.define({
   },
   main(m: any) {
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
+      const specByName: Record<string, string> = {}
     m.provide(Market, {
         index: () => fetchIndexCached() as Promise<MarketIndex>,
         installed: async () => {
@@ -586,7 +587,14 @@ export default Plugin.define({
               execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
             for (const ln of out.split('\n').slice(1)) {
               const [id, ver, src] = ln.trim().split(/\s{2,}/)
-              if (id) { map[id] = ver ?? '?'; if (src) map[src.replace(/@\d[^@]*$/, '')] = ver ?? '?' }
+              if (id) {
+                map[id] = ver ?? '?'
+                if (src) {
+                  const clean = src.replace(/@\d[^@]*$/, '')
+                  map[clean] = ver ?? '?'
+                  specByName[clean] = src
+                }
+              }
             }
           } catch { /* plugin list unavailable — skills are still reported */ }
           Object.assign(map, scanSkillKeys(
@@ -613,7 +621,11 @@ export default Plugin.define({
         update: (name: string) =>
           new Promise<string>((resolve, reject) => {
             const { spawn } = require('node:child_process') as typeof import('node:child_process')
-            const p = spawn('opencode', ['plugin', 'update', name], { env: process.env })
+            // pinned specs (name@x.y.z) are a no-op for `update` — re-add the
+            // clean name instead, which installs latest and unpins the spec
+            const spec = specByName[name] ?? name
+            const pinned = /@\d[^@]*$/.test(spec)
+            const p = spawn('opencode', ['plugin', pinned ? 'add' : 'update', pinned ? spec.replace(/@\d[^@]*$/, '') : spec], { env: process.env })
             jobs.set(name, p)
             const push = (line: string) => m.emit?.('progress', { name, line })
             p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))

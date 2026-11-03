@@ -64,6 +64,7 @@ export default Plugin.define({
       const [settingsSel, setSettingsSel] = createSignal(0)
       const [findingsOpen, setFindingsOpen] = createSignal(false)
       const jobs = new Map<string, unknown>()
+const specByName: Record<string, string> = {}
       let searchInput: { focus(): void; blur(): void } | undefined
 
       const log = (line: string) => {
@@ -76,7 +77,11 @@ export default Plugin.define({
         try {
           const res = await ctx.client.plugin.list({ location: location() })
           for (const p of res.data ?? [])
-            if (p.source.type === 'package') map[p.source.target] = p.source.version ?? '?'
+            if (p.source.type === 'package') {
+              const clean = p.source.target.replace(/@\d[^@]*$/, '')
+              map[clean] = p.source.version ?? '?'
+              specByName[clean] = p.source.target
+            }
         } catch { /* server list unavailable */ }
         try {
           await ctx.data.location.skill.sync(location())
@@ -151,7 +156,9 @@ export default Plugin.define({
         setStatus(`installing ${e.name}…`)
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
-        const p = spawn('opencode', ['plugin', ver && hasUpdate(e, ver) ? 'update' : 'add', e.name])
+        const spec = specByName[e.name] ?? e.name
+        const pinned = /@\d[^@]*$/.test(spec)
+        const p = spawn('opencode', ['plugin', ver && hasUpdate(e, ver) ? (pinned ? 'add' : 'update') : 'add', pinned ? spec.replace(/@\d[^@]*$/, '') : spec])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
