@@ -35,6 +35,7 @@ type Api = {
   index(): Promise<MarketIndex>
   installed(): Promise<Record<string, string>>
   install(name: string): Promise<string>
+  update(name: string): Promise<string>
   cancelInstall(name: string): Promise<string>
   verifyActivation(name: string): Promise<string>
   uninstall(name: string): Promise<string>
@@ -585,7 +586,7 @@ export default Plugin.define({
               execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
             for (const ln of out.split('\n').slice(1)) {
               const [id, ver, src] = ln.trim().split(/\s{2,}/)
-              if (id) { map[id] = ver ?? '?'; if (src) map[src] = ver ?? '?' }
+              if (id) { map[id] = ver ?? '?'; if (src) map[src.replace(/@\d[^@]*$/, '')] = ver ?? '?' }
             }
           } catch { /* plugin list unavailable — skills are still reported */ }
           Object.assign(map, scanSkillKeys(
