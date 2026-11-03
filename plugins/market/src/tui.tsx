@@ -343,7 +343,13 @@ export default Plugin.define({
         }
         if (zone() === 'chrome') {
           if (k === 'left' || k === 'h') { chromeGo(-1); return }
-          if (k === 'right' || k === 'l') { chromeGo(1); return }
+          if (k === 'right' || k === 'l') {
+            // right past the last chip drops back into the card grid
+            if (chromeRow() === 3 && chromeSel() === chromeItems(3).length - 1) {
+              setZone('grid'); setSel(0); return
+            }
+            chromeGo(1); return
+          }
           if (k === 'up' || k === 'k') {
             if (chromeRow() > 0) { setChromeRow(r => r - 1); setChromeSel(0) }
             return
