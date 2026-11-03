@@ -10,6 +10,12 @@ export function dedupeSpecs(list: readonly string[], clean: string): string[] {
   return [...list.filter(s => cleanSpec(s) !== clean), clean]
 }
 
+/** Same as dedupeSpecs but keeps an exact spec (may carry a @version pin) —
+ *  update flow: dedupe old specs down to the approved pinned spec. */
+export function dedupeToSpec(list: readonly string[], spec: string): string[] {
+  return [...list.filter(s => cleanSpec(s) !== cleanSpec(spec)), spec]
+}
+
 /** Remove every spec resolving to the plugin — by clean spec, raw name, or plugin id. */
 export function removeSpec(list: readonly string[], name: string, idByName: Record<string, string> = {}): string[] {
   const clean = cleanSpec(name)

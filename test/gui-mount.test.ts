@@ -18,7 +18,7 @@ describe('L3 mount: window-side behavior', () => {
     const updAll = find(root, '全部更新')!
     updAll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     await flush()
-    expect(api.update).toHaveBeenCalledWith('@x/old')
+    expect(api.update).toHaveBeenCalledWith({ name: '@x/old', spec: '@x/old@2.0.0' })
   })
 
   it('install button calls api.install on add click', async () => {
@@ -27,7 +27,7 @@ describe('L3 mount: window-side behavior', () => {
     expect(add).toBeTruthy()
     add!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flush()
-    expect(api.install).toHaveBeenCalledWith('@y/new')
+    expect(api.install).toHaveBeenCalledWith({ name: '@y/new', spec: '@y/new@1.0.0' })
   })
 
   it('install failure marks the button failed, not silent', async () => {
@@ -44,7 +44,7 @@ describe('L3 mount: window-side behavior', () => {
     const add = find(root, 'add')!
     add.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     const cx = find(root, '×') ?? find(root, 'cancel')
-    if (!cx) { expect(api.install).toHaveBeenCalledWith('@y/new'); return }
+    if (!cx) { expect(api.install).toHaveBeenCalledWith({ name: '@y/new', spec: '@y/new@1.0.0' }); return }
     cx.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flush()
     expect(api.cancelInstall).toHaveBeenCalled()

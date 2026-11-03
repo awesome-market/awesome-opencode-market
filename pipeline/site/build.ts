@@ -21,6 +21,12 @@ export function verifyLabel(e: PluginEntry): { text: string; cls: string } {
     default: return { text: 'unverified', cls: 'muted' }
   }
 }
+/** approval badge — 'legacy' entries predate the review gate; 'approved' needs no badge. */
+export function approvalBadge(e: PluginEntry): string {
+  return e.approval === 'legacy' ? ' <span class=muted>legacy</span>' : ''
+}
+/** user-visible entries — pending (under-review) entries never render on the site. */
+export const isVisible = (e: PluginEntry): boolean => e.approval !== 'pending'
 
 const CSS = `body{font:14px/1.5 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#222}
 a{color:#06c;text-decoration:none}code{background:#f4f4f4;padding:1px 4px;border-radius:3px}
@@ -34,13 +40,14 @@ export function page(title: string, body: string): string {
 }
 
 export function listPage(index: CatalogIndex): string {
-  const cards = index.plugins.map(e => {
+  const visible = index.plugins.filter(isVisible)
+  const cards = visible.map(e => {
     const s = scanLabel(e), v = verifyLabel(e)
-    return `<div class=card><a href="p/${esc(e.slug)}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>
+    return `<div class=card><a href="p/${esc(e.slug)}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${approvalBadge(e)}
       <div>${esc(e.description.en ?? '')}</div>
       <div class=meta><span class="${s.cls}">${s.text}</span> · <span class="${v.cls}">${v.text}</span>${e.latestVersion ? ` · v${esc(e.latestVersion)}` : ''}</div></div>`
   }).join('\n')
-  return page('plugins', `<h1>opencode market</h1><p class=meta>${index.plugins.length} entries · generated ${esc(index.generatedAt)}</p>
+  return page('plugins', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)}</p>
     <input id=q placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="document.querySelectorAll('.card').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')">${cards}`)
 }
 
@@ -50,7 +57,9 @@ export function detailPage(e: PluginEntry): string {
     Object.entries(o).filter(([, x]) => x !== undefined).map(([k, x]) => `<tr><td>${k}</td><td>${x}</td></tr>`).join('')
   const findings = e.capabilities.findings.length
     ? `<ul>${e.capabilities.findings.map(f => `<li><code>${esc(f)}</code>`).join('')}</ul>` : '<p class=muted>none</p>'
-  return page(e.name, `<h1>${esc(e.name)}</h1><p>${esc(e.description.en ?? '')}</p>
+  const underReview = e.pendingUpdate
+    ? `<tr><td>next version</td><td><code>v${esc(e.pendingUpdate.version)}</code> <span class=muted>under review — not installable yet</span></td></tr>` : ''
+  return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}</h1><p>${esc(e.description.en ?? '')}</p>
     <table>${rows({
       type: esc(e.type), slug: `<code>${esc(e.slug)}</code>`,
       license: e.license ? esc(e.license) : 'unknown',
@@ -64,21 +73,24 @@ export function detailPage(e: PluginEntry): string {
       'opencode ver': e.verification.opencodeVersion ? esc(e.verification.opencodeVersion) : undefined,
       'verify run': e.verification.runUrl ? `<a href="${esc(e.verification.runUrl)}">logs</a>` : undefined,
       deprecated: e.deprecated ? '<span class=bad>deprecated</span>' : undefined,
-    })}</table>
+    })}${underReview}</table>
     <h2>scan findings</h2>${findings}
     ${e.verification.logExcerpt ? `<h2>failure log</h2><pre>${esc(e.verification.logExcerpt)}</pre>` : ''}
-    <p class=meta><a href="../index.html">← all plugins</a> · install: <code>opencode plugin add ${esc(e.source.id)}</code></p>`)
+    <p class=meta><a href="../index.html">← all plugins</a> · install: <code>opencode plugin add ${esc(e.source.id)}${e.latestVersion ? `@${esc(e.latestVersion)}` : ''}</code></p>`)
 }
 
 export function buildSite(index: CatalogIndex, outDir: string): void {
   mkdirSync(join(outDir, 'p'), { recursive: true })
+  // index.json ships the FULL catalog (pending included) — it is the auditable
+  // data plane; every UI/install surface filters pending itself.
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index))
+  const visible = { ...index, plugins: index.plugins.filter(isVisible) }
   // privacy note + health endpoint (dsh parity)
   writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
-  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: index.plugins.length, generatedAt: index.generatedAt }))
-  buildSkillCatalog(index, outDir)
-  writeFileSync(join(outDir, 'index.html'), listPage(index))
-  for (const e of index.plugins) {
+  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, generatedAt: index.generatedAt }))
+  buildSkillCatalog(visible, outDir)
+  writeFileSync(join(outDir, 'index.html'), listPage(visible))
+  for (const e of visible.plugins) {
     const p = join(outDir, 'p', `${e.slug}.html`)
     mkdirSync(dirname(p), { recursive: true })
     writeFileSync(p, detailPage(e))

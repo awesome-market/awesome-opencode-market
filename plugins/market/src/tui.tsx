@@ -9,7 +9,8 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, pinSpec, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { dedupeToSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot } from './skill-install.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
@@ -64,7 +65,6 @@ export default Plugin.define({
       const [settingsSel, setSettingsSel] = createSignal(0)
       const [findingsOpen, setFindingsOpen] = createSignal(false)
       const jobs = new Map<string, unknown>()
-const specByName: Record<string, string> = {}
       let searchInput: { focus(): void; blur(): void } | undefined
 
       const log = (line: string) => {
@@ -80,7 +80,6 @@ const specByName: Record<string, string> = {}
             if (p.source.type === 'package') {
               const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
               map[clean] = p.source.version ?? '?'
-              specByName[clean] = p.source.target
             }
         } catch { /* server list unavailable */ }
         try {
@@ -156,37 +155,36 @@ const specByName: Record<string, string> = {}
         setStatus(`installing ${e.name}…`)
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
-        const spec = specByName[e.name] ?? e.name
-        const clean = spec.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+        // pin to the catalog-approved version — `plugin add` accepts name@ver
+        // and never silently resolves past what review allowed
+        const pin = pinSpec(e)
         const updating = !!(ver && hasUpdate(e, ver))
-        if (updating) {
-          setStatus(`updating ${e.name}…`)
-          try {
-            if (spec !== clean) {
-              const fs = await import('node:fs')
-              const { homedir } = await import('node:os')
-              const { join } = await import('node:path')
-              const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-              const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
-              const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
-              d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
-              fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-            }
-            let lastErr: unknown
-            for (let i = 0; i < 6; i++) {
-              try { await ctx.client.plugin.update({ targets: [clean] }); lastErr = null; break }
-              catch (x) { lastErr = x; if (!String(x).includes('not in the current server inventory')) throw x; await new Promise(r => setTimeout(r, 1500)) }
-            }
-            setStatus(lastErr ? `updated (inventory lag) ${e.name}` : `updated ${e.name}`); void refreshInstalled(); return
-          } catch (x) { setStatus(`update fail: ${String(x)}`); return }
+        const afterAdd = async () => {
+          if (!updating) return
+          // `plugin add` appends rather than dedupes — rewrite config down to
+          // exactly the pinned spec so no stale/duplicate specs linger
+          const fs = await import('node:fs')
+          const { homedir } = await import('node:os')
+          const { join } = await import('node:path')
+          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+          const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
+          const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+          d.plugins = dedupeToSpec(list, pin)
+          fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
         }
-        const p = spawn('opencode', ['plugin', 'add', spec])
+        if (updating) setStatus(`updating ${e.name} → ${e.latestVersion ?? '?'}…`)
+        const p = spawn('opencode', ['plugin', 'add', pin])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
         p.on('close', code => {
           jobs.delete(e.name)
-          if (code === 0) { setStatus(`${e.name} ${t('installed')} — ${t('restartNeeded')}`); void refreshInstalled() }
+          if (code === 0) {
+            void afterAdd().then(() => {
+              setStatus(updating ? `updated ${e.name}` : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
+              void refreshInstalled()
+            }).catch(x => setStatus(`update fail: ${String(x)}`))
+          }
           else { setStatus(`${e.name} install failed (exit ${code})`); log(`install fail ${e.name}: exit ${code}`) }
         })
         p.on('error', x => { jobs.delete(e.name); setStatus(`install throw: ${x.message}`); log(`install throw ${e.name}: ${x}`) })

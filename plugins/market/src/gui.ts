@@ -8,8 +8,8 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
-import { cleanSpec, dedupeSpecs, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir } from './skill-install.js'
 
 const Market = Ipc.define({
@@ -18,8 +18,8 @@ const Market = Ipc.define({
     index: { output: Schema.Unknown },
     refreshIndex: { output: Schema.Unknown },
     installed: { output: Schema.Unknown },
-    install: { input: Schema.String, output: Schema.String },
-    update: { input: Schema.String, output: Schema.String },
+    install: { input: Schema.Unknown, output: Schema.String },
+    update: { input: Schema.Unknown, output: Schema.String },
     cancelInstall: { input: Schema.String, output: Schema.String },
     verifyActivation: { input: Schema.String, output: Schema.String },
     uninstall: { input: Schema.String, output: Schema.String },
@@ -39,8 +39,8 @@ type Api = {
   index(): Promise<MarketIndex>
   refreshIndex(): Promise<MarketIndex>
   installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
-  install(name: string): Promise<string>
-  update(name: string): Promise<string>
+  install(p: { name: string; spec?: string }): Promise<string>
+  update(p: { name: string; spec?: string }): Promise<string>
   cancelInstall(name: string): Promise<string>
   verifyActivation(name: string): Promise<string>
   uninstall(name: string): Promise<string>
@@ -260,7 +260,7 @@ export default Plugin.define({
           const b64 = btoa(bin)
           return safe.writeSkill({ name: e.name, b64 })
         }
-        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update(e.name) : safe.install(e.name))
+        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) }))
         try { doInstall().then(
           async () => {
             setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
@@ -399,7 +399,7 @@ export default Plugin.define({
         let ok = 0, fail = 0
         for (const e of outdated) {
           updAll.textContent = `更新中 ${ok + fail + 1}/${outdated.length}…`
-          try { await safe.update(e.name); ok++ } catch { fail++ }
+          try { await safe.update({ name: e.name, spec: pinSpec(e) }); ok++ } catch { fail++ }
         }
         await new Promise(r => setTimeout(r, 2000))
         const fresh = await safe.installed?.().catch(() => null)
@@ -735,37 +735,49 @@ export default Plugin.define({
           for (const x of extras) map[x.name] = x.version
           return { versions: map, extras, features: featByName }
         },
-        install: (name: string) =>
+        install: (p: { name: string; spec?: string }) =>
           new Promise<string>((resolve, reject) => {
             const { spawn } = require('node:child_process') as typeof import('node:child_process')
-            const p = spawn('opencode', ['plugin', 'add', name], { env: process.env })
-            jobs.set(name, p)
-            const push = (line: string) => m.emit?.('progress', { name, line })
-            p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-            p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-            const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
-            p.on('close', code => {
-              clearTimeout(kill); jobs.delete(name)
-              m.emit?.('progress', { name, line: '', done: true, ok: code === 0 })
+            const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
+            const child = spawn('opencode', ['plugin', 'add', spec], { env: process.env })
+            jobs.set(p.name, child)
+            const push = (line: string) => m.emit?.('progress', { name: p.name, line })
+            child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+            child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+            const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
+            child.on('close', code => {
+              clearTimeout(kill); jobs.delete(p.name)
+              m.emit?.('progress', { name: p.name, line: '', done: true, ok: code === 0 })
               code === 0 ? resolve('installed') : reject(new Error(`exit ${code}`))
             })
-            p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
+            child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); reject(e) })
           }),
-        update: async (name: string) => {
+        update: async (p: { name: string; spec?: string }) => {
           const { appendFileSync } = require('node:fs') as typeof import('node:fs')
-          const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${name}: ${s}\n`) } catch { /* */ } }
+          const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${p.name}: ${s}\n`) } catch { /* */ } }
           lg('called')
-          const spec = specByName[name] ?? name
-          const clean = cleanSpec(spec)
-          lg(`spec=${spec} clean=${clean} hasClient=${!!m.client?.plugin?.update}`)
-          const push = (line: string) => m.emit?.('progress', { name, line })
-          const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
+          const pin = p.spec ?? p.name             // catalog-approved pinned spec
+          const clean = cleanSpec(pin)
+          lg(`pin=${pin} clean=${clean}`)
+          const push = (line: string) => m.emit?.('progress', { name: p.name, line })
+          const done = (ok: boolean) => m.emit?.('progress', { name: p.name, line: '', done: true, ok })
           try {
-            // pinned spec → rewrite config to the clean name first; the CLI
-            // remove path was unreliable in the Electron main process
+            // pinned update: `plugin add` does NOT dedupe — a second spec for the
+            // same package appends. Install the pinned spec first, then rewrite
+            // config down to exactly that spec. Never plugin.update — it resolves
+            // npm latest, which would bypass the approved-version gate.
+            push(`install ${pin}`)
+            await new Promise<void>((res, rej) => {
+              const { spawn } = require('node:child_process') as typeof import('node:child_process')
+              const child = spawn('opencode', ['plugin', 'add', pin], { env: process.env })
+              jobs.set(p.name, child)
+              child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+              child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+              const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
+              child.on('close', code => { clearTimeout(kill); jobs.delete(p.name); code === 0 ? res() : rej(new Error(`plugin add exit ${code}`)) })
+              child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
+            })
             {
-              // always dedupe to the clean spec — kills any duplicate entries
-              // (pinned + bare) left behind by earlier failed update attempts
               const fs = require('node:fs') as typeof import('node:fs')
               const { homedir } = require('node:os') as typeof import('node:os')
               const { join } = require('node:path') as typeof import('node:path')
@@ -773,21 +785,11 @@ export default Plugin.define({
               const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
               const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
               const before = list.filter(s => cleanSpec(s) === clean)
-              d.plugins = dedupeSpecs(list, clean)
+              d.plugins = dedupeToSpec(list, pin)
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-              if (before.length !== 1 || before[0] !== clean) { push(`config deduped ${before.join(',')} → ${clean}`); lg(`config rewritten (${before.length} specs → ${clean})`) }
+              if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`config rewritten (${before.length} specs → ${pin})`) }
             }
-            if (!m.client?.plugin?.update) throw new Error('host plugin API unavailable')
-            // config rewrite triggers a daemon rescan — the clean spec may not
-            // be in the inventory yet; retry a few times, then accept the
-            // outcome if plugin list already shows the new version
-            let lastErr: unknown
-            for (let i = 0; i < 6; i++) {
-              try { push('plugin update (host api)'); await m.client.plugin.update({ targets: [clean] }); lastErr = null; break }
-              catch (x) { lastErr = x; if (!String(x).includes('not in the current server inventory')) throw x; await new Promise(r => setTimeout(r, 1500)) }
-            }
-            if (lastErr) { lg(`inventory never caught up: ${String(lastErr)}`) }
-            lg('host update ok'); done(true); return 'updated'
+            lg('pinned update ok'); done(true); return 'updated'
           } catch (x) { push(`update failed: ${String(x)}`); lg(`FAILED ${String(x)}`); done(false); throw x }
         },
         cancelInstall: async (name: string) => {

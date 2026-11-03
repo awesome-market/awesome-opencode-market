@@ -11,6 +11,8 @@ export interface MarketEntry {
   latestVersion?: string | null
   publishedAt?: string | null
   firstSeenAt?: string
+  /** approval state (hold-by-default index); absent = pre-approval index = legacy */
+  approval?: 'approved' | 'pending' | 'legacy'
   capabilities?: { scannedAt: string | null; findings: string[]; redFlags: string[] }
   verification?: { status: string; level?: string; verifiedAt?: string; opencodeVersion?: string }
   metrics?: { stars: number | null; npmDownloads30d: number | null }
@@ -50,6 +52,19 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
   }
 }
 
+/** User-visible entries only — pending (under-review) entries never reach the
+ *  UI or install paths. Absent approval = old index = treat as visible (legacy). */
+export function isVisible(e: MarketEntry): boolean {
+  return e.approval !== 'pending'
+}
+
+/** The npm spec users should install: pinned to the catalog-approved version
+ *  so `plugin add` resolves exactly what review passed (implicit-latest is a
+ *  bypass — a pending version must never reach a user machine). */
+export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string {
+  return e.latestVersion ? `${e.name}@${e.latestVersion}` : e.name
+}
+
 export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
   // timeout guard — a sandboxed webview fetch that never settles must surface as an error
   const ctrl = new AbortController()
@@ -57,7 +72,8 @@ export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> 
   try {
     const res = await fetch(url, { signal: ctrl.signal })
     if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
-    return sanitizeIndex((await res.json()) as MarketIndex)
+    const idx = sanitizeIndex((await res.json()) as MarketIndex)
+    return { ...idx, plugins: idx.plugins.filter(isVisible) }
   } finally {
     clearTimeout(t)
   }
