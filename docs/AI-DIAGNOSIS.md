@@ -50,7 +50,8 @@ verify run（钉装 pendingVersion/最新批准版测试）
 
 本地 AI（每小时，断网自动补）
    → 拉 pending 条目 + pendingVersion
-   → 全量审（物料=包内容+scan+verify结果+信任信号，去散文）
+   → L0.5 注入检测分类器（专用小模型，产出信号非裁决；高分→直接 concern 转人工）
+   → 全量审（物料=包内容+scan+verify结果+信任信号+L0.5分数，去散文）
    → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,source}）
 
 下一趟 catalog run 读 verdicts
@@ -123,7 +124,47 @@ user:   <data>
 
 **tarball sha 去重**：同内容重发/re-tag 跳过不重复审。
 
-## 6. 上架后复审（防"上架后投毒"）
+### L0.5 注入检测分类器（专用模型，信号非裁决）
+
+通用 LLM 审核时必须语义"读懂"被审文本 = 可被说服；专用分类器只做
+模式打分、不执行指令——对注入的免疫是**结构性**的。它补的恰是 LLM
+最弱的一格（被话术绕进去）；LLM 补它覆盖不了的语义意图。
+
+**产出 = 信号**：分数+类别 → 超阈值直接 concern 转人工（不耗主审
+token）；分数也进主审物料作为提示。本地毫秒级，全部件可跑。
+
+**候选开源模型**（本地推理，按用途选）：
+
+| 模型 | 规模 | 特点 | 许可 |
+|---|---|---|---|
+| `meta-llama/Llama-Prompt-Guard-2-86M`（含 22M 变体） | 86M | 专为注入/jailbreak 训练，多语言，毫秒级 | Llama |
+| `dannyliv/agent-guard-deberta-pi-base`（V3.2） | 184M | ProtectAI warm-start，FPR 1.6%，OWASP/ATLAS 多头 | Apache-2.0 |
+| `protectai/deberta-v3-base-prompt-injection-v2` | 184M | 经典款，英语+512 token 上限，项目已归档 | Apache-2.0 |
+| `ibm-granite/granite-guardian-*`（3.x/4.x，2B/8B/LoRA） | 2B/8B | **BYOC 自定义判据**——可定义"针对审核者的话术""教唆 agent 外联/窃密"专属标准 | Apache-2.0 |
+
+**推荐组合**：Prompt Guard 2 当快速全量闸；Granite Guardian BYOC 做
+第二判据（自定义"审核者定向文本/教唆行为"标准，注入检测和意图判断
+之间的中间层）。两者产出都只是信号，裁决仍走保守漏斗。
+
+**已知局限如实写**：注入检测是军备竞赛——已公开研究对各分类器都有
+非零绕过率；其威胁模型（聊天注入）与"skill 本身就是指令文本"不完全
+重合，看着正常的恶意引导它判不出。不确定一律转人工。
+
+### 品类×审查矩阵（skill / MCP 纳入时的差异）
+
+市场含 skill 与 MCP（未开发）。载荷类型不同，管线重心不同：
+
+| 品类 | 恶意载荷 | 机械层 | verify | AI 角色 |
+|---|---|---|---|---|
+| 插件 | 代码（exec/eval/混淆） | 代码扫描（现有） | 装+加载（+渲染） | 二审 |
+| skill | **指令文本**——毒通过 agent 推理执行 | 换 skill 专用信号：指令内嵌 shell/远程抓取/凭据访问/unicode 混淆/审核者话术 | 仅文件完整性（无"运行"概念） | **主审**——几 KB 全文可喂，L0.5 必跑 |
+| MCP | server 代码 + **tool descriptions**（prompt 材料） | 代码扫描 + 描述信号 | 起进程+handshake+`tools/list` | 二审，但描述字段按 skill 规则审 |
+
+skill 投毒的本质区别：毒必须写在明面上（藏了就毒不到人）——同一文本
+既要教坏终端 agent 又要骗过审核器，还要躲 L0/L0.5 的模式识别，三个
+载荷互相暴露。**残余窄缝如实承认**：看着完全正常的微妙坏引导可能漏
+过——事后靠 blocklist tombstone 兜底，徽章按品类分层措辞（skill 只能
+说"已过审"）。
 
 版本 bump → `pendingVersion` 自动挂起（hold-by-default）→ verify 装测
 新版 → AI 全量重审 → pass 释放 / concern 挂起。休眠唤醒、维护者变更
@@ -208,8 +249,11 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 ## 11. 本地组件
 
-- `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → 全量审 →
-  写 ai-verdicts.jsonl + 推 catalog 分支；needs-work/invalid issue → 草稿评论
+- `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → L0.5 分类器
+  → 全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
+  needs-work/invalid issue → 草稿评论
+- 注入检测模型：Prompt Guard 2 86M（全量闸）+ Granite Guardian BYOC
+  （自定义判据）；皆信号源非裁决
 - `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern 挂起）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
