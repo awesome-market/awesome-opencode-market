@@ -170,8 +170,16 @@ export default Plugin.define({
       // progress-driven busy/failed states — a re-render during install must
       // keep showing … instead of resetting the button back to add
       const pr = prog()[e.name]
-      if (pr && !pr.done)
-        return el('button', 'font-size:12px;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px;opacity:.6;white-space:nowrap;flex-shrink:0', '…')
+      if (pr && !pr.done) {
+        if (!document.getElementById('oc-mk-spin')) {
+          const st = document.createElement('style'); st.id = 'oc-mk-spin'
+          st.textContent = '@keyframes oc-mk-spin{to{transform:rotate(360deg)}}'
+          document.head.appendChild(st)
+        }
+        const b = el('button', 'font-size:12px;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px;opacity:.6;white-space:nowrap;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center')
+        b.appendChild(el('span', 'width:10px;height:10px;border:2px solid rgba(128,128,128,.35);border-top-color:currentColor;border-radius:50%;display:inline-block;animation:oc-mk-spin .7s linear infinite'))
+        return b
+      }
       if (pr?.done && !pr.ok)
         return el('button', 'font-size:12px;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `failed — ${pr.lines[pr.lines.length - 1] ?? ''}`)
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
@@ -205,6 +213,7 @@ export default Plugin.define({
         const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => safe.install(e.name)
         try { doInstall().then(
           async () => {
+            setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
             if (isSkill) {
               // optimistic + version bookkeeping → real update detection later
               const v = e.latestVersion ?? 'local'
