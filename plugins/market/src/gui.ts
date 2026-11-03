@@ -70,8 +70,8 @@ export default Plugin.define({
     }
     const partChips = (compact = false) => {
       const grp = el('span', `display:inline-flex;border:1px solid rgba(128,128,128,.4);border-radius:12px;overflow:hidden;${compact ? '' : 'margin-left:4px'}`)
-      for (const [k, label] of [['server','server'],['tui','tui'],['gui','gui'],['rpc','rpc']] as const) {
-        const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;background:transparent;color:inherit;${featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
+      for (const [i, [k, label]] of ([['server','server'],['tui','tui'],['gui','gui'],['rpc','rpc']] as const).entries()) {
+        const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;${i ? 'border-left:1px solid rgba(128,128,128,.35);' : ''}background:transparent;color:inherit;${featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
         seg.title = `${k} 部件（可多选）`
         seg.onclick = (ev) => { ev.stopPropagation(); toggleFeat(k) }
         grp.appendChild(seg)
