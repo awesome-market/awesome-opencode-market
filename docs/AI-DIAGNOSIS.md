@@ -332,6 +332,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   挂起）+ 发布时写 `digest-state.json`（`lastDigestAt`）到 catalog
   分支——run.ts 据此判 verdict 成熟度；digest 必须先于承担释放的
   catalog run 发布（21:00 日报 → 03:17 跑批）
+- 主审 LLM endpoint：本机 omlx（OpenAI 兼容，`http://localhost:8001/v1`），
+  模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`；`AI_BASE_URL`/
+  `AI_API_KEY`/`AI_MODEL` 读 `~/.config/opencode-market/ai.env`
+  （**key 永不进 repo**，配置驱动可换 provider）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
 
