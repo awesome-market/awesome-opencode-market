@@ -192,6 +192,8 @@ DEV.md 定义了"仓库根放 `.opencode-market.json` 声明 category/descriptio
 
 `git fetch origin catalog` 在 job 开头，push 在 ~30-60min 后——用的是开头快照。修法：commit 步骤内重 fetch + `pull --rebase` 重试环。配合 I-4 的共享 concurrency group。
 
+**remerge 信任语义（已实现，备忘）**：竞态重试时 `pipeline/remerge.ts` 把"我们刚扫的新鲜数据"merge 进"远端较新状态"——**远端在 verification/removed 上是权威**（它可能刚被 verify.yml 写过），我们赢在 scan/firstSeen 字段。隐含假设：catalog 分支是 append-only 且每个 writer 都先读最新远端。如果远端某次 verify merge 本身是错的，我们会信任并保留它——可接受的取舍（错误来源会被记在那次 run 的日志/issue 里），但要意识到"远端永远赢"意味着远端一旦写入坏状态，后续 merge 会继承它而非自愈。
+
 ### WF-3 权限最小化未对齐自家标准
 
 verify.yml 做对了（跑不可信代码的 job `permissions: {}`），catalog.yml 却把 `contents:write+pages:write` 的 token 传给处理不可信 npm 元数据的 run.ts。修法：拆 **generate job（`permissions: {}`，跑管线产 index+site 存 artifact）→ publish job（写权限，只干 commit/push/deploy）**——同文件两 job，不需要拆 yml。

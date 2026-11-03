@@ -16,10 +16,17 @@ jobs:
       - run: npm ci
       - name: fetch old index + aux files (merge base)
         run: |
-          git fetch origin catalog 2>/dev/null || true
-          # WF-1: branch exists but index unreadable → hard fail. No silent amnesia.
-          if git rev-parse --verify origin/catalog >/dev/null 2>&1; then
+          # WF-1: distinguish "remote branch exists" (→ fetch MUST succeed and
+          # index MUST be present+valid) from "first run ever" (branch absent).
+          # A failed fetch or empty/corrupt index must hard-fail, never run blind.
+          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+            git fetch origin catalog
             git show origin/catalog:index.json > /tmp/old-index.json
+            if [ ! -s /tmp/old-index.json ]; then
+              echo "catalog branch exists but index.json is empty — refusing to run blind (WF-1)"
+              exit 1
+            fi
+            npx tsx -e "import { CatalogIndex } from './src/schema.ts'; import { readFileSync } from 'node:fs'; CatalogIndex.parse(JSON.parse(readFileSync('/tmp/old-index.json','utf8'))); console.log('old index valid')"
             git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
             git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || touch /tmp/blocklist.json
           else
