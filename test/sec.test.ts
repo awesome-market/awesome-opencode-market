@@ -227,3 +227,55 @@ describe('run gone-check (F-2)', () => {
     expect(idx.removed).toHaveLength(0)
   })
 })
+
+import { remerge } from '../pipeline/remerge.ts'
+import { backfill } from '../pipeline/backfill.ts'
+
+describe('remerge (WF-2 publish retry)', () => {
+  it('remote state preserved: verification + removed + categories survive', () => {
+    const ours = mkIndex([mkEntry('a', '1.0.0'), mkEntry('new-pkg', '1.0.0')], {
+      categories: { c1: { en: 'C1' } },
+      removed: [{ slug: 'x', name: 'x', disappearedAt: 't', reason: 'npm-404' }],
+    })
+    const remote = mkIndex([mkEntry('a', '1.0.0', { verification: { status: 'verified', level: 'load' } })], {
+      categories: { c2: { en: 'C2' } },
+      removed: [{ slug: 'y', name: 'y', disappearedAt: 't', reason: 'filtered' }],
+    })
+    const out = remerge(ours, remote)
+    expect(out.plugins.find(e => e.name === 'a')!.verification.status).toBe('verified')
+    expect(out.plugins.find(e => e.name === 'new-pkg')).toBeTruthy()
+    expect(out.removed.map(r => r.name).sort()).toEqual(['x', 'y'])
+    expect(out.categories).toMatchObject({ c1: { en: 'C1' }, c2: { en: 'C2' } })
+  })
+  it('null remote → ours returned wholesale', () => {
+    const ours = mkIndex([mkEntry('a')])
+    expect(remerge(ours, null)).toBe(ours)
+  })
+})
+
+describe('backfill (SEC-4)', () => {
+  it('fills createdAt/maintainers/repoId for entries missing them', async () => {
+    const e = mkEntry('old-pkg', '1.0.0', {
+      createdAt: null, maintainers: [],
+      source: { kind: 'npm', id: 'old-pkg', repo: 'o/r' },
+    })
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('registry.npmjs.org'))
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: {},
+          time: { created: '2019-01-01', modified: 'm' },
+          maintainers: [{ name: 'bob' }],
+        }))
+      if (url.includes('api.github.com/repos'))
+        return new Response(JSON.stringify({ id: 555, stargazers_count: 1 }))
+      return new Response('{}', { status: 404 })
+    }) as typeof fetch
+    const out = await backfill(mkIndex([e]), { fetchFn })
+    const got = out.plugins[0]!
+    expect(got.createdAt).toBe('2019-01-01')
+    expect(got.maintainers).toEqual(['bob'])
+    expect(got.source.repoId).toBe(555)
+  })
+})

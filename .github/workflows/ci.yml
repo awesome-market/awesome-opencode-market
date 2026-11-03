@@ -12,5 +12,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: npm --prefix plugins/market ci   # gui-mount tests import plugins/market/src (solid-js et al)
       - run: npx tsc --noEmit
       - run: npx vitest run --coverage   # ≥90% thresholds fail the build
