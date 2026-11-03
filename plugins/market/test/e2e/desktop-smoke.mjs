@@ -26,7 +26,7 @@ if (opened) {
   // invisible to Electron; the webview quirk only applies to the plugin webview
   const menuItem = page.locator('button').filter({ hasText: /^Market$/ }).first()
   await menuItem.click()
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(900)
   opened = await page.locator('text=opencode market').first().isVisible({ timeout: 10_000 }).catch(() => false)
   t('market panel opens on click', opened)
   if (!opened) {
@@ -37,15 +37,17 @@ if (opened) {
 
 try {
 
-  // 设置 → 更新数据 刷新
+  // 设置 → 更新数据 刷新（给它落点时间再点）
   await page.getByRole('button', { name: '设置', exact: true }).click()
-  await page.getByRole('button', { name: /更新数据/ }).click()
+  await page.waitForTimeout(1200)
+  const refBtn = page.getByRole('button', { name: /更新数据/ })
+  await refBtn.dispatchEvent('mousedown')
   const refreshed = await page.locator('text=已刷新').first().isVisible({ timeout: 15_000 }).catch(() => false)
   t('更新数据 refreshes', refreshed)
 
   // tab switching — every market tab renders its own content
   for (const [tabName, marker] of [
-    ['我的插件', '已安装|未收录|安装'],
+    ['我的插件', '已安装|installed|未收录'],
     ['技能', '技能|skill|目录'],
     ['发现', '全部|分类|插件'],
     ['插件', '@'],

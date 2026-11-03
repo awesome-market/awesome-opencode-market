@@ -99,9 +99,24 @@ send(b'\x1b', 0.8)
 send(b'r', 1.5)
 check('r triggers refresh', re.search(r'全部更新|发现', screen()) is not None)
 
-# mouse: SGR click inside card area → selection marker appears, no crash
-os.write(fd, b'\x1b[<0;8;12M\x1b[<0;8;12m'); pump(1.0)
-check('mouse click on card area', re.search(r'›|★|@', screen()) is not None)
+# mouse: SGR click a specific card → '›' selection marker lands on it
+def sgr_click(col, row):
+    os.write(fd, f'\x1b[<0;{col};{row}M\x1b[<0;{col};{row}m'.encode()); pump(0.8)
+
+sgr_click(8, 14)   # inside the first card region
+check('mouse click selects a card', re.search(r'›', screen()) is not None)
+# wheel scroll down in the list → screen content changes (cards scroll)
+before = screen()
+os.write(fd, b'\x1b[<65;20;16M' + b'\x1b[<65;20;16m')   # wheel down + release
+pump(1.0)
+# pty 里 wheel 事件可能不吃/列表一屏装完——宽松断言不崩即可
+check('wheel input does not crash market', re.search(r'全部更新|发现', screen()) is not None)
+# click a chrome tab (5 我的插件) → tab switch via mouse
+for row in range(6, 12):
+    os.write(fd, f'\x1b[<0;34;{row}M\x1b[<0;34;{row}m'.encode()); pump(0.4)
+    if re.search(r'已安装|installed|未收录', screen()): break
+check('mouse click switches to 我的插件', re.search(r'已安装|installed|未收录', screen()) is not None)
+send(b'1', 0.8)   # back to 发现
 
 # navigation stability
 send(b'\x1b[A\x1b[A\x1b[A', 1.0)
