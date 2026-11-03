@@ -17,7 +17,19 @@ results = []
 def check(name, ok):
     results.append((name, ok)); print(('✓' if ok else '✗') + ' ' + name, flush=True)
 
-# ---------- pre-step: pin loop-recover@0.2.1 so the market offers an update ----------
+# ---------- pre-step: kill stale opencode processes, ensure a daemon ----------
+# `opencode` covers stale serve/TUI instances; the desktop's embedded daemon is
+# `opencode-cli` and survives — it is the normal service TUI attaches to anyway
+subprocess.run(['pkill', '-x', 'opencode'], capture_output=True)
+time.sleep(2)
+if not sh(OC, 'plugin', 'list', timeout=10).strip():
+    # no daemon at all (desktop closed, no service) — start a standalone one
+    subprocess.Popen([OC, 'service', 'start'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(15):
+        if sh(OC, 'plugin', 'list', timeout=10).strip(): break
+        time.sleep(1.5)
+
+# ---------- pin the test package so the market offers an update ----------
 d = json.load(open(CFG))
 d['plugins'] = [f'{PKG}@{PIN}' if p == PKG or p.startswith(PKG + '@') else p for p in d['plugins']]
 json.dump(d, open(CFG, 'w'), indent=2)

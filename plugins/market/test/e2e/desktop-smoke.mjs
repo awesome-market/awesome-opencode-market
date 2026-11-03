@@ -10,22 +10,19 @@ async function connect() {
   return chromium.connectOverCDP('http://127.0.0.1:9222', { noDefaults: true })
 }
 
-let cdp = await connect().catch(() => null)
-if (!cdp) {
-  // no debug instance — if the app isn't running at all, launch it ourselves
-  const running = process.platform === 'darwin'
-    && execSync('pgrep -x OpenCode || true').toString().trim() !== ''
-  if (running) {
-    console.error(`✗ OpenCode 已在运行但不是调试模式 — 脚本不能接管你的实例`)
-    console.error(`  咋办: 退出 Dock 里的 OpenCode 后重跑本脚本（脚本会自己以调试模式拉起）`)
-    process.exit(2)
-  }
-  console.log('OpenCode not running — launching with debug port…')
-  spawn(APP, [FLAG], { detached: true, stdio: 'ignore' }).unref()
-  for (let i = 0; i < 20 && !cdp; i++) {
-    await new Promise(r => setTimeout(r, 1500))
-    cdp = await connect().catch(() => null)
-  }
+// always kill + relaunch — a running instance may lack the debug port or carry
+// stale state; the embedded daemon (opencode-cli) dies with the app automatically
+if (process.platform === 'darwin') execSync('pkill -x OpenCode || true')
+for (let i = 0; i < 20; i++) {
+  if (execSync('pgrep -x OpenCode || true').toString().trim() === '') break
+  await new Promise(r => setTimeout(r, 500))
+}
+console.log('launching OpenCode with debug port…')
+spawn(APP, [FLAG], { detached: true, stdio: 'ignore' }).unref()
+let cdp = null
+for (let i = 0; i < 20 && !cdp; i++) {
+  await new Promise(r => setTimeout(r, 1500))
+  cdp = await connect().catch(() => null)
 }
 if (!cdp) {
   console.error(`✗ 连不上 CDP 端口 9222 — 自动拉起也失败了`)
