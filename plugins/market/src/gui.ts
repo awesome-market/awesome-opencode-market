@@ -528,21 +528,20 @@ export default Plugin.define({
 
     const settingsPanel = () => {
       const root = el('div', 'padding:8px 12px;max-width:520px')
-      const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:14px', '更新数据（强制刷新索引）') as HTMLButtonElement
+      const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
+      const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
       refBtn.onclick = () => void (async () => {
-        refBtn.disabled = true; refBtn.textContent = '刷新中…'
-        log(`refreshIndex click hasFn=${typeof safe.refreshIndex}`)
-        if (typeof safe.refreshIndex !== 'function') { refBtn.textContent = '需重启桌面端（host 过旧）'; setTimeout(() => { refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）' }, 3000); return }
+        refBtn.disabled = true; refBtn.textContent = '刷新中…'; refStatus.textContent = ''
         try {
-          const idx = await safe.refreshIndex()
+          const idx = typeof safe.refreshIndex === 'function' ? await safe.refreshIndex() : await safe.index()
           if (idx) setData(idx)
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-          refBtn.textContent = `已刷新（${idx?.plugins?.length ?? '?'} 条）`
-        } catch (x) { log(`refreshIndex fail ${String(x)}`); refBtn.textContent = `刷新失败: ${String(x)}` }
-        setTimeout(() => { refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）' }, 3000)
+          refStatus.textContent = `已刷新 ${idx?.plugins?.length ?? '?'} 条，${new Date().toLocaleTimeString()}`
+        } catch (x) { refStatus.textContent = `刷新失败: ${String(x)}` }
+        refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）'
       })
-      root.appendChild(refBtn)
+      root.appendChild(refBtn); root.appendChild(refStatus)
       root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
       const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', '收藏、分组、备注存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。')
       root.appendChild(desc)
