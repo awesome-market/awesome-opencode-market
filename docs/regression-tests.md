@@ -18,8 +18,14 @@ npx vitest run test/gui-mount.test.ts  # L3 jsdom 挂载
 npx vitest run --coverage              # 看哪层掉出 90%
 
 # 发版前真实端冒烟（需要本机环境）
-node plugins/market/test/e2e/desktop-smoke.mjs   # 桌面 CDP（app 需带 --remote-debugging-port=9222 启动）
-node plugins/market/test/e2e/tui-smoke.mjs       # TUI pty
+# 桌面端：先用调试端口启动 app（正常 Dock 启动的实例没有 CDP 端口，需 Cmd+Q 退出后重启）
+open -a "OpenCode" --args --remote-debugging-port=9222
+# 或直接跑二进制：
+/Applications/OpenCode.app/Contents/MacOS/OpenCode --remote-debugging-port=9222
+curl http://127.0.0.1:9222/json/version   # 有 JSON 返回 = CDP 通了
+
+node plugins/market/test/e2e/desktop-smoke.mjs   # 桌面 CDP
+node plugins/market/test/e2e/tui-smoke.mjs       # TUI pty（脚本自己 spawn opencode，service 在跑更顺）
 ```
 
 CI：`ci.yml` 每次 push 自动跑 `tsc --noEmit` + `vitest --coverage`。
