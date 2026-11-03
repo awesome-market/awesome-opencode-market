@@ -761,12 +761,26 @@ export default Plugin.define({
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
-        uninstall: (name: string) =>
-          new Promise<string>((resolve, reject) => {
-            const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            execFile('opencode', ['plugin', 'remove', name], { timeout: 30_000 },
-              (e, out, er) => e ? reject(new Error(er || e.message)) : resolve(out || 'removed'))
-          }),
+        uninstall: async (name: string) => {
+          // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
+          // takes a spec, not the catalog name, and silently misses pinned specs
+          const fs = require('node:fs') as typeof import('node:fs')
+          const { homedir } = require('node:os') as typeof import('node:os')
+          const { join } = require('node:path') as typeof import('node:path')
+          const stripVer = (s: string) => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+          const clean = stripVer(name)
+          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+          const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
+          const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+          const keep = list.filter(s => {
+            const c = stripVer(s)
+            return c !== clean && s !== name && (idByName[c] ?? c) !== name
+          })
+          if (keep.length === list.length) throw new Error(`${name} not found in opencode.json plugins`)
+          d.plugins = keep
+          fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+          return 'removed'
+        },
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
         writeSkill: async (p: { name: string; b64: string }) => {
           const { homedir } = require('node:os') as typeof import('node:os')
