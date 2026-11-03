@@ -532,14 +532,16 @@ export default Plugin.define({
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
       refBtn.onclick = () => void (async () => {
         refBtn.disabled = true; refBtn.textContent = '刷新中…'; refStatus.textContent = ''
+        const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('超时 25s')), 25_000))])
         try {
-          const idx = typeof safe.refreshIndex === 'function' ? await safe.refreshIndex() : await safe.index()
+          const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex() : safe.index())
           if (idx) setData(idx)
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           refStatus.textContent = `已刷新 ${idx?.plugins?.length ?? '?'} 条，${new Date().toLocaleTimeString()}`
-        } catch (x) { refStatus.textContent = `刷新失败: ${String(x)}` }
-        refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）'
+        } catch (x) { refStatus.textContent = `刷新失败: ${String(x)}` } finally {
+          refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）'
+        }
       })
       root.appendChild(refBtn); root.appendChild(refStatus)
       root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
