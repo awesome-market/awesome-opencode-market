@@ -630,16 +630,19 @@ export default Plugin.define({
           try {
             // pinned spec → rewrite config to the clean name first; the CLI
             // remove path was unreliable in the Electron main process
-            if (spec !== clean) {
+            {
+              // always dedupe to the clean spec — kills any duplicate entries
+              // (pinned + bare) left behind by earlier failed update attempts
               const fs = require('node:fs') as typeof import('node:fs')
               const { homedir } = require('node:os') as typeof import('node:os')
               const { join } = require('node:path') as typeof import('node:path')
               const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
               const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
               const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
-              d.plugins = [...list.filter(s => s !== spec && s !== clean), clean]
+              const before = list.filter(s => s.replace(/@\d[^@]*$/, '') === clean)
+              d.plugins = [...list.filter(s => s.replace(/@\d[^@]*$/, '') !== clean), clean]
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-              push(`unpinned ${spec} → ${clean}`); lg('config rewritten')
+              if (before.length !== 1 || before[0] !== clean) { push(`config deduped ${before.join(',')} → ${clean}`); lg(`config rewritten (${before.length} specs → ${clean})`) }
             }
             if (!m.client?.plugin?.update) throw new Error('host plugin API unavailable')
             push('plugin update (host api)')
