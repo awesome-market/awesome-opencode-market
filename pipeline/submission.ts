@@ -67,9 +67,14 @@ export function parseSubmission(body: string): Submission {
   const typeRaw = (field(map, '类型', 'type') ?? '').toLowerCase()
   const type: Submission['type'] = typeRaw.startsWith('skill') ? 'skill' : typeRaw.startsWith('plugin') ? 'plugin' : null
 
-  // multi-select renders "a, b" in the body; 自动 means "let pipeline decide"
-  const catRaw = field(map, '分类（可多选）', '分类', 'category') ?? ''
-  const cats = catRaw.split(/[,，]/).map(s => s.trim()).filter(s => s && !s.startsWith('自动'))
+  // checkboxes render "- [x] a\n- [ ] b"; old multi-select renders "a, b".
+  // All-unchecked / empty / "自动" → null → pipeline classifies.
+  const catSec = map.get('分类（可多选）') ?? map.get('分类') ?? map.get('category') ?? ''
+  const isChecklist = /^- \[[ xX]\]/m.test(catSec)
+  const cats = (isChecklist
+    ? [...catSec.matchAll(/^- \[[xX]\]\s*(.+)$/gm)].map(m => m[1]!.trim())
+    : catSec.split(/[,，]/).map(s => s.trim())
+  ).filter(s => s && !s.startsWith('自动'))
   const category = cats.length ? cats : null
 
   return { name, repo, kind: name ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }

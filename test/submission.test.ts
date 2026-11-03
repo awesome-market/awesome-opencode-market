@@ -45,6 +45,13 @@ describe('submission parser', () => {
     expect(s.category).toEqual(['模型与接入', '记忆'])
   })
 
+  it('checkbox-format category: only [x] items counted; all-unchecked → null', () => {
+    const s = parseSubmission(`### npm 包名\n\npkg-x\n\n### 分类（可多选）\n\n- [ ] 主题与外观\n- [x] 记忆\n- [x] 安全与权限\n- [ ] 通知`)
+    expect(s.category).toEqual(['记忆', '安全与权限'])
+    const none = parseSubmission(`### npm 包名\n\npkg-x\n\n### 分类（可多选）\n\n- [ ] 主题与外观\n- [ ] 记忆`)
+    expect(none.category).toBeNull()
+  })
+
   it('auto category → null; _No response_ fields → null', () => {
     const s = parseSubmission(`### npm 包名\n\npkg-x\n\n### 分类（可多选）\n\n自动（由管线判断）\n\n### 其他语言描述（可选）\n\n_No response_`)
     expect(s.category).toBeNull()
