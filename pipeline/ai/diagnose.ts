@@ -80,7 +80,8 @@ export async function ornithReview(e: CatalogIndex['plugins'][number], material:
 
 export function verdictRecord(e: CatalogIndex['plugins'][number], v: 'pass' | 'concern', reason: string, sha?: string): AiVerdict {
   return {
-    name: e.name, version: e.pendingUpdate?.version ?? e.latestVersion ?? null,
+    name: e.name,
+    version: e.pendingUpdate?.version ?? e.latestVersion ?? null,
     verdict: v, reason: reason || undefined,
     at: new Date().toISOString(), source: 'ai', sha,
   }
@@ -99,7 +100,9 @@ async function main(): Promise<void> {
       .map(l => AiVerdict.parse(JSON.parse(l))))
 
   const candidates = idx.plugins.filter(e => {
-    const ver = e.pendingUpdate?.version
+    // two held shapes: pendingUpdate (newer version behind a displayed one)
+    // and approval:pending on the entry itself (first version never released)
+    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
     if (!ver) return false
     return seen.get(`${e.name}@${ver}`)?.source !== 'ai' // unreviewed by AI
   }).slice(0, limit)
@@ -107,18 +110,19 @@ async function main(): Promise<void> {
   console.log(`[diagnose] ${candidates.length} pending candidates`)
   const out: AiVerdict[] = []
   for (const e of candidates) {
+    const ver = e.pendingUpdate?.version ?? e.latestVersion ?? '?'
     const material = reviewMaterial(e)
     let l05flag: string | null = null
     try {
       const scores = l05Score(material)
       const top = [...scores.entries()].sort((a, b) => b[1] - a[1])[0]
       if (top && top[1] >= L05_THRESHOLD) l05flag = `L0.5 injection score ${top[1].toFixed(3)} ≥ ${L05_THRESHOLD} on ${top[0]}`
-      console.log(`[diagnose] ${e.name}@${e.pendingUpdate!.version} L0.5 max=${top?.[1].toFixed(3) ?? '?'}`)
+      console.log(`[diagnose] ${e.name}@${ver} L0.5 max=${top?.[1].toFixed(3) ?? '?'}`)
     } catch (x) { console.error(`[diagnose] L0.5 failed for ${e.name}: ${x}`) }
 
     try {
       const r = await ornithReview(e, material)
-      console.log(`[diagnose] ${e.name}@${e.pendingUpdate!.version} ornith=${r.verdict} ${r.reason.slice(0, 80)}`)
+      console.log(`[diagnose] ${e.name}@${ver} ornith=${r.verdict} ${r.reason.slice(0, 80)}`)
       if (l05flag) { // L0.5 red flag outranks the LLM's own call — honest layering
         out.push(verdictRecord(e, 'concern', `${l05flag} (LLM: ${r.verdict}: ${r.reason})`))
       } else out.push(verdictRecord(e, r.verdict, r.reason))

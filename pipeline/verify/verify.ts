@@ -36,6 +36,10 @@ const LOG_REL = 'opencode/log/opencode.log'
 export function xdgEnv(home: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    // HOME override is load-bearing on macOS: XDG_* alone leaves opencode
+    // resolving plugin config/state via the real ~ (E2E rehearsal: XDG-only
+    // never loaded the pinned plugin). Full sandbox needs all four.
+    HOME: home,
     XDG_CONFIG_HOME: join(home, '.config'),
     XDG_DATA_HOME: join(home, 'data'),
     XDG_CACHE_HOME: join(home, 'cache'),
@@ -50,9 +54,16 @@ export function xdgEnv(home: string): NodeJS.ProcessEnv {
 export function writeDummyProvider(home: string): void {
   const dir = join(home, '.config', 'opencode')
   mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, 'opencode.json'), JSON.stringify({
+  // MERGE, don't overwrite — this runs after `plugin add` wrote the pinned
+  // spec into `plugins`; a blind writeFileSync erases it and the load check
+  // can never see the plugin (E2E rehearsal found this)
+  const cfgPath = join(dir, 'opencode.json')
+  const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8') || '{}') as Record<string, unknown> : {}
+  writeFileSync(cfgPath, JSON.stringify({
+    ...cfg,
     $schema: 'https://opencode.ai/config.json',
     provider: {
+      ...(cfg.provider as Record<string, unknown> ?? {}),
       fake: {
         npm: '@ai-sdk/openai-compatible',
         name: 'fake',
@@ -118,11 +129,15 @@ export async function verifyPackage(
     `PW=$(sed -n 's/server password //p' serve.out | head -1)`,
     `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/plugin"`,
     `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/session"`,
-    `sleep 1`,
+    // 2.2.5 loads plugins lazily on session CREATE — a GET alone never triggers
+    // the load, so POST one (E2E rehearsal: GET-only left /api/plugin empty)
+    `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'`,
+    // poll the log for the load signal — a fixed sleep races the writer
+    `for i in $(seq 1 24); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done`,
     `kill $SPID 2>/dev/null; true`,
   ].join('\n')
   try {
-    await run('sh', ['-c', boot], { env, cwd: home, timeout: 25_000 })
+    await run('sh', ['-c', boot], { env: { ...env, LOG: join(home, 'data', LOG_REL) }, cwd: home, timeout: 30_000 })
   } catch {
     // boot/curl failure still leaves whatever log was written — the canary decides
   }

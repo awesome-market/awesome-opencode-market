@@ -93,6 +93,7 @@ export async function run(opts: RunOptions = {}) {
   // seeds: submissions.txt lines — JSONL (issue-form submissions carry declared
   // metadata) or legacy plain names or github:owner/repo
   const seedMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
+  const seedNames = new Set<string>()
   if (opts.seedPath) {
     let seeded = 0
     const lines = readFileSync(opts.seedPath, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
@@ -119,6 +120,7 @@ export async function run(opts: RunOptions = {}) {
       } else {
         name = line
       }
+      if (name) seedNames.add(name)
       if (name && !npmCands.has(name)) {
         npmCands.set(name, {
           name, version: '', description: '', keywords: [], repoUrl: repo, publishedAt: null,
@@ -160,7 +162,11 @@ export async function run(opts: RunOptions = {}) {
   const limit = opts.maxEntries ?? 500
   const sorted = [...admitted].sort((a, b) => a.name.localeCompare(b.name))
   const queue = sorted.slice(0, limit)
-  const cappedOut = new Set(sorted.slice(limit).map(c => c.name))
+  // submissions bypass the cap — a human-reviewed seed must not starve behind
+  // alphabetical truncation (E2E rehearsal: 'oc-market-…' sorts past the cap)
+  const queued = new Set(queue.map(c => c.name))
+  for (const c of sorted) if (seedNames.has(c.name) && !queued.has(c.name)) queue.push(c)
+  const cappedOut = new Set(sorted.slice(limit).map(c => c.name).filter(n => !seedNames.has(n)))
 
   // 3. fetch + evidence gate + scan — concurrent batches of 10.
   //    Incremental short-circuit (S-2): name@version unchanged in old index → reuse
