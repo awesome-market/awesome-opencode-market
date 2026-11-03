@@ -1,16 +1,35 @@
 // 桌面端真实冒烟 — 前置: OpenCode.app 带 --remote-debugging-port=9222 启动 + service 在跑
 // 用法: node test/e2e/desktop-smoke.mjs
 import { chromium } from 'playwright-core'
+import { spawn, execSync } from 'node:child_process'
 
-let cdp
-try {
-  cdp = await chromium.connectOverCDP('http://127.0.0.1:9222', { noDefaults: true })
-} catch {
-  console.error(`✗ 连不上 CDP 端口 9222 — OpenCode 桌面端不是调试模式启动的`)
-  console.error(`  发生了啥: 桌面冒烟要 attach 到带调试端口的 app`)
-  console.error(`  咋办: 先退出 Dock 里普通的 OpenCode，再这样启动:`)
-  console.error(`    /Applications/OpenCode.app/Contents/MacOS/OpenCode --remote-debugging-port=9222`)
-  console.error(`  确认: curl http://127.0.0.1:9222/json/version 有输出后再跑本脚本`)
+const APP = '/Applications/OpenCode.app/Contents/MacOS/OpenCode'
+const FLAG = '--remote-debugging-port=9222'
+
+async function connect() {
+  return chromium.connectOverCDP('http://127.0.0.1:9222', { noDefaults: true })
+}
+
+let cdp = await connect().catch(() => null)
+if (!cdp) {
+  // no debug instance — if the app isn't running at all, launch it ourselves
+  const running = process.platform === 'darwin'
+    && execSync('pgrep -x OpenCode || true').toString().trim() !== ''
+  if (running) {
+    console.error(`✗ OpenCode 已在运行但不是调试模式 — 脚本不能接管你的实例`)
+    console.error(`  咋办: 退出 Dock 里的 OpenCode 后重跑本脚本（脚本会自己以调试模式拉起）`)
+    process.exit(2)
+  }
+  console.log('OpenCode not running — launching with debug port…')
+  spawn(APP, [FLAG], { detached: true, stdio: 'ignore' }).unref()
+  for (let i = 0; i < 20 && !cdp; i++) {
+    await new Promise(r => setTimeout(r, 1500))
+    cdp = await connect().catch(() => null)
+  }
+}
+if (!cdp) {
+  console.error(`✗ 连不上 CDP 端口 9222 — 自动拉起也失败了`)
+  console.error(`  咋办: 手动跑 ${APP} ${FLAG} 看启动报错`)
   process.exit(2)
 }
 const results = []
