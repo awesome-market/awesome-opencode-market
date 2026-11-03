@@ -133,22 +133,28 @@ user:   <data>
 **产出 = 信号**：分数+类别 → 超阈值直接 concern 转人工（不耗主审
 token）；分数也进主审物料作为提示。本地毫秒级，全部件可跑。
 
-**候选开源模型**（本地推理，按用途选）：
+**L0.5 是可换插槽，不绑定模型**：接口 = `score → 阈值 → finding`，
+`modelId+version` 记入审计元数据，随领域演进换血——分类器不会因
+时间失效，但**覆盖面**会随新攻击手法老化。
 
-| 模型 | 规模 | 特点 | 许可 |
+**候选开源模型**（2026 格局，按独立评测排序，发布分数只当初筛）：
+
+| 模型 | 规模 | 实测表现 | 许可 |
 |---|---|---|---|
-| `meta-llama/Llama-Prompt-Guard-2-86M`（含 22M 变体） | 86M | 专为注入/jailbreak 训练，多语言，毫秒级 | Llama |
-| `dannyliv/agent-guard-deberta-pi-base`（V3.2） | 184M | ProtectAI warm-start，FPR 1.6%，OWASP/ATLAS 多头 | Apache-2.0 |
-| `protectai/deberta-v3-base-prompt-injection-v2` | 184M | 经典款，英语+512 token 上限，项目已归档 | Apache-2.0 |
-| `ibm-granite/granite-guardian-*`（3.x/4.x，2B/8B/LoRA） | 2B/8B | **BYOC 自定义判据**——可定义"针对审核者的话术""教唆 agent 外联/窃密"专属标准 | Apache-2.0 |
+| `usezn/Galvanize-2` | 141M | **训练目标即"AI coding agent 实际所见"**——域最对口；83.4% 检出 / 0.81% FPR、多语言 | Apache-2.0 |
+| `Horizon-Labs/prompt-injection-guard-*` | 141M/308M | 独立评测注入捕获 82.2%@1%FPR（当前公开最佳档），开源评测套件可自建基准 | Apache-2.0 |
+| `ibm-granite/granite-guardian-*`（3.x/4.x） | 2B/8B | **BYOC 自定义判据**——定义"审核者定向文本/教唆 agent 外联"专属标准，填注入检测与意图判断之间的空档 | Apache-2.0 |
+| `meta-llama/Llama-Prompt-Guard-2-86M` | 86M | 一年多老模型，已跌至第二梯队（69.4%@1%FPR，AUC 0.883）；有公开 bypass 研究——**保留作多样性投票，不当主闸** | Llama |
 
-**推荐组合**：Prompt Guard 2 当快速全量闸；Granite Guardian BYOC 做
-第二判据（自定义"审核者定向文本/教唆行为"标准，注入检测和意图判断
-之间的中间层）。两者产出都只是信号，裁决仍走保守漏斗。
+**推荐组合**：Galvanize-2 / Horizon 当快速全量闸 + Granite Guardian
+BYOC 第二判据 + PG2 第三票（多样性）。产出皆信号，裁决走保守漏斗。
 
-**已知局限如实写**：注入检测是军备竞赛——已公开研究对各分类器都有
-非零绕过率；其威胁模型（聊天注入）与"skill 本身就是指令文本"不完全
-重合，看着正常的恶意引导它判不出。不确定一律转人工。
+**基准自建**：所有分类器训练语料高度重叠、威胁模型是"聊天注入"——
+与"skill 本身是指令文本"分布不同，发布分数必须打折。上线前用
+catalog 真实语料 + 合成攻击集自建 eval（Horizon 开源评测套件可复用）。
+
+**已知局限如实写**：注入检测是军备竞赛，各分类器均有非零绕过率；
+看着正常的恶意引导不在注入检测覆盖内。不确定一律转人工。
 
 ### 品类×审查矩阵（skill / MCP 纳入时的差异）
 
@@ -252,8 +258,9 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate → L0.5 分类器
   → 全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
   needs-work/invalid issue → 草稿评论
-- 注入检测模型：Prompt Guard 2 86M（全量闸）+ Granite Guardian BYOC
-  （自定义判据）；皆信号源非裁决
+- 注入检测模型（可换插槽）：Galvanize-2 / Horizon 全量闸 + Granite
+  Guardian BYOC 第二判据 + PG2 第三票；皆信号源非裁决，
+  `modelId+version` 记入审计元数据
 - `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern 挂起）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
