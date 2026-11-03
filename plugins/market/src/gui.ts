@@ -28,6 +28,7 @@ const Market = Ipc.define({
     skillSource: { output: Schema.Unknown },
     skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
     devlog: { input: Schema.String, output: Schema.String },
+    readDevlog: { output: Schema.Unknown },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
@@ -48,6 +49,7 @@ type Api = {
   skillSource(): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   devlog(line: string): Promise<string>
+  readDevlog(): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -588,7 +590,7 @@ export default Plugin.define({
       const cbL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
       cbL.append(cb, document.createTextNode('记录调试日志（装包各阶段+错误，存本机）'))
       const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap;user-select:text;-webkit-user-select:text;cursor:text')
-      const refresh = () => { logBox.textContent = devlog() ? (readLog().slice(-80).join('\n') || '暂无日志') : '开关关闭中' }
+      const refresh = () => { void safe.readDevlog?.().then(t => { logBox.textContent = t || '暂无日志' }).catch(() => {}) }
       refresh()
       const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '清空日志') as HTMLButtonElement
       clrL.onclick = () => { clearLog(); refresh() }
@@ -808,6 +810,11 @@ export default Plugin.define({
             writeFileSync(cfg, JSON.stringify(d, null, 2))
             resolve(Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect])))
           }),
+        readDevlog: async () => {
+          try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
+            return readFileSync('/tmp/opencode-market.log', 'utf8').split('\n').filter(Boolean).slice(-120).join('\n')
+          } catch { return '' }
+        },
         devlog: async (line: string) => {
           const { appendFileSync } = require('node:fs') as typeof import('node:fs')
           appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} ${line}\n`)
