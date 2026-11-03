@@ -370,7 +370,7 @@ export default Plugin.define({
       const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s
       const Card = (props: { e: MarketEntry; i: number }) => {
         const e = props.e
-        const active = () => props.i === sel() && !detail()
+        const active = () => props.i === sel() && !detail() && zone() !== 'chrome'
         return (
           <box flexDirection="column" flexGrow={1} flexBasis={0}
                border={['top', 'right', 'bottom', 'left']}
@@ -406,17 +406,26 @@ export default Plugin.define({
               <text fg={theme.text.muted}>[U] 全部更新</text>
             </box>
             <box flexDirection="row" paddingLeft={1}>
-              <For each={TABS}>{([id, label], i) => (
-                <text fg={id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? theme.text.base : theme.text.faint}
-                      onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
-                  {id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
-                </text>
-              )}</For>
+              <For each={TABS}>{([id, label], i) => {
+                const focused = () => zone() === 'chrome' && chromeSel() === i()
+                return (
+                  <box border={focused() ? ['top', 'right', 'bottom', 'left'] : undefined}
+                       borderColor={theme.text.base}
+                       onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
+                    <text fg={id === tab() || focused() ? theme.text.base : theme.text.faint}>
+                      {id === tab() || focused() ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}
+                    </text>
+                  </box>
+                )
+              }}</For>
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <text fg={zone() === 'chrome' && chromeSel() === 7 ? theme.text.base : theme.text.muted}
-                      onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
+                <box border={zone() === 'chrome' && chromeSel() === 7 ? ['top', 'right', 'bottom', 'left'] : undefined}
+                     borderColor={theme.text.base}
+                     onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>
+                  <text fg={theme.text.muted}>/ </text>
+                </box>
                 <input
                   flexGrow={1}
                   placeholder={t('search')}
@@ -427,17 +436,29 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <text fg={zone() === 'chrome' && chromeSel() === 8 ? theme.text.base : theme.text.muted}
-                      onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                <box border={zone() === 'chrome' && chromeSel() === 8 ? ['top', 'right', 'bottom', 'left'] : undefined}
+                     borderColor={theme.text.base}
+                     onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}>
+                  <text fg={zone() === 'chrome' && chromeSel() === 8 ? theme.text.base : theme.text.muted}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                </box>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <text fg={zone() === 'chrome' && chromeSel() === 9 ? theme.text.base : theme.text.muted}
-                      onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
+                <box border={zone() === 'chrome' && chromeSel() === 9 ? ['top', 'right', 'bottom', 'left'] : undefined}
+                     borderColor={theme.text.base}
+                     onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>
+                  <text fg={zone() === 'chrome' && chromeSel() === 9 ? theme.text.base : theme.text.muted}>[c] </text>
+                </box>
                 <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
-                <For each={cats().slice(0, 6)}>{(c, i) => (
-                  <text fg={cat() === c || (zone() === 'chrome' && chromeSel() === 10 + i()) ? theme.text.base : theme.text.muted}
-                        onMouseDown={() => setCat(c)}>{c} </text>
-                )}</For>
+                <For each={cats().slice(0, 6)}>{(c, i) => {
+                  const focused = () => zone() === 'chrome' && chromeSel() === 10 + i()
+                  return (
+                    <box border={focused() ? ['top', 'right', 'bottom', 'left'] : undefined}
+                         borderColor={theme.text.base}
+                         onMouseDown={() => setCat(c)}>
+                      <text fg={cat() === c || focused() ? theme.text.base : theme.text.muted}>{c} </text>
+                    </box>
+                  )
+                }}</For>
               </box>
             </Show>
           </box>
