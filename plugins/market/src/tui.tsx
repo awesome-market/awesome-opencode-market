@@ -276,7 +276,24 @@ export default Plugin.define({
       // dialogs run in the "modal" input mode — a plugin keymap layer must
       // target it explicitly or binds never dispatch (upstream btw.tsx pattern);
       // useKeyboard stays as fallback for hosts that route raw keys instead
-      const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat('') }
+      // focus zones: 'grid' (cards) | 'chrome' (menu bar: tabs/search/filter/chips)
+      const [zone, setZone] = createSignal<'grid' | 'chrome'>('grid')
+      const [chromeSel, setChromeSel] = createSignal(0)
+      // chrome items: 7 tabs + search + filter + 'c' + one per visible chip
+      const chromeItems = () => [...TABS.map(t => `tab:${t[0]}`), 'search', 'filter', 'cat',
+        ...cats().slice(0, 6).map(c => `chip:${c}`)]
+      const chromeGo = (d: number) =>
+        setChromeSel(i => Math.max(0, Math.min(chromeItems().length - 1, i + d)))
+      const chromeRun = () => {
+        const item = chromeItems()[chromeSel()]
+        if (!item) return
+        if (item.startsWith('tab:')) { toTab(TABS.findIndex(([id]) => id === item.slice(4))); return }
+        if (item === 'search') { setSearchOn(true); searchInput?.focus(); return }
+        if (item === 'filter') { pickFilter(); return }
+        if (item === 'cat') { pickCategory(); return }
+        if (item.startsWith('chip:')) setCat(item.slice(5))
+      }
+      const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
       const act = (k: string): void => {
         const m = menu()
         if (m) {
@@ -287,11 +304,24 @@ export default Plugin.define({
           return  // swallow other keys while a menu is open
         }
         if (k === 'escape') {
+          if (zone() === 'chrome') { setZone('grid'); return }
           if (findingsOpen()) { setFindingsOpen(false); return }
           if (detail()) { setDetail(null); return }
           ctx.ui.dialog.clear(); return
         }
-        if (k === 'up' || k === 'k') { tab() === 'settings' ? setSettingsSel(i => Math.max(0, i - 1)) : move(-2); return }
+        if (zone() === 'chrome') {
+          if (k === 'left' || k === 'h') { chromeGo(-1); return }
+          if (k === 'right' || k === 'l') { chromeGo(1); return }
+          if (k === 'down' || k === 'j') { setZone('grid'); return }
+          if (k === 'return') { chromeRun(); return }
+          if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
+          return
+        }
+        if (k === 'up' || k === 'k') {
+          if (tab() === 'settings') { setSettingsSel(i => Math.max(0, i - 1)); return }
+          if (sel() < 2) { setZone('chrome'); setChromeSel(0); return }
+          move(-2); return
+        }
         if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)) : move(2); return }
         if ((k === 'left' || k === 'h') && tab() !== 'settings') { move(-1); return }
         if ((k === 'right' || k === 'l') && tab() !== 'settings') { move(1); return }
@@ -347,7 +377,7 @@ export default Plugin.define({
                borderColor={active() ? theme.text.base : theme.border.base}
                paddingLeft={1} paddingRight={1} marginRight={1}
                onMouseOver={() => setSel(props.i)}
-               onMouseDown={(ev) => { if (!ev.defaultPrevented) { setSel(props.i); openDetail(e) } }}>
+               onMouseDown={(ev) => { if (!ev.defaultPrevented) { setMenu(null); setSel(props.i); openDetail(e) } }}>
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
@@ -366,7 +396,8 @@ export default Plugin.define({
       }
 
       return (
-        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background.base}>
+        <box flexGrow={1} flexDirection="column" backgroundColor={theme.background.base}
+             onMouseDown={() => { if (menu()) setMenu(null); if (prompt()) closePrompt(null) }}>
           <box flexDirection="column" flexShrink={0}>
             <box flexDirection="row" paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>opencode market</b></text>
@@ -376,15 +407,15 @@ export default Plugin.define({
             </box>
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
-                <text fg={id === tab() ? theme.text.base : theme.text.faint}
+                <text fg={id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? theme.text.base : theme.text.faint}
                       onMouseDown={() => toTab(i())}>
-                  {id === tab() ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
+                  {id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
                 </text>
               )}</For>
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <text fg={theme.text.muted}
+                <text fg={zone() === 'chrome' && chromeSel() === 7 ? theme.text.base : theme.text.muted}
                       onMouseDown={() => { setSearchOn(true); searchInput?.focus() }}>/ </text>
                 <input
                   flexGrow={1}
@@ -396,13 +427,16 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <text fg={theme.text.muted} onMouseDown={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                <text fg={zone() === 'chrome' && chromeSel() === 8 ? theme.text.base : theme.text.muted}
+                      onMouseDown={pickFilter}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <text fg={theme.text.muted} onMouseDown={pickCategory}>[c] </text>
+                <text fg={zone() === 'chrome' && chromeSel() === 9 ? theme.text.base : theme.text.muted}
+                      onMouseDown={pickCategory}>[c] </text>
                 <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
-                <For each={cats().slice(0, 6)}>{(c) => (
-                  <text fg={cat() === c ? theme.text.base : theme.text.muted} onMouseDown={() => setCat(c)}>{c} </text>
+                <For each={cats().slice(0, 6)}>{(c, i) => (
+                  <text fg={cat() === c || (zone() === 'chrome' && chromeSel() === 10 + i()) ? theme.text.base : theme.text.muted}
+                        onMouseDown={() => setCat(c)}>{c} </text>
                 )}</For>
               </box>
             </Show>
@@ -485,7 +519,7 @@ export default Plugin.define({
               <For each={m().options}>{(o, i) => (
                 <text fg={i() === m().sel ? theme.text.base : theme.text.muted}
                       onMouseOver={() => setMenu({ ...m(), sel: i() })}
-                      onMouseDown={() => { const opt = m().options[i()]; setMenu(null); opt?.run() }}>
+                      onMouseDown={(ev) => { ev.stopPropagation(); const opt = m().options[i()]; setMenu(null); opt?.run() }}>
                   {i() === m().sel ? '› ' : '  '}{o.label}
                 </text>
               )}</For>
