@@ -530,7 +530,10 @@ export default Plugin.define({
       const root = el('div', 'padding:8px 12px;max-width:520px')
       // button-level handlers don't fire in this webview (clicks bubble to
       // root though) — dispatch from the root listener instead
-      root.onmousedown = (ev) => { if ((ev.target as HTMLElement) === refBtn) void doRefresh() }
+      root.onmousedown = (ev) => {
+        const t = ev.target as HTMLElement
+        if (t?.tagName === 'BUTTON' && t.textContent?.includes('更新数据')) void doRefresh()
+      }
       const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
       const doRefresh = () => void (async () => {
