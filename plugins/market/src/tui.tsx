@@ -272,6 +272,12 @@ export default Plugin.define({
       const openDetail = (e: MarketEntry) => { setFindingsOpen(false); setDetail(e) }
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
       const move = (d: number) => setSel(i => Math.max(0, Math.min(pool().length - 1, i + d)))
+      const updateAll = () => {
+        const targets = (idx()?.plugins ?? []).filter(e => { const v = verOf(e); return v && hasUpdate(e, v) })
+        if (!targets.length) { setStatus('全部已是最新'); return }
+        setStatus(`更新 ${targets.length} 项…`)
+        targets.forEach(install)
+      }
 
       // dialogs run in the "modal" input mode — a plugin keymap layer must
       // target it explicitly or binds never dispatch (upstream btw.tsx pattern);
@@ -280,10 +286,11 @@ export default Plugin.define({
       const [zone, setZone] = createSignal<'grid' | 'chrome'>('grid')
       const [chromeRow, setChromeRow] = createSignal(2)
       const [chromeSel, setChromeSel] = createSignal(0)
-      // rows: 0 tabs | 1 search+filter | 2 'c'+chips — enter from grid lands on chips
+      // rows: 0 全部更新 | 1 tabs | 2 search+filter | 3 'c'+chips — enter from grid lands on chips
       const chromeItems = (row = chromeRow()) =>
-        row === 0 ? TABS.map(t => `tab:${t[0]}` as const) :
-        row === 1 ? ['search', 'filter'] as const :
+        row === 0 ? ['updateAll'] as const :
+        row === 1 ? TABS.map(t => `tab:${t[0]}` as const) :
+        row === 2 ? ['search', 'filter'] as const :
         ['cat', ...cats().slice(0, 6).map(c => `chip:${c}`)]
       const chromeGo = (d: number) =>
         setChromeSel(i => Math.max(0, Math.min(chromeItems().length - 1, i + d)))
@@ -293,6 +300,7 @@ export default Plugin.define({
         const item = chromeItems()[chromeSel()]
         if (!item) return
         if (item.startsWith('tab:')) { toTab(TABS.findIndex(([id]) => id === item.slice(4))); return }
+        if (item === 'updateAll') { updateAll(); return }
         if (item === 'search') { setSearchOn(true); searchInput?.focus(); return }
         if (item === 'filter') { pickFilter(); return }
         if (item === 'cat') { pickCategory(); return }
@@ -324,7 +332,7 @@ export default Plugin.define({
           if (k === 'down' || k === 'j') {
             // settings tab only exposes the tabs row — down always re-enters the list
             if (tab() === 'settings') { setZone('grid'); return }
-            if (chromeRow() < 2) { setChromeRow(r => r + 1); setChromeSel(0) }
+            if (chromeRow() < 3) { setChromeRow(r => r + 1); setChromeSel(0) }
             else setZone('grid')
             return
           }
@@ -335,10 +343,10 @@ export default Plugin.define({
         if (k === 'up' || k === 'k') {
           if (tab() === 'settings') {
             // top of the settings list -> hand focus to the tabs row, on 设置 itself
-            if (settingsSel() === 0) { setZone('chrome'); setChromeRow(0); setChromeSel(6); return }
+            if (settingsSel() === 0) { setZone('chrome'); setChromeRow(1); setChromeSel(6); return }
             setSettingsSel(i => Math.max(0, i - 1)); return
           }
-          if (sel() < 2) { setZone('chrome'); setChromeRow(2); setChromeSel(0); return }
+          if (sel() < 2) { setZone('chrome'); setChromeRow(3); setChromeSel(0); return }
           move(-2); return
         }
         if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)) : move(2); return }
@@ -358,12 +366,13 @@ export default Plugin.define({
         if (k === 'n') { const e = detail() ?? pick(); if (e) editNote(e); return }
         if (k === 'x') { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()); return }
         if (k === 'r') { setIdxErr(''); fetchIndexCached().then(setIdx, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
         if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
         const d = Number(k)
         if (d >= 1 && d <= TABS.length) toTab(d - 1)
       }
-      const BINDS = 'escape up k down j left h right l return / f c i u * g n x r q tab 1 2 3 4 5 6 7'
+      const BINDS = 'escape up k down j left h right l return / f c i u * g n x r q tab U 1 2 3 4 5 6 7'
       ctx.keymap.layer(() => ({
         mode: 'modal',
         enabled: () => !searchOn(),
@@ -422,24 +431,28 @@ export default Plugin.define({
               <text fg={theme.text.base}><b>opencode market</b></text>
               <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v0.0.3 · {indexAge(idx())}</text>
               <box flexGrow={1} />
-              <text fg={theme.text.muted}>[U] 全部更新</text>
+              <box backgroundColor={chromeFocused(0, 0) ? theme.background.action.primary.focused : undefined}>
+                <text fg={chromeFocused(0, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                      onMouseOver={() => { setZone('chrome'); setChromeRow(0); setChromeSel(0) }}
+                      onMouseDown={(ev) => { ev.stopPropagation(); updateAll() }}>[U] 全部更新</text>
+              </box>
             </box>
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
-                <box backgroundColor={chromeFocused(0, i()) ? theme.background.action.primary.focused : undefined}>
-                  <text fg={chromeFocused(0, i()) ? theme.text.action.primary.focused : id === tab() ? theme.text.base : theme.text.faint}
-                        onMouseOver={() => { setZone('chrome'); setChromeRow(0); setChromeSel(i()) }}
+                <box backgroundColor={chromeFocused(1, i()) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(1, i()) ? theme.text.action.primary.focused : id === tab() ? theme.text.base : theme.text.faint}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(i()) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
-                    {id === tab() || chromeFocused(0, i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
+                    {id === tab() || chromeFocused(1, i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
                   </text>
                 </box>
               )}</For>
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <box backgroundColor={chromeFocused(1, 0) ? theme.background.action.primary.focused : undefined}>
-                  <text fg={chromeFocused(1, 0) ? theme.text.action.primary.focused : theme.text.muted}
-                        onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(0) }}
+                <box backgroundColor={chromeFocused(3, 0) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(3, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(0) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
                 </box>
                 <input
@@ -452,23 +465,23 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <box backgroundColor={chromeFocused(1, 1) ? theme.background.action.primary.focused : undefined}>
-                  <text fg={chromeFocused(1, 1) ? theme.text.action.primary.focused : theme.text.muted}
-                        onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(1) }}
+                <box backgroundColor={chromeFocused(2, 1) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(2, 1) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(1) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
                 </box>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <box backgroundColor={chromeFocused(2, 0) ? theme.background.action.primary.focused : undefined}>
-                  <text fg={chromeFocused(2, 0) ? theme.text.action.primary.focused : theme.text.muted}
-                        onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(0) }}
+                <box backgroundColor={chromeFocused(3, 0) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(3, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(0) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
                 </box>
                 <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
                 <For each={cats().slice(0, 6)}>{(c, i) => (
-                  <box backgroundColor={chromeFocused(2, 1 + i()) ? theme.background.action.primary.focused : undefined}>
-                    <text fg={chromeFocused(2, 1 + i()) ? theme.text.action.primary.focused : cat() === c ? theme.text.base : theme.text.muted}
-                          onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(1 + i()) }}
+                  <box backgroundColor={chromeFocused(3, 1 + i()) ? theme.background.action.primary.focused : undefined}>
+                    <text fg={chromeFocused(3, 1 + i()) ? theme.text.action.primary.focused : cat() === c ? theme.text.base : theme.text.muted}
+                          onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(1 + i()) }}
                           onMouseDown={() => setCat(c)}>{c} </text>
                   </box>
                 )}</For>
