@@ -8,7 +8,6 @@
  */
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
-import { TextAttributes } from '@opentui/core'
 import { createSignal, createMemo, For, Show, onMount, type JSX } from 'solid-js'
 import { spawn, execFile } from 'node:child_process'
 import { readdirSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs'
@@ -279,12 +278,17 @@ export default Plugin.define({
       // useKeyboard stays as fallback for hosts that route raw keys instead
       // focus zones: 'grid' (cards) | 'chrome' (menu bar: tabs/search/filter/chips)
       const [zone, setZone] = createSignal<'grid' | 'chrome'>('grid')
+      const [chromeRow, setChromeRow] = createSignal(2)
       const [chromeSel, setChromeSel] = createSignal(0)
-      // chrome items: 7 tabs + search + filter + 'c' + one per visible chip
-      const chromeItems = () => [...TABS.map(t => `tab:${t[0]}`), 'search', 'filter', 'cat',
-        ...cats().slice(0, 6).map(c => `chip:${c}`)]
+      // rows: 0 tabs | 1 search+filter | 2 'c'+chips — enter from grid lands on chips
+      const chromeItems = (row = chromeRow()) =>
+        row === 0 ? TABS.map(t => `tab:${t[0]}` as const) :
+        row === 1 ? ['search', 'filter'] as const :
+        ['cat', ...cats().slice(0, 6).map(c => `chip:${c}`)]
       const chromeGo = (d: number) =>
         setChromeSel(i => Math.max(0, Math.min(chromeItems().length - 1, i + d)))
+      const chromeFocused = (row: number, s: number) =>
+        zone() === 'chrome' && chromeRow() === row && chromeSel() === s
       const chromeRun = () => {
         const item = chromeItems()[chromeSel()]
         if (!item) return
@@ -313,14 +317,22 @@ export default Plugin.define({
         if (zone() === 'chrome') {
           if (k === 'left' || k === 'h') { chromeGo(-1); return }
           if (k === 'right' || k === 'l') { chromeGo(1); return }
-          if (k === 'down' || k === 'j') { setZone('grid'); return }
+          if (k === 'up' || k === 'k') {
+            if (chromeRow() > 0) { setChromeRow(r => r - 1); setChromeSel(0) }
+            return
+          }
+          if (k === 'down' || k === 'j') {
+            if (chromeRow() < 2) { setChromeRow(r => r + 1); setChromeSel(0) }
+            else setZone('grid')
+            return
+          }
           if (k === 'return') { chromeRun(); return }
           if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
           return
         }
         if (k === 'up' || k === 'k') {
           if (tab() === 'settings') { setSettingsSel(i => Math.max(0, i - 1)); return }
-          if (sel() < 2) { setZone('chrome'); setChromeSel(0); return }
+          if (sel() < 2) { setZone('chrome'); setChromeRow(2); setChromeSel(0); return }
           move(-2); return
         }
         if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)) : move(2); return }
@@ -408,20 +420,22 @@ export default Plugin.define({
             </box>
             <box flexDirection="row" paddingLeft={1}>
               <For each={TABS}>{([id, label], i) => (
-                <text fg={id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? theme.text.base : theme.text.faint}
-                      attributes={zone() === 'chrome' && chromeSel() === i() ? TextAttributes.INVERSE : undefined}
-                      onMouseOver={() => { setZone('chrome'); setChromeSel(i()) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
-                  {id === tab() || (zone() === 'chrome' && chromeSel() === i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
-                </text>
+                <box backgroundColor={chromeFocused(0, i()) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(0, i()) ? theme.text.action.primary.focused : id === tab() ? theme.text.base : theme.text.faint}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(0); setChromeSel(i()) }}
+                        onMouseDown={(ev) => { ev.stopPropagation(); toTab(i()) }}>
+                    {id === tab() || chromeFocused(0, i()) ? `[${i() + 1} ${label}]` : ` ${i() + 1} ${label} `}{' '}
+                  </text>
+                </box>
               )}</For>
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <text fg={zone() === 'chrome' && chromeSel() === 7 ? theme.text.base : theme.text.muted}
-                      attributes={zone() === 'chrome' && chromeSel() === 7 ? TextAttributes.INVERSE : undefined}
-                      onMouseOver={() => { setZone('chrome'); setChromeSel(7) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
+                <box backgroundColor={chromeFocused(1, 0) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(1, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(0) }}
+                        onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
+                </box>
                 <input
                   flexGrow={1}
                   placeholder={t('search')}
@@ -432,22 +446,25 @@ export default Plugin.define({
                     if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
                   }}
                 />
-                <text fg={zone() === 'chrome' && chromeSel() === 8 ? theme.text.base : theme.text.muted}
-                      attributes={zone() === 'chrome' && chromeSel() === 8 ? TextAttributes.INVERSE : undefined}
-                      onMouseOver={() => { setZone('chrome'); setChromeSel(8) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                <box backgroundColor={chromeFocused(1, 1) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(1, 1) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(1) }}
+                        onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                </box>
               </box>
               <box flexDirection="row" paddingLeft={1}>
-                <text fg={zone() === 'chrome' && chromeSel() === 9 ? theme.text.base : theme.text.muted}
-                      attributes={zone() === 'chrome' && chromeSel() === 9 ? TextAttributes.INVERSE : undefined}
-                      onMouseOver={() => { setZone('chrome'); setChromeSel(9) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
+                <box backgroundColor={chromeFocused(2, 0) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(2, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(0) }}
+                        onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
+                </box>
                 <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
                 <For each={cats().slice(0, 6)}>{(c, i) => (
-                  <text fg={cat() === c || (zone() === 'chrome' && chromeSel() === 10 + i()) ? theme.text.base : theme.text.muted}
-                        attributes={zone() === 'chrome' && chromeSel() === 10 + i() ? TextAttributes.INVERSE : undefined}
-                        onMouseOver={() => { setZone('chrome'); setChromeSel(10 + i()) }}
-                        onMouseDown={() => setCat(c)}>{c} </text>
+                  <box backgroundColor={chromeFocused(2, 1 + i()) ? theme.background.action.primary.focused : undefined}>
+                    <text fg={chromeFocused(2, 1 + i()) ? theme.text.action.primary.focused : cat() === c ? theme.text.base : theme.text.muted}
+                          onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(1 + i()) }}
+                          onMouseDown={() => setCat(c)}>{c} </text>
+                  </box>
                 )}</For>
               </box>
             </Show>
