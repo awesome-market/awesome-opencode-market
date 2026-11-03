@@ -1,6 +1,6 @@
 name: submission-review
 on:
-  issues: { types: [opened, edited] }
+  issues: { types: [opened, edited, labeled] }
   issue_comment: { types: [created] }   # re-review loop: author replies after fixing
   schedule: [ { cron: '23 5 * * *' } ]  # abandonment sweep
 permissions: {}
@@ -159,7 +159,115 @@ jobs:
           done
           [ -n "$PUSHED" ] || { echo "failed to land submission after 3 attempts"; exit 1; }
 
-  # daily: close issues abandoned in needs-work/invalid for 30+ days
+  # dual-channel verdict writeback — a HUMAN applying submission:approved or a
+  # collaborator commenting `/approve` / `/concern [reason]` records a
+  # source:human verdict in ai-verdicts.jsonl on the catalog branch. Bot-applied
+  # labels (sender == github-actions[bot]) don't count: mechanical review is
+  # admission-only and never publishes by itself.
+  verdict:
+    if: >-
+      github.event.issue.state == 'open'
+      && !github.event.issue.pull_request
+      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]')
+          || github.event.label.name == 'submission:approved')
+      && (
+        (github.event_name == 'issues' && github.event.action == 'labeled'
+          && github.event.label.name == 'submission:approved'
+          && github.event.sender.login != 'github-actions[bot]')
+        || (github.event_name == 'issue_comment' && github.event.action == 'created'
+          && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+          && (startsWith(github.event.comment.body, '/approve') || startsWith(github.event.comment.body, '/concern')))
+      )
+    runs-on: ubuntu-latest
+    concurrency: catalog-branch        # same writer lock as ingest/catalog/verify
+    permissions: { issues: write, contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: parse submission + resolve verdict record
+        id: v
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+        run: |
+          npx tsx pipeline/submission.ts > /tmp/sub.json
+          NAME=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
+          REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
+          KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
+          VERDICT=pass; REASON=""
+          if [[ "$COMMENT_BODY" == /concern* ]]; then
+            VERDICT=concern
+            REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/concern\s*||' | head -c 2000)
+          elif [[ "$COMMENT_BODY" == /approve* ]]; then
+            VERDICT=pass
+            REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/approve\s*||' | head -c 2000)
+          fi
+          # version+sha: latest npm version at approve-time for npm submissions;
+          # null for repo-only (github-kind) entries. sha is best-effort so a
+          # registry blip doesn't block a human decision.
+          VER=""; SHA=""
+          if [ "$KIND" = npm ] && [ -n "$NAME" ]; then
+            VER=$(npm view "$NAME" version 2>/dev/null || true)
+            [ -n "$VER" ] && SHA=$(npm view "$NAME@$VER" dist.integrity 2>/dev/null || true)
+          fi
+          # repo-only submissions identify by repo as the entry name
+          ENTRY="${NAME:-$REPO}"
+          [ -n "$ENTRY" ] || { echo "no parseable submission — skip"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; }
+          node -e '
+            const rec = {
+              name: process.argv[1],
+              version: process.argv[2] || null,
+              verdict: process.argv[3],
+              ...(process.argv[4] ? { reason: process.argv[4] } : {}),
+              at: new Date().toISOString(),
+              source: "human",
+              ...(process.argv[5] ? { sha: process.argv[5] } : {}),
+            }
+            console.log(JSON.stringify(rec))
+          ' "$ENTRY" "$VER" "$VERDICT" "$REASON" "$SHA" > /tmp/verdict.line
+          cat /tmp/verdict.line
+          echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+          echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
+      - name: append to ai-verdicts.jsonl on catalog branch
+        if: steps.v.outputs.skip != '1'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINE: ${{ steps.v.outputs.line }}
+        run: |
+          git config user.email "market-bot@users.noreply.github.com"
+          git config user.name "market-bot"
+          PUSHED=
+          for i in 1 2 3; do
+            git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
+            git checkout -B catalog origin/catalog || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
+            touch ai-verdicts.jsonl
+            echo "$LINE" >> ai-verdicts.jsonl
+            git add ai-verdicts.jsonl
+            git commit -m "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.v.outputs.target }} (issue #${{ github.event.issue.number }})" || { echo "no changes"; PUSHED=1; break; }
+            git push origin catalog && { PUSHED=1; break; }
+            echo "push rejected (attempt $i) — retrying"
+            sleep 3
+          done
+          [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
+      - name: acknowledge on issue
+        if: steps.v.outputs.skip != '1'
+        uses: actions/github-script@v7
+        env:
+          V: ${{ steps.v.outputs.verdict }}
+          TARGET: ${{ steps.v.outputs.target }}
+        with:
+          script: |
+            const msg = process.env.V === 'concern'
+              ? `⚠️ 已记录人工 concern（${process.env.TARGET}）——该版本的发布已被阻断，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
+              : `✅ 已记录人工 pass（${process.env.TARGET}）——将在下次日报公示后进入上架流程，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body: msg })
+
   sweep:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
