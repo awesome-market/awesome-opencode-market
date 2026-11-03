@@ -193,8 +193,17 @@ export default Plugin.define({
             for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
             const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
             put({ skillVers: sv }); setInstalled(next)
+            setInstalledExtra(x => x.filter(x => x.name !== e.name))
+            // daemon rescans config async — wait, then reconcile; drop the
+            // entry from the fresh data too so it can't resurrect
+            await new Promise(r => setTimeout(r, 2000))
             const fresh = await safe.installed?.().catch(() => null)
-            if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
+            if (fresh) {
+              const v = { ...fresh.versions }; delete v[e.name]
+              setInstalled(v)
+              setInstalledExtra(fresh.extras.filter(x => x.name !== e.name))
+              setFeatMap(fresh.features)
+            }
           },
           (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = 'failed'; b.title = String(x) },
         )
