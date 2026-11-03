@@ -9,7 +9,10 @@
     "coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "pipeline": "tsx pipeline/run.ts",
-    "check": "tsc --noEmit && vitest run --coverage"
+    "check": "tsc --noEmit && vitest run --coverage",
+    "e2e": "node plugins/market/test/e2e/desktop-smoke.mjs && python3 plugins/market/test/e2e/tui-smoke.py",
+    "e2e:desktop": "node plugins/market/test/e2e/desktop-smoke.mjs",
+    "e2e:tui": "python3 plugins/market/test/e2e/tui-smoke.py"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
