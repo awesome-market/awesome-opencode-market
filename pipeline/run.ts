@@ -129,7 +129,10 @@ export async function run(opts: RunOptions = {}) {
             if (/gui/.test(p)) parts.add('gui')
             if (/rpc/.test(p)) parts.add('rpc')
           }
-          return parts.size ? { features: [...parts] } : {}
+          // every admitted package is a server-part plugin by definition —
+          // hasPluginEvidence requires main/exports which IS the server entry
+          parts.add('server')
+          return { features: [...parts] }
         })(),
         category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
