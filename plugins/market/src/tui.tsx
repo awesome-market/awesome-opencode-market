@@ -158,7 +158,12 @@ const specByName: Record<string, string> = {}
         const ver = installed()[e.name]
         const spec = specByName[e.name] ?? e.name
         const pinned = /@\d[^@]*$/.test(spec)
-        const p = spawn('opencode', ['plugin', ver && hasUpdate(e, ver) ? (pinned ? 'add' : 'update') : 'add', pinned ? spec.replace(/@\d[^@]*$/, '') : spec])
+        const updating = !!(ver && hasUpdate(e, ver))
+        if (updating && pinned) {
+          const cp = await import('node:child_process')
+          await new Promise<void>(res => cp.execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, () => res()))
+        }
+        const p = spawn('opencode', ['plugin', updating ? (pinned ? 'add' : 'update') : 'add', pinned ? spec.replace(/@\d[^@]*$/, '') : spec])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)

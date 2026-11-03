@@ -618,14 +618,18 @@ export default Plugin.define({
             })
             p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
           }),
-        update: (name: string) =>
-          new Promise<string>((resolve, reject) => {
-            const { spawn } = require('node:child_process') as typeof import('node:child_process')
-            // pinned specs (name@x.y.z) are a no-op for `update` — re-add the
-            // clean name instead, which installs latest and unpins the spec
+        update: async (name: string) =>
+          new Promise<string>(async (resolve, reject) => {
+            const { spawn, execFile } = require('node:child_process') as typeof import('node:child_process')
+            // pinned specs (name@x.y.z): `update` is a no-op and `add` only
+            // APPENDS the clean spec (leaving the pinned one → duplicate ID).
+            // Correct flow: remove the pinned spec first, then add the name.
             const spec = specByName[name] ?? name
             const pinned = /@\d[^@]*$/.test(spec)
-            const p = spawn('opencode', ['plugin', pinned ? 'add' : 'update', pinned ? spec.replace(/@\d[^@]*$/, '') : spec], { env: process.env })
+            const argv = pinned ? ['plugin', 'add', spec.replace(/@\d[^@]*$/, '')] : ['plugin', 'update', spec]
+            if (pinned) await new Promise<void>(res =>
+              execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, () => res()))
+            const p = spawn('opencode', argv, { env: process.env })
             jobs.set(name, p)
             const push = (line: string) => m.emit?.('progress', { name, line })
             p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
