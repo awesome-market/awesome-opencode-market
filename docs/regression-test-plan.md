@@ -158,9 +158,58 @@ plugins/market/
 
 规则约束：测试只断行为不断实现细节；gui.ts 里 require 的 node:* 部分（main 侧 provide）不进 jsdom，单测走 L2 提取函数。
 
-## 五、风险与边界
+## 五、完整覆盖矩阵
 
-- **jsdom ≠ webview**：click 被吞这类怪癖 jsdom 测不出——由 L4 兜底，不强求 jsdom 复现
-- **daemon 时序**：L3 用可控 fake（installed 第一次旧/第二次新）确定性模拟；真实时序只放 L4
-- **进 CI 范围**：L1-L3 进 `npm test`（commit 门禁）；L4 发版前手动 `npm run e2e`
-- **不测试的**：视觉像素级细节（badge 像素位置、颜色值）——人工验收
+> 第一层"对症版"只防本轮 bug。补全后按功能域保证"能用→状态对→错处理"三条基线。
+
+### L2 纯函数补全
+
+| 域 | 函数/位置 | 用例 |
+|---|---|---|
+| **skill 生命周期** | `installSkillTar` / `writeSkill` / `installSkillDir` / `scanSkillKeys` / `skillInstalledVer` | tarball 解压落盘、global/project 双 scope、`<base>-*` lifted skills、版本探测、空目录/隐藏目录跳过、`<name>` dir 标记语义 |
+| **spec 解析** | `cleanSpec`/`dedupeSpecs`/`removeSpec`/`featuresMap`/`buildExtras` | scoped/pinned/裸名/路径全形态（本轮 bug 已列） |
+| **nav 状态机** | `src/nav.ts` | 方向键全表、prompt 拦截、wrap 边界、pageup/down、grid↔chrome 过渡、settings 焦点 |
+| **激活验证** | `verifyActivation` handler | activated / restartNeeded / verify-pending 三分支、plugins.json 状态读取失败 |
+| **过滤排序** | `search`/`sortEntries`/`allCategories`/`inDays`/`hasUpdate` | 查询匹配、分类+收藏+分组+时间+部件叠加、asc/desc 反转、空结果、日期边界 |
+| **状态持久化** | `loadState`/`saveState`/备份导出恢复 roundtrip | favorites/groups/notes 序列化↔反序列化、损坏 JSON 容错、TTL 过期→fetch 失败→snapshot fallback |
+| **管道** | `preAdmit`/`looksLikeTemplateSpam`/`hasPluginEvidence`/`merge`/`slugOf`/`detectFeatures`/`classify` | 三个发现通道、模板垃圾拒收、证据门、old-index merge 字段保留、exports 子路径部件 |
+| **安全脱敏** | `redactLog`/`keyLines` | home 路径/token/API key 不出现在导出日志、行过滤 |
+
+### L3 jsdom 挂载补全（每个功能区块"能用→状态对→错处理"）
+
+| 区块 | 用例 |
+|---|---|
+| **安装/更新/卸载** | add→spinner→installed、update→版本升、卸载→卡消失；stale inventory 防回弹；失败保留 error 按钮 |
+| **全部更新** | batch 流程：多插件并发进度、部分失败其他继续、无更新时"全部已是最新" |
+| **收藏/分组/备注** | ★ 切换、分组赋值、备注输入、备份导出→恢复 roundtrip 后状态一致 |
+| **搜索过滤** | query 输入过滤列表、分类/收藏/分组/时间/部件多条件叠加、空结果提示 |
+| **设置** | 更新数据按钮真刷新、devlog 开关、备份恢复、清空数据二次确认、日志框显示文件日志 |
+| **弹层/详情** | 筛选菜单选中态、详情页渲染、卸载确认武装态 3s 复位 |
+| **已装视图** | extras 合成卡（uncataloged）、mixed plugin+skill 双 tab、features 部件段、版本徽标 |
+| **错误边界** | api 抛错各按钮变 failed+错误文本、host 过旧提示（非假成功）、IPC 超时 25s 兜底 |
+
+### L4 真实端冒烟补全（CDP + pty checklist）
+
+| 端 | 场景 |
+|---|---|
+| **桌面 CDP** | 市场打开渲染、刷新按钮、安装→已装、卸载→消失、钉版升级、全部更新、收藏、设置各按钮 |
+| **TUI pty** | 三行导航、方向键 wrap、pageup/down、esc 各路径（搜索/prompt/弹层/市场）、滚动条点击、卡片 hover、S/T/G/R chips |
+| **管道 e2e** | `tsx pipeline/run.ts --out` 完整跑（fixture 源）、verify/merge/site 链 |
+
+## 六、实施顺序（修订）
+
+| 阶段 | 内容 | 验收 |
+|---|---|---|
+| **P1** | L1 契约测试 + spec/features/nav 纯函数提取单测 | 本轮 bug 全部有失败用例→修复→绿 |
+| **P2** | skill 生命周期 L2 + L3 mount 基建 + 安装/卸载/更新场景 | skill 全链覆盖 |
+| **P3** | L3 剩余区块（设置/搜索/收藏/全部更新/错误边界） | mount 测试覆盖所有用户操作面 |
+| **P4** | L4a CDP 桌面冒烟 + L4b pty TUI 冒烟脚本 | 发版 checklist 一键跑 |
+| **P5** | 管道容错+激活验证+脱敏单测 | L2 补全 |
+
+## 七、原则
+
+- **功能开发即测试开发**——新功能合并时带对应 L2/L3 用例，不后补
+- **行为断言，不内联实现**——测试断言 IPC 调用+DOM 文本+函数输出，不复制被测逻辑
+- **真实数据不猜**——features/分类等有真实来源的字段断言实际值，无来源的断言"未收录/不显示"
+- **jsdom ≠ webview**——webview 事件怪癖归 L4，不强求 jsdom 复现
+- **进 CI 范围**：L1-L3 进 `npm test` commit 门禁（覆盖≥90%）；L4 发版前手动 `npm run e2e`
