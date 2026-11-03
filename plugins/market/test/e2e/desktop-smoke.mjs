@@ -2,32 +2,42 @@
 // 用法: node test/e2e/desktop-smoke.mjs
 import { chromium } from 'playwright-core'
 
-const cdp = await chromium.connectOverCDP('http://127.0.0.1:9222', { noDefaults: true })
+let cdp
+try {
+  cdp = await chromium.connectOverCDP('http://127.0.0.1:9222', { noDefaults: true })
+} catch {
+  console.error(`✗ 连不上 CDP 端口 9222 — OpenCode 桌面端不是调试模式启动的`)
+  console.error(`  发生了啥: 桌面冒烟要 attach 到带调试端口的 app`)
+  console.error(`  咋办: 先退出 Dock 里普通的 OpenCode，再这样启动:`)
+  console.error(`    /Applications/OpenCode.app/Contents/MacOS/OpenCode --remote-debugging-port=9222`)
+  console.error(`  确认: curl http://127.0.0.1:9222/json/version 有输出后再跑本脚本`)
+  process.exit(2)
+}
 const results = []
 const t = (name, ok) => { results.push([name, ok]); console.log(`${ok ? '✓' : '✗'} ${name}`) }
 
-const pages = cdp.contexts()[0].pages()
-// already-open market counts as pass — plugin alive + panel open
+// poll — fresh launch needs time for renderer + sidebar to mount
 let page = null, opened = false
-for (const p of pages) {
-  if (await p.locator('text=opencode market').first().isVisible({ timeout: 2500 }).catch(() => false)) { page = p; opened = true; break }
+const deadline = Date.now() + 45_000
+while (Date.now() < deadline && !page) {
+  for (const p of cdp.contexts()[0].pages()) {
+    if (await p.locator('text=opencode market').first().isVisible({ timeout: 1500 }).catch(() => false)) { page = p; opened = true; break }
+    if (await p.locator('text=Market').first().isVisible({ timeout: 1500 }).catch(() => false)) { page = p; break }
+  }
+  if (!page) await new Promise(r => setTimeout(r, 2000))
 }
 if (opened) {
   t('sidebar Market item exists (plugin alive)', true)
   t('market panel open', true)
 } else {
-  for (const p of pages) {
-    const found = await p.locator('text=Market').first().isVisible({ timeout: 2500 }).catch(() => false)
-    if (found) { page = p; break }
-  }
   if (!page) { t('sidebar Market item exists (plugin alive)', false); await cdp.close(); process.exit(1) }
   t('sidebar Market item exists (plugin alive)', true)
   // REAL click — the app sidebar is host UI, dispatchEvent is synthetic and
   // invisible to Electron; the webview quirk only applies to the plugin webview
   const menuItem = page.locator('button').filter({ hasText: /^Market$/ }).first()
   await menuItem.click()
-  await page.waitForTimeout(900)
-  opened = await page.locator('text=opencode market').first().isVisible({ timeout: 10_000 }).catch(() => false)
+  opened = await page.locator('text=opencode market').first()
+    .waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
   t('market panel opens on click', opened)
   if (!opened) {
     console.log('clicked element:', await menuItem.evaluate(el => `${el.tagName}.${el.className}`).catch(() => '?'))
@@ -41,8 +51,14 @@ try {
   await page.getByRole('button', { name: '设置', exact: true }).click()
   await page.waitForTimeout(1200)
   const refBtn = page.getByRole('button', { name: /更新数据/ })
-  await refBtn.dispatchEvent('mousedown')
-  const refreshed = await page.locator('text=已刷新').first().isVisible({ timeout: 15_000 }).catch(() => false)
+  // retry — listener may not be bound on first dispatch; cold daemon makes refresh slow.
+  // waitFor actually polls; isVisible({timeout}) returns instantly (known trap)
+  let refreshed = false
+  for (let attempt = 0; attempt < 3 && !refreshed; attempt++) {
+    await refBtn.dispatchEvent('mousedown').catch(() => {})
+    refreshed = await page.locator('text=已刷新').first()
+      .waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false)
+  }
   t('更新数据 refreshes', refreshed)
 
   // tab switching — every market tab renders its own content
@@ -54,7 +70,8 @@ try {
     ['设置', '更新数据|开发日志'],
   ]) {
     await page.getByRole('button', { name: tabName, exact: true }).click()
-    const ok = await page.locator(`text=${marker.split('|')[0]}`).first().isVisible({ timeout: 8000 }).catch(() => false)
+    const ok = await page.locator(`text=${marker.split('|')[0]}`).first()
+      .waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false)
     t(`tab ${tabName} switches`, ok)
   }
 } catch (e) { t('smoke aborted', false); console.log(String(e).slice(0, 200)) }
