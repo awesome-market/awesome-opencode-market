@@ -86,11 +86,15 @@ jobs:
     steps:
       # B-5: site always builds from the catalog branch's current index —
       # never from a possibly-stale artifact produced hours earlier.
+      # Stay on the main checkout (pipeline sources) and pull just index.json
+      # from the data-only catalog branch.
       - uses: actions/checkout@v4
-        with: { ref: catalog }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - run: |
+          git fetch origin catalog
+          git show origin/catalog:index.json > index.json
       - run: npx tsx pipeline/site/build.ts index.json /tmp/site
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
