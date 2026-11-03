@@ -530,9 +530,11 @@ export default Plugin.define({
       const root = el('div', 'padding:8px 12px;max-width:520px')
       const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
-      refBtn.onmousedown = () => { void safe.devlog?.('refBtn mousedown').catch(() => {}) }
-      refBtn.onclick = () => void (async () => {
-        void safe.devlog?.('refBtn click').catch(() => {})
+      // click gets swallowed between mousedown/mouseup in this webview —
+      // mousedown is the reliable trigger (verified via devlog)
+      refBtn.onmousedown = (ev) => { ev.preventDefault(); void doRefresh() }
+      const doRefresh = () => void (async () => {
+        void safe.devlog?.('refBtn fire').catch(() => {})
         refBtn.disabled = true; refBtn.textContent = '刷新中…'; refStatus.textContent = ''
         const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('超时 25s')), 25_000))])
         try {
