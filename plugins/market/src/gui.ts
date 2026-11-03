@@ -62,7 +62,22 @@ export default Plugin.define({
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
     const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
     const [featMap, setFeatMap] = createSignal<Record<string, Record<string, true> | undefined>>({})
-    const [featFilter, setFeatFilter] = createSignal<string | null>(null)
+    const [featFilter, setFeatFilter] = createSignal<Set<string>>(new Set())
+    const toggleFeat = (k: string) => {
+      const s = new Set(featFilter())
+      s.has(k) ? s.delete(k) : s.add(k)
+      setFeatFilter(s)
+    }
+    const partChips = (compact = false) => {
+      const grp = el('span', `display:inline-flex;border:1px solid rgba(128,128,128,.4);border-radius:12px;overflow:hidden;${compact ? '' : 'margin-left:4px'}`)
+      for (const [k, label] of [['server','S'],['tui','T'],['gui','G'],['rpc','R']] as const) {
+        const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;background:transparent;color:inherit;${featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
+        seg.title = `${k} 部件（可多选）`
+        seg.onclick = (ev) => { ev.stopPropagation(); toggleFeat(k) }
+        grp.appendChild(seg)
+      }
+      return grp
+    }
     // host inventory features when installed; otherwise infer from scanned file paths
     const featuresOf = (e: MarketEntry): string[] => {
       const real = featMap()[e.name]
@@ -131,7 +146,7 @@ export default Plugin.define({
       if (g) list = list.filter(p => s.groups[p.name] === g)
       if (rangeDays()) list = list.filter(p => inDays(p, rangeDays()))
       const ff = featFilter()
-      if (ff) list = list.filter(p => featuresOf(p).includes(ff))
+      if (ff.size) list = list.filter(p => featuresOf(p).some(f => ff.has(f)))
       const srt = sortEntries(search(list, query()), sort())
       return sortDir() === 'asc' ? [...srt].reverse() : srt
     }
@@ -284,8 +299,7 @@ export default Plugin.define({
         .filter(Boolean).join(' · ')
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
       const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
-      const feats = featuresOf(e)
-      if (feats.length) bottom.appendChild(el('span', 'font-size:10px;opacity:.5;letter-spacing:1px', feats.map(f => f === 'server' ? 'S' : f === 'tui' ? 'T' : f === 'gui' ? 'G' : 'R').join('·')))
+      if (featuresOf(e).length) bottom.appendChild(partChips(true))
       for (const ct of categoriesOf(e)) {
         const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
@@ -450,18 +464,12 @@ export default Plugin.define({
           tab() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
         const mk = (id: string, label: string) => {
           const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
-          if (cat() === id || (id === '' && !cat())) { c.style.background = '#556'; c.style.color = '#fff' }
+          if (id && cat() === id) { c.style.background = '#556'; c.style.color = '#fff' }
           c.onclick = () => setCat(id)
           return c
         }
-        const cats = [mk('', `全部(${pool.length})`), ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
-        for (const k of ['server','tui','gui','rpc'] as const) {
-          const chip = mk('', k)
-          chip.title = `只看 ${k} 部件（再点取消）`
-          chip.onclick = () => setFeatFilter(featFilter() === k ? null : k)
-          if (featFilter() === k) { chip.style.background = '#556'; chip.style.color = '#fff' }
-          cats.push(chip)
-        }
+        const cats = [mk('', `全部(${pool.length})`), partChips() as unknown as HTMLButtonElement,
+          ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
         return cats
       })
       root.appendChild(chips)
