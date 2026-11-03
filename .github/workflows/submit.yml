@@ -5,6 +5,7 @@ permissions: {}
 jobs:
   review:
     if: contains(github.event.issue.labels.*.name || 'submission', 'submission') || startsWith(github.event.issue.title, '[submit]')
+    outputs: { pkg: "${{ steps.scan.outputs.pkg }}", verdict: "${{ steps.verdict.outputs.v }}" }
     runs-on: ubuntu-latest
     permissions: { issues: write }     # comments only; pipeline runs in this job but nothing executes plugin code
     steps:
@@ -31,6 +32,11 @@ jobs:
               issue_number: context.issue.number,
               body: `## Automated review\n\n${fs.readFileSync('/tmp/review.md','utf8')}\n\n_Human maintainer makes the final call._`
             })
+      - name: capture verdict
+        id: verdict
+        run: |
+          V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
+          echo "v=$V" >> "$GITHUB_OUTPUT"
       - name: label + close on verdict
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,3 +51,31 @@ jobs:
             flagged) gh issue edit "$ISSUE" --add-label "submission:needs-work" --remove-label "submission:approved" --remove-label "submission:invalid" ;;
             invalid) gh issue edit "$ISSUE" --add-label "submission:invalid" --remove-label "submission:approved" --remove-label "submission:needs-work" ;;
           esac
+
+  # D-2: approved submissions actually land — append pkg to catalog branch's
+  # submissions.txt; catalog.yml picks it up via --seed on the next run.
+  ingest:
+    needs: review
+    if: ${{ needs.review.outputs.verdict == 'clean' }}
+    runs-on: ubuntu-latest
+    concurrency: catalog-branch        # same writer lock as catalog/verify (I-4)
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - name: append package to submissions.txt on catalog branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PKG: ${{ needs.review.outputs.pkg }}
+        run: |
+          git config user.email "market-bot@users.noreply.github.com"
+          git config user.name "market-bot"
+          for i in 1 2 3; do
+            git fetch origin catalog 2>/dev/null || true
+            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
+            touch submissions.txt
+            grep -qxF "$PKG" submissions.txt || echo "$PKG" >> submissions.txt
+            git add submissions.txt
+            git commit -m "submission: $PKG (issue #${{ github.event.issue.number }})" || { echo "no changes"; break; }
+            git push origin catalog && break
+            echo "push rejected (attempt $i) — retrying"
+          done

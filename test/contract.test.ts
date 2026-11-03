@@ -10,7 +10,7 @@ function keysIn(startMark: string, indent: number): string[] {
   const re = new RegExp(`^\\s{${indent}}(\\w+)\\s*:`)
   for (const ln of lines.slice(1)) {
     const m = ln.match(re)
-    if (m) out.push(m[1])
+    if (m?.[1]) out.push(m[1])
     else if (ln.trim() && !ln.startsWith(' '.repeat(indent))) break
   }
   return out

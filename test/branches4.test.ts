@@ -36,13 +36,13 @@ describe('branch coverage round 4', () => {
     const e: PluginEntry = {
       name: 'p', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: [],
       source: { kind: 'npm', id: 'p' }, description: {}, category: [],
-      license: null, deprecated: false, replacement: null,
+      license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: '2026-01-01', latestVersion: null, publishedAt: null,
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'verified' }, compat: {},
     }
-    const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e] })
+    const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e], removed: [] })
     expect(html).toContain('verified (install)')
     expect(html).not.toContain('undefined')
   })

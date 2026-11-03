@@ -14,7 +14,7 @@ export interface Review {
 }
 
 export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch } = {}): Promise<Review> {
-  const pk = await fetchPackument(name, opts)
+  const { pk } = await fetchPackument(name, opts)
   if (!pk) return { name, exists: false, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null }
   const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports })
   let findings: string[] = [], redFlags: string[] = []

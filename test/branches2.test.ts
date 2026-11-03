@@ -16,7 +16,7 @@ const mkRes = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status:
 const mkEntry = (name: string, v = '1'): PluginEntry => ({
   name, slug: name, aliases: ['x'], type: 'plugin', discoveredVia: ['npm-keyword'],
   source: { kind: 'npm', id: name }, description: { en: '' }, category: [],
-  license: null, deprecated: false, replacement: null,
+  license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2020-01-01', latestVersion: v, publishedAt: null,
   metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
@@ -52,7 +52,7 @@ describe('branches round 2', () => {
   it('fetchPackument: lic object without type + deprecated', async () => {
     const doc = { 'dist-tags': { latest: '1' },
       versions: { '1': { license: {}, deprecated: 'yes', dist: {} } }, time: {} }
-    const p = await fetchPackument('x', { fetchFn: (async () => mkRes(doc)) as typeof fetch })
+    const { pk: p } = await fetchPackument('x', { fetchFn: (async () => mkRes(doc)) as typeof fetch })
     expect(p!.license).toBeNull()
     expect(p!.deprecated).toBe(true)
     expect(p!.repository).toBeNull()
@@ -62,7 +62,7 @@ describe('branches round 2', () => {
       expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer tok')
       return mkRes({ stargazers_count: 0, archived: true, pushed_at: 't' })
     }
-    const r = await fetchRepoMeta('o/r', { token: 'tok', fetchFn: f as typeof fetch })
+    const { meta: r } = await fetchRepoMeta('o/r', { token: 'tok', fetchFn: f as typeof fetch })
     expect(r).toMatchObject({ archived: true, license: null })
   })
   it('repoFileExists: branch param in query', async () => {
@@ -83,7 +83,7 @@ describe('branches round 2', () => {
   })
   it('mergeEntries: aliases + discoveredVia union', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
-      plugins: [{ ...mkEntry('a'), aliases: ['old-alias'], discoveredVia: ['github-topic' as const] }] }
+      plugins: [{ ...mkEntry('a'), aliases: ['old-alias'], discoveredVia: ['github-topic' as const] }], removed: [] }
     const merged = mergeEntries([{ ...mkEntry('a'), aliases: ['new-alias'] }], old, '2.2.5')
     expect(merged[0]!.aliases).toEqual(expect.arrayContaining(['old-alias', 'new-alias']))
     expect(merged[0]!.discoveredVia).toContain('github-topic')

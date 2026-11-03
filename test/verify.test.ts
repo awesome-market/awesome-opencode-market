@@ -34,7 +34,7 @@ describe('verify/merge', () => {
     plugins: [{
       name: 'p', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
       source: { kind: 'npm', id: 'p' }, description: { en: '' }, category: [],
-      license: null, deprecated: false, replacement: null,
+      license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: 't', latestVersion: '1', publishedAt: null,
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
@@ -42,12 +42,13 @@ describe('verify/merge', () => {
     }, {
       name: 'q', slug: 'o/q', aliases: [], type: 'plugin', discoveredVia: [],
       source: { kind: 'npm', id: 'q' }, description: { en: '' }, category: [],
-      license: null, deprecated: false, replacement: null,
+      license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: 't', latestVersion: '1', publishedAt: null,
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, compat: {},
     }],
+    removed: [],
   }
   it('merges results into matching entries only', () => {
     const merged = mergeResults(idx, [

@@ -54,7 +54,7 @@ describe('coverage round 3', () => {
     const e: PluginEntry = {
       name: 'p<script>', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: [],
       source: { kind: 'npm', id: 'p', repo: 'o/p' }, description: { en: 'd' }, category: [],
-      license: 'MIT', deprecated: true, replacement: 'other',
+      license: 'MIT', deprecated: true, replacement: 'other', deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1', publishedAt: null,
       metrics: { stars: 1, npmDownloads30d: 2, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: [] },
@@ -67,7 +67,7 @@ describe('coverage round 3', () => {
     expect(html).toContain('https://run/1')
     expect(html).toContain('deprecated')
     expect(html).toContain('boom')
-    const list = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e] })
+    const list = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e], removed: [] })
     expect(list).toContain('verification failed')
   })
 })

@@ -26,6 +26,30 @@ export interface MarketIndex {
 export const DEFAULT_INDEX_URL =
   'https://terry2010.github.io/opencode-market-spike/index.json'
 
+/** Strip C0/C1 control chars + ANSI/OSC escape sequences from untrusted index
+ *  strings before they reach a terminal (B-2: index.json is raw untrusted input). */
+export function sanitize(s: string): string {
+  return s
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')              // OSC ... BEL/ST
+    .replace(/\x1b[@-Z\\-_]|\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')          // ESC + CSI
+    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '')                   // remaining C0/C1
+}
+
+export function sanitizeIndex(idx: MarketIndex): MarketIndex {
+  return {
+    ...idx,
+    plugins: idx.plugins.map(e => ({
+      ...e,
+      name: sanitize(e.name),
+      slug: sanitize(e.slug),
+      ...(e.description
+        ? { description: { ...(e.description.en ? { en: sanitize(e.description.en) } : {}), ...(e.description.zh ? { zh: sanitize(e.description.zh) } : {}) } }
+        : {}),
+      category: e.category.map(sanitize),
+    })),
+  }
+}
+
 export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
   // timeout guard — a sandboxed webview fetch that never settles must surface as an error
   const ctrl = new AbortController()
@@ -33,7 +57,7 @@ export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> 
   try {
     const res = await fetch(url, { signal: ctrl.signal })
     if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
-    return (await res.json()) as MarketIndex
+    return sanitizeIndex((await res.json()) as MarketIndex)
   } finally {
     clearTimeout(t)
   }

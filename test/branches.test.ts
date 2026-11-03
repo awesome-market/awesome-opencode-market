@@ -31,14 +31,14 @@ describe('branch coverage', () => {
     expect(r).toHaveLength(100)
   })
   it('fetchPackument: no dist-tags / missing version record', async () => {
-    const p1 = await fetchPackument('x', { fetchFn: (async () => mkRes({ versions: {}, time: {} })) as typeof fetch })
+    const { pk: p1 } = await fetchPackument('x', { fetchFn: (async () => mkRes({ versions: {}, time: {} })) as typeof fetch })
     expect(p1!.latest).toBeNull()
-    const p2 = await fetchPackument('x', { fetchFn: (async () => mkRes({ 'dist-tags': { latest: '9' }, versions: {}, time: {} })) as typeof fetch })
+    const { pk: p2 } = await fetchPackument('x', { fetchFn: (async () => mkRes({ 'dist-tags': { latest: '9' }, versions: {}, time: {} })) as typeof fetch })
     expect(p2!.tarballUrl).toBeNull()
     expect(p2!.latestPublishedAt).toBeNull()
   })
   it('fetchRepoMeta null on non-ok', async () => {
-    expect(await fetchRepoMeta('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).toBeNull()
+    expect((await fetchRepoMeta('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
   })
   it('rules: non-matching paths', () => {
     const life = RULES.find(r => r.id === 'lifecycle-script')!

@@ -33,7 +33,7 @@ describe('branches round 3', () => {
       seen = String(input)
       return mkRes({ 'dist-tags': { latest: '1' }, versions: { '1': { license: 'MIT', dist: {} } }, time: {} })
     }
-    const p = await fetchPackument('x', { registry: 'https://mirror.local', fetchFn: f as typeof fetch })
+    const { pk: p } = await fetchPackument('x', { registry: 'https://mirror.local', fetchFn: f as typeof fetch })
     expect(seen).toContain('mirror.local')
     expect(p!.keywords).toEqual([])
   })

@@ -1,22 +1,48 @@
 /** GitHub fetch: repo metadata + file probes (SKILL.md, opencode.json, plugin entries). */
 import { ghHeaders } from '../discover/github.ts'
 
+export interface RepoMeta {
+  id: number | null              // numeric repo id — repojacking detection (id changes on recreation)
+  stars: number
+  archived: boolean
+  pushedAt: string | null
+  createdAt: string | null
+  license: string | null
+  topics: string[]
+}
+
+export type RepoMetaStatus = 'ok' | 'not-found' | 'error'
+export interface RepoMetaResult { meta: RepoMeta | null; status: RepoMetaStatus }
+
 export async function fetchRepoMeta(
   fullName: string,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
-): Promise<{ stars: number; archived: boolean; pushedAt: string | null; license: string | null; topics: string[] } | null> {
+): Promise<RepoMetaResult> {
   const f = opts.fetchFn ?? fetch
-  const res = await f(`https://api.github.com/repos/${fullName}`, { headers: ghHeaders(opts.token) })
-  if (!res.ok) return null
+  let res: Response
+  try {
+    res = await f(`https://api.github.com/repos/${fullName}`, { headers: ghHeaders(opts.token) })
+  } catch {
+    return { meta: null, status: 'error' }
+  }
+  if (res.status === 404) return { meta: null, status: 'not-found' }
+  if (!res.ok) return { meta: null, status: 'error' }
   const b = (await res.json()) as {
-    stargazers_count?: number; archived?: boolean; pushed_at?: string; license?: { spdx_id?: string }; topics?: string[]
+    id?: number
+    stargazers_count?: number; archived?: boolean; pushed_at?: string; created_at?: string
+    license?: { spdx_id?: string }; topics?: string[]
   }
   return {
-    stars: b.stargazers_count ?? 0,
-    topics: b.topics ?? [],
-    archived: b.archived ?? false,
-    pushedAt: b.pushed_at ?? null,
-    license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
+    meta: {
+      id: b.id ?? null,
+      stars: b.stargazers_count ?? 0,
+      topics: b.topics ?? [],
+      archived: b.archived ?? false,
+      pushedAt: b.pushed_at ?? null,
+      createdAt: b.created_at ?? null,
+      license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
+    },
+    status: 'ok',
   }
 }
 
@@ -28,6 +54,43 @@ export async function repoFileExists(
 ): Promise<boolean> {
   const f = opts.fetchFn ?? fetch
   const url = `https://api.github.com/repos/${fullName}/contents/${path}${opts.branch ? `?ref=${opts.branch}` : ''}`
-  const res = await f(url, { headers: ghHeaders(opts.token), method: 'HEAD' })
-  return res.ok
+  try {
+    const res = await f(url, { headers: ghHeaders(opts.token), method: 'HEAD' })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export interface MarketMeta {
+  category?: string[]
+  description?: { en?: string; zh?: string }
+}
+
+/** Author-declared metadata: repo-root `.opencode-market.json` (DEV §元数据约定). */
+export async function fetchMarketMeta(
+  fullName: string,
+  opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
+): Promise<MarketMeta | null> {
+  const f = opts.fetchFn ?? fetch
+  try {
+    const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/.opencode-market.json`,
+      { headers: ghHeaders(opts.token) })
+    if (!res.ok) return null
+    const b = (await res.json()) as { category?: unknown; description?: unknown }
+    const out: MarketMeta = {}
+    if (Array.isArray(b.category) && b.category.every(c => typeof c === 'string')) {
+      out.category = b.category as string[]
+    }
+    if (b.description && typeof b.description === 'object') {
+      const d = b.description as Record<string, unknown>
+      const desc: { en?: string; zh?: string } = {}
+      if (typeof d.en === 'string') desc.en = d.en
+      if (typeof d.zh === 'string') desc.zh = d.zh
+      if (desc.en || desc.zh) out.description = desc
+    }
+    return Object.keys(out).length ? out : null
+  } catch {
+    return null
+  }
 }

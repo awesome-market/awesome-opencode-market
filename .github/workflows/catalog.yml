@@ -2,45 +2,109 @@ name: catalog
 on:
   schedule: [{ cron: '17 3 * * *' }, { cron: '0 11 * * *' }]
   workflow_dispatch:
-concurrency: catalog        # serialize — prevent two runs racing the catalog branch
-permissions:
-  contents: write           # catalog branch push
-  pages: write              # Pages deployment
-  id-token: write           # required by actions/deploy-pages
+concurrency: catalog-branch   # shared with verify.yml — serializes all writers of the catalog branch
+permissions: {}               # job-level grants below
 jobs:
-  build:
+  generate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    permissions: {}             # processes untrusted npm metadata — no write token (WF-3)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - name: fetch old index (merge base)
+      - name: fetch old index + aux files (merge base)
         run: |
           git fetch origin catalog 2>/dev/null || true
-          git show origin/catalog:index.json > /tmp/old-index.json 2>/dev/null || echo 'no old index'
+          # WF-1: branch exists but index unreadable → hard fail. No silent amnesia.
+          if git rev-parse --verify origin/catalog >/dev/null 2>&1; then
+            git show origin/catalog:index.json > /tmp/old-index.json
+            git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
+            git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || touch /tmp/blocklist.json
+          else
+            touch /tmp/submissions.txt /tmp/blocklist.json   # first run ever
+          fi
       - name: run pipeline
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json
-      - name: stage Pages site
-        run: npx tsx pipeline/site/build.ts /tmp/index.json /tmp/site
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - name: commit index to catalog branch
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --max 2000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalog-out
+          path: |
+            /tmp/index.json
+          retention-days: 1
+
+  publish:
+    needs: generate
+    runs-on: ubuntu-latest
+    permissions: { contents: write }   # the only job that writes (WF-3)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with: { name: catalog-out, path: /tmp }
+      - name: commit index to catalog branch (re-merge + retry on race, WF-2)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
-          git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
-          cp /tmp/index.json index.json
-          git add index.json
-          git commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-          git push origin catalog
+          ok=0
+          for i in 1 2 3 4; do
+            git fetch origin catalog 2>/dev/null || true
+            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
+            # race happened → re-merge our fresh scan against the fresh remote index
+            # (preserves remote's verification/removed state instead of clobbering it)
+            git show origin/catalog:index.json > /tmp/remote-index.json 2>/dev/null || true
+            if [ -s /tmp/remote-index.json ]; then
+              npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json
+              mv /tmp/index.merged.json /tmp/index.json
+            fi
+            cp /tmp/index.json index.json
+            git add index.json
+            git commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            git push origin catalog && { ok=1; break; }
+            echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
+          done
+          [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
+
+  site:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # B-5: site always builds from the catalog branch's current index —
+      # never from a possibly-stale artifact produced hours earlier.
+      - uses: actions/checkout@v4
+        with: { ref: catalog }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
         id: deploy
+
+  alert:
+    needs: [generate, publish, site]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          gh issue create \
+            --title "catalog workflow failed (run ${GITHUB_RUN_ID})" \
+            --body "Automated alert: the catalog workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label "pipeline-alert"

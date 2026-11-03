@@ -36,5 +36,5 @@ export function featuresMap(items: readonly { id?: string; source?: { type?: str
 export function buildExtras(specByName: Record<string, string>, idByName: Record<string, string>, versions: Record<string, string>, idxNames: Set<string>): { name: string; version: string }[] {
   return Object.keys(specByName)
     .filter(k => !idxNames.has(k))
-    .map(k => ({ name: idByName[k] ?? k, version: versions[k] }))
+    .map(k => ({ name: idByName[k] ?? k, version: versions[k] ?? '' }))
 }

@@ -5,17 +5,19 @@ import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, repoFileExists } from './fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, repoFileExists } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
-import { buildIndex } from './publish/merge.ts'
+import { RULESET_VERSION } from './scan/rules.ts'
+import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
 import { slugOf } from './publish/slug.ts'
-import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
+import { CatalogIndex, type PluginEntry, type RemovedEntry } from '../src/schema.ts'
 import { classify } from '../src/categories.ts'
 import { detectFeatures } from '../src/features.ts'
 
 export interface RunOptions {
   seedPath?: string | undefined
   oldIndexPath?: string | undefined
+  blocklistPath?: string | undefined
   outPath?: string | undefined
   ghToken?: string | undefined
   maxEntries?: number | undefined
@@ -32,10 +34,38 @@ export function loadOldIndex(path?: string): CatalogIndex | null {
   }
 }
 
+interface Blocklist { names: string[]; slugs: string[] }
+
+function loadBlocklist(path?: string): Blocklist | null {
+  if (!path) return null
+  try {
+    const b = JSON.parse(readFileSync(path, 'utf8')) as { names?: unknown; slugs?: unknown }
+    return {
+      names: Array.isArray(b.names) ? b.names.filter(x => typeof x === 'string') as string[] : [],
+      slugs: Array.isArray(b.slugs) ? b.slugs.filter(x => typeof x === 'string') as string[] : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Best-effort replacement extraction from npm deprecate message ("use X instead"). */
+export function replacementOf(msg: string | null): string | null {
+  if (!msg) return null
+  const m = msg.match(/(?:use|moved to|renamed to|install|migrate to)\s+[`'"]?(@[\w-]+\/[\w.-]+|[\w-]+)/i)
+  return m?.[1] ?? null
+}
+
+const METRICS_STALE_MS = 7 * 24 * 3600 * 1000
+
 export async function run(opts: RunOptions = {}) {
   const f = opts.fetchFn ?? fetch
   const now = opts.now ?? new Date().toISOString()
   const old = loadOldIndex(opts.oldIndexPath)
+  const oldByName = new Map((old?.plugins ?? []).map(e => [e.name, e]))
+  const blocklist = loadBlocklist(opts.blocklistPath)
+  const isBlocked = (name: string, slug?: string) =>
+    !!blocklist && (blocklist.names.includes(name) || (!!slug && blocklist.slugs.includes(slug)))
 
   // 1. discover (+ optional seed file: one npm name or github:owner/repo per line)
   const [npmCands, ghCands] = await Promise.all([
@@ -71,25 +101,74 @@ export async function run(opts: RunOptions = {}) {
   })
   console.log(`admitted: ${admitted.length} npm + ${ghList.length} github (spam owners: ${spamOwners.size})`)
 
-  // 3. fetch + evidence gate + scan — concurrent batches of 10 (serial was too slow for CI budget)
-  const entries: PluginEntry[] = []
+  // deterministic admission order: name asc — the slice cap must not flap (PIPELINE-ISSUES §F-1)
   const limit = opts.maxEntries ?? 500
-  const queue = admitted.slice(0, limit)
+  const sorted = [...admitted].sort((a, b) => a.name.localeCompare(b.name))
+  const queue = sorted.slice(0, limit)
+  const cappedOut = new Set(sorted.slice(limit).map(c => c.name))
+
+  // 3. fetch + evidence gate + scan — concurrent batches of 10.
+  //    Incremental short-circuit (S-2): name@version unchanged in old index → reuse
+  //    the whole entry; only metrics get a rolling refresh (>7d stale).
+  const entries: PluginEntry[] = []
+  const reusedNames = new Set<string>()
+
+  const refreshMeta = async (e: PluginEntry): Promise<PluginEntry> => {
+    const { pk } = await fetchPackument(e.name, { fetchFn: f })
+    const repoMetaRes = e.source.repo
+      ? await fetchRepoMeta(e.source.repo, { token: opts.ghToken, fetchFn: f })
+      : null
+    const downloads = await fetchDownloads30d(e.name, { fetchFn: f })
+    return {
+      ...e,
+      ...(pk ? {
+        deprecated: pk.deprecated,
+        deprecatedMessage: pk.deprecatedMessage,
+        replacement: pk.deprecated ? replacementOf(pk.deprecatedMessage) : e.replacement,
+        createdAt: pk.createdAt ?? e.createdAt,
+        modifiedAt: pk.modifiedAt ?? e.modifiedAt,
+        maintainers: pk.maintainers.length ? pk.maintainers : e.maintainers,
+        distTags: Object.keys(pk.distTags).length ? pk.distTags : e.distTags,
+      } : {}),
+      metrics: {
+        stars: repoMetaRes?.meta?.stars ?? e.metrics.stars,
+        npmDownloads30d: downloads ?? e.metrics.npmDownloads30d,
+        checkedAt: now,
+      },
+      // refresh repoId so repojacking detection works on reused entries too
+      ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
+    }
+  }
+
   const worker = async (cand: (typeof admitted)[number]) => {
     try {
-      const pk = await fetchPackument(cand.name, { fetchFn: f })
+      const prev = oldByName.get(cand.name)
+      // incremental short-circuit: same version + same ruleset → reuse wholesale
+      if (prev && cand.version && cand.version === prev.latestVersion
+          && prev.capabilities.rulesetVersion === RULESET_VERSION && !isBlocked(cand.name)) {
+        const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
+        entries.push(stale ? await refreshMeta(prev) : prev)
+        reusedNames.add(cand.name)
+        return
+      }
+
+      const { pk } = await fetchPackument(cand.name, { fetchFn: f })
       if (!pk) return
       const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports })
       if (!ev.ok) return
 
       const repo = normalizeRepoUrl(pk.repository)
-      let scan = { scannedAt: null as string | null, findings: [] as string[], redFlags: [] as string[] }
+      const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
+      if (isBlocked(cand.name, slug)) return
+
+      let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       if (pk.tarballUrl) {
         try {
           const tgz = await fetchTarball(pk.tarballUrl, { fetchFn: f })
           const r = await scanTarball(tgz)
           scan = {
             scannedAt: now,
+            rulesetVersion: RULESET_VERSION,
             findings: r.findings.map(x => `${x.rule}:${x.file}`),
             redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
           }
@@ -98,27 +177,34 @@ export async function run(opts: RunOptions = {}) {
         }
       }
 
-      const repoMeta = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      const repoMeta = repoMetaRes?.meta ?? null
       const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
       const hasSkill = repo
         ? (await repoFileExists(repo, 'SKILL.md', { token: opts.ghToken, fetchFn: f })) ||
           (await repoFileExists(repo, '.opencode/skills', { token: opts.ghToken, fetchFn: f }))
         : false
+      const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
 
       const entry: PluginEntry = {
         name: cand.name,
-        slug: slugOf({ repo: repo ?? undefined, npmName: cand.name }),
+        slug,
         aliases: [],
         type: 'plugin',
         ...(hasSkill ? { contains: ['skill' as const] } : {}),
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
-        source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
-        description: { en: cand.description },
+        source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(repoMeta?.id ? { repoId: repoMeta.id } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
+        description: { en: marketMeta?.description?.en ?? cand.description, ...(marketMeta?.description?.zh ? { zh: marketMeta.description.zh } : {}) },
         features: detectFeatures(pk.exports, scan.findings),
-        category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
+        category: marketMeta?.category ?? classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
-        replacement: null,
+        deprecatedMessage: pk.deprecatedMessage,
+        replacement: replacementOf(pk.deprecatedMessage),
+        createdAt: pk.createdAt,
+        modifiedAt: pk.modifiedAt,
+        maintainers: pk.maintainers,
+        distTags: pk.distTags,
         firstSeenAt: now,
         latestVersion: pk.latest,
         publishedAt: pk.latestPublishedAt,
@@ -140,20 +226,85 @@ export async function run(opts: RunOptions = {}) {
     await Promise.all(queue.slice(i, i + BATCH).map(worker))
   }
 
-  // 4. build index (merge + corruption gate)
-  const { index, gate } = buildIndex(entries, old, { opencodeVersion: '2.2.5', now })
+  // 3b. github-topic candidates with no npm counterpart (D-1: ghList wiring)
+  const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
+  for (const c of ghList) {
+    if (coveredRepos.has(c.fullName)) continue
+    if (isBlocked(c.fullName, c.fullName)) continue
+    entries.push({
+      name: c.fullName,
+      slug: c.fullName.toLowerCase(),
+      aliases: [],
+      type: 'plugin',
+      discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
+      source: { kind: 'github', id: c.fullName, repo: c.fullName },
+      description: { en: c.description },
+      features: ['server'],
+      category: classify(c.fullName, c.fullName.toLowerCase(), c.description),
+      license: null,
+      deprecated: false,
+      deprecatedMessage: null,
+      replacement: null,
+      createdAt: null,
+      modifiedAt: null,
+      maintainers: [],
+      distTags: {},
+      firstSeenAt: now,
+      latestVersion: null,
+      publishedAt: null,
+      metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
+      capabilities: { scannedAt: null, findings: [], redFlags: [] },
+      verification: { status: 'skipped', level: 'install' },
+      compat: {},
+    })
+  }
+
+  // 4. gone-check: old entries missing from fresh set — probe before tombstoning (F-2)
+  const freshNames = new Set(entries.map(e => e.name))
+  const removedNow: RemovedEntry[] = []
+  const goneCheck = async (e: PluginEntry) => {
+    let reason: RemovedEntry['reason'] = 'unknown'
+    if (cappedOut.has(e.name)) reason = 'capped'
+    else if (isBlocked(e.name, e.slug)) reason = 'manual'
+    else if (e.source.kind === 'npm') {
+      const { status } = await fetchPackument(e.name, { fetchFn: f })
+      if (status === 'error') {
+        // transient failure (429/5xx/network) is NOT proof of disappearance —
+        // keep the stale entry rather than emitting a false tombstone (F-2).
+        entries.push(e)
+        return
+      }
+      reason = status === 'not-found' ? 'npm-404' : 'filtered'
+    }
+    removedNow.push({
+      slug: e.slug, name: e.name, lastSource: e.source,
+      disappearedAt: now, reason,
+    })
+  }
+  const missing = (old?.plugins ?? []).filter(e => !freshNames.has(e.name))
+  for (let i = 0; i < missing.length; i += BATCH) {
+    await Promise.all(missing.slice(i, i + BATCH).map(goneCheck))
+  }
+  if (removedNow.length) {
+    console.log(`removed: ${removedNow.length} (${removedNow.map(r => `${r.name}:${r.reason}`).join(', ')})`)
+  }
+
+  // 5. build index (merge + corruption gate)
+  const { index, gate } = buildIndex(entries, old, {
+    opencodeVersion: OPENCODE_VERSION, now, rulesetVersion: RULESET_VERSION, removed: removedNow,
+  })
   if (!gate.ok) throw new Error(`publish gate: ${gate.reason}`)
 
-  // 5. write
+  // 6. write
   const out = opts.outPath ?? 'dist/index.json'
   mkdirSync(dirname(out), { recursive: true })
   writeFileSync(out, JSON.stringify(index, null, 2))
-  console.log(`index.json: ${index.plugins.length} entries → ${out}`)
+  console.log(`index.json: ${index.plugins.length} entries (${reusedNames.size} reused, ${removedNow.length} removed) → ${out}`)
   return index
 }
 
 // CLI entry (untestable in vitest — excluded from coverage)
-/* v8 ignore next 10 */
+/* v8 ignore next 11 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const arg = (k: string) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : undefined }
   run({
@@ -161,6 +312,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     outPath: arg('--out'),
     oldIndexPath: arg('--old'),
     seedPath: arg('--seed'),
+    blocklistPath: arg('--blocklist'),
     ...(arg('--max') ? { maxEntries: Number(arg('--max')) } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }

@@ -6,7 +6,7 @@ import type { PluginEntry } from '../src/schema.ts'
 const mkEntry = (name: string, v = '1.0.0'): PluginEntry => ({
   name, slug: name, aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
   source: { kind: 'npm', id: name }, description: { en: 'd' }, category: [],
-  license: 'MIT', deprecated: false, replacement: null,
+  license: 'MIT', deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
   metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
@@ -22,7 +22,7 @@ describe('publish/merge', () => {
       plugins: [{ ...mkEntry('a'),
         verification: { status: 'verified' as const, level: 'load' as const },
         capabilities: { scannedAt: 't', findings: ['f'], redFlags: [] },
-        firstSeenAt: '2025-01-01' }] }
+        firstSeenAt: '2025-01-01' }], removed: [] }
     const merged = mergeEntries([mkEntry('a'), mkEntry('b')], old, '2.2.5')
     expect(merged[0]!.verification.status).toBe('verified')
     expect(merged[0]!.firstSeenAt).toBe('2025-01-01')
@@ -30,13 +30,13 @@ describe('publish/merge', () => {
   })
   it('merge re-verifies on version bump (cache key miss)', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
-      plugins: [{ ...mkEntry('a', '1.0.0'), verification: { status: 'verified' as const } }] }
+      plugins: [{ ...mkEntry('a', '1.0.0'), verification: { status: 'verified' as const } }], removed: [] }
     const merged = mergeEntries([mkEntry('a', '2.0.0')], old, '2.2.5')
     expect(merged[0]!.verification.status).toBe('unverified')
   })
   it('corruption gate: empty refuse, >20% drop refuse, ok pass', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
-      plugins: Array.from({ length: 100 }, (_, i) => mkEntry(`p${i}`)) }
+      plugins: Array.from({ length: 100 }, (_, i) => mkEntry(`p${i}`)), removed: [] }
     expect(corruptionGate([], old).ok).toBe(false)
     expect(corruptionGate([mkEntry('a')], old).ok).toBe(false)
     expect(corruptionGate(Array.from({ length: 85 }, (_, i) => mkEntry(`p${i}`)), old).ok).toBe(true)

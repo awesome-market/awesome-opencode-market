@@ -6,7 +6,7 @@ const entry = {
   discoveredVia: ['npm-keyword'],
   source: { kind: 'npm', id: 'p', repo: 'o/p' },
   description: { en: 'd' }, category: [], license: 'MIT',
-  deprecated: false, replacement: null,
+  deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1.0.0', publishedAt: null,
   metrics: { stars: 1, npmDownloads30d: 10, checkedAt: '2026-01-01T00:00:00Z' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
@@ -16,11 +16,11 @@ const entry = {
 
 describe('schema', () => {
   it('parses a valid index', () => {
-    const idx = CatalogIndex.parse({ version: '1', generatedAt: 'x', categories: {}, plugins: [entry] })
+    const idx = CatalogIndex.parse({ version: '1', generatedAt: 'x', categories: {}, plugins: [entry], removed: [] })
     expect(idx.plugins[0]!.slug).toBe('o/p')
   })
   it('rejects wrong version', () => {
-    expect(() => CatalogIndex.parse({ version: '2', generatedAt: 'x', categories: {}, plugins: [] })).toThrow()
+    expect(() => CatalogIndex.parse({ version: '2', generatedAt: 'x', categories: {}, plugins: [], removed: [] })).toThrow()
   })
   it('rejects bad type', () => {
     expect(() => PluginEntry.parse({ ...entry, type: 'wat' })).toThrow()

@@ -1,8 +1,8 @@
 name: verify
 on:
-  schedule: [{ cron: '47 4 * * *' }]
+  schedule: [{ cron: '47 4 * * *' }, { cron: '47 16 * * *' }]   # 2x/day — aligned behind both catalog runs (WF-4)
   workflow_dispatch:
-concurrency: verify
+concurrency: catalog-branch   # shared with catalog.yml — serializes all writers of the catalog branch (I-4)
 permissions: {}
 jobs:
   plan:
@@ -44,6 +44,18 @@ jobs:
     timeout-minutes: 20
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
+      # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
+      # registries it needs to install. Covers install AND activation phases.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -74,22 +86,45 @@ jobs:
       - run: npm ci
       - uses: actions/download-artifact@v4
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
-      - run: git fetch origin catalog && git show origin/catalog:index.json > /tmp/index.json
-      - run: npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
-      - name: rebuild Pages site   # must run BEFORE checkout switches tree to catalog
-        run: npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
-      - name: commit to catalog
+      - name: "merge results + commit to catalog (rebase-retry: re-merge against fresh head each attempt, WF-2)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
-          git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
-          cp /tmp/index.new.json index.json
-          git add index.json
-          git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-          git push origin catalog
+          git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
+          ok=0
+          for i in 1 2 3 4; do
+            git fetch origin catalog
+            git show origin/catalog:index.json > /tmp/index.json
+            npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
+            npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
+            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
+            cp /tmp/index.new.json index.json
+            git add index.json
+            git commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            git push origin catalog && { ok=1; break; }
+            echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
+          done
+          [ "$ok" = 1 ] || { echo "verify merge failed after retries"; exit 1; }
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
         continue-on-error: true
+
+  alert:
+    needs: [plan, verify, merge]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          gh issue create \
+            --title "verify workflow failed (run ${GITHUB_RUN_ID})" \
+            --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label "pipeline-alert"

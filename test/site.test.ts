@@ -8,7 +8,7 @@ import type { PluginEntry, CatalogIndex } from '../src/schema.ts'
 const mk = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'p', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: [],
   source: { kind: 'npm', id: 'p' }, description: { en: 'desc' }, category: [],
-  license: 'MIT', deprecated: false, replacement: null,
+  license: 'MIT', deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1.0.0', publishedAt: null,
   metrics: { stars: 5, npmDownloads30d: 100, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
@@ -37,7 +37,7 @@ describe('site honest labels', () => {
   })
   it('buildSite writes index + detail pages', () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
-    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [mk({ name: 'a' }), mk({ name: 'b' })] }
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [mk({ name: 'a' }), mk({ name: 'b' })], removed: [] }
     buildSite(idx, out)
     expect(existsSync(join(out, 'index.json'))).toBe(true)
     expect(existsSync(join(out, 'p', 'o/p.html'))).toBe(true)
@@ -45,13 +45,13 @@ describe('site honest labels', () => {
     expect(list).toContain('2 entries')
   })
   it('listPage search input present', () => {
-    expect(listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()] })).toContain('id=q')
+    expect(listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] })).toContain('id=q')
   })
 })
   it('buildSite writes skills/index.json even when skill tarball unavailable', () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: 'definitely-not-a-real-pkg-zz9', contains: ['skill'] }), mk({ name: 'b' })] }
+      mk({ name: 'definitely-not-a-real-pkg-zz9', contains: ['skill'] }), mk({ name: 'b' })], removed: [] }
     buildSite(idx, out)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(Array.isArray(cat.skills)).toBe(true)
@@ -67,7 +67,7 @@ describe('site honest labels', () => {
     execSync(`cd "${src}" && tar czf s.tgz package`)
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: 'sk-real', contains: ['skill'], latestVersion: '2' })] }
+      mk({ name: 'sk-real', contains: ['skill'], latestVersion: '2' })], removed: [] }
     buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)
@@ -88,7 +88,7 @@ describe('site honest labels', () => {
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: '', slug: 'fb-slug', contains: ['skill'], latestVersion: null }),   // id falls back to slug, version → '1'
       mk({ name: 'sk-empty', contains: ['skill'] }),                                  // empty md → skipped
-    ] }
+    ], removed: [] }
     buildSkillCatalog(idx, out, (n) => n === 'sk-empty' ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}`)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)

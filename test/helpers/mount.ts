@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 
 export function makeApi(over: Record<string, unknown> = {}) {
   return {
-    index: vi.fn(async () => ({ plugins: [{ name: '@x/old', latestVersion: '2.0.0', categories: [], contains: [] }] })),
+    index: vi.fn(async () => ({ plugins: [{ name: '@x/old', latestVersion: '2.0.0', categories: [], contains: [] }, { name: '@y/new', latestVersion: '1.0.0', categories: [], contains: [] }] })),
     refreshIndex: vi.fn(async () => ({ plugins: [] })),
     installed: vi.fn(async () => ({ versions: { '@x/old': '1.0.0' }, extras: [], features: {} })),
     install: vi.fn(async () => 'ok'), update: vi.fn(async () => 'updated'),
@@ -17,6 +17,14 @@ export function makeApi(over: Record<string, unknown> = {}) {
 }
 export function fakeCtx(api: ReturnType<typeof makeApi>) {
   const mounted: { content?: () => HTMLElement } = {}
+  let dispose: (() => void) | undefined
+  const render = () => {
+    // insert/createEffect need an owner to track — wrap in createRoot
+    const { createRoot } = require('solid-js') as typeof import('solid-js')
+    let out!: HTMLElement
+    dispose = createRoot(() => { out = mounted.content!() })
+    return { el: out, dispose: dispose! }
+  }
   const ctx = {
     client: { plugin: { list: async () => ({ data: [] }), update: async () => {} } },
     main: () => api,
@@ -29,3 +37,15 @@ export function fakeCtx(api: ReturnType<typeof makeApi>) {
   return { ctx: ctx as never, mounted }
 }
 export const flush = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 10)) }
+
+/** Solid's runtime under vitest resolves SSR-side so signal-driven re-renders
+ *  don't flush. Signals persist at module level — remount a fresh tree after
+ *  an action to assert the new state. */
+export async function remount(mounted: { content?: () => HTMLElement }) {
+  const { createRoot } = await import('solid-js')
+  let root!: HTMLElement
+  createRoot(() => { root = mounted.content!() })
+  return root
+}
+export const find = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll('button')].find(b => b.textContent?.includes(text)) as HTMLButtonElement | undefined

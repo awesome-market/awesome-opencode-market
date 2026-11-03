@@ -14,17 +14,17 @@ describe('fetch/npm', () => {
     time: { '2.0.0': '2026-01-01' },
   }
   it('parses packument', async () => {
-    const p = await fetchPackument('x', { fetchFn: (async () => mkRes(doc)) as typeof fetch })
+    const { pk: p } = await fetchPackument('x', { fetchFn: (async () => mkRes(doc)) as typeof fetch })
     expect(p).toMatchObject({ latest: '2.0.0', repository: 'git+https://github.com/o/r.git', license: 'MIT' })
   })
   it('returns null on 404', async () => {
-    expect(await fetchPackument('x', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).toBeNull()
+    expect((await fetchPackument('x', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
   })
   it('handles string repository + license object', async () => {
     const d = { 'dist-tags': { latest: '1' },
       versions: { '1': { repository: 'https://github.com/o/r', license: { type: 'Apache-2.0' }, dist: {} } },
       time: {} }
-    const p = await fetchPackument('x', { fetchFn: (async () => mkRes(d)) as typeof fetch })
+    const { pk: p } = await fetchPackument('x', { fetchFn: (async () => mkRes(d)) as typeof fetch })
     expect(p!.license).toBe('Apache-2.0')
   })
   it('fetchTarball returns buffer, throws on failure', async () => {
@@ -41,11 +41,11 @@ describe('fetch/npm', () => {
 describe('fetch/github', () => {
   it('fetchRepoMeta maps fields', async () => {
     const f = async () => mkRes({ stargazers_count: 9, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } })
-    expect(await fetchRepoMeta('o/r', { fetchFn: f as typeof fetch })).toMatchObject({ stars: 9, license: 'MIT' })
+    expect((await fetchRepoMeta('o/r', { fetchFn: f as typeof fetch })).meta).toMatchObject({ stars: 9, license: 'MIT' })
   })
   it('NOASSERTION license → null', async () => {
     const f = async () => mkRes({ stargazers_count: 0, archived: false, pushed_at: null, license: { spdx_id: 'NOASSERTION' } })
-    expect((await fetchRepoMeta('o/r', { fetchFn: f as typeof fetch }))!.license).toBeNull()
+    expect((await fetchRepoMeta('o/r', { fetchFn: f as typeof fetch })).meta!.license).toBeNull()
   })
   it('repoFileExists true/false on status', async () => {
     expect(await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => new Response('', { status: 200 })) as typeof fetch })).toBe(true)

@@ -73,7 +73,7 @@ describe('pipeline/run', () => {
     expect(loadOldIndex()).toBeNull()
     expect(loadOldIndex(join(dir, 'nope.json'))).toBeNull()
     const good = join(dir, 'good.json')
-    writeFileSync(good, JSON.stringify({ version: '1', generatedAt: 'x', categories: {}, plugins: [] }))
+    writeFileSync(good, JSON.stringify({ version: '1', generatedAt: 'x', categories: {}, plugins: [], removed: [] }))
     expect(loadOldIndex(good)!.plugins).toEqual([])
     const bad = join(dir, 'bad.json')
     writeFileSync(bad, '{"version":"9"}')

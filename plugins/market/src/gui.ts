@@ -120,7 +120,9 @@ export default Plugin.define({
     try {
       safe.on?.('progress', (d) => {
         const cur = prog()[d.name] ?? { lines: [] }
-        setProg({ ...prog(), [d.name]: d.done ? { ...cur, done: true, ok: d.ok } : { lines: [...cur.lines, d.line].slice(-20) } })
+        setProg({ ...prog(), [d.name]: d.done
+          ? { ...cur, done: true, ...(d.ok !== undefined ? { ok: d.ok } : {}) }
+          : { lines: [...cur.lines, d.line].slice(-20) } })
       })
     } catch { /* older host: no events */ }
 
