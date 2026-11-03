@@ -660,8 +660,11 @@ export default Plugin.define({
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
               try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
               for (const p of res.data ?? []) {
-                if ((p as { features?: Record<string, true> }).features)
-                  featByName[(p.source?.target ?? '').replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')] = (p as { features?: Record<string, true> }).features
+                if ((p as { features?: Record<string, true> }).features) {
+                  const fk = (p.source?.target ?? '').replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+                  featByName[fk] = (p as { features?: Record<string, true> }).features
+                  if (p.id) featByName[String(p.id)] = (p as { features?: Record<string, true> }).features
+                }
                 if (p.source?.type === 'package' && p.source.target) {
                   const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = p.source.version ?? '?'
