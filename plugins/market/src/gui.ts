@@ -211,7 +211,7 @@ export default Plugin.define({
           const b64 = btoa(bin)
           return safe.writeSkill({ name: e.name, b64 })
         }
-        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) ? safe.update(e.name) : safe.install(e.name))
+        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update(e.name) : safe.install(e.name))
         try { doInstall().then(
           async () => {
             setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
