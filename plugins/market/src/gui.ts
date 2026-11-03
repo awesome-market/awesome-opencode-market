@@ -389,7 +389,25 @@ export default Plugin.define({
       head.appendChild(el('h3', 'margin:0;font-size:15px;font-weight:600', 'opencode market'))
       head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', 'opencode-market v0.0.3'))
       const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', '全部更新') as HTMLButtonElement
-      updAll.onclick = () => { updAll.textContent = '暂无更新' }   // placeholder per spec
+      const runUpdateAll = () => void (async () => {
+        if (typeof safe.update !== 'function') { updAll.textContent = '需重启桌面端'; return }
+        const outdated = (data()?.plugins ?? []).filter(e => { const v = installed()[e.name]; return !!v && hasUpdate(e, v) })
+        if (!outdated.length) { updAll.textContent = '全部已是最新'; setTimeout(() => { updAll.textContent = '全部更新' }, 3000); return }
+        updAll.disabled = true
+        let ok = 0, fail = 0
+        for (const e of outdated) {
+          updAll.textContent = `更新中 ${ok + fail + 1}/${outdated.length}…`
+          try { await safe.update(e.name); ok++ } catch { fail++ }
+        }
+        await new Promise(r => setTimeout(r, 2000))
+        const fresh = await safe.installed?.().catch(() => null)
+        if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
+        updAll.disabled = false
+        updAll.textContent = fail ? `更新 ${ok} 成功 ${fail} 失败` : `已更新 ${ok} 个`
+        setTimeout(() => { updAll.textContent = '全部更新' }, 4000)
+      })
+      // same webview quirk as the refresh button — dispatch on the parent
+      head.onmousedown = (ev) => { const t = ev.target as HTMLElement; if (t?.tagName === 'BUTTON' && t.textContent?.includes('全部更新')) void runUpdateAll() }
       head.appendChild(updAll)
       root.appendChild(head)
       // functional tabs: 发现/插件/skill/收藏/已安装/高级 (dsh top-nav style)
