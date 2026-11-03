@@ -465,7 +465,6 @@ export default Plugin.define({
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
-              <text fg={theme.text.faint}> {e.contains?.includes('skill') ? '技能' : '插件'} </text>
               <box backgroundColor={active() ? theme.background.action.primary.focused : undefined}>
                 <text fg={active() ? theme.text.action.primary.focused : verOf(e) ? theme.text.base : theme.text.muted}
                       onMouseDown={(ev) => {
@@ -474,6 +473,7 @@ export default Plugin.define({
                         if (ver) uninstall(e); else install(e)
                       }}>{actionLabel(e)}</text>
               </box>
+              <text fg={theme.text.faint}> {e.contains?.includes('skill') ? '技能' : '插件'}</text>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(e.description?.en ?? '', 42)}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>

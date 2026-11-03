@@ -228,7 +228,7 @@ export default Plugin.define({
       return b
     }
     const row = (e: MarketEntry) => {
-      const d = el('div', 'padding:12px 14px;cursor:pointer;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box')
+      const d = el('div', 'padding:12px 14px;cursor:pointer;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box;position:relative')
       // official [data-component=settings-list]: bg-layer-01 + 0.5px inset hairline via box-shadow
       d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'
       d.style.boxShadow = 'inset 0 0 0 0.5px var(--v2-border-border-muted, color-mix(in srgb, CanvasText 14%, transparent))'
@@ -239,7 +239,7 @@ export default Plugin.define({
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
       title.append(nameBox)
-      title.appendChild(el('span', 'font-size:10px;opacity:.6;border:1px solid rgba(128,128,128,.4);border-radius:4px;padding:0 5px;flex-shrink:0;align-self:center', e.contains?.includes('skill') ? '技能' : '插件'))
+      d.appendChild(el('span', 'font-size:10px;opacity:.7;border:1px solid rgba(128,128,128,.4);border-radius:4px;padding:0 5px;position:absolute;top:8px;right:10px', e.contains?.includes('skill') ? '技能' : '插件'))
       const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
