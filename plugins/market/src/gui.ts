@@ -618,30 +618,39 @@ export default Plugin.define({
             })
             p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
           }),
-        update: async (name: string) =>
-          new Promise<string>(async (resolve, reject) => {
-            const { spawn, execFile } = require('node:child_process') as typeof import('node:child_process')
-            // pinned specs (name@x.y.z): `update` is a no-op and `add` only
-            // APPENDS the clean spec (leaving the pinned one → duplicate ID).
-            // Correct flow: remove the pinned spec first, then add the name.
-            const spec = specByName[name] ?? name
-            const pinned = /@\d[^@]*$/.test(spec)
-            const argv = pinned ? ['plugin', 'add', spec.replace(/@\d[^@]*$/, '')] : ['plugin', 'update', spec]
-            if (pinned) await new Promise<void>(res =>
-              execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, () => res()))
-            const p = spawn('opencode', argv, { env: process.env })
-            jobs.set(name, p)
-            const push = (line: string) => m.emit?.('progress', { name, line })
-            p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-            p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-            const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
-            p.on('close', code => {
-              clearTimeout(kill); jobs.delete(name)
-              m.emit?.('progress', { name, line: '', done: true, ok: code === 0 })
-              code === 0 ? resolve('updated') : reject(new Error(`exit ${code}`))
+        update: async (name: string) => {
+          const spec = specByName[name] ?? name
+          const pinned = /@\d[^@]*$/.test(spec)
+          const push = (line: string) => m.emit?.('progress', { name, line })
+          const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
+          // host API path — the daemon does the work, no CLI subprocess
+          if (!pinned && m.client?.plugin?.update) {
+            try { push('plugin update (host api)'); await m.client.plugin.update({ targets: [spec] }); done(true); return 'updated' }
+            catch (x) { push(`host update failed: ${String(x)}`); done(false); throw x }
+          }
+          // pinned spec or no host API: remove the pinned spec, then add the
+          // clean name (add alone would leave a duplicate ID)
+          const cp = require('node:child_process') as typeof import('node:child_process')
+          return new Promise<string>((resolve, reject) => {
+            const go = () => {
+              const p = cp.spawn('opencode', ['plugin', pinned ? 'add' : 'update', pinned ? spec.replace(/@\d[^@]*$/, '') : spec], { env: process.env })
+              jobs.set(name, p)
+              p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+              p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+              const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
+              p.on('close', code => {
+                clearTimeout(kill); jobs.delete(name); done(code === 0)
+                code === 0 ? resolve('updated') : reject(new Error(`exit ${code}`))
+              })
+              p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); done(false); reject(e) })
+            }
+            if (!pinned) return go()
+            cp.execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, (e, o, er) => {
+              if (e) push(`remove ${spec} failed: ${er || e.message}`)
+              go()
             })
-            p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
-          }),
+          })
+        },
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },

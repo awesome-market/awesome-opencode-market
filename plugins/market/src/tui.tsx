@@ -159,6 +159,13 @@ const specByName: Record<string, string> = {}
         const spec = specByName[e.name] ?? e.name
         const pinned = /@\d[^@]*$/.test(spec)
         const updating = !!(ver && hasUpdate(e, ver))
+        if (updating && !pinned && ctx.client?.plugin?.update) {
+          setStatus(`updating ${e.name}…`)
+          try {
+            await ctx.client.plugin.update({ targets: [spec] })
+            setStatus(`updated ${e.name}`); void refreshInstalled(); return
+          } catch (x) { setStatus(`update fail: ${String(x)}`); return }
+        }
         if (updating && pinned) {
           const cp = await import('node:child_process')
           await new Promise<void>(res => cp.execFile('opencode', ['plugin', 'remove', spec], { timeout: 15_000 }, () => res()))
