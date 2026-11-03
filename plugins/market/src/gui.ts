@@ -8,6 +8,7 @@ import { Plugin, Ipc, Panel, SettingsPage, Command, MenuItem } from '@opencode/p
 import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
+import { cleanSpec, dedupeSpecs, removeSpec, featuresMap, buildExtras } from './spec.js'
 import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir } from './skill-install.js'
 
@@ -675,14 +676,10 @@ export default Plugin.define({
             if (m.client?.plugin?.list) {
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
               try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
+              Object.assign(featByName, featuresMap(res.data ?? []))
               for (const p of res.data ?? []) {
-                if ((p as { features?: Record<string, true> }).features) {
-                  const fk = (p.source?.target ?? '').replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
-                  featByName[fk] = (p as { features?: Record<string, true> }).features
-                  if (p.id) featByName[String(p.id)] = (p as { features?: Record<string, true> }).features
-                }
                 if (p.source?.type === 'package' && p.source.target) {
-                  const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+                  const clean = cleanSpec(p.source.target)
                   map[clean] = p.source.version ?? '?'
                   specByName[clean] = p.source.target
                   if (p.id) idByName[clean] = String(p.id)
@@ -701,7 +698,7 @@ export default Plugin.define({
               if (id) {
                 map[id] = ver ?? '?'
                 if (src) {
-                  const clean = src.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+                  const clean = cleanSpec(src)
                   map[clean] = ver ?? '?'
                   specByName[clean] = src
                   idByName[clean] = id
@@ -714,9 +711,8 @@ export default Plugin.define({
             d => readdirSync(d), p => existsSync(p)))
           // installed plugins with no catalog entry still get a card
           const idxNames = new Set(((await fetchIndexCached())?.plugins ?? []).map(p => p.name))
-          const extras = Object.keys(specByName)
-            .filter(k => !idxNames.has(k))
-            .map(k => { const name = idByName[k] ?? k; map[name] = map[k]; return { name, version: map[k] } })
+          const extras = buildExtras(specByName, idByName, map, idxNames)
+          for (const x of extras) map[x.name] = x.version
           return { versions: map, extras, features: featByName }
         },
         install: (name: string) =>
@@ -740,7 +736,7 @@ export default Plugin.define({
           const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${name}: ${s}\n`) } catch { /* */ } }
           lg('called')
           const spec = specByName[name] ?? name
-          const clean = spec.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+          const clean = cleanSpec(spec)
           lg(`spec=${spec} clean=${clean} hasClient=${!!m.client?.plugin?.update}`)
           const push = (line: string) => m.emit?.('progress', { name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name, line: '', done: true, ok })
@@ -756,8 +752,8 @@ export default Plugin.define({
               const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
               const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
               const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
-              const before = list.filter(s => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1') === clean)
-              d.plugins = [...list.filter(s => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1') !== clean), clean]
+              const before = list.filter(s => cleanSpec(s) === clean)
+              d.plugins = dedupeSpecs(list, clean)
               fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
               if (before.length !== 1 || before[0] !== clean) { push(`config deduped ${before.join(',')} → ${clean}`); lg(`config rewritten (${before.length} specs → ${clean})`) }
             }
@@ -785,16 +781,13 @@ export default Plugin.define({
           const fs = require('node:fs') as typeof import('node:fs')
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join } = require('node:path') as typeof import('node:path')
-          const stripVer = (s: string) => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
-          const clean = stripVer(name)
+          // (cleanSpec imported)
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
           const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
           const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
-          const keep = list.filter(s => {
-            const c = stripVer(s)
-            return c !== clean && s !== name && (idByName[c] ?? c) !== name
-          })
-          if (keep.length === list.length) { lg(`no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
+          let keep: string[]
+          try { keep = removeSpec(list, name, idByName) }
+          catch { lg(`no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
           d.plugins = keep
           fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
           lg(`removed ${list.length - keep.length} spec(s)`)
