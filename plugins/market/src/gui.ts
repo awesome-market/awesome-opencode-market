@@ -210,7 +210,7 @@ export default Plugin.define({
           const b64 = btoa(bin)
           return safe.writeSkill({ name: e.name, b64 })
         }
-        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => safe.install(e.name)
+        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) ? safe.update(e.name) : safe.install(e.name))
         try { doInstall().then(
           async () => {
             setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
@@ -606,6 +606,22 @@ export default Plugin.define({
               clearTimeout(kill); jobs.delete(name)
               m.emit?.('progress', { name, line: '', done: true, ok: code === 0 })
               code === 0 ? resolve('installed') : reject(new Error(`exit ${code}`))
+            })
+            p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
+          }),
+        update: (name: string) =>
+          new Promise<string>((resolve, reject) => {
+            const { spawn } = require('node:child_process') as typeof import('node:child_process')
+            const p = spawn('opencode', ['plugin', 'update', name], { env: process.env })
+            jobs.set(name, p)
+            const push = (line: string) => m.emit?.('progress', { name, line })
+            p.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+            p.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+            const kill = setTimeout(() => p.kill('SIGTERM'), 90_000)
+            p.on('close', code => {
+              clearTimeout(kill); jobs.delete(name)
+              m.emit?.('progress', { name, line: '', done: true, ok: code === 0 })
+              code === 0 ? resolve('updated') : reject(new Error(`exit ${code}`))
             })
             p.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(name); reject(e) })
           }),

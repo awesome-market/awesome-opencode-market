@@ -150,7 +150,8 @@ export default Plugin.define({
         if (isSkill) { void installSkill(e); return }
         setStatus(`installing ${e.name}…`)
         const { spawn } = await import('node:child_process')
-        const p = spawn('opencode', ['plugin', 'add', e.name])
+        const ver = installed()[e.name]
+        const p = spawn('opencode', ['plugin', ver && hasUpdate(e, ver) ? 'update' : 'add', e.name])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
