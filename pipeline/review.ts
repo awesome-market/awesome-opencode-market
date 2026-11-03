@@ -11,11 +11,12 @@ export interface Review {
   redFlags: string[]
   downloads30d: number | null
   repo: string | null
+  createdAt: string | null        // packument time.created — name-squat heuristics
 }
 
 export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch } = {}): Promise<Review> {
   const { pk } = await fetchPackument(name, opts)
-  if (!pk) return { name, exists: false, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null }
+  if (!pk) return { name, exists: false, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null, createdAt: null }
   const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports })
   let findings: string[] = [], redFlags: string[] = []
   if (pk.tarballUrl) {
@@ -29,6 +30,7 @@ export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch
     name, exists: true, evidence: ev.via, findings, redFlags,
     downloads30d: await fetchDownloads30d(name, opts),
     repo: pk.repository,
+    createdAt: pk.createdAt,
   }
 }
 
@@ -48,7 +50,10 @@ export function renderReview(r: Review): string {
     r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',
     r.findings.length ? `\n### Findings (${r.findings.length})\n${r.findings.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.findings.length > 30 ? `\n- … +${r.findings.length - 30} more (truncated)` : ''}` : '\n### Findings: none — this does not mean safe.',
   ]
-  return `${lines.join('\n')}\n\n<!-- verdict: ${verdict(r)} -->`
+  // markers go LAST — report body above contains package-controlled text
+  // (repo url, filenames, matched code), so consumers must take the LAST
+  // 'verdict:'/'createdAt:' occurrence, never the first.
+  return `${lines.join('\n')}\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- verdict: ${verdict(r)} -->`
 }
 
 /* v8 ignore next 4 */

@@ -9,7 +9,7 @@ jobs:
     if: >-
       github.event.issue.state == 'open'
       && !github.event.issue.pull_request
-      && (contains(github.event.issue.labels.*.name || 'submission', 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
       && (github.event_name == 'issues'
           || (github.event_name == 'issue_comment'
               && !endsWith(github.event.comment.user.login, '[bot]')
@@ -17,7 +17,7 @@ jobs:
                   || contains(github.event.issue.labels.*.name || 'x', 'submission:invalid'))))
     outputs:
       pkg: "${{ steps.parse.outputs.pkg }}"
-      verdict: "${{ steps.verdict.outputs.v }}"
+      verdict: "${{ steps.scan.outputs.v }}"
       subline: "${{ steps.parse.outputs.subline }}"
     runs-on: ubuntu-latest
     concurrency:                       # one review per issue at a time — edited/opened
@@ -50,30 +50,50 @@ jobs:
           KIND: ${{ steps.parse.outputs.kind }}
           COMMENTER: ${{ github.event.comment.user.login || github.event.issue.user.login }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_CREATED: ${{ github.event.issue.created_at }}
         run: |
           if [ "$KIND" = npm ]; then
             npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
           elif [ "$KIND" = repo ]; then
             # repo-only submission: no npm package to scan — honest verdict
-            printf 'verdict: clean\n\nGitHub-only 提交（%s）：未做 npm 扫描，目录按仓库条目收录。\n' "$PKG" > /tmp/review.md
+            printf 'GitHub-only 提交（%s）：未做 npm 扫描，目录按仓库条目收录。\n\n<!-- verdict: clean -->\n' "$PKG" > /tmp/review.md
           else
-            printf 'verdict: invalid\n\n未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n' > /tmp/review.md
+            printf '未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n\n<!-- verdict: invalid -->\n' > /tmp/review.md
           fi
+          [ -s /tmp/review.md ] || { echo "review produced no report"; exit 1; }
           # name-squatting guard: a re-review driven by someone other than the
           # issue author can attach the ORIGINAL author's declared metadata to
           # a different package (author deleted, name re-registered). Auto-approve
           # only trusts author-driven iterations — third party forces human review.
           if [ "${{ github.event_name }}" = issue_comment ] && [ "$COMMENTER" != "$ISSUE_AUTHOR" ]; then
             printf '\n\n⚠️ 本次重审由非投稿人 @%s 触发（投稿人 @%s）——包名可能已易主，转人工复核。\n' "$COMMENTER" "$ISSUE_AUTHOR" >> /tmp/review.md
-            sed -i 's/verdict: clean/verdict: flagged/' /tmp/review.md
+            sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
           fi
+          # name-age guard: package registered AFTER an issue that has been open
+          # >24h means the name changed hands since submission (legit
+          # submit-then-publish resolves within hours). Catches author-driven
+          # re-review of a squatted name too.
+          if [ "$KIND" = npm ]; then
+            PC=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            if [ -n "$PC" ] && [ "$PC" != "null" ] && PC="$PC" node -e "process.exit(Date.parse(process.env.PC) > Date.parse(process.env.ISSUE_CREATED) && Date.now() - Date.parse(process.env.ISSUE_CREATED) > 86400e3 ? 0 : 1)"; then
+              printf '\n\n⚠️ 包名在 issue 创建之后才注册（%s），且 issue 已存在超过 24 小时——名称可能已易主，转人工复核。\n' "$PC" >> /tmp/review.md
+              sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
+            fi
+          fi
+          # verdict = LAST 'verdict:' occurrence — report body contains
+          # package-controlled text (repo url, filenames, matched code) that can
+          # inject a fake 'verdict: clean' earlier in the file.
+          V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | tail -1 | awk '{print $2}')
+          echo "v=${V:-invalid}" >> "$GITHUB_OUTPUT"
       - name: post review comment (+ next-step guidance)
         uses: actions/github-script@v7
+        env:
+          VERDICT: ${{ steps.scan.outputs.v }}
         with:
           script: |
             const fs = require('fs')
             const md = fs.readFileSync('/tmp/review.md','utf8')
-            const v = (md.match(/verdict: (clean|flagged|invalid)/) || [])[1] || 'invalid'
+            const v = process.env.VERDICT || 'invalid'
             const footer = {
               clean:   '\n\n---\n✅ **初审通过，已加入收录队列**。收录进目录后 bot 会再来评论并关闭本 issue。',
               flagged: '\n\n---\n⚠️ 发现高危信号。修复后**在本 issue 里回复一条评论**即可重新审查；30 天无更新将视为放弃并自动关闭。',
@@ -84,22 +104,17 @@ jobs:
               issue_number: context.issue.number,
               body: `## Automated review\n\n${md}${footer}\n\n_Human maintainer makes the final call._`
             })
-      - name: capture verdict
-        id: verdict
-        run: |
-          V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
-          echo "v=${V:-invalid}" >> "$GITHUB_OUTPUT"
       - name: label by verdict (no close — issue closes on actual publish or abandonment)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
+          V: ${{ steps.scan.outputs.v }}
         run: |
           gh label create "submission"            --color 0969da -d "plugin submission"   --force 2>/dev/null || true
           gh label create "submission:approved"   --color 0e8a16 -d "review passed"       --force 2>/dev/null || true
           gh label create "submission:needs-work" --color d93f0b -d "red flags present"   --force 2>/dev/null || true
           gh label create "submission:invalid"    --color 6e5494 -d "package not found"   --force 2>/dev/null || true
-          V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
           case "$V" in
             clean)   LBL=submission:approved ;;
             flagged) LBL=submission:needs-work ;;
@@ -126,16 +141,23 @@ jobs:
           git config user.name "market-bot"
           KEY=$(node -e "const s=JSON.parse(process.env.LINE);console.log(s.name||s.repo||'')")
           [ -n "$KEY" ] || { echo "empty submission key — skipping"; exit 0; }
+          PUSHED=
           for i in 1 2 3; do
-            git fetch origin catalog 2>/dev/null || true
-            git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
+            # catalog branch MUST come from origin — never fabricate it from the
+            # main checkout (would push the whole source tree into the data branch)
+            git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
+            git checkout -B catalog origin/catalog || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
             touch submissions.txt
-            grep -qF "\"name\":\"$KEY\"" submissions.txt || grep -qF "\"repo\":\"$KEY\"" submissions.txt || echo "$LINE" >> submissions.txt
+            # exact-match dedupe: serialized lines are {"name":"x","repo":...} — the
+            # comma anchor prevents substring false-positives (o/repo vs o/repo-x)
+            grep -qF "\"name\":\"$KEY\"," submissions.txt || grep -qF "\"repo\":\"$KEY\"," submissions.txt || echo "$LINE" >> submissions.txt
             git add submissions.txt
-            git commit -m "submission: $KEY (issue #${{ github.event.issue.number }})" || { echo "no changes"; break; }
-            git push origin catalog && break
+            git commit -m "submission: $KEY (issue #${{ github.event.issue.number }})" || { echo "no changes"; PUSHED=1; break; }
+            git push origin catalog && { PUSHED=1; break; }
             echo "push rejected (attempt $i) — retrying"
+            sleep 3
           done
+          [ -n "$PUSHED" ] || { echo "failed to land submission after 3 attempts"; exit 1; }
 
   # daily: close issues abandoned in needs-work/invalid for 30+ days
   sweep:

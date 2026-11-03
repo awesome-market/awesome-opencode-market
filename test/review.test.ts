@@ -32,7 +32,7 @@ describe('review', () => {
   })
 
   it('verdict: clean/flagged/invalid', () => {
-    const base = { name: 'x', exists: true, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null }
+    const base = { name: 'x', exists: true, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null, createdAt: null }
     expect(verdict(base)).toBe('clean')
     expect(verdict({ ...base, redFlags: ['rf'] })).toBe('flagged')
     expect(verdict({ ...base, exists: false })).toBe('invalid')
