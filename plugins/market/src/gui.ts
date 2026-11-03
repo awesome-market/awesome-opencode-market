@@ -239,9 +239,9 @@ export default Plugin.define({
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
       title.append(nameBox)
-      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-9px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', e.contains?.includes('skill') ? '技能' : '插件')
+      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-8px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', e.contains?.includes('skill') ? '技能' : '插件')
       // outline only for the ~9px above the card edge — inside part stays fused
-      typeBadge.appendChild(el('span', 'position:absolute;inset:0 0 auto;height:9px;box-sizing:border-box;border:0.5px solid var(--v2-border-border-muted,color-mix(in srgb, CanvasText 14%, transparent));border-bottom:none;border-radius:8px 8px 0 0;pointer-events:none'))
+      typeBadge.appendChild(el('span', 'position:absolute;inset:0 0 auto;height:8px;box-sizing:border-box;border:0.5px solid var(--v2-border-border-muted,color-mix(in srgb, CanvasText 14%, transparent));border-bottom:none;border-radius:8px 8px 0 0;pointer-events:none'))
       d.appendChild(typeBadge)
       const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
