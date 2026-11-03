@@ -336,6 +336,9 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`；`AI_BASE_URL`/
   `AI_API_KEY`/`AI_MODEL` 读 `~/.config/opencode-market/ai.env`
   （**key 永不进 repo**，配置驱动可换 provider）
+- 实现要点：该模型是**推理模型**——响应先吐 `reasoning_content`
+  （思考链）再给 `content`；解析取 `content`，`max_tokens` 须为
+  思考链留足余量（实测 8 tokens 全耗在 reasoning 上）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
 
