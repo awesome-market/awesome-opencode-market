@@ -8,7 +8,7 @@
  */
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
-import { createSignal, createMemo, For, Show, onMount, type JSX } from 'solid-js'
+import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
 import { spawn, execFile } from 'node:child_process'
 import { readdirSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -132,6 +132,18 @@ export default Plugin.define({
         return disk ? (store.skillVers?.[e.name] ?? disk) : undefined
       }
       const pick = () => pool()[sel()]
+      let listScroll: { scrollTop: number; scrollTo(y: number): void } | undefined
+      createEffect(() => {
+        sel()
+        setTimeout(() => {
+          const r = listScroll
+          if (!r) return
+          const top = Math.floor(sel() / 2) * 8
+          const vp = Math.max(6, dims().height - 12)
+          if (top < r.scrollTop) r.scrollTo(top)
+          else if (top + 8 > r.scrollTop + vp) r.scrollTo(top + 8 - vp)
+        }, 0)
+      })
 
       const install = (e: MarketEntry) => {
         const isSkill = e.contains?.includes('skill')
@@ -358,15 +370,21 @@ export default Plugin.define({
         }
         if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 1)) : move(2); return }
         if ((k === 'left' || k === 'h') && tab() !== 'settings') {
-          const n = pool().length; if (n) setSel(i => (i - 1 + n) % n); return
+          if (sel() === 0) {
+            const items = chromeItems(3)
+            setZone('chrome'); setChromeRow(3); setChromeSel(items.length - 1); return
+          }
+          move(-1); return
         }
         if ((k === 'right' || k === 'l') && tab() !== 'settings') {
-          const n = pool().length; if (n) setSel(i => (i + 1) % n); return
+          move(1); return  // move() clamps at the last card
         }
         if (k === 'return') {
           if (tab() === 'settings') { settingsItems()[settingsSel()]?.run(); return }
           const e = pick(); if (e) openDetail(e); return
         }
+        if (k === 'pageup') { tab() === 'settings' ? setSettingsSel(i => Math.max(0, i - 6)) : move(-10); return }
+        if (k === 'pagedown') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 6)) : move(10); return }
         if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
         if (k === 'f') { pickFilter(); return }
         if (k === 'c') { pickCategory(); return }
@@ -383,7 +401,7 @@ export default Plugin.define({
         const d = Number(k)
         if (d >= 1 && d <= TABS.length) toTab(d - 1)
       }
-      const BINDS = 'escape up down left right return tab backspace delete space ' +
+      const BINDS = 'escape up down left right return tab backspace delete space pageup pagedown ' +
         'a b c d e f g h i j k l m n o p q r s t u v w x y z ' +
         '0 1 2 3 4 5 6 7 8 9 / * - _ . : ~ @ U'
       ctx.keymap.layer(() => ({
@@ -532,7 +550,8 @@ export default Plugin.define({
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
                     <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()}</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
-                    <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}>
+                    <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}
+                               ref={(r) => { listScroll = r as unknown as typeof listScroll }}>
                       <box flexDirection="column" paddingLeft={1}>
                         <For each={grid()}>{(pair, ri) => (
                           <box flexDirection="row" marginTop={ri() === 0 ? 0 : 1}>
