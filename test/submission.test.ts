@@ -7,30 +7,32 @@ import { markNotified } from '../pipeline/notify-published.ts'
 import { run } from '../pipeline/run.ts'
 import { CatalogIndex } from '../src/schema.ts'
 
-const FORM_BODY = `### npm 包名
+const FORM_BODY = `### npm package name / npm 包名
 
 opencode-foo
 
-### GitHub 仓库地址
+### GitHub repository / GitHub 仓库地址
 
 https://github.com/o/foo
 
-### 英文描述
+### Description (English) / 英文描述
 
 Does the thing.
 
-### 其他语言描述（可选）
+### Other languages (optional) / 其他语言描述
 
 zh: 做那件事
 ja: それをやる
 
-### 类型
+### Type / 类型
 
-skill（技能包）
+skill
 
-### 分类（可多选）
+### Categories (multi-select) / 分类可多选
 
-模型与接入, 记忆
+- [x] 模型与接入 (Models & providers)
+- [ ] 主题与外观 (Themes & UI)
+- [x] 记忆 (Memory)
 `
 
 describe('submission parser', () => {

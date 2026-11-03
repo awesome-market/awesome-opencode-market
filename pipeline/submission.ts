@@ -39,7 +39,7 @@ const LANG_LINE = /^([a-z]{2,3}(?:-[A-Za-z]{2,8})?)\s*[:：]\s*(.+)$/
 
 export function parseSubmission(body: string): Submission {
   const map = sections(body)
-  let name = field(map, 'npm 包名', 'package', 'npm package', '包名')
+  let name = field(map, 'npm package name / npm 包名', 'npm 包名', 'package', 'npm package', 'npm package name', '包名')
   if (name && !PKG_RE.test(name)) name = null
   // freeform fallback: first package-like token in the body
   if (!name) {
@@ -52,29 +52,30 @@ export function parseSubmission(body: string): Submission {
       }
     }
   }
-  const repoRaw = field(map, 'GitHub 仓库地址', 'repo', 'repository', 'github', '仓库')
+  const repoRaw = field(map, 'GitHub repository / GitHub 仓库地址', 'GitHub 仓库地址', 'repo', 'repository', 'github', '仓库')
   const repoM = repoRaw?.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/) ?? body.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/)
   const repo = repoM ? repoM[1]!.replace(/\.git$/, '').replace(/\/$/, '') : null
 
-  const descEn = field(map, '英文描述', 'english description', 'description (en)') ?? null
-  const descOtherRaw = map.get('其他语言描述（可选）') ?? map.get('other languages') ?? ''
+  const descEn = field(map, 'Description (English) / 英文描述', '英文描述', 'english description', 'description (en)') ?? null
+  const descOtherRaw = map.get('Other languages (optional) / 其他语言描述') ?? map.get('其他语言描述（可选）') ?? map.get('other languages') ?? ''
   const descOther: Record<string, string> = {}
   for (const line of descOtherRaw.split('\n')) {
     const m = line.trim().match(LANG_LINE)
     if (m) descOther[m[1]!.toLowerCase()] = m[2]!.trim()
   }
 
-  const typeRaw = (field(map, '类型', 'type') ?? '').toLowerCase()
+  const typeRaw = (field(map, 'Type / 类型', '类型', 'type') ?? '').toLowerCase()
   const type: Submission['type'] = typeRaw.startsWith('skill') ? 'skill' : typeRaw.startsWith('plugin') ? 'plugin' : null
 
   // checkboxes render "- [x] a\n- [ ] b"; old multi-select renders "a, b".
   // All-unchecked / empty / "自动" → null → pipeline classifies.
-  const catSec = map.get('分类（可多选）') ?? map.get('分类') ?? map.get('category') ?? ''
+  const catSec = map.get('Categories (multi-select) / 分类可多选') ?? map.get('分类（可多选）') ?? map.get('分类') ?? map.get('category') ?? ''
   const isChecklist = /^- \[[ xX]\]/m.test(catSec)
   const cats = (isChecklist
-    ? [...catSec.matchAll(/^- \[[xX]\]\s*(.+)$/gm)].map(m => m[1]!.trim())
-    : catSec.split(/[,，]/).map(s => s.trim())
-  ).filter(s => s && !s.startsWith('自动'))
+    ? [...catSec.matchAll(/^- \[[xX]\]\s*(.+)$/gm)].map(m => m[1]!)
+    : catSec.split(/[,，]/)
+  ).map(s => s.trim().replace(/\s*\([^()]*\)\s*$/, ''))   // strip trailing "(English)" — canonical names are Chinese
+   .filter(s => s && !s.startsWith('自动'))
   const category = cats.length ? cats : null
 
   return { name, repo, kind: name ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }

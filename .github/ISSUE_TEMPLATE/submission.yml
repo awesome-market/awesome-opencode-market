@@ -1,69 +1,70 @@
-name: 自荐插件 / Submit a plugin
-description: 把你的 OpenCode 插件或 skill 提交到市场目录
+name: Submit a plugin / 自荐插件
+description: Submit your OpenCode plugin or skill to the market catalog / 把你的 OpenCode 插件或 skill 提交到市场目录
 title: "[submit] "
 labels: [submission]
 body:
   - type: markdown
     attributes:
       value: |
-        填写下面的表单即可投稿。机器会先自动审查（npm 存在性、插件证据、静态扫描），
-        审查结果会以评论形式回复在本 issue 里。
+        Fill in the form to submit. An automated review (npm presence, plugin evidence,
+        static scan) replies here as a comment.
+        填写下面的表单即可投稿。机器会自动审查（npm 存在性、插件证据、静态扫描），结果以评论回复。
   - type: input
     id: package
     attributes:
-      label: npm 包名
-      description: 已发布到 npm 的包名（还没发布的技能类可留空，只填 GitHub 地址）
-      placeholder: "opencode-my-plugin 或 @scope/opencode-my-plugin"
+      label: npm package name / npm 包名
+      description: Published npm package name. Leave empty for repo-only skills. / 还没发布的技能类可留空
+      placeholder: "opencode-my-plugin or @scope/opencode-my-plugin"
     validations:
       required: false
   - type: input
     id: repo
     attributes:
-      label: GitHub 仓库地址
-      description: 插件源码仓库，形如 https://github.com/owner/repo
+      label: GitHub repository / GitHub 仓库地址
+      description: "Source repository URL / 插件源码仓库"
       placeholder: "https://github.com/you/your-plugin"
     validations:
       required: true
   - type: textarea
     id: desc_en
     attributes:
-      label: 英文描述
-      description: 一句话说明这个插件干什么（将展示在目录里）
+      label: Description (English) / 英文描述
+      description: One line — what does it do? Shown in the catalog. / 一句话说明，会展示在目录里
       placeholder: "Shows model usage and cost in the status bar."
     validations:
       required: true
   - type: textarea
     id: desc_other
     attributes:
-      label: 其他语言描述（可选）
-      description: '每行一条，格式 "语言代码: 描述"'
+      label: Other languages (optional) / 其他语言描述
+      description: 'One per line, format "lang: description" / 每行一条，格式 "语言代码: 描述"'
       placeholder: "zh: 在状态栏显示模型用量和花费"
     validations:
       required: false
   - type: dropdown
     id: type
     attributes:
-      label: 类型
+      label: Type / 类型
       options:
-        - plugin（插件）
-        - skill（技能包）
+        - plugin
+        - skill
     validations:
       required: true
   - type: checkboxes
     id: category
     attributes:
-      label: 分类（可多选）
-      description: 勾选所有适用的分类；都不选则由管线按名称和描述自动判断
+      label: Categories (multi-select) / 分类可多选
+      description: Pick all that apply. Leave all unchecked and the pipeline classifies automatically. / 勾选所有适用的分类；都不选则由管线自动判断
       options:
-        - label: 主题与外观
-        - label: 模型与接入
-        - label: 会话与消息
-        - label: 记忆
-        - label: 通知
-        - label: 安全与权限
-        - label: 开发流程
-        - label: 工具与能力
-        - label: 集成与移动
-        - label: 其他
+        - label: 主题与外观 (Themes & UI)
+        - label: 模型与接入 (Models & providers)
+        - label: 会话与消息 (Sessions & messages)
+        - label: 记忆 (Memory)
+        - label: 通知 (Notifications)
+        - label: 安全与权限 (Security & permissions)
+        - label: 开发流程 (Dev workflow)
+        - label: 工具与能力 (Tools & capabilities)
+        - label: 集成与移动 (Integrations & mobile)
+        - label: 其他 (Other)
     validations:
       required: false
