@@ -221,7 +221,7 @@ export default Plugin.define({
           ...RANGES.map(([d, label]) => ({ label: `${days() === d ? '✓ ' : ''}${label}`, run: () => setDays(d) })),
         ])
 
-      const settingsItems: { label: string; run: () => void }[] = [
+      const settingsItems = createMemo<{ label: string; run: () => void }[]>(() => [
         { label: '导出备份 → ~/opencode-market-backup.json', run: () => {
           const p = join(homedir(), 'opencode-market-backup.json')
           try { writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(`export fail: ${String(x)}`) }
@@ -239,7 +239,7 @@ export default Plugin.define({
           { label: '✗ 清空', run: () => void mutate(d => { d.favorites = {}; d.groups = {}; d.notes = {}; d.skillVers = {} }) },
           { label: '取消', run: noop },
         ]) },
-        { label: `开发日志: ${store.devlog ? '开' : '关'}（${LOG_FILE}）`, run: () => {
+        { label: `开发日志: [${store.devlog ? '开' : '关'}]（${LOG_FILE}）`, run: () => {
           void mutate(d => { d.devlog = !d.devlog })
           setStatus(`devlog ${store.devlog ? 'off' : 'on'} → ${LOG_FILE}`)
         } },
@@ -256,7 +256,7 @@ export default Plugin.define({
             setStatus(`catalog source ${list.includes(CATALOG_URL) ? 'already enabled' : 'enabled'} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(`catalog fail: ${String(x)}`) }
         } },
-      ]
+      ])
 
       const actionLabel = (e: MarketEntry) => {
         const ver = verOf(e)
@@ -349,11 +349,11 @@ export default Plugin.define({
           if (sel() < 2) { setZone('chrome'); setChromeRow(3); setChromeSel(0); return }
           move(-2); return
         }
-        if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems.length - 1, i + 1)) : move(2); return }
+        if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 1)) : move(2); return }
         if ((k === 'left' || k === 'h') && tab() !== 'settings') { move(-1); return }
         if ((k === 'right' || k === 'l') && tab() !== 'settings') { move(1); return }
         if (k === 'return') {
-          if (tab() === 'settings') { settingsItems[settingsSel()]?.run(); return }
+          if (tab() === 'settings') { settingsItems()[settingsSel()]?.run(); return }
           const e = pick(); if (e) openDetail(e); return
         }
         if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
@@ -378,7 +378,18 @@ export default Plugin.define({
         enabled: () => !searchOn(),
         commands: BINDS.split(' ').map(b => ({ bind: b, run: () => act(b) })),
       }))
-      useKeyboard((ev) => { if (!searchOn()) act(ev.name) })
+      useKeyboard((ev) => {
+        if (prompt()) {
+          if (ev.name === 'escape') closePrompt(null)
+          else if (ev.name === 'return') closePrompt(promptVal())
+          return
+        }
+        if (searchOn()) {
+          if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
+          return
+        }
+        act(ev.name)
+      })
 
       const wrap2 = (s: string, w: number): string[] => {
         const words = s.split(/\s+/)
@@ -450,9 +461,9 @@ export default Plugin.define({
             </box>
             <Show when={!detail() && tab() !== 'settings'}>
               <box flexDirection="row" paddingLeft={1} paddingRight={1}>
-                <box backgroundColor={chromeFocused(3, 0) ? theme.background.action.primary.focused : undefined}>
-                  <text fg={chromeFocused(3, 0) ? theme.text.action.primary.focused : theme.text.muted}
-                        onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(0) }}
+                <box backgroundColor={chromeFocused(2, 0) ? theme.background.action.primary.focused : undefined}>
+                  <text fg={chromeFocused(2, 0) ? theme.text.action.primary.focused : theme.text.muted}
+                        onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(0) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); setSearchOn(true); searchInput?.focus() }}>/ </text>
                 </box>
                 <input
@@ -495,11 +506,11 @@ export default Plugin.define({
                 ? <box flexDirection="column" paddingLeft={1} flexGrow={1} minHeight={Math.max(6, dims().height - 10)}>
                     <text fg={theme.text.base}><b>设置</b></text>
                     <box height={1} />
-                    <For each={settingsItems}>{(item, i) => (
+                    <For each={settingsItems()}>{(item, i) => (
                       <box backgroundColor={i() === settingsSel() && zone() === 'grid' ? theme.background.action.primary.focused : undefined}>
                         <text fg={i() === settingsSel() && zone() === 'grid' ? theme.text.action.primary.focused : theme.text.muted}
                               onMouseOver={() => { setZone('grid'); setSettingsSel(i()) }}
-                              onMouseDown={(ev) => { ev.stopPropagation(); settingsItems[i()]?.run() }}>
+                              onMouseDown={(ev) => { ev.stopPropagation(); settingsItems()[i()]?.run() }}>
                           {i() === settingsSel() && zone() === 'grid' ? '› ' : '  '}{item.label}
                         </text>
                       </box>
