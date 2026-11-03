@@ -445,7 +445,7 @@ export default Plugin.define({
             when={detail()}
             fallback={
               tab() === 'settings'
-                ? <box flexDirection="column" paddingLeft={1} flexGrow={1}>
+                ? <box flexDirection="column" paddingLeft={1} flexGrow={1} minHeight={Math.max(6, dims().height - 10)}>
                     <text fg={theme.text.base}><b>设置</b></text>
                     <box height={1} />
                     <For each={settingsItems}>{(item, i) => (
@@ -475,7 +475,7 @@ export default Plugin.define({
               const e = detail()!
               const caps = e.capabilities
               return (
-                <scrollbox flexGrow={1} minHeight={0}>
+                <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 10)}>
                   <box flexDirection="column" paddingLeft={1} paddingRight={1}>
                     <box flexDirection="row">
                       <text fg={theme.text.base}><b>{store.favorites[e.name] ? '★ ' : '☆ '}{e.name}</b> {badge(e)}</text>
