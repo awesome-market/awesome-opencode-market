@@ -29,14 +29,18 @@ jobs:
             npx tsx -e "import { CatalogIndex } from './src/schema.ts'; import { readFileSync } from 'node:fs'; CatalogIndex.parse(JSON.parse(readFileSync('/tmp/old-index.json','utf8'))); console.log('old index valid')"
             git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
             git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || touch /tmp/blocklist.json
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || touch /tmp/ai-verdicts.jsonl
+            # missing digest-state = -∞: all pass verdicts stay frozen until the
+            # first daily digest publishes (fail-closed bootstrap, AI-DIAGNOSIS §4)
+            git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null || rm -f /tmp/digest-state.json
           else
-            touch /tmp/submissions.txt /tmp/blocklist.json   # first run ever
+            touch /tmp/submissions.txt /tmp/blocklist.json /tmp/ai-verdicts.jsonl   # first run ever
           fi
       - name: run pipeline
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
           GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --max 2000
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --max 2000
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out

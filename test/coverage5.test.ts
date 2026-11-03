@@ -113,6 +113,7 @@ describe('run.ts remaining branches', () => {
     metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
+    approval: 'approved',
   })
   const alive = Array.from({ length: 5 }, (_, i) => mkEntry(`alive-${i}`))
   const mkOld = () => {
@@ -191,6 +192,7 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
     metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
+    approval: 'approved',
     ...over,
   }
 }

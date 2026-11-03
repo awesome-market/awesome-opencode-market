@@ -9,6 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackageName } f
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
+import { loadVerdicts, loadLastDigestAt, applyMatureVerdicts } from './verdicts.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry, type RemovedEntry } from '../src/schema.ts'
 import { classify } from '../src/categories.ts'
@@ -23,6 +24,10 @@ export interface RunOptions {
   maxEntries?: number | undefined
   now?: string | undefined
   fetchFn?: typeof fetch | undefined
+  /** catalog-branch ai-verdicts.jsonl (AI-DIAGNOSIS §4) */
+  verdictsPath?: string | undefined
+  /** catalog-branch digest-state.json — pass verdict maturity anchor */
+  digestStatePath?: string | undefined
 }
 
 export function loadOldIndex(path?: string): CatalogIndex | null {
@@ -61,7 +66,20 @@ const METRICS_STALE_MS = 7 * 24 * 3600 * 1000
 export async function run(opts: RunOptions = {}) {
   const f = opts.fetchFn ?? fetch
   const now = opts.now ?? new Date().toISOString()
-  const old = loadOldIndex(opts.oldIndexPath)
+  // Order is load-bearing (AI-DIAGNOSIS §10): mature verdicts apply to the OLD
+  // index BEFORE discovery comparison — a reviewed-but-unreleased version gets
+  // its release window here, otherwise the next npm bump would overwrite the
+  // pendingUpdate slot and high-frequency packages would starve forever.
+  let old = loadOldIndex(opts.oldIndexPath)
+  if (old) {
+    const verdicts = loadVerdicts(opts.verdictsPath)
+    const lastDigestAt = loadLastDigestAt(opts.digestStatePath)
+    if (verdicts.length || lastDigestAt !== null) {
+      const applied = applyMatureVerdicts(old, verdicts, lastDigestAt)
+      old = applied.index
+      console.log(`verdicts: ${verdicts.length} loaded, lastDigestAt=${lastDigestAt ?? '-inf'} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
+    }
+  }
   const oldByName = new Map((old?.plugins ?? []).map(e => [e.name, e]))
   const blocklist = loadBlocklist(opts.blocklistPath)
   const isBlocked = (name: string, slug?: string) =>
@@ -182,9 +200,12 @@ export async function run(opts: RunOptions = {}) {
   const worker = async (cand: (typeof admitted)[number]) => {
     try {
       const prev = oldByName.get(cand.name)
-      // incremental short-circuit: same version + same ruleset → reuse wholesale
-      if (prev && cand.version && cand.version === prev.latestVersion
-          && prev.capabilities.rulesetVersion === RULESET_VERSION && !isBlocked(cand.name)) {
+      // incremental short-circuit: same version + same ruleset → reuse wholesale.
+      // Under hold-by-default the candidate to compare is the HELD version —
+      // a held bump already carries that version's scan in pendingUpdate.
+      if (prev && cand.version && cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)
+          && (prev.pendingUpdate?.capabilities.rulesetVersion ?? prev.capabilities.rulesetVersion) === RULESET_VERSION
+          && !isBlocked(cand.name)) {
         const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
         entries.push(stale ? await refreshMeta(prev) : prev)
         reusedNames.add(cand.name)
@@ -271,6 +292,55 @@ export async function run(opts: RunOptions = {}) {
           ? { status: 'skipped', level: 'install' }
           : { status: 'unverified' },
         compat: {},
+        approval: 'pending',
+        approvalReason: 'awaiting-review',
+      }
+      // hold-by-default (AI-DIAGNOSIS §4): a version bump on a DISPLAYED entry
+      // holds the new version in pendingUpdate and pins display fields to the
+      // last approved version. A bump on a pending entry just moves the
+      // candidate in place (nothing displayed to protect).
+      if (prev && prev.approval !== 'pending' && pk.latest !== prev.latestVersion) {
+        if (pk.latest) {
+          entry.pendingUpdate = {
+            version: pk.latest,
+            capabilities: entry.capabilities,
+            verification: entry.verification,
+            ...(entry.features ? { features: entry.features } : {}),
+            publishedAt: entry.publishedAt,
+            reason: 'awaiting-review',
+            heldAt: now,
+          }
+          entry.approval = prev.approval
+          entry.approvalReason = prev.approvalReason
+          entry.latestVersion = prev.latestVersion
+          entry.publishedAt = prev.publishedAt
+          entry.capabilities = prev.capabilities
+          entry.verification = prev.verification
+          entry.features = prev.features
+          entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
+        } else {
+          // npm has no latest tag at all — carry the whole display state
+          entry.approval = prev.approval
+          entry.approvalReason = prev.approvalReason
+          entry.pendingUpdate = prev.pendingUpdate
+          entry.latestVersion = prev.latestVersion
+          entry.publishedAt = prev.publishedAt
+          entry.capabilities = prev.capabilities
+          entry.verification = prev.verification
+          entry.features = prev.features
+          entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
+        }
+      } else if (prev) {
+        entry.approval = prev.approval
+        if (prev.approval !== 'pending') {
+          // npm latest rolled back to the displayed version — hold survives
+          entry.pendingUpdate = prev.pendingUpdate
+          entry.approvalReason = prev.approvalReason
+        } else {
+          // pending candidate updated in place — the old concern reason
+          // described the previous candidate version, so reset it
+          entry.approvalReason = 'awaiting-review'
+        }
       }
       entries.push(entry)
       console.log(`  [${entries.length}] ${cand.name}`)
@@ -292,6 +362,7 @@ export async function run(opts: RunOptions = {}) {
   for (let i = 0; i < ghMissing.length; i += BATCH) {
     const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
       const mm = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
+      const ghPrev = oldByName.get(c.fullName)
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
@@ -317,6 +388,8 @@ export async function run(opts: RunOptions = {}) {
         capabilities: { scannedAt: null, findings: [], redFlags: [] },
         verification: { status: 'skipped', level: 'install' },
         compat: {},
+        approval: ghPrev?.approval ?? 'pending',
+        ...(ghPrev?.approvalReason ? { approvalReason: ghPrev.approvalReason } : {}),
       }
       return entry
     }))
@@ -381,5 +454,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     seedPath: arg('--seed'),
     blocklistPath: arg('--blocklist'),
     ...(arg('--max') ? { maxEntries: Number(arg('--max')) } : {}),
+    verdictsPath: arg('--verdicts'),
+    digestStatePath: arg('--digest-state'),
   }).catch(e => { console.error(e); process.exit(1) })
 }

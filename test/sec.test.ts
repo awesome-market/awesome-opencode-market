@@ -16,6 +16,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
+  approval: 'approved',
   ...over,
 })
 const mkIndex = (plugins: PluginEntry[], over: Partial<CatalogIndex> = {}): CatalogIndex => ({

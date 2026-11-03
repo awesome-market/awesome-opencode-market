@@ -21,6 +21,7 @@ const mkEntry = (name: string, v = '1'): PluginEntry => ({
   metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
+  approval: 'approved',
 })
 
 describe('branches round 2', () => {

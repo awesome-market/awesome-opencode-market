@@ -8,6 +8,7 @@ export const PluginType = z.enum(['plugin', 'skill', 'agent', 'command', 'mcp', 
 export type PluginType = z.infer<typeof PluginType>
 
 export const SourceKind = z.enum(['npm', 'github'])
+export const PluginFeature = z.enum(['server', 'tui', 'gui', 'rpc'])
 export const DiscoveryChannel = z.enum(['npm-keyword', 'github-topic', 'code-search', 'topic-list', 'submission'])
 
 export const VerificationStatus = z.enum(['verified', 'failed', 'unverified', 'skipped'])
@@ -39,6 +40,28 @@ export const Verification = z.object({
   logExcerpt: z.string().max(2048).optional(),
 })
 
+/** AI/human review state (AI-DIAGNOSIS §4).
+ *  approved = passed review, displayed
+ *  pending  = not yet reviewed, filtered from site + client
+ *  legacy   = pre-migration entry: displayed, flagged "predates AI review" */
+export const Approval = z.enum(['approved', 'pending', 'legacy'])
+export type Approval = z.infer<typeof Approval>
+
+/** A version bump held back from display (hold-by-default). Display fields stay
+ *  pinned to the last approved version until this releases via verdict+verify. */
+export const PendingUpdate = z.object({
+  version: z.string(),
+  capabilities: Capabilities,
+  verification: Verification,
+  /** new version's detected features — promoted to display on release */
+  features: z.array(PluginFeature).optional(),
+  publishedAt: z.string().nullable().optional(),
+  /** AI concern reason / awaiting-review */
+  reason: z.string().optional(),
+  heldAt: z.string(),
+})
+export type PendingUpdate = z.infer<typeof PendingUpdate>
+
 export const Compat = z.object({
   engines: z.string().optional(),
   peer: z.string().optional(),
@@ -50,7 +73,7 @@ export const PluginEntry = z.object({
   aliases: z.array(z.string()).default([]),
   type: PluginType,
   contains: z.array(z.enum(['plugin', 'skill', 'mcp', 'command', 'agent', 'hook'])).optional(),
-  features: z.array(z.enum(['server', 'tui', 'gui', 'rpc'])).optional(),
+  features: z.array(PluginFeature).optional(),
   discoveredVia: z.array(DiscoveryChannel).default([]),
   source: Source,
   description: LocalizedText.partial().default({}),
@@ -77,6 +100,10 @@ export const PluginEntry = z.object({
   capabilities: Capabilities,
   verification: Verification,
   compat: Compat.default({}),
+  /** 'legacy' default migrates old indexes that predate the field */
+  approval: Approval.default('legacy'),
+  approvalReason: z.string().optional(),
+  pendingUpdate: PendingUpdate.optional(),
 })
 export type PluginEntry = z.infer<typeof PluginEntry>
 
@@ -102,3 +129,25 @@ export const CatalogIndex = z.object({
   removed: z.array(RemovedEntry).default([]),
 })
 export type CatalogIndex = z.infer<typeof CatalogIndex>
+
+/** One record in catalog-branch ai-verdicts.jsonl (append-only, AI-DIAGNOSIS §4). */
+export const AiVerdict = z.object({
+  name: z.string(),
+  /** null = github-kind entries (no versions); matches latestVersion: null */
+  version: z.string().nullable().default(null),
+  verdict: z.enum(['pass', 'concern']),
+  reason: z.string().optional(),
+  at: z.string(),
+  /** stamped by our writers, never by the model — AI can't forge 'human' */
+  source: z.enum(['ai', 'human']),
+  /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */
+  sha: z.string().optional(),
+})
+export type AiVerdict = z.infer<typeof AiVerdict>
+
+/** catalog-branch digest-state.json — pass verdicts mature only after they have
+ *  appeared in a daily digest (verdict.at ≤ lastDigestAt). Missing file → -∞. */
+export const DigestState = z.object({
+  lastDigestAt: z.string(),
+})
+export type DigestState = z.infer<typeof DigestState>

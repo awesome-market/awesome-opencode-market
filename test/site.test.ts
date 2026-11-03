@@ -13,6 +13,7 @@ const mk = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   metrics: { stars: 5, npmDownloads30d: 100, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
+  approval: 'approved',
   ...over,
 })
 

@@ -20,7 +20,13 @@ const ruleOf = (finding: string) => finding.split(':')[0] ?? finding
 /** Delta-scan strong rules: newly-appearing install-time code execution (SEC-3.5). */
 const STRONG_DELTA_RULES = new Set(['lifecycle-script', 'prepare-script'])
 
-/** Identity-change + delta-scan red flags (SEC-2/SEC-3). */
+/** Identity-change + delta-scan red flags (SEC-2/SEC-3).
+ *  `e` must carry the CANDIDATE version's data: for held bumps the caller passes
+ *  `{...entry, latestVersion: pendingUpdate.version, capabilities: pendingUpdate.capabilities}`
+ *  so delta findings describe the version under review, not the pinned display.
+ *  Rollback is measured against the currently-held target
+ *  (`pendingUpdate?.version ?? latestVersion`) so a held version doesn't fire
+ *  rollback against the pinned display every run (AI-DIAGNOSIS §10). */
 export function trustFlags(prev: PluginEntry | undefined, e: PluginEntry): { findings: string[]; redFlags: string[] } {
   const findings: string[] = []
   const redFlags: string[] = []
@@ -36,8 +42,8 @@ export function trustFlags(prev: PluginEntry | undefined, e: PluginEntry): { fin
   if (prev.source.repoId && e.source.repoId && prev.source.repoId !== e.source.repoId) {
     redFlags.push('sec:repo-recreated')
   }
-  // dist-tags.latest rolled backwards
-  if (versionCmp(e.latestVersion, prev.latestVersion) < 0) redFlags.push('sec:version-rollback')
+  // dist-tags.latest rolled backwards (vs the held target when a hold exists)
+  if (versionCmp(e.latestVersion, prev.pendingUpdate?.version ?? prev.latestVersion) < 0) redFlags.push('sec:version-rollback')
   // delta scan: rules present in new findings but absent from previous findings.
   // Only meaningful when both sides were scanned by the SAME ruleset — a ruleset
   // upgrade surfaces pre-existing issues, which is not a behavior change.
@@ -113,22 +119,81 @@ export function mergeEntries(
       out.discoveredVia = [...new Set([...prev.discoveredVia, ...e.discoveredVia])] as PluginEntry['discoveredVia']
     }
 
-    // per-version layer (name@version+host-matched)
+    // approval/hold state layer (AI-DIAGNOSIS §4): e carries it for paths that
+    // know it (run worker surgery, remerge's own computed entries); prev —
+    // the post-verdict old index — fills it otherwise (github-kind rebuilds).
+    out.approval = e.approval ?? prev?.approval ?? 'pending'
+    out.approvalReason = e.approvalReason ?? prev?.approvalReason
+    if (out.approval === 'pending') out.approvalReason ??= 'awaiting-review'
+    if (e.pendingUpdate) {
+      out.pendingUpdate = e.pendingUpdate
+      // same held version on both sides → keep the remote verification slot
+      // (a verify-merge may have written into it after ours was built)
+      if (prev?.pendingUpdate?.version === e.pendingUpdate.version) {
+        out.pendingUpdate = { ...e.pendingUpdate, verification: prev.pendingUpdate.verification }
+      }
+    } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion) {
+      // remote holds a version we never saw → keep the hold (unless ours just
+      // released that exact version — then the hold is resolved, don't resurrect)
+      out.pendingUpdate = prev.pendingUpdate
+    }
+
+    // per-version layer (name@version+host-matched) — under hold semantics
+    // e.latestVersion is the PINNED display version, so this restores the
+    // displayed version's own scan/verify data (e.g. fresher verification
+    // written by a verify-merge on the remote side of a rebase race).
     if (prevVer) {
       if (sameRuleset) out.capabilities = prevVer.capabilities
       out.verification = prevVer.verification
     }
 
-    // trust flags + verified downgrade (SEC-2/3/3.5)
-    const tf = trustFlags(prev, out)
-    if (tf.findings.length || tf.redFlags.length) {
+    // trust flags (SEC-2/3/3.5) — computed against the CANDIDATE version's
+    // scan (pendingUpdate when held, else the entry itself), then split by
+    // layer: identity-level flags attach to the DISPLAYED capabilities,
+    // version-level sec-delta:* flags attach to the version under review
+    // (pendingUpdate.capabilities) and ride along when it releases.
+    const cand: PluginEntry = out.pendingUpdate
+      ? { ...e, latestVersion: out.pendingUpdate.version, capabilities: out.pendingUpdate.capabilities }
+      : e
+    const tf = trustFlags(prev, cand)
+    const isDelta = (f: string) => f.startsWith('sec-delta:')
+    const idFindings = tf.findings.filter(f => !isDelta(f))
+    const idRed = tf.redFlags.filter(f => !isDelta(f))
+    const dFindings = tf.findings.filter(isDelta)
+    const dRed = tf.redFlags.filter(isDelta)
+    if (idFindings.length || idRed.length) {
       out.capabilities = {
         ...out.capabilities,
-        findings: [...new Set([...out.capabilities.findings, ...tf.findings])],
-        redFlags: [...new Set([...out.capabilities.redFlags, ...tf.redFlags])],
+        findings: [...new Set([...out.capabilities.findings, ...idFindings])],
+        redFlags: [...new Set([...out.capabilities.redFlags, ...idRed])],
       }
       if (out.capabilities.redFlags.length > 0 && out.verification.status === 'verified') {
         out.verification = { status: 'skipped', level: out.verification.level ?? 'install' }
+      }
+    }
+    if (dFindings.length || dRed.length) {
+      if (out.pendingUpdate) {
+        out.pendingUpdate = {
+          ...out.pendingUpdate,
+          capabilities: {
+            ...out.pendingUpdate.capabilities,
+            findings: [...new Set([...out.pendingUpdate.capabilities.findings, ...dFindings])],
+            redFlags: [...new Set([...out.pendingUpdate.capabilities.redFlags, ...dRed])],
+          },
+        }
+        if (out.pendingUpdate.capabilities.redFlags.length > 0 && out.pendingUpdate.verification.status === 'verified') {
+          out.pendingUpdate = { ...out.pendingUpdate, verification: { status: 'skipped', level: out.pendingUpdate.verification.level ?? 'install' } }
+        }
+      } else {
+        // no hold in play — the entry itself IS the candidate
+        out.capabilities = {
+          ...out.capabilities,
+          findings: [...new Set([...out.capabilities.findings, ...dFindings])],
+          redFlags: [...new Set([...out.capabilities.redFlags, ...dRed])],
+        }
+        if (out.capabilities.redFlags.length > 0 && out.verification.status === 'verified') {
+          out.verification = { status: 'skipped', level: out.verification.level ?? 'install' }
+        }
       }
     }
     return out

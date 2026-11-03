@@ -7,14 +7,17 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
 
 export function markNotified(index: CatalogIndex, lines: string[]): { lines: string[]; issues: number[] } {
-  const present = new Set(index.plugins.map(e => e.name))
+  // "已收录" = user-visible. A pending entry is in the index but not displayed —
+  // notify only once it actually publishes (approved or legacy), AI-DIAGNOSIS §9.
+  const byName = new Map(index.plugins.map(e => [e.name, e]))
   const issues: number[] = []
   const out = lines.map(l => {
     const t = l.trim()
     if (!t.startsWith('{')) return l
     try {
       const s = JSON.parse(t) as { name?: string; issue?: number; notified?: boolean }
-      if (s.name && s.issue && !s.notified && present.has(s.name)) {
+      const e = s.name ? byName.get(s.name) : undefined
+      if (s.name && s.issue && !s.notified && e && e.approval !== 'pending') {
         issues.push(s.issue)
         return JSON.stringify({ ...s, notified: true })
       }

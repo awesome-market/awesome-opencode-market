@@ -60,6 +60,7 @@ describe('coverage round 3', () => {
       capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: [] },
       verification: { status: 'failed', logExcerpt: 'boom', runUrl: 'https://run/1', opencodeVersion: '2.2.5' },
       compat: {},
+      approval: 'approved',
     }
     const html = detailPage(e)
     expect(html).toContain('p&lt;script&gt;')

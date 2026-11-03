@@ -39,6 +39,7 @@ describe('verify/merge', () => {
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, compat: {},
+      approval: 'approved',
     }, {
       name: 'q', slug: 'o/q', aliases: [], type: 'plugin', discoveredVia: [],
       source: { kind: 'npm', id: 'q' }, description: { en: '' }, category: [],
@@ -47,6 +48,7 @@ describe('verify/merge', () => {
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, compat: {},
+      approval: 'approved',
     }],
     removed: [],
   }

@@ -41,6 +41,7 @@ describe('branch coverage round 4', () => {
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'verified' }, compat: {},
+      approval: 'approved',
     }
     const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e], removed: [] })
     expect(html).toContain('verified (install)')

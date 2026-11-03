@@ -11,6 +11,7 @@ const mkEntry = (name: string, v = '1.0.0'): PluginEntry => ({
   metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
+  approval: 'approved',
 })
 
 describe('publish/merge', () => {
