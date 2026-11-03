@@ -4,10 +4,11 @@
 export interface Submission {
   name: string | null             // npm package name (may be null for repo-only skills)
   repo: string | null             // owner/repo
+  kind: 'npm' | 'repo' | 'none'   // what the workflow should review
   descEn: string | null
   descOther: Record<string, string>  // { zh: '...', ja: '...' }
   type: 'plugin' | 'skill' | null
-  category: string | null         // author-claimed; null = let pipeline classify
+  category: string[] | null       // author-claimed; null = let pipeline classify
 }
 
 const NO_RESPONSE = /^\s*_?no response_?\s*$/i
@@ -66,10 +67,12 @@ export function parseSubmission(body: string): Submission {
   const typeRaw = (field(map, '类型', 'type') ?? '').toLowerCase()
   const type: Submission['type'] = typeRaw.startsWith('skill') ? 'skill' : typeRaw.startsWith('plugin') ? 'plugin' : null
 
-  const catRaw = field(map, '分类', 'category')
-  const category = catRaw && !catRaw.startsWith('自动') ? catRaw : null
+  // multi-select renders "a, b" in the body; 自动 means "let pipeline decide"
+  const catRaw = field(map, '分类（可多选）', '分类', 'category') ?? ''
+  const cats = catRaw.split(/[,，]/).map(s => s.trim()).filter(s => s && !s.startsWith('自动'))
+  const category = cats.length ? cats : null
 
-  return { name, repo, descEn, descOther, type, category }
+  return { name, repo, kind: name ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }
 }
 
 /** One-line JSONL for catalog-branch submissions.txt (consumed by run.ts --seed). */
@@ -78,7 +81,7 @@ export function seedLine(s: Submission, issue: number): string {
     name: s.name,
     repo: s.repo,
     type: s.type,
-    category: s.category ? [s.category] : null,
+    category: s.category,
     desc: { en: s.descEn, ...s.descOther },
     issue,
     notified: false,

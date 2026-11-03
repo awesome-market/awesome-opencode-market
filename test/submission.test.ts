@@ -28,9 +28,9 @@ ja: それをやる
 
 skill（技能包）
 
-### 分类
+### 分类（可多选）
 
-模型与接入
+模型与接入, 记忆
 `
 
 describe('submission parser', () => {
@@ -38,16 +38,22 @@ describe('submission parser', () => {
     const s = parseSubmission(FORM_BODY)
     expect(s.name).toBe('opencode-foo')
     expect(s.repo).toBe('o/foo')
+    expect(s.kind).toBe('npm')
     expect(s.descEn).toBe('Does the thing.')
     expect(s.descOther).toEqual({ zh: '做那件事', ja: 'それをやる' })
     expect(s.type).toBe('skill')
-    expect(s.category).toBe('模型与接入')
+    expect(s.category).toEqual(['模型与接入', '记忆'])
   })
 
   it('auto category → null; _No response_ fields → null', () => {
-    const s = parseSubmission(`### npm 包名\n\npkg-x\n\n### 分类\n\n自动（由管线判断）\n\n### 其他语言描述（可选）\n\n_No response_`)
+    const s = parseSubmission(`### npm 包名\n\npkg-x\n\n### 分类（可多选）\n\n自动（由管线判断）\n\n### 其他语言描述（可选）\n\n_No response_`)
     expect(s.category).toBeNull()
     expect(s.descOther).toEqual({})
+  })
+
+  it('kind: repo when only a repo is given, none when neither', () => {
+    expect(parseSubmission('### GitHub 仓库地址\n\nhttps://github.com/a/b\n').kind).toBe('repo')
+    expect(parseSubmission('### 英文描述\n\nnothing else\n').kind).toBe('none')
   })
 
   it('freeform fallback: first package-like token + repo url', () => {
