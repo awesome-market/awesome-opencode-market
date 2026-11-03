@@ -17,15 +17,10 @@ npx vitest run test/contract.test.ts   # L1 IPC 契约
 npx vitest run test/gui-mount.test.ts  # L3 jsdom 挂载
 npx vitest run --coverage              # 看哪层掉出 90%
 
-# 发版前真实端冒烟（需要本机环境）
-# 桌面端：先用调试端口启动 app（正常 Dock 启动的实例没有 CDP 端口，需 Cmd+Q 退出后重启）
-open -a "OpenCode" --args --remote-debugging-port=9222
-# 或直接跑二进制：
-/Applications/OpenCode.app/Contents/MacOS/OpenCode --remote-debugging-port=9222
-curl http://127.0.0.1:9222/json/version   # 有 JSON 返回 = CDP 通了
-
-node plugins/market/test/e2e/desktop-smoke.mjs   # 桌面 CDP
-python3 plugins/market/test/e2e/tui-smoke.py     # TUI pty（Python 自带 pty 模块，零依赖；node-pty 本机原生绑定坏、script 需要真 stdin tty）
+# 发版前真实端冒烟（本机跑，脚本自管进程——杀掉运行中的 app 再带调试端口自启）
+npm run e2e              # 桌面 CDP + TUI pty 连跑
+npm run e2e:desktop      # 单独跑桌面（node plugins/market/test/e2e/desktop-smoke.mjs）
+npm run e2e:tui          # 单独跑 TUI（python3 plugins/market/test/e2e/tui-smoke.py，Python 自带 pty 模块，零依赖）
 ```
 
 CI：`ci.yml` 每次 push 自动跑 `tsc --noEmit` + `vitest --coverage`。
