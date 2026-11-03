@@ -72,15 +72,52 @@ export async function run(opts: RunOptions = {}) {
     discoverNpm(undefined, { fetchFn: f }),
     discoverGithub(undefined, { token: opts.ghToken, fetchFn: f }),
   ])
+  // seeds: submissions.txt lines — JSONL (issue-form submissions carry declared
+  // metadata) or legacy plain names or github:owner/repo
+  const seedMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
   if (opts.seedPath) {
+    let seeded = 0
     const lines = readFileSync(opts.seedPath, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
-    for (const name of lines.filter(l => !l.startsWith('github:'))) {
-      if (!npmCands.has(name)) npmCands.set(name, {
-        name, version: '', description: '', keywords: [], repoUrl: null, publishedAt: null,
-        discoveredVia: ['submission' as const],
-      } as never)
+    for (const line of lines) {
+      let name: string | null = null
+      let repo: string | null = null
+      if (line.startsWith('{')) {
+        try {
+          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: string[] | null; desc?: Record<string, string | null> }
+          name = s.name ?? null
+          repo = s.repo ?? null
+          if (name) {
+            const desc: Record<string, string> = {}
+            for (const [k, v] of Object.entries(s.desc ?? {})) if (v) desc[k] = v
+            seedMeta.set(name, {
+              ...(s.type ? { type: s.type } : {}),
+              ...(s.category?.length ? { category: s.category } : {}),
+              ...(Object.keys(desc).length ? { desc } : {}),
+            })
+          }
+        } catch { continue }
+      } else if (line.startsWith('github:')) {
+        repo = line.slice(7)
+      } else {
+        name = line
+      }
+      if (name && !npmCands.has(name)) {
+        npmCands.set(name, {
+          name, version: '', description: '', keywords: [], repoUrl: repo, publishedAt: null,
+          discoveredVia: ['submission' as const],
+        } as never)
+        seeded++
+      } else if (!name && repo && !ghCands.has(repo)) {
+        // repo-only submission (e.g. a skill with no npm package) → github-kind
+        ghCands.set(repo, {
+          fullName: repo, description: '', archived: false, fork: false, pushedAt: null,
+          stars: 0, defaultBranch: 'HEAD', id: null, createdAt: null, license: null, topics: [],
+          discoveredVia: ['submission' as const],
+        })
+        seeded++
+      }
     }
-    console.log(`seed: ${lines.length} entries injected`)
+    console.log(`seed: ${seeded} entries injected`)
   }
   console.log(`discover: ${npmCands.size} npm + ${ghCands.size} github candidates`)
 
@@ -191,18 +228,23 @@ export async function run(opts: RunOptions = {}) {
       const hasSkill = !!treeRes?.paths &&
         (treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills')))
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      // author-claimed fields precedence: repo .opencode-market.json > issue submission > auto-derived
+      const sub = seedMeta.get(cand.name)
 
       const entry: PluginEntry = {
         name: cand.name,
         slug,
         aliases: [],
-        type: 'plugin',
+        type: (sub?.type === 'skill' ? 'skill' : 'plugin'),
         ...(hasSkill ? { contains: ['skill' as const] } : {}),
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(repoMeta?.id ? { repoId: repoMeta.id } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
-        description: { en: marketMeta?.description?.en ?? cand.description, ...(marketMeta?.description?.zh ? { zh: marketMeta.description.zh } : {}) },
+        description: {
+          en: marketMeta?.description?.en ?? sub?.desc?.en ?? cand.description,
+          ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
+        },
         features: detectFeatures(pk.exports, scan.findings),
-        category: marketMeta?.category ?? classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
+        category: marketMeta?.category ?? sub?.category ?? classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
         deprecatedMessage: pk.deprecatedMessage,

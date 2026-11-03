@@ -47,7 +47,7 @@ jobs:
   publish:
     needs: generate
     runs-on: ubuntu-latest
-    permissions: { contents: write }   # the only job that writes (WF-3)
+    permissions: { contents: write, issues: write }   # contents: the only catalog writer; issues: submission notification (WF-3)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,6 +58,8 @@ jobs:
       - name: commit index to catalog branch (re-merge + retry on race, WF-2)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
@@ -83,6 +85,19 @@ jobs:
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
+          # notify+close submission issues whose package just landed (best-effort:
+          # the index is already published; a failed comment must not fail the run)
+          if [ -f /tmp/cat/submissions.txt ]; then
+            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt > /tmp/notify.list
+            while read -r N; do
+              [ -n "$N" ] || continue
+              gh issue comment "$N" --body "✅ 已收录进插件目录（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
+              gh issue close "$N" || true
+              echo "notified + closed issue #$N"
+            done < /tmp/notify.list
+            git -C /tmp/cat add submissions.txt
+            git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" 2>/dev/null && git -C /tmp/cat push origin HEAD:catalog || true
+          fi
 
   site:
     needs: publish

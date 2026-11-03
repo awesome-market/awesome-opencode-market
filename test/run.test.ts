@@ -82,14 +82,15 @@ describe('pipeline/run', () => {
 })
 
 describe('pipeline/run seed injection', () => {
-  it('--seed injects npm names + skips github: lines, dedups', async () => {
+  it('--seed injects npm names + github: lines become github-kind, dedups', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'runseed-'))
     const seed = join(dir, 'seed.txt')
     writeFileSync(seed, 'seed-pkg\ngithub:o/r\ngood-pkg\n\n')
     const out = join(dir, 'index.json')
     const idx = await run({ outPath: out, seedPath: seed, fetchFn: mkFetch(mkTgz()), now: '2026-11-02T00:00:00Z' })
-    // good-pkg was already a discovered candidate — seed must not double-count; still 1 entry
-    expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg'])
+    // good-pkg dedup'd (already a candidate); github:o/r lands as a github-kind entry
+    expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg', 'o/r'])
+    expect(idx.plugins.find(p => p.name === 'o/r')!.source.kind).toBe('github')
   })
 })
 

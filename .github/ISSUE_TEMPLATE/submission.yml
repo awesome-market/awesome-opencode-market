@@ -1,0 +1,70 @@
+name: 自荐插件 / Submit a plugin
+description: 把你的 OpenCode 插件或 skill 提交到市场目录
+title: "[submit] "
+labels: [submission]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        填写下面的表单即可投稿。机器会先自动审查（npm 存在性、插件证据、静态扫描），
+        审查结果会以评论形式回复在本 issue 里。
+  - type: input
+    id: package
+    attributes:
+      label: npm 包名
+      description: 已发布到 npm 的包名（还没发布的技能类可留空，只填 GitHub 地址）
+      placeholder: "opencode-my-plugin 或 @scope/opencode-my-plugin"
+    validations:
+      required: false
+  - type: input
+    id: repo
+    attributes:
+      label: GitHub 仓库地址
+      description: 插件源码仓库，形如 https://github.com/owner/repo
+      placeholder: "https://github.com/you/your-plugin"
+    validations:
+      required: true
+  - type: textarea
+    id: desc_en
+    attributes:
+      label: 英文描述
+      description: 一句话说明这个插件干什么（将展示在目录里）
+      placeholder: "Shows model usage and cost in the status bar."
+    validations:
+      required: true
+  - type: textarea
+    id: desc_other
+    attributes:
+      label: 其他语言描述（可选）
+      description: 每行一条，格式 "语言代码: 描述"
+      placeholder: "zh: 在状态栏显示模型用量和花费"
+    validations:
+      required: false
+  - type: dropdown
+    id: type
+    attributes:
+      label: 类型
+      options:
+        - plugin（插件）
+        - skill（技能包）
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: 分类
+      description: 不确定就选"自动"，由管线按名称和描述判断
+      options:
+        - 自动（由管线判断）
+        - 主题与外观
+        - 模型与接入
+        - 会话与消息
+        - 记忆
+        - 通知
+        - 安全与权限
+        - 开发流程
+        - 工具与能力
+        - 集成与移动
+        - 其他
+    validations:
+      required: false

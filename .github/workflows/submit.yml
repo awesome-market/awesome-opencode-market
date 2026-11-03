@@ -1,81 +1,138 @@
 name: submission-review
 on:
   issues: { types: [opened, edited] }
+  issue_comment: { types: [created] }   # re-review loop: author replies after fixing
+  schedule: [ { cron: '23 5 * * *' } ]  # abandonment sweep
 permissions: {}
 jobs:
   review:
-    if: contains(github.event.issue.labels.*.name || 'submission', 'submission') || startsWith(github.event.issue.title, '[submit]')
-    outputs: { pkg: "${{ steps.scan.outputs.pkg }}", verdict: "${{ steps.verdict.outputs.v }}" }
+    if: >-
+      github.event.issue.state == 'open'
+      && !github.event.issue.pull_request
+      && (contains(github.event.issue.labels.*.name || 'submission', 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (github.event_name == 'issues'
+          || (github.event_name == 'issue_comment'
+              && !endsWith(github.event.comment.user.login, '[bot]')
+              && (contains(github.event.issue.labels.*.name || 'x', 'submission:needs-work')
+                  || contains(github.event.issue.labels.*.name || 'x', 'submission:invalid'))))
+    outputs:
+      pkg: "${{ steps.parse.outputs.pkg }}"
+      verdict: "${{ steps.verdict.outputs.v }}"
+      subline: "${{ steps.parse.outputs.subline }}"
     runs-on: ubuntu-latest
-    permissions: { issues: write }     # comments only; pipeline runs in this job but nothing executes plugin code
+    permissions: { issues: write }     # comments/labels only; pipeline runs here but executes no plugin code
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - name: extract candidate + static scan
-        id: scan
+      - name: parse submission form (+ freeform fallback)
+        id: parse
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
-          PKG=$(echo "$ISSUE_BODY" | grep -oE '[a-zA-Z0-9@/_.-]+' | grep -m1 -E '^(@[a-z0-9-]+/)?[a-z0-9-]+$' || true)
-          echo "pkg=$PKG" >> "$GITHUB_OUTPUT"
-          test -n "$PKG" || exit 1
-          npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
-      - name: post review comment
+          npx tsx pipeline/submission.ts > /tmp/sub.json
+          npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM" > /tmp/sub.line
+          PKG=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
+          REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
+          echo "pkg=${PKG:-$REPO}" >> "$GITHUB_OUTPUT"     # repo-only skills identify by repo
+          echo "subline=$(cat /tmp/sub.line)" >> "$GITHUB_OUTPUT"
+      - name: static review
+        id: scan
+        env:
+          PKG: ${{ steps.parse.outputs.pkg }}
+          SUB_NAME: ${{ steps.parse.outputs.pkg }}
+        run: |
+          if [ -z "$PKG" ]; then
+            printf 'verdict: invalid\n\n未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n' > /tmp/review.md
+          elif grep -q '^@' <<<"$PKG" || { grep -qE '^[a-z0-9-_.]+$' <<<"$PKG" && ! grep -q '/' <<<"$PKG"; }; then
+            npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
+          else
+            # repo-only submission: no npm package to scan — honest verdict
+            printf 'verdict: clean\n\nGitHub-only 提交（%s）：未做 npm 扫描，目录按仓库条目收录。\n' "$PKG" > /tmp/review.md
+          fi
+      - name: post review comment (+ next-step guidance)
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs')
+            const md = fs.readFileSync('/tmp/review.md','utf8')
+            const v = (md.match(/verdict: (clean|flagged|invalid)/) || [])[1] || 'invalid'
+            const footer = {
+              clean:   '\n\n---\n✅ **初审通过，已加入收录队列**。收录进目录后 bot 会再来评论并关闭本 issue。',
+              flagged: '\n\n---\n⚠️ 发现高危信号。修复后**在本 issue 里回复一条评论**即可重新审查；30 天无更新将视为放弃并自动关闭。',
+              invalid: '\n\n---\n❌ 未能收录（常见原因：包不存在 / 缺少插件证据）。按上面报告修正后**回复评论**重新审查；30 天无更新将自动关闭。',
+            }[v]
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `## Automated review\n\n${fs.readFileSync('/tmp/review.md','utf8')}\n\n_Human maintainer makes the final call._`
+              body: `## Automated review\n\n${md}${footer}\n\n_Human maintainer makes the final call._`
             })
       - name: capture verdict
         id: verdict
         run: |
           V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
-          echo "v=$V" >> "$GITHUB_OUTPUT"
-      - name: label + close on verdict
+          echo "v=${V:-invalid}" >> "$GITHUB_OUTPUT"
+      - name: label by verdict (no close — issue closes on actual publish or abandonment)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh label create "submission:approved" --color 0e8a16 -d "review passed" --force 2>/dev/null || true
+          gh label create "submission:approved"  --color 0e8a16 -d "review passed"      --force 2>/dev/null || true
           gh label create "submission:needs-work" --color d93f0b -d "red flags present" --force 2>/dev/null || true
-          gh label create "submission:invalid" --color 6e5494 -d "package not found" --force 2>/dev/null || true
+          gh label create "submission:invalid"   --color 6e5494 -d "package not found"  --force 2>/dev/null || true
           V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | awk '{print $2}')
-          case "$V" in
-            clean)   gh issue edit "$ISSUE" --add-label "submission:approved" --remove-label "submission:needs-work" --remove-label "submission:invalid"; gh issue close "$ISSUE" ;;
-            flagged) gh issue edit "$ISSUE" --add-label "submission:needs-work" --remove-label "submission:approved" --remove-label "submission:invalid" ;;
-            invalid) gh issue edit "$ISSUE" --add-label "submission:invalid" --remove-label "submission:approved" --remove-label "submission:needs-work" ;;
-          esac
+          for L in approved needs-work invalid; do gh issue edit "$ISSUE" --remove-label "submission:$L" 2>/dev/null || true; done
+          gh issue edit "$ISSUE" --add-label "submission:${V:-invalid}"
 
-  # D-2: approved submissions actually land — append pkg to catalog branch's
-  # submissions.txt; catalog.yml picks it up via --seed on the next run.
+  # approved → append to catalog-branch submissions.txt; catalog.yml --seed picks it up
   ingest:
     needs: review
-    if: ${{ needs.review.outputs.verdict == 'clean' }}
+    if: needs.review.outputs.verdict == 'clean' && needs.review.outputs.subline != ''
     runs-on: ubuntu-latest
     concurrency: catalog-branch        # same writer lock as catalog/verify (I-4)
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
-      - name: append package to submissions.txt on catalog branch
+      - name: append to submissions.txt on catalog branch (dedupe by name/repo)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PKG: ${{ needs.review.outputs.pkg }}
+          LINE: ${{ needs.review.outputs.subline }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
+          KEY=$(node -e "const s=JSON.parse(process.env.LINE);console.log(s.name||s.repo||'')")
+          [ -n "$KEY" ] || { echo "empty submission key — skipping"; exit 0; }
           for i in 1 2 3; do
             git fetch origin catalog 2>/dev/null || true
             git checkout -B catalog origin/catalog 2>/dev/null || git checkout -b catalog
             touch submissions.txt
-            grep -qxF "$PKG" submissions.txt || echo "$PKG" >> submissions.txt
+            grep -qF "\"name\":\"$KEY\"" submissions.txt || grep -qF "\"repo\":\"$KEY\"" submissions.txt || echo "$LINE" >> submissions.txt
             git add submissions.txt
-            git commit -m "submission: $PKG (issue #${{ github.event.issue.number }})" || { echo "no changes"; break; }
+            git commit -m "submission: $KEY (issue #${{ github.event.issue.number }})" || { echo "no changes"; break; }
             git push origin catalog && break
             echo "push rejected (attempt $i) — retrying"
+          done
+
+  # daily: close issues abandoned in needs-work/invalid for 30+ days
+  sweep:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: close stale submission issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for LBL in submission:invalid submission:needs-work; do
+            gh issue list --label "$LBL" --state open --limit 200 --json number,updatedAt |
+              node -e "const i=require('fs').readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut).forEach(x=>console.log(x.number))" |
+              while read -r N; do
+                gh issue comment "$N" --body "30 天没有新动态，视为放弃投稿，自动关闭。修复完成后欢迎重新开 issue 投稿。" || true
+                gh issue close "$N" || true
+                echo "closed abandoned issue #$N"
+              done
           done
