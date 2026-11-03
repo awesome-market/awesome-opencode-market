@@ -322,6 +322,8 @@ export default Plugin.define({
             return
           }
           if (k === 'down' || k === 'j') {
+            // settings tab only exposes the tabs row — down always re-enters the list
+            if (tab() === 'settings') { setZone('grid'); return }
             if (chromeRow() < 2) { setChromeRow(r => r + 1); setChromeSel(0) }
             else setZone('grid')
             return
@@ -331,7 +333,11 @@ export default Plugin.define({
           return
         }
         if (k === 'up' || k === 'k') {
-          if (tab() === 'settings') { setSettingsSel(i => Math.max(0, i - 1)); return }
+          if (tab() === 'settings') {
+            // top of the settings list -> hand focus to the tabs row, on 设置 itself
+            if (settingsSel() === 0) { setZone('chrome'); setChromeRow(0); setChromeSel(6); return }
+            setSettingsSel(i => Math.max(0, i - 1)); return
+          }
           if (sel() < 2) { setZone('chrome'); setChromeRow(2); setChromeSel(0); return }
           move(-2); return
         }
@@ -477,11 +483,11 @@ export default Plugin.define({
                     <text fg={theme.text.base}><b>设置</b></text>
                     <box height={1} />
                     <For each={settingsItems}>{(item, i) => (
-                      <box backgroundColor={i() === settingsSel() ? theme.background.action.primary.focused : undefined}>
-                        <text fg={i() === settingsSel() ? theme.text.action.primary.focused : theme.text.muted}
-                              onMouseOver={() => setSettingsSel(i())}
+                      <box backgroundColor={i() === settingsSel() && zone() === 'grid' ? theme.background.action.primary.focused : undefined}>
+                        <text fg={i() === settingsSel() && zone() === 'grid' ? theme.text.action.primary.focused : theme.text.muted}
+                              onMouseOver={() => { setZone('grid'); setSettingsSel(i()) }}
                               onMouseDown={(ev) => { ev.stopPropagation(); settingsItems[i()]?.run() }}>
-                          {i() === settingsSel() ? '› ' : '  '}{item.label}
+                          {i() === settingsSel() && zone() === 'grid' ? '› ' : '  '}{item.label}
                         </text>
                       </box>
                     )}</For>
