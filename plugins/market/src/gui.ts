@@ -532,7 +532,7 @@ export default Plugin.define({
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
       // click gets swallowed between mousedown/mouseup in this webview —
       // mousedown is the reliable trigger (verified via devlog)
-      refBtn.onmousedown = (ev) => { ev.preventDefault(); void doRefresh() }
+      refBtn.onmousedown = () => void doRefresh()
       const doRefresh = () => void (async () => {
         void safe.devlog?.('refBtn fire').catch(() => {})
         refBtn.disabled = true; refBtn.textContent = '刷新中…'; refStatus.textContent = ''
