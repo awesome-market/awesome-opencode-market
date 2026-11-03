@@ -68,7 +68,7 @@ verify run（钉装 pendingUpdate.version/latestVersion 测试）
 
 本地 AI（每小时，断网自动补）
    → 拉 pending 条目 + pendingUpdate
-   → L0.5 注入检测分类器【一期 mock：恒 pass，不产信号】
+   → L0.5 注入检测分类器【开发期 Galvanize-2 占位，正式选型待定】
    → 全量审（物料=包内容+scan+verify结果+信任信号，去散文）
    → ai-verdicts.jsonl 写回 catalog 分支（{name,version,pass|concern,reason,at,source}）
 
@@ -153,12 +153,25 @@ user:   <data>
 
 **tarball sha 去重**：同内容重发/re-tag 跳过不重复审。
 
-### L0.5 注入检测分类器【一期 mock：恒 pass，不产信号】
+### L0.5 注入检测分类器【开发期：Galvanize-2 占位，正式选型待定】
 
-> **实现状态**：一期为 mock 实现——接口就位、流程串通，但恒返回
-> 无信号（score=0），不产生 finding、不影响任何裁决。具体模型
-> 选型待调研定夺后替换实现。接口签名与接入点按真实方案设计，
-> 换真模型时只改实现不改流程。
+> **实现状态**：开发期用 `usezn/Galvanize-2` 当真模型跑通接口
+> （它本就是首选候选，若正式选型换别家只改 modelId/加载路径）。
+> 已下载至 HF 缓存 `/Volumes/2t/huggingface_tmp/hub/models--usezn--Galvanize-2/`
+> （1.1GB：safetensors 537M + onnx 537M），冒烟测试注入/正常文本
+> 分离清晰（0.9999 vs 0.006，阈值 0.662 余量大）。
+
+> **runtime 事实**：encoder 分类器，**跑不进 omlx**（omlx 只服务
+> decoder 生成模型的 chat completions，拿不到分类 logits）。加载
+> 走 `tokenizers.Tokenizer.from_file(tokenizer.json)` + torch 前向
+> ——transformers 4.57 的 AutoTokenizer 吃不下其
+> `backend:tokenizers` 配置格式；或走自带 `onnx/model.onnx` +
+> onnxruntime-node，Node 管线无 Python 依赖。阈值与输入协议随
+> 模型包自带 `thresholds.json`：flatten whitespace、前 512
+> token、probability ≥ 0.662 判注入；标签 {0:SAFE,1:INJECTION}。
+
+> 接口签名与接入点按真实方案设计（`score → 阈值 → finding`，
+> `modelId+version` 记审计元数据），正式选型落地时只换实现。
 
 通用 LLM 审核时必须语义"读懂"被审文本 = 可被说服；专用分类器只做
 模式打分、不执行指令——对注入的免疫是**结构性**的。它补的恰是 LLM
@@ -324,10 +337,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   推 catalog 分支；needs-work/invalid issue → 草稿评论
 - 本地素材边界：`fetchTarball` **下载阅读允许**（数据非执行），
   install/run/plugin add 永远禁止——与云端零执行不冲突
-- 注入检测模型（可换插槽，**一期 mock 恒 pass**）：选型待定——
-  候选 Galvanize-2 / Horizon 全量闸 + Granite Guardian BYOC 第二
-  判据 + PG2 第三票；皆信号源非裁决，`modelId+version` 记入审计
-  元数据
+- 注入检测模型（可换插槽）：**开发期 Galvanize-2 已下载占位**
+  （HF 缓存，1.1GB），正式选型待调研——候选 Galvanize-2 /
+  Horizon 全量闸 + Granite Guardian BYOC 第二判据 + PG2 第三
+  票；皆信号源非裁决，`modelId+version` 记入审计元数据
 - `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern
   挂起）+ 发布时写 `digest-state.json`（`lastDigestAt`）到 catalog
   分支——run.ts 据此判 verdict 成熟度；digest 必须先于承担释放的
