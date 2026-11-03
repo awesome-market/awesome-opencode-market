@@ -762,6 +762,8 @@ export default Plugin.define({
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
         uninstall: async (name: string) => {
+          const lg = (s: string) => { try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} uninstall ${name}: ${s}\n`) } catch { /* */ } }
+          lg('called')
           // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
           // takes a spec, not the catalog name, and silently misses pinned specs
           const fs = require('node:fs') as typeof import('node:fs')
@@ -776,9 +778,10 @@ export default Plugin.define({
             const c = stripVer(s)
             return c !== clean && s !== name && (idByName[c] ?? c) !== name
           })
-          if (keep.length === list.length) throw new Error(`${name} not found in opencode.json plugins`)
+          if (keep.length === list.length) { lg(`no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
           d.plugins = keep
           fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+          lg(`removed ${list.length - keep.length} spec(s)`)
           return 'removed'
         },
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
