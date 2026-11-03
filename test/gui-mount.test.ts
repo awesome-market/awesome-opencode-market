@@ -31,10 +31,7 @@ describe('L3 mount: window-side behavior', () => {
     expect(api.refreshIndex.mock.calls.length + api.index.mock.calls.length + api.installed.mock.calls.length).toBeGreaterThan(0)
   })
 
-  // RED case: the button is still a placeholder (impl lives in 955be87, reverted).
-  // it.fails = expected red; when 全部更新 is implemented this flips green and
-  // vitest reports an unexpected pass — forcing the marker off.
-  it.fails('全部更新 updates every outdated plugin (placeholder must not pass)', async () => {
+  it('全部更新 updates every outdated plugin', async () => {
     const { root, api } = mount()
     await flush()
     const updAll = [...root.querySelectorAll('button')].find(b => b.textContent === '全部更新')!
