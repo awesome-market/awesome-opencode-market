@@ -78,7 +78,7 @@ const specByName: Record<string, string> = {}
           const res = await ctx.client.plugin.list({ location: location() })
           for (const p of res.data ?? [])
             if (p.source.type === 'package') {
-              const clean = p.source.target.replace(/@\d[^@]*$/, '')
+              const clean = p.source.target.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1')
               map[clean] = p.source.version ?? '?'
               specByName[clean] = p.source.target
             }
@@ -157,7 +157,7 @@ const specByName: Record<string, string> = {}
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
         const spec = specByName[e.name] ?? e.name
-        const clean = spec.replace(/@\d[^@]*$/, '')
+        const clean = spec.replace(/^((?:@[^/]+/)?[^@]+)@.*$/, '$1')
         const updating = !!(ver && hasUpdate(e, ver))
         if (updating) {
           setStatus(`updating ${e.name}…`)
