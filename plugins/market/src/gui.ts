@@ -17,6 +17,7 @@ const Market = Ipc.define({
     index: { output: Schema.Unknown },
     installed: { output: Schema.Unknown },
     install: { input: Schema.String, output: Schema.String },
+    update: { input: Schema.String, output: Schema.String },
     cancelInstall: { input: Schema.String, output: Schema.String },
     verifyActivation: { input: Schema.String, output: Schema.String },
     uninstall: { input: Schema.String, output: Schema.String },
