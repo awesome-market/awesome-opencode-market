@@ -25,7 +25,7 @@ open -a "OpenCode" --args --remote-debugging-port=9222
 curl http://127.0.0.1:9222/json/version   # 有 JSON 返回 = CDP 通了
 
 node plugins/market/test/e2e/desktop-smoke.mjs   # 桌面 CDP
-node plugins/market/test/e2e/tui-smoke.mjs       # TUI pty（脚本自己 spawn opencode，service 在跑更顺）
+python3 plugins/market/test/e2e/tui-smoke.py     # TUI pty（Python 自带 pty 模块，零依赖；node-pty 本机原生绑定坏、script 需要真 stdin tty）
 ```
 
 CI：`ci.yml` 每次 push 自动跑 `tsc --noEmit` + `vitest --coverage`。
@@ -37,7 +37,7 @@ CI：`ci.yml` 每次 push 自动跑 `tsc --noEmit` + `vitest --coverage`。
 | **L1 契约** | `test/contract.test.ts` | IPC methods schema ⇄ `m.provide` ⇄ Api 接口三方对齐 + `safe.*` 用法审计 | `safe.X is not a function`、方法漏注册 |
 | **L2 纯函数** | `test/spec.test.ts`、`test/features.test.ts` 等 | `spec.ts`、`catalog.ts`、`pipeline/`、`src/categories.ts` | spec 解析、去重、卸载匹配、features 双 key、分类规则 |
 | **L3 挂载** | `test/gui-mount.test.ts` | jsdom 挂载真实 `setup()`，spy fake `safe` api | 按钮不触发、状态回弹、占位符没实现 |
-| **L4 冒烟** | `plugins/market/test/e2e/*.mjs` | CDP 桌面 / pty TUI | webview 事件怪癖、真实 daemon 时序 |
+| **L4 冒烟** | `plugins/market/test/e2e/desktop-smoke.mjs` + `tui-smoke.py` | CDP 桌面 / pty TUI | webview 事件怪癖、真实 daemon 时序 |
 
 ## 已固化的真实 bug 用例
 
