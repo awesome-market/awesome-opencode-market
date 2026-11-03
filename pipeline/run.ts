@@ -113,7 +113,7 @@ export async function run(opts: RunOptions = {}) {
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
         description: { en: cand.description },
-        category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? ''),
+        category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
         replacement: null,

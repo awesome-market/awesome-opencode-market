@@ -11,8 +11,8 @@ const CAT_RULES: [string, RegExp][] = [
   ['工具与能力', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp/i],
   ['集成与移动', /integrat|qq|wechat|slack|discord|telegram|feishu|mobile|remote|browser|chrome/i],
 ]
-export function classify(name: string, slug: string, descEn: string): string[] {
-  const hay = `${name} ${slug} ${descEn}`
+export function classify(name: string, slug: string, descEn: string, extra: readonly string[] = []): string[] {
+  const hay = `${name} ${slug} ${descEn} ${extra.join(' ')}`
   const hits = CAT_RULES.filter(([, r]) => r.test(hay)).map(([c]) => c)
   return hits.length ? hits.slice(0, 2) : ['其他']
 }
