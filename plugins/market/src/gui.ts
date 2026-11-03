@@ -34,7 +34,7 @@ const Market = Ipc.define({
 })
 type Api = {
   index(): Promise<MarketIndex>
-  installed(): Promise<Record<string, string>>
+  installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[] }>
   install(name: string): Promise<string>
   update(name: string): Promise<string>
   cancelInstall(name: string): Promise<string>
@@ -60,6 +60,7 @@ export default Plugin.define({
     const safe = api as Api
     const [data, setData] = createSignal<MarketIndex | null>(null)
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
+    const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
     const [err, setErr] = createSignal('')
     const [query, setQuery] = createSignal('')
     const [cat, setCat] = createSignal('')
@@ -93,7 +94,7 @@ export default Plugin.define({
     } catch { /* older host: no events */ }
 
     safe.index().then(i => setData(i), e => setErr(String(e)))
-    safe.installed?.().then(s => setInstalled(s ?? {}), () => {})
+    safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []) }, () => {})
 
     const filtered = () => {
       const all = data()?.plugins ?? []
@@ -102,7 +103,10 @@ export default Plugin.define({
       switch (tab()) {
         case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
-        case 'installed': list = list.filter(p => installed()[p.name]); break
+        case 'installed':
+          list = [...list.filter(p => installed()[p.name]),
+            ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [] } as unknown as MarketEntry))]
+          break
         case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
         case 'discover': default: break
@@ -158,7 +162,7 @@ export default Plugin.define({
             const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
             put({ skillVers: sv }); setInstalled(next)
             const fresh = await safe.installed?.().catch(() => null)
-            if (fresh) setInstalled(fresh)
+            if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras) }
           },
           (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = 'failed'; b.title = String(x) },
         )
@@ -224,9 +228,9 @@ export default Plugin.define({
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
               // effectiveness re-check: reload installed list, flag restart need
-              const fresh = await safe.installed?.().catch(() => installed())
-              if (fresh) setInstalled(fresh)
-              const okNow = (fresh ?? installed())[e.name]
+              const fresh = await safe.installed?.().catch(() => null)
+              if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras) }
+              const okNow = (fresh?.versions ?? installed())[e.name]
               b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
               const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
               b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
@@ -575,6 +579,7 @@ export default Plugin.define({
   main(m: any) {
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
       const specByName: Record<string, string> = {}
+      const idByName: Record<string, string> = {}
     m.provide(Market, {
         index: () => fetchIndexCached() as Promise<MarketIndex>,
         installed: async () => {
@@ -587,13 +592,17 @@ export default Plugin.define({
           // what catalog entries match on (CLI list reports internal ids)
           try {
             if (m.client?.plugin?.list) {
-              const res = await m.client.plugin.list() as { data?: { source?: { type?: string; target?: string; version?: string } }[] }
+              const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
               try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
               for (const p of res.data ?? []) {
                 if (p.source?.type === 'package' && p.source.target) {
                   const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = p.source.version ?? '?'
                   specByName[clean] = p.source.target
+                  if (p.id) idByName[clean] = String(p.id)
+                } else if (p.source?.type === 'local' && p.id) {
+                  const clean = String(p.id)
+                  map[clean] = 'local'; specByName[clean] = clean; idByName[clean] = clean
                 }
               }
             }
@@ -609,15 +618,20 @@ export default Plugin.define({
                   const clean = src.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
                   map[clean] = ver ?? '?'
                   specByName[clean] = src
+                  idByName[clean] = id
                 }
               }
             }
           } catch { /* plugin list unavailable — skills are still reported */ }
-          try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): map keys ${JSON.stringify(Object.keys(map))}\n`) } catch { /* */ }
           Object.assign(map, scanSkillKeys(
             [join(homedir(), '.config', 'opencode', 'skills'), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
             d => readdirSync(d), p => existsSync(p)))
-          return map
+          // installed plugins with no catalog entry still get a card
+          const idxNames = new Set(((await fetchIndexCached())?.plugins ?? []).map(p => p.name))
+          const extras = Object.keys(specByName)
+            .filter(k => !idxNames.has(k))
+            .map(k => { const name = idByName[k] ?? k; map[name] = map[k]; return { name, version: map[k] } })
+          return { versions: map, extras }
         },
         install: (name: string) =>
           new Promise<string>((resolve, reject) => {
