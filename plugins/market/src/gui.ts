@@ -531,13 +531,15 @@ export default Plugin.define({
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:14px', '更新数据（强制刷新索引）') as HTMLButtonElement
       refBtn.onclick = () => void (async () => {
         refBtn.disabled = true; refBtn.textContent = '刷新中…'
+        log(`refreshIndex click hasFn=${typeof safe.refreshIndex}`)
+        if (typeof safe.refreshIndex !== 'function') { refBtn.textContent = '需重启桌面端（host 过旧）'; setTimeout(() => { refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）' }, 3000); return }
         try {
-          const idx = await safe.refreshIndex?.()
+          const idx = await safe.refreshIndex()
           if (idx) setData(idx)
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           refBtn.textContent = `已刷新（${idx?.plugins?.length ?? '?'} 条）`
-        } catch (x) { refBtn.textContent = `刷新失败: ${String(x)}` }
+        } catch (x) { log(`refreshIndex fail ${String(x)}`); refBtn.textContent = `刷新失败: ${String(x)}` }
         setTimeout(() => { refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）' }, 3000)
       })
       root.appendChild(refBtn)
