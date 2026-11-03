@@ -1,210 +1,183 @@
-# AI 诊断层设计：本地 LLM 异步审查 + 人工放行通道
+# AI 审核与上架管线设计
 
-> 状态：设计定稿，待实现。解决投稿审查中"红旗件需要人话诊断"的缺口——机械审查给出结构化结果，本地 AI 负责把结果翻译成人能读的诊断草稿，人终审一键放行。
+> 状态：设计定稿 v2，待实现。
+>
+> v2 相对 v1 的关键变化：机械审查 clean 不再自动上架（原自动仅为开发期便利）；
+> AI 权限模型定为**二审否决权**（收窄任务、去语义化输入）而非放行特赦；
+> 增加每日上架日报 + 恒定否决窗口；版本风暴用 latest-only + delta-findings 限频。
 
-## 1. 背景与目标
+## 1. 目标与原则
 
-`submit.yml` 的审查是全机械的：npm 存在性 + 插件证据 + 静态扫描 + 模板回复。
-`flagged`（redFlags）和 `invalid` 件堆在 issue 队列里，每个都要人逐条看报告、
-写诊断——这正是 RESEARCH.md/DEV.md 原设计里"AI 诊断起草 → 人终审"的位置
-（P4，需要 LLM；本地端点 localhost:8001 已在 D2 备案）。
+投稿审查要覆盖"大部分插件自动审核上架"，人只做两件事：**每天看明日上架
+日报**（可一票否决）+ **处理风险件**。设计假设人的注意力会退化到零
+（流于形式是常态）——安全底线必须由机械红线 + AI 客观判定构成，不能
+依赖人的认真。
 
-目标：**AI 起草诊断，人只负责批准**。且满足：
+四条不变原则：
 
-- 本机每天凌晨固定断网一次 → 队列必须在 GitHub 侧（label），本地零持久状态
-- AI 输出永远只是**草稿评论**，进不了 verdict/label/ingest 判定链
-- 本机只跑文本推理，**绝不执行投稿包代码**（DEV.md：本机不跑陌生装测）
+- AI 输出（除结构化的二审判定外）永远只是评论，不进 verdict/label/ingest
+- 本机只跑文本推理，**绝不执行投稿包代码**（云端验证，DEV.md 同规）
+- 机械 redFlags 永远转人工——AI 不能替代"计划外发现"
+- 全程可审计：AI 判定理由留档、日报是公开上架日志
 
-## 2. 总体架构
+## 2. 验证深度现状（云端）
+
+| 层级 | 状态 | 做法 |
+|---|---|---|
+| 静态代码分析 | ✅ | `scanTarball` 规则集（findings/redFlags） |
+| 安装测试 | ✅ | `opencode plugin add` 真装进 XDG 隔离环境 |
+| 真实运行 | ✅ headless | `opencode serve` + API 触发懒加载 + `loading plugin` canary |
+| TUI 交互级 | ❌ 二期 | `tmux` 驱动真 TUI + `capture-pane` 断言无 panic（Linux runner，需 pty） |
+| Windows 兼容 | 可选 | public repo runner 免费；Windows 无 pty，只适合 serve headless 分片 |
+
+安装/运行测试一律云端（GitHub Actions），本机不做任何装测。
+
+## 3. 总体架构
 
 ```
 投稿 issue
    │
    ▼ submit.yml review job（仅 opened/edited + 合格评论触发）
-机械审查 → verdict
-   ├─ clean   → submission:approved + ingest → catalog 收录 → notify 评论+关闭
-   ├─ flagged → submission:needs-work ─┐
-   └─ invalid → submission:invalid   ──┤
-                                       │  label = AI 诊断队列
+机械初审 → verdict
+   ├─ clean   → submission:ai-review      ← 初审通过，等 AI 二审（不再自动上架）
+   ├─ flagged → submission:needs-work ──┐
+   └─ invalid → submission:invalid    ──┤
+                                        │  label = AI 队列（GitHub 侧，断网免疫）
         本地 cron/launchd（每小时）      │
-   ┌───────────────────────────────────┘
+   ┌────────────────────────────────────┘
    ▼ pipeline/ai-diagnose.ts
-拉 needs-work/invalid 且无 ai-diagnosed 标签的 open issue
-   → issue body + 最新审查评论（review.md）当 <data> 喂 localhost:8001
-   → 评论 "## 🤖 AI 诊断草稿 <!-- ai-diag -->" + 贴 submission:ai-diagnosed
-   │
-   ▼ 人终审（两条等价通道，GitHub 网页原生操作）
-   ├─ 右侧栏勾选 submission:approved   → issues:labeled 事件
-   └─ 评论 /approve                    → issue_comment 事件（owner 专属）
-   │
-   ▼ approve job → verdict=clean → ingest → catalog 收录 → notify 关闭
+   ├─ ai-review 队列 → 二审（见 §4 任务收窄）
+   │    ├─ pass    → submission:ai-approved（明日上架池）
+   │    └─ concern → submission:needs-work + 疑虑草稿（转人工）
+   └─ needs-work/invalid → 诊断草稿帮人判断（不裁决）
+
+每日日报（本地 cron 21:00，固定 issue 盖楼）：
+   "明日上架 N 个 + 各件 AI 理由摘要；人工待定 M 个"
+   → 次日 07:00 publish 前 = 恒定 ~10h 人否决窗口
+   → 否决动作 = 摘掉 issue 的 ai-approved 标签（零新机制）
+
+publish job（每日 07:00，catalog run 前）：
+   批量拉 ai-approved + approved（人工通道）标签 → ingest → submissions.txt
+   → 下一趟 catalog run 上架 → notify 评论+关闭 issue
 ```
 
-## 3. 状态机（issue 生命周期）
+## 4. AI 二审：任务收窄 + 去语义化输入
+
+**权限模型：否决权，不是特赦权。**
+
+| 机械 verdict | AI 可判 | 注入攻击的最坏结果 |
+|---|---|---|
+| clean → ai-review | pass / concern | 骗"pass" → 回到机械 clean 自动上架的旧基线，**不更差** |
+| flagged → needs-work | （只能出草稿，无裁决权） | 注入无法突破机械红线 |
+| invalid | 同上 | 同上 |
+
+AI 误判方向恒为保守：误拦 → 人看一眼；绝不误放。
+
+**输入面——只做安全判断，不读散文：**
+
+```
+system: 你是安全审查员。对每个 finding 判定 true_positive 或
+        false_positive 并给一句技术理由。输出严格 JSON：
+        { "verdict": "pass"|"concern",
+          "signals": [{ "finding": "...", "tp": bool, "reason": "..." }] }
+user:   <data>
+        - 结构化元数据（name/version/maintainers/createdAt/repoId 变更）
+        - 机械扫描的 findings + redFlags（规则:文件:命中行）
+        - 命中代码行摘录（≤80 字符/行，截断）
+        - 文件清单（路径名）
+        </data>
+```
+
+不喂：描述、README、issue 散文、其他用户评论——连续叙述性文本是最大的
+注入面。残余注入只能藏在代码行/标识符里，且要先骗过机械规则命中才会
+被 AI 看到；最坏结果仍回落到基线，不更差。
+
+**输出校验**：严格 JSON schema；`verdict` 非 `pass` 一律当 concern 处理
+（含解析失败——失败不 retry 空转，贴一次"诊断暂不可用"出队）。
+
+**上架后复审（版本风暴防护）**：AI 触发器是**新增信号**不是版本数——
+新版本带来新 finding/redFlag（merge 已算 delta）→ 该条目进人审队列；
+无新信号的版本 bump 静默通过。发包频率不产生 AI 工作量。
+
+## 5. 标签状态机
 
 | label | 含义 | 谁贴的 | 下一状态 |
 |---|---|---|---|
-| `submission` | 模板自动贴的投稿标记 | 表单模板 | → 审查后打 verdict 标签 |
-| `submission:approved` | 审查通过 / 人工批准 | bot 或 triage+ 人 | → 收录后 issue 关闭 |
-| `submission:needs-work` | 有 redFlags，待处理 | bot | → 修复重审 / 30天 sweep |
-| `submission:invalid` | 包不存在等 | bot | → 修复重审 / 30天 sweep |
-| `submission:ai-diagnosed` | AI 已出草稿（幂等标记） | 本地脚本 | → 人工处理出队 |
+| `submission` | 投稿标记 | 表单模板 | → 初审 |
+| `submission:ai-review` | 机械初审过，待 AI 二审 | bot | → ai-approved / needs-work |
+| `submission:ai-approved` | AI 二胜过，明日上架池 | 本地脚本 | → publish 上架 |
+| `submission:approved` | 人工批准（label/approve） | triage+ 人 | → publish 上架 |
+| `submission:needs-work` | 人工队列（机械红旗+AI疑虑） | bot/AI | → 修复重审 / sweep |
+| `submission:invalid` | 待修正 | bot | → 修复重审 / sweep |
+| `submission:ai-diagnosed` | 已出草稿（幂等标记） | 本地脚本 | → 重审时清除重诊 |
 
-规则：verdict 三标签互斥（每次审查先全清再贴真值）；`ai-diagnosed` 在
-每次新 verdict 落 needs-work/invalid 时**清除**——草稿永远对应最新报告。
+## 6. submit.yml 改动点
 
-## 4. 组件详细设计
+1. `issues.types` 加 `labeled`；review `if` 精确到 `opened|edited|合格评论`
+   （评论排除 bot、`ai-diag` 标记、`/approve` 开头）
+2. verdict 映射改三态：clean→`ai-review`（**不再 approved/ingest**）、
+   flagged→needs-work、invalid→invalid；贴 needs-work/invalid 时清
+   `ai-diagnosed`
+3. 新增 `approve` job：人工 labeled `submission:approved`（排除 bot sender）
+   或 owner `/approve` 评论 → 贴 approved + 确认评论
+4. 新增 `publish` job（`schedule` 每日 07:00 + `workflow_dispatch`）：
+   拉 `ai-approved`+`approved` open issues → 逐 issue 解析 subline →
+   批量 append submissions.txt（catalog 分支，共用 `catalog-branch` 锁）
+   → 给每件评论"已提交今日上架批"
+5. ingest job 删除（职能并入 publish）或保留为单件即时通道（人工急用）
 
-### 4.1 submit.yml 改动
+## 7. 本地组件
 
-**(a) review job `if` 精确到 action**（防 label 循环）：
+**pipeline/ai-diagnose.ts**（TS，可测试，~200 行）：
+队列拉取 → 物料组装（去语义化）→ localhost:8001 → JSON 校验 →
+贴草稿/标签。LLM key 从 `~/.config/opencode-market/ai-key` 读。
+lockfile 防并发。任何异常静默退出，下趟补。
 
-```yaml
-if: >-
-  github.event.issue.state == 'open'
-  && !github.event.issue.pull_request
-  && (contains(github.event.issue.labels.*.name, 'submission')
-      || startsWith(github.event.issue.title, '[submit]'))
-  && (github.event.action == 'opened'
-      || github.event.action == 'edited'
-      || (github.event_name == 'issue_comment'
-          && !endsWith(github.event.comment.user.login, '[bot]')
-          && !contains(github.event.comment.body, 'ai-diag')
-          && !startsWith(github.event.comment.body, '/approve')
-          && (contains(github.event.issue.labels.*.name || 'x', 'submission:needs-work')
-              || contains(github.event.issue.labels.*.name || 'x', 'submission:invalid'))))
-```
+**pipeline/publish-digest.ts**（日报）：
+拉 ai-approved/approved issues → 渲染"明日上架清单 + AI 理由 +
+人工待定清单" → 在固定 digest issue 评论盖楼。
 
-**(b) triggers**：`issues.types` 增加 `labeled`。
+**launchd**：两档——ai-diagnose 每小时；digest 每日 21:00。
 
-**(c) label 步骤**：贴 verdict 标签时，needs-work/invalid 分支同时
-`gh issue edit --remove-label submission:ai-diagnosed`（幂等，`|| true`）。
-
-**(d) 新增 approve job**（与 review 平级，产出同样 outputs）：
-
-```yaml
-approve:
-  if: >-
-    github.event.issue.state == 'open' && !github.event.issue.pull_request
-    && (contains(github.event.issue.labels.*.name, 'submission')
-        || startsWith(github.event.issue.title, '[submit]'))
-    && ((github.event_name == 'issues'
-         && github.event.action == 'labeled'
-         && github.event.label.name == 'submission:approved'
-         && github.event.sender.login != 'github-actions[bot]')
-        || (github.event_name == 'issue_comment'
-            && github.event.comment.user.login == github.repository_owner
-            && startsWith(github.event.comment.body, '/approve')))
-  outputs: { verdict: clean, subline: "${{ steps.ap.outputs.subline }}" }
-  concurrency: { group: sub-review-${{ github.event.issue.number }}, cancel-in-progress: true }
-  permissions: { issues: write }
-  steps:
-    - checkout + npm ci + tsx（同 review 的 parse 步骤）
-    - parse → outputs.subline（复用 submission.ts --seedline）
-    - gh issue comment "✅ 已人工批准，进入收录队列"
-    - gh issue edit --add-label submission:approved（/approve 路径补标）
-```
-
-**(e) ingest job 双源**：
-
-```yaml
-ingest:
-  needs: [review, approve]
-  if: >-
-    (needs.review.outputs.verdict == 'clean'
-      || needs.approve.outputs.verdict == 'clean')
-  env:
-    LINE: ${{ needs.review.outputs.subline || needs.approve.outputs.subline }}
-```
-
-（skipped job 的 outputs 为空串，`||` 自然落到另一边）
-
-### 4.2 review.ts：verdict 补缺口
-
-```ts
-if (!r.exists) return 'invalid'
-if (r.redFlags.length) return 'flagged'
-if (!r.evidence.length) return 'flagged'   // 无插件证据不该自动放——转人工
-return 'clean'
-```
-
-报告同步加一行提示"无插件证据"的原因（没证据≠有问题，但不值得自动放行）。
-
-### 4.3 pipeline/ai-diagnose.ts（本地脚本，可测试）
-
-```
-1. gh issue list --label submission:needs-work --state open --json number
-   + 同法拉 submission:invalid
-2. 每个 issue：labels 含 submission:ai-diagnosed → 跳过
-3. 拉 issue body + 最新一条 github-actions[bot] 评论（= 最新审查报告）
-4. POST localhost:8001/v1/chat/completions
-     system: 固定角色 + 输出 JSON schema
-       { "summary": "一句话结论", "cause": "原因分析",
-         "fix": "建议修复步骤", "verdict_hint": "approve|needs-work|uncertain" }
-     user: <data>\n<issue body + review.md>\n</data>   ← 数据不是指令
-5. JSON 校验失败/LLM 挂了 → 贴一条 "AI 诊断暂不可用" + ai-diagnosed（出队不刷屏）
-   成功 → 贴 "## 🤖 AI 诊断草稿（人工确认前仅供参考）\n\n{渲染}" <!-- ai-diag -->
-   → gh issue edit --add-label submission:ai-diagnosed
-6. 全程幂等；断网/任何异常 → 静默退出，下趟补
-```
-
-约束：
-- LLM key 从 `~/.config/opencode-market/ai-key` 读，不进仓库不进脚本
-- 并发保护：脚本开头 `flock`/lockfile，上次没跑完直接退出
-- 只取 body + bot 报告，**不喂其他用户的评论**（防指令注入）
-
-### 4.4 launchd（macOS）/ cron
-
-```xml
-<!-- ~/Library/LaunchAgents/com.local.ai-diagnose.plist -->
-<key>StartInterval</key><integer>3600</integer>
-<key>ProgramArguments</key>
-<array><string>/opt/homebrew/bin/npx</string>
-       <string>tsx</string><string>pipeline/ai-diagnose.ts</string></array>
-<key>WorkingDirectory</key><string>/Volumes/2t/code/opencode-market</string>
-```
-
-cron 替代：`0 * * * * cd /Volumes/2t/code/opencode-market && npx tsx pipeline/ai-diagnose.ts >> /tmp/aidiag.log 2>&1`
-
-## 5. 安全边界（每条都有依据）
+## 8. 安全边界
 
 | 边界 | 依据 |
 |---|---|
-| AI 输出永远只进评论——不进 verdict/label/ingest | verdict 只由机械 scan 产出（上轮的注入修复不能白堵）；prompt injection 最坏=一条怪草稿 |
-| review.md 包在 `<data>` 里，不当指令 | 报告含包方可控文本（repo url/文件名/匹配代码行），注入已实证可行 |
-| AI 无法自批准 | 脚本发的评论恒带 `## 🤖` 头+`ai-diag` 标记——永远不是裸 `/approve`，也永不碰 `approved` 标签；哪怕用 owner 账号发也够不到放行键 |
-| 本机不执行投稿代码 | DEV.md："本机不跑陌生装测"——LLM 只读文本 |
-| `/approve` 限 owner（`comment.user.login == repository_owner`）| 协作者走 label 通道（triage+ 天然有权限）；裸句开头匹配防误触 |
-| labeled 排除 `sender == github-actions[bot]` | 否则 bot 贴标→labeled→approve→再贴标循环 |
-| LLM key 只进 `~/.config/` | 不进 git、不进 workflow、不进日志 |
+| AI 无特赦权（flagged/invalid 只起草） | 注入不可突破机械红线；AI 误判方向恒保守 |
+| 输入去散文（无 README/描述/评论） | 注入面只剩代码行，且须先骗过机械规则 |
+| 输出严格 JSON schema | 无自由文本藏私货；解析失败=concern 兜底 |
+| 本地零执行 | 装测全在云端 runner（零 token、egress 白名单） |
+| 日报≠审批，是反悔窗口 | 人注意力归零时系统保底仍成立 |
+| `/approve` 限 owner + labeled 排除 bot | 人通道不被 AI/自身循环触发 |
+| LLM key 只进 `~/.config/` | 不进 git、workflow、日志 |
 
-## 6. 已审过的边界情况
+## 9. 边界情况
 
 | 场景 | 结果 |
 |---|---|
-| 批准不存在的包 | ingest 写 seed → catalog packument 404 → 不落条目，无害 |
-| 误批 | 走 blocklist.json 下架流程（`{"names":["pkg"]}`→ 下趟 tombstone `manual`） |
-| 批准和审查并发 | approve 与 review 共用 `sub-review-${issue#}` concurrency 组串行化 |
-| /approve 在非投稿 issue | `submission` 标签/`[submit]` 标题门槛挡住 |
-| freeform 投稿（无 submission 标签） | 门槛兼容 `[submit]` 标题 |
-| 评论触发 /approve 时 review 也命中 | review 的 comment 条件排除 `/approve` 开头 |
-| AI 诊断后作者又触发重审 | 新 verdict 清 ai-diagnosed → 草稿重新生成 |
-| sweep 30天 | 不变——AI 草稿不续命，人工没理照样关闭 |
-| 断网/LLM 挂 | 静默下趟补；LLM 持久故障 → 贴一次"暂不可用"出队 |
+| 批准不存在的包 | catalog packument 404 → 不落，无害 |
+| 误批 | blocklist.json 下架（tombstone `manual`） |
+| 日报后想拦某件 | 摘 ai-approved 标签即出批（label timeline 留痕） |
+| 版本风暴（一天 10 版） | 只扫 latest；无新信号静默；verify 每趟限频——成本与发版频率解耦 |
+| 上架后投毒（v1过审 v2藏毒） | 新 finding 出现 → delta 触发 → 进人审队列 |
+| AI/LLM 挂掉 | 队列堆积在 GitHub label，恢复后消化；单件诊断失败贴一次出队 |
+| 断网 | 队列零本地状态，下趟补 |
 
-## 7. 不做清单（防蔓延）
+## 10. 不做清单
 
-- AI 不直接改 verdict/label（只起草）
-- AI 不读 issue 里非 bot 的评论（只喂 body + 审查报告）
-- 不做 verify 失败归类的 AI 分析（二期：`index.json` 的 `logExcerpt` 聚类→健康 issue 周报，零 workflow 改动）
-- 不做 CI 巡检 agent（远期 §9，同机同 cron 可复用）
+- AI 不裁决 flagged/invalid（只起草）
+- AI 输入不含散文（README/描述/评论不进 prompt）
+- 不在本机执行投稿代码
+- 不做 TUI/desktop 实时测试（二期：tmux TUI 断言 + Windows headless 分片）
+- 不做 verify 失败 AI 归因（三期：logExcerpt 聚类周报）
 
-## 8. 验收清单
+## 11. 验收清单
 
-- [ ] 开一个 flagged 投稿 issue → AI 下趟 cron 贴草稿 + ai-diagnosed
-- [ ] 手动勾 approved → approve job → 评论+ingest
-- [ ] 评论 /approve → 同上
-- [ ] AI 草稿评论不再触发重审（无新报告）
-- [ ] 重审后 ai-diagnosed 被清 → AI 重新诊断
-- [ ] bot 贴的 approved 不触发 approve job
+- [ ] clean 投稿 → `ai-review` 标签，不自动 ingest
+- [ ] AI 二审 pass → `ai-approved` → 日报含此件 → 次日上架
+- [ ] AI 二审 concern → `needs-work` + 疑虑草稿
+- [ ] 人工勾 `approved` / 评论 `/approve` → 进明日批
+- [ ] 日报后摘 `ai-approved` → 该件不在次日上架
+- [ ] bot 贴的 label 不触发 approve job；AI 评论不触发重审
 - [ ] 断网时段脚本静默失败、恢复后补跑
+- [ ] 同包新版本无新 finding → 不进 AI 复审
