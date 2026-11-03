@@ -12,7 +12,8 @@ export const PluginFeature = z.enum(['server', 'tui', 'gui', 'rpc'])
 export const DiscoveryChannel = z.enum(['npm-keyword', 'github-topic', 'code-search', 'topic-list', 'submission'])
 
 export const VerificationStatus = z.enum(['verified', 'failed', 'unverified', 'skipped'])
-export const VerificationLevel = z.enum(['install', 'load', 'structure'])
+/** deepest stage reached: install → load (server canary) → interactive (L2 tmux) → render (L3a gui harness) */
+export const VerificationLevel = z.enum(['install', 'load', 'interactive', 'render', 'structure'])
 
 export const Source = z.object({
   kind: SourceKind,

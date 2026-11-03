@@ -17,20 +17,9 @@ jobs:
         with: { node-version: 22 }
       - id: shards
         run: |
-          node -e '
-            const fs = require("fs")
-            const idx = JSON.parse(fs.readFileSync("/tmp/index.json","utf8"))
-            const todo = idx.plugins.filter(p =>
-              p.verification.status === "unverified" && !(p.capabilities.redFlags||[]).length
-            ).map(p => p.name)
-            const shards = []
-            const cap = todo.slice(0, 48)
-            for (let i = 0; i < cap.length; i += 12) shards.push(cap.slice(i, i + 12))
-            console.log("todo:", todo.length, "shards:", shards.length)
-            shards.forEach((s, i) => fs.writeFileSync(`/tmp/shard-${i}.json`, JSON.stringify(s)))
-            fs.appendFileSync(process.env.GITHUB_OUTPUT,
-              `list=${JSON.stringify(shards.map((_, i) => i))}\n`)
-          '
+          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp > /tmp/plan.out
+          tail -1 /tmp/plan.out > /tmp/shard-list.json
+          echo "list=$(cat /tmp/shard-list.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with: { name: shards, path: /tmp/shard-*.json, retention-days: 1 }
 
@@ -60,7 +49,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm i -g @opencode/cli && opencode --version   # A6-verified v2 install
+      # pinned in lockstep with OPENCODE_VERSION in pipeline/publish/merge.ts —
+      # verification results are keyed name@version+host (DEV §4)
+      - run: npm i -g @opencode/cli@2.2.5 && opencode --version
       - uses: actions/download-artifact@v4
         with: { name: shards, path: /tmp }
       - name: verify shard

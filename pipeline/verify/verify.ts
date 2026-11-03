@@ -10,11 +10,25 @@ export type ExecFn = typeof exec
 
 export interface VerifyResult {
   name: string
+  /** exact version that was installed — write-back routes on this (DEV §4). */
+  version?: string
   status: 'verified' | 'failed'
-  level: 'install' | 'load'
+  level: 'install' | 'load' | 'interactive' | 'render'
   opencodeVersion: string
   verifiedAt: string
   logExcerpt?: string
+}
+
+/** Shard input unit (verify.yml plan emits these). Legacy string shards coerce. */
+export interface VerifyTarget {
+  name: string
+  version?: string
+  /** features of the version under test — routes optional L2/L3a checks */
+  features?: string[]
+}
+
+export function coerceTarget(t: VerifyTarget | string): VerifyTarget {
+  return typeof t === 'string' ? { name: t } : t
 }
 
 const LOG_REL = 'opencode/log/opencode.log'
@@ -64,22 +78,27 @@ export function loadedSignal(logText: string, name: string): boolean {
 
 export async function verifyPackage(
   name: string,
-  opts: { home?: string; timeoutMs?: number; execFn?: ExecFn } = {},
+  opts: { version?: string; features?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn } = {},
 ): Promise<VerifyResult> {
   const run = opts.execFn ?? exec
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
   const env = xdgEnv(home)
   const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
+  const spec = opts.version ? `${name}@${opts.version}` : name
+  const base = {
+    name,
+    ...(opts.version ? { version: opts.version } : {}),
+    opencodeVersion: await ocVersion(env, run).catch(() => 'unknown'),
+    verifiedAt: new Date().toISOString(),
+  }
 
-  // install (plugin add writes config + fetches package)
+  // install the PINNED spec (name@version) — the version users would get (DEV §4)
   try {
-    await run('opencode', ['plugin', 'add', name], { env, timeout })
+    await run('opencode', ['plugin', 'add', spec], { env, timeout })
   } catch (e) {
     return {
-      name, status: 'failed', level: 'install',
-      opencodeVersion: await ocVersion(env, run).catch(() => 'unknown'),
-      verifiedAt: new Date().toISOString(),
+      ...base, status: 'failed', level: 'install',
       logExcerpt: tail(String((e as { stderr?: string }).stderr ?? (e as Error).message)),
     }
   }
@@ -88,7 +107,9 @@ export async function verifyPackage(
   // http.span on `loading plugin` log lines), so: boot `serve` in background,
   // wait for its listening+password lines, hit /api/plugin + /api/session to
   // force the load, then kill. No provider needed; `run`'s service machinery
-  // hangs in CI so it isn't used.
+  // hangs in CI so it isn't used. The dummy provider config is still written —
+  // the TUI check below needs it to get past first-run.
+  writeDummyProvider(home)
   const boot = [
     `opencode serve --port 0 > serve.out 2>&1 &`,
     `SPID=$!`,
@@ -106,15 +127,35 @@ export async function verifyPackage(
     // boot/curl failure still leaves whatever log was written — the canary decides
   }
   const log = readLog(home)
-  const ok = loadedSignal(log, name)
-  return {
-    name,
-    status: ok ? 'verified' : 'failed',
-    level: 'load',
-    opencodeVersion: await ocVersion(env, run).catch(() => 'unknown'),
-    verifiedAt: new Date().toISOString(),
-    ...(ok ? {} : { logExcerpt: tail(log) }),
+  if (!loadedSignal(log, name)) {
+    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(log) }
   }
+
+  // feature-routed depth checks (L2/L3a) — level records deepest stage passed
+  const feats = opts.features ?? []
+  let level: VerifyResult['level'] = 'load'
+
+  if (feats.includes('tui')) {
+    const { checkTui } = await import('./tui.ts')
+    const tui = await checkTui(env, run)
+    if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
+    level = 'interactive'
+  }
+
+  if (feats.includes('gui')) {
+    const { checkGuiBundle, findGuiBundle } = await import('./gui.ts')
+    const found = findGuiBundle(home, name)
+    if ('error' in found) {
+      return { ...base, status: 'failed', level: 'render', logExcerpt: found.error }
+    }
+    const gui = await checkGuiBundle(found.src)
+    if (!gui.ok) {
+      return { ...base, status: 'failed', level: 'render', logExcerpt: `gui ${gui.stage}: ${gui.error}` }
+    }
+    level = 'render'
+  }
+
+  return { ...base, status: 'verified', level }
 }
 
 async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
@@ -122,12 +163,17 @@ async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
   return stdout.trim().replace(/^opencode\s*v?/i, '')
 }
 
-/** Shard driver: verify a slice of names, write results JSON. */
-export async function verifyShard(names: string[], outPath: string, opts: { execFn?: ExecFn } = {}): Promise<VerifyResult[]> {
+/** Shard driver: verify a slice of {name,version,features} targets, write results JSON. */
+export async function verifyShard(targets: (VerifyTarget | string)[], outPath: string, opts: { execFn?: ExecFn } = {}): Promise<VerifyResult[]> {
   const results: VerifyResult[] = []
-  for (const n of names) {
-    results.push(await verifyPackage(n, opts))
-    console.log(`verify ${n}: ${results.at(-1)!.status}`)
+  for (const t of targets) {
+    const target = coerceTarget(t)
+    results.push(await verifyPackage(target.name, {
+      ...opts,
+      ...(target.version ? { version: target.version } : {}),
+      ...(target.features ? { features: target.features } : {}),
+    }))
+    console.log(`verify ${target.name}@${target.version ?? 'latest'}: ${results.at(-1)!.status}`)
   }
   mkdirSync(join(outPath, '..'), { recursive: true })
   const { writeFileSync } = await import('node:fs')
@@ -139,6 +185,6 @@ export async function verifyShard(names: string[], outPath: string, opts: { exec
 if (import.meta.url === `file://${process.argv[1]}`) {
   const namesFile = process.argv[2]!
   const out = process.argv[3]!
-  const names: string[] = JSON.parse(readFileSync(namesFile, 'utf8'))
+  const names: (VerifyTarget | string)[] = JSON.parse(readFileSync(namesFile, 'utf8'))
   verifyShard(names, out).catch(e => { console.error(e); process.exit(1) })
 }

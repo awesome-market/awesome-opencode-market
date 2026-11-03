@@ -181,9 +181,6 @@ export function mergeEntries(
             redFlags: [...new Set([...out.pendingUpdate.capabilities.redFlags, ...dRed])],
           },
         }
-        if (out.pendingUpdate.capabilities.redFlags.length > 0 && out.pendingUpdate.verification.status === 'verified') {
-          out.pendingUpdate = { ...out.pendingUpdate, verification: { status: 'skipped', level: out.pendingUpdate.verification.level ?? 'install' } }
-        }
       } else {
         // no hold in play — the entry itself IS the candidate
         out.capabilities = {
@@ -191,9 +188,21 @@ export function mergeEntries(
           findings: [...new Set([...out.capabilities.findings, ...dFindings])],
           redFlags: [...new Set([...out.capabilities.redFlags, ...dRed])],
         }
-        if (out.capabilities.redFlags.length > 0 && out.verification.status === 'verified') {
-          out.verification = { status: 'skipped', level: out.verification.level ?? 'install' }
-        }
+      }
+    }
+    // honest-label invariant: a flagged version never gets run → 'skipped'
+    // ("有高危信号没跑"), not 'unverified' ("还没验"). 'failed' results keep
+    // their real outcome. Applies to both layers — trust flags can add
+    // redFlags after scan time produced 'unverified'.
+    const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
+      flagged && (v.status === 'verified' || v.status === 'unverified')
+        ? { status: 'skipped', level: v.level ?? 'install' }
+        : v
+    out.verification = skipIfFlagged(out.verification, out.capabilities.redFlags.length > 0)
+    if (out.pendingUpdate) {
+      out.pendingUpdate = {
+        ...out.pendingUpdate,
+        verification: skipIfFlagged(out.pendingUpdate.verification, out.pendingUpdate.capabilities.redFlags.length > 0),
       }
     }
     return out
