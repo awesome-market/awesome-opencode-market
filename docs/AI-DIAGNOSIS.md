@@ -1,6 +1,6 @@
 # AI 审核与上架管线设计
 
-> 状态：设计定稿 v3.1，待实现。
+> 状态：设计定稿 v3.3，待实现。
 >
 > v3 相对 v2 的关键变化：
 > - **队列统一**：取消 issue-label 上架池，改为 index 级 `approval` 字段 +
@@ -27,6 +27,20 @@
 > - 红旗件 AI 写 `concern`+草稿当 reason——草稿顺 verdict 进日报
 > - `trustFlags` 拆身份级（挂展示层）/ 版本级 delta（挂 pendingUpdate）
 > - legacy backfill 批量翻牌 >5% → 告警+人工确认闸
+>
+> v3.3 复审三轮修正（补一个真实放毒门槛 + 一条人工死路）：
+> - **release 需 verification 通过**：48h 降级只降 AI 物料不降门槛——
+>   `verification.status!=='verified'`（品类豁免除外）即使 verdict
+>   成熟也不释放；verify 宕机=自然 fail-closed 冻结
+> - 二次拦截收窄为 **`source:ai` 的 pass**——source 由我们代码盖章
+>   AI 伪造不了；human pass 走 verdict 通道留审计，不再被静默吞掉
+> - 同 `name@version` 多 verdict 取 `at` 最新；**concern 落展示版
+>   = 人工事后撤下通道**（AI 只审 pending 目标，能给展示版写
+>   concern 的只有人——免费的紧急刹车，blocklist 仍是重事故手段）
+> - verdict 记录带 `sha`——同 sha re-tag 复用判词有了证明载体
+> - digest-state 缺文件 = `lastDigestAt` 视为 -∞（全冻结 bootstrap）
+> - L0.5 输入钉死=主审物料文本面逐块打分取 max，不跑整包源码
+> - **human pass 同样需上日报**——日报是所有放行的唯一完整预告面
 
 ## 1. 目标与原则
 
@@ -78,17 +92,24 @@ catalog run 读 verdicts（顺序钉死：run 开头先对 old index 应用
    ├─ pass（verdict.at ≤ digest-state.json 的 lastDigestAt）
    │     → approved / pendingUpdate 释放为展示版
    │     ※ "先上日报再上架"= 真实否决窗；日报不跑 = 自然 fail-closed
-   ├─ pass 落在 redFlags 条目 → run.ts 二次拦截忽略（纵深防御）
-   └─ concern → 保持 pending + reason（立即生效，无窗口）
+   │     ※ release gate：目标版 verification.status==='verified'
+   │       （品类豁免除外）才释放——48h 降级硬审的 pass 也过不了
+   │       此闸，verify 宕机 = 冻结不放毒
+   ├─ source:ai 的 pass 落在 redFlags 条目 → 二次拦截忽略
+   │     （source 由代码盖章 AI 伪造不了 human；human pass 放行——
+   │       人批红旗件是知情决定，走 verdict 通道留审计）
+   └─ concern → 保持 pending + reason（立即生效，无窗口）；
+      concern 落展示版 → approval 打回 pending 撤下（人工刹车）
 
 人工通道
    ├─ 投稿 issue：/approve（owner）或勾 submission:approved（triage+）
    └─ 非投稿条目：日报 issue 评论 /approve <name>，或直接推 verdicts 文件
    → approve 写入时用 npm view 解析当下 latest 再落 verdict（防版本漂移）
 
-日报（本地 cron 21:00，固定 issue 盖楼）
-   ① 明日上架（pass verdict 未满 24h / 已成熟未跑过 catalog）
-   ② pending 中（等 AI 审）
+日报（本地 cron 21:00，固定 issue 盖楼；lastDigestAt=本期发布时间）
+   ① 明日上架（当前目标版已有 pass verdict 且 verification 过——
+      本期发布后这些 verdict 全部成熟，下趟 run 释放）
+   ② pending 中（等 AI 审 / 等 verify / pass 已成熟但 verify 未过）
    ③ concern 挂起（等人工）
 ```
 
@@ -119,11 +140,19 @@ capabilities/verification 提升为展示字段，`pendingUpdate` 清除。
 per-version 数据，这是本设计在 merge.ts 里的手术核心。
 
 **写回通道**：catalog 分支 `ai-verdicts.jsonl`（同 submissions.txt 模式）
-`{name, version, verdict: pass|concern, reason, at, source: ai|human}`
-- verdict 按 `name@version` 键控，append-only 无清理
+`{name, version, verdict: pass|concern, reason, at, source: ai|human, sha?}`
+- verdict 按 `name@version` 键控，append-only 无清理；
+  同 `name@version` 多 verdict 取 `at` 最新者生效
+- `sha` = 被审 tarball 的 sha——同 sha re-tag/重发时复用判词
+  （同内容重审零收益；无 sha 字段无法证明"同内容"）
 - `pass` 需**已出现在最近一期日报**（`at ≤ digest-state.json 的
-  lastDigestAt`）才生效；`concern` 立即生效
-- github-kind 无版本：`version: null` 匹配 `latestVersion: null` 的条目
+  lastDigestAt`）才生效；`concern` 立即生效；**human pass 同样
+  需上日报**——日报是所有放行的唯一完整预告面
+- `digest-state.json` 缺文件 → `lastDigestAt` 视为 -∞ → 全冻结
+  （fail-closed；首期日报建立 bootstrap）
+- github-kind 无版本：`version: null` 匹配 `latestVersion: null`
+  的条目；github-kind **无 pendingUpdate**（无版本键可挂）——
+  复审直接作用于展示条目，concern 即 `approval` 打回 pending 撤下
 
 ## 5. AI 二审：任务收窄 + 去语义化输入
 
@@ -180,6 +209,11 @@ user:   <data>
 **产出 = 信号**：分数+类别 → 超阈值直接 concern 转人工（不耗主审
 token）；分数也进主审物料作为提示。本地毫秒级，全部件可跑。
 
+**输入钉死**：打分对象 = **主审物料的文本面**——skill 全文、
+tool descriptions、manifest 描述、命中行摘录等会进 `<data>` 的
+文本块，逐块打分取 max。**不跑整包源码**——分类器按 chat 分布
+训练，代码是 off-distribution 输入，FP 必然偏高。
+
 **L0.5 是可换插槽，不绑定模型**：接口 = `score → 阈值 → finding`，
 `modelId+version` 记入审计元数据，随领域演进换血——分类器不会因
 时间失效，但**覆盖面**会随新攻击手法老化。
@@ -203,7 +237,7 @@ catalog 真实语料 + 合成攻击集自建 eval（Horizon 开源评测套件�
 **已知局限如实写**：注入检测是军备竞赛，各分类器均有非零绕过率；
 看着正常的恶意引导不在注入检测覆盖内。不确定一律转人工。
 
-### 品类×审查矩阵（skill / MCP 纳入时的差异）
+## 6. 品类×审查矩阵（skill / MCP 纳入时的差异）
 
 市场含 skill 与 MCP（未开发）。载荷类型不同，管线重心不同：
 
@@ -309,10 +343,18 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   - `pass` 仅 `at ≤ lastDigestAt`（已上最近一期日报）生效；
     `concern` 立即生效；日报不跑 = fail-closed 冻结
   - verdict 按 `name@version` 键控：v1.3 的 pass 不会误放 v1.4；
-    旧 verdict 自然失效，文件 append-only 无清理需求
-  - **二次拦截**：pass 落在 capabilities（或 pendingUpdate.capabilities）
-    含 redFlags 的条目上 → 忽略（AI 写错也兜住；人批准可override=
-    人本来就能直接改文件）
+    旧 verdict 自然失效，文件 append-only 无清理需求；
+    同 `name@version` 多 verdict 取 `at` 最新者生效
+  - **release gate**：释放要求目标版 `verification.status ===
+    'verified'`（品类豁免除外）——48h 降级硬审的 pass 同样过不
+    了此闸；verify 宕机/迟到 = 冻结不放毒，fail-closed
+  - **二次拦截**（仅 `source:ai` 的 pass）：落在 capabilities
+    （或 pendingUpdate.capabilities）含 redFlags 的条目上 → 忽略。
+    source 由我们代码盖章，AI 伪造不了 human；human pass 放行——
+    人批红旗件是知情决定，走 verdict 通道留审计比改文件干净
+  - concern 落当前展示版（只可能是 source:human——AI 只审
+    pending 目标）→ `approval` 打回 `pending` 立即撤下——
+    人工紧急刹车通道；重事故仍走 blocklist tombstone
   - 红旗件的 AI 出路：**写 `concern` + 草稿当 reason**——非投稿条目
     没有 issue 可评论，草稿顺 verdict 通道进日报/详情页，不新增通道
   - 人可"预批准"：verdict 先于 pendingUpdate 落盘也无害——条目
@@ -320,8 +362,9 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   - 两个写者（本地 AI 直推 + GitHub approve job）→ push 冲突时
     fetch+rebase 重试，同 ingest 现有模式
 - ai-diagnose 对 pendingUpdate 的 audit **等 `verification.status
-  !== 'unverified'` 再跑**（48h 无结果才降级硬审）——料不全的
-  audit 会被后来的 verify-fail 推翻，白费 token；新 pending 条目同理
+  !== 'unverified'` 再跑**（48h 无结果才降级硬审——**降级只降
+  AI 物料，release 仍需 verified**，不放毒）——料不全的 audit
+  会被后来的 verify-fail 推翻，白费 token；新 pending 条目同理
 - legacy backfill 加闸：单趟 concern 翻牌 >5% 存量 → 批量告警 +
   人工确认再生效（防模型/阈值事故把站点清空一角）
 - 新条目 → `approval: pending`；存量迁移 → `approval: 'legacy'`
@@ -333,26 +376,36 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 - `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate →
   verify-failed 短路（`verification.status==='failed'` → 直接写
-  concern，不调 LLM）→ L0.5 分类器 → 全量审 → 写 ai-verdicts.jsonl +
-  推 catalog 分支；needs-work/invalid issue → 草稿评论
+  concern、reason 带 verify 摘要，不调 LLM）→ L0.5 分类器 →
+  全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
+  needs-work/invalid issue → 草稿评论
 - 本地素材边界：`fetchTarball` **下载阅读允许**（数据非执行），
   install/run/plugin add 永远禁止——与云端零执行不冲突
 - 注入检测模型（可换插槽）：**开发期 Galvanize-2 已下载占位**
   （HF 缓存，1.1GB），正式选型待调研——候选 Galvanize-2 /
   Horizon 全量闸 + Granite Guardian BYOC 第二判据 + PG2 第三
   票；皆信号源非裁决，`modelId+version` 记入审计元数据
+- L0.5 加载路径：Python sidecar（`tokenizers` 读 tokenizer.json +
+  torch 前向，依赖本机已装）经 `pipeline/l05/classify.py` 由 Node
+  spawn 调用；或 onnxruntime-node 走模型自带 onnx——launchd 进程
+  需显式带 `HF_HOME` env 才找得到缓存（不继承 shell env）
+- 容量诚实账：Ornith 实测 ~21 tok/s，单件全量审约 1-3 min →
+  每小时数十件上限；积压不丢——在日报 ② 排队显示深度，自然背压
 - `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern
   挂起）+ 发布时写 `digest-state.json`（`lastDigestAt`）到 catalog
   分支——run.ts 据此判 verdict 成熟度；digest 必须先于承担释放的
   catalog run 发布（21:00 日报 → 03:17 跑批）
 - 主审 LLM endpoint：本机 omlx（OpenAI 兼容，`http://localhost:8001/v1`），
-  模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`；`AI_BASE_URL`/
-  `AI_API_KEY`/`AI_MODEL` 读 `~/.config/opencode-market/ai.env`
-  （**key 永不进 repo**，配置驱动可换 provider）
+  模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（已实测可用，
+  ~21 tok/s、262k 上下文）；`AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL`
+  读 `~/.config/opencode-market/ai.env`（已创建，权限 600，
+  **key 永不进 repo**，配置驱动可换 provider）
 - 实现要点：该模型是**推理模型**——响应先吐 `reasoning_content`
   （思考链）再给 `content`；解析取 `content`，`max_tokens` 须为
   思考链留足余量（实测 8 tokens 全耗在 reasoning 上）
-- launchd：ai-diagnose 每小时、digest 每日 21:00；key 在 `~/.config/`
+- launchd：ai-diagnose 每小时、digest 每日 21:00；plist 交付后
+  `launchctl` 激活与否由人定；GUI 管理推荐 `azu/launchd-ui`
+  （开源，定时预览/日志/启停），备选 jayhickey/Launchyard
 - AI 故障 = fail-closed：新内容冻结 pending，已上线不动；超时告警
 
 ## 12. 安全边界
@@ -360,7 +413,8 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 | 边界 | 依据 |
 |---|---|
 | 展示=批准版，装=批准版 | hold-by-default + 钉装，毒版到不了用户 |
-| AI 无特赦权 | redFlags 只起草；误判方向恒保守 |
+| 上架=机械+AI 都过 | release gate 要求 verified；verify 宕机=冻结不放毒 |
+| AI 无特赦权 | redFlags 只起草；source:ai pass 落红旗被拦截；误判方向恒保守 |
 | 输入去散文 + 严格 JSON 输出 | 注入面最小化，无自由文本藏私货 |
 | 本地零执行 | 装测全在云端零 token 沙箱 |
 | 日报≠审批，是反悔窗 | 人注意力归零时保底成立 |
@@ -374,9 +428,11 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 |---|---|
 | 批准不存在的包 | packument 404 → 不落，无害 |
 | 人批准时版本已漂移 | approve 按 `npm view` 解析当下 latest 落 verdict——批的就是当下版 |
-| 误批/事后发现毒版 | blocklist 下架（tombstone） |
+| 误批/事后发现毒版 | blocklist 下架（tombstone）；或 human concern 落展示版 → 打回 pending 撤下（轻量刹车） |
 | 想拦 pending 中的 | 写 human concern 进 verdicts，或 AI 挂起时人工复核 |
 | 版本风暴 | 只审最新版；中间版饿死但条目照常滚动——成熟 verdict 在 run 开头先释放，每个已审版都有一次确定的释放窗 |
+| 同 sha re-tag/重发 | verdict 带 sha，同内容复用判词不重复审 |
+| verify 宕机/迟到 | release gate 挡住——pass 再成熟也不放，fail-closed；恢复后已成熟 verdict 直接走 |
 | 休眠后投毒 | 高疑信号进物料；hold 保证毒版只进审计面 |
 | AI 挂掉 | 更新冻结 pending，存量不动，告警 |
 | 存量迁移 | legacy 展示标注，backfill 逐批升级，不清空站点 |
@@ -399,11 +455,18 @@ skill 走 `installSkillTar` 独立路径，同步钉。
       未上日报的不释放；run 开头先应用成熟 verdict 再跑发现比对
 - [ ] AI concern → 立即保持 pending + reason，进人工
 - [ ] 红旗件 AI 写 concern + 草稿 reason（顺 verdict 进日报）
-- [ ] pass 落在 redFlags 条目 → run.ts 拦截忽略
+- [ ] `source:ai` 的 pass 落在 redFlags 条目 → run.ts 拦截忽略；
+      `source:human` 的 pass 放行（走 verdict 通道留审计）
+- [ ] **release gate**：目标版 `verification.status==='verified'`
+      才释放；verify 未回/失败时成熟 pass 不释放（fail-closed）
+- [ ] 同 `name@version` 多 verdict 取最新；concern 落展示版 →
+      approval 打回 pending 撤下（人工刹车）
+- [ ] verdict 记录带 `sha`；同 sha re-tag 复用判词
 - [ ] 版本 bump → pendingUpdate 挂起，展示字段钉旧版；pass 后升级
 - [ ] 挂起版不重复全量扫；rollback 检测不误报；sec-delta 归
       pendingUpdate、身份级 flag 留展示层
-- [ ] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 降级）
+- [ ] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 只降级
+      物料，不降 release 门槛）
 - [ ] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
 - [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
       `plugins` spec → reload；**列表/搜索/详情过滤 pending**
