@@ -11,6 +11,7 @@ import { buildIndex } from './publish/merge.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
 import { classify } from '../src/categories.ts'
+import { detectFeatures } from '../src/features.ts'
 
 export interface RunOptions {
   seedPath?: string | undefined
@@ -113,27 +114,7 @@ export async function run(opts: RunOptions = {}) {
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
         description: { en: cand.description },
-        ...((): { features?: ('server' | 'tui' | 'gui' | 'rpc')[] } => {
-          const parts = new Set<'server' | 'tui' | 'gui' | 'rpc'>()
-          const keys = pk.exports && typeof pk.exports === 'object' ? Object.keys(pk.exports as object) : []
-          for (const k of keys) {
-            if (/server/.test(k)) parts.add('server')
-            if (/tui/.test(k)) parts.add('tui')
-            if (/gui/.test(k)) parts.add('gui')
-            if (/rpc/.test(k)) parts.add('rpc')
-          }
-          for (const f of scan.findings) {
-            const p = f.split(':').slice(1).join(':')
-            if (/server|cli\./.test(p)) parts.add('server')
-            if (/tui/.test(p)) parts.add('tui')
-            if (/gui/.test(p)) parts.add('gui')
-            if (/rpc/.test(p)) parts.add('rpc')
-          }
-          // every admitted package is a server-part plugin by definition —
-          // hasPluginEvidence requires main/exports which IS the server entry
-          parts.add('server')
-          return { features: [...parts] }
-        })(),
+        features: detectFeatures(pk.exports, scan.findings),
         category: classify(cand.name, slugOf({ repo: repo ?? undefined, npmName: cand.name }), cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
