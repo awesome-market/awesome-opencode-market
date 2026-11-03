@@ -9,10 +9,17 @@ export interface RepoMeta {
   createdAt: string | null
   license: string | null
   topics: string[]
+  defaultBranch: string | null
 }
 
-export type RepoMetaStatus = 'ok' | 'not-found' | 'error'
+/** 'rate-limited' is distinct from 'error': quota exhaustion must be visible, not silent. */
+export type RepoMetaStatus = 'ok' | 'not-found' | 'rate-limited' | 'error'
 export interface RepoMetaResult { meta: RepoMeta | null; status: RepoMetaStatus }
+
+function rateLimited(res: Response): boolean {
+  return res.status === 429
+    || (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0')
+}
 
 export async function fetchRepoMeta(
   fullName: string,
@@ -26,11 +33,12 @@ export async function fetchRepoMeta(
     return { meta: null, status: 'error' }
   }
   if (res.status === 404) return { meta: null, status: 'not-found' }
+  if (rateLimited(res)) return { meta: null, status: 'rate-limited' }
   if (!res.ok) return { meta: null, status: 'error' }
   const b = (await res.json()) as {
     id?: number
     stargazers_count?: number; archived?: boolean; pushed_at?: string; created_at?: string
-    license?: { spdx_id?: string }; topics?: string[]
+    license?: { spdx_id?: string }; topics?: string[]; default_branch?: string
   }
   return {
     meta: {
@@ -41,9 +49,34 @@ export async function fetchRepoMeta(
       pushedAt: b.pushed_at ?? null,
       createdAt: b.created_at ?? null,
       license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
+      defaultBranch: b.default_branch ?? null,
     },
     status: 'ok',
   }
+}
+
+export interface RepoTreeResult { paths: Set<string> | null; status: RepoMetaStatus }
+
+/** One git-trees call returns every path — replaces per-file contents probes. */
+export async function fetchRepoTree(
+  fullName: string,
+  branch = 'HEAD',
+  opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
+): Promise<RepoTreeResult> {
+  const f = opts.fetchFn ?? fetch
+  let res: Response
+  try {
+    res = await f(`https://api.github.com/repos/${fullName}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      { headers: ghHeaders(opts.token) })
+  } catch {
+    return { paths: null, status: 'error' }
+  }
+  if (res.status === 404 || res.status === 409) return { paths: null, status: 'not-found' }
+  if (rateLimited(res)) return { paths: null, status: 'rate-limited' }
+  if (!res.ok) return { paths: null, status: 'error' }
+  const b = (await res.json()) as { tree?: Array<{ path?: string }>; truncated?: boolean }
+  // truncated responses still contain the front of the tree — usable for root probes
+  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok' }
 }
 
 /** Probe whether a path exists in a repo (default branch). */

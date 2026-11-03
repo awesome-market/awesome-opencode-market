@@ -103,8 +103,8 @@ describe('branches round 2', () => {
         'dist-tags': { latest: '1' },
         versions: { '1': { repository: 'https://github.com/o/e', keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } }, time: {} })
       if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
-      if (url.includes('api.github.com/repos/')) return mkRes({ stargazers_count: 1, archived: false, pushed_at: 't' })
-      if (url.includes('/contents/SKILL.md')) return new Response('', { status: 200 }) // hasSkill branch
+      if (url.includes('/git/trees/')) return mkRes({ tree: [{ path: 'SKILL.md' }] }) // hasSkill via single tree call
+      if (url.includes('api.github.com/repos/')) return mkRes({ stargazers_count: 1, archived: false, pushed_at: 't', default_branch: 'main' })
       if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
       return mkRes({}, 404)
     }) as typeof fetch

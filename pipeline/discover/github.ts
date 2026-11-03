@@ -11,6 +11,10 @@ export interface GhRepo {
   pushedAt: string | null
   stars: number
   defaultBranch: string
+  id: number | null          // numeric repo id — repojacking detection, free from search results
+  createdAt: string | null
+  license: string | null
+  topics: string[]
 }
 
 export function ghHeaders(token?: string): Record<string, string> {
@@ -36,6 +40,8 @@ export async function searchTopic(
       items?: Array<{
         full_name: string; description: string | null; archived: boolean
         fork: boolean; pushed_at: string | null; stargazers_count: number; default_branch: string
+        id?: number; created_at?: string | null
+        license?: { spdx_id?: string } | null; topics?: string[]
       }>
     }
     const items = body.items ?? []
@@ -48,6 +54,10 @@ export async function searchTopic(
         pushedAt: it.pushed_at,
         stars: it.stargazers_count,
         defaultBranch: it.default_branch,
+        id: it.id ?? null,
+        createdAt: it.created_at ?? null,
+        license: it.license?.spdx_id && it.license.spdx_id !== 'NOASSERTION' ? it.license.spdx_id : null,
+        topics: it.topics ?? [],
       })
     }
     if (items.length < 100) break

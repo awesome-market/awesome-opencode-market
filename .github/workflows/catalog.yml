@@ -27,7 +27,8 @@ jobs:
           fi
       - name: run pipeline
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
+          GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
         run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --max 2000
       - uses: actions/upload-artifact@v4
         with:

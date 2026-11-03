@@ -5,7 +5,7 @@ import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchMarketMeta, repoFileExists } from './fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
@@ -112,12 +112,14 @@ export async function run(opts: RunOptions = {}) {
   //    the whole entry; only metrics get a rolling refresh (>7d stale).
   const entries: PluginEntry[] = []
   const reusedNames = new Set<string>()
+  let rateLimitedCalls = 0
 
   const refreshMeta = async (e: PluginEntry): Promise<PluginEntry> => {
     const { pk } = await fetchPackument(e.name, { fetchFn: f })
     const repoMetaRes = e.source.repo
       ? await fetchRepoMeta(e.source.repo, { token: opts.ghToken, fetchFn: f })
       : null
+    if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
     const downloads = await fetchDownloads30d(e.name, { fetchFn: f })
     return {
       ...e,
@@ -178,12 +180,16 @@ export async function run(opts: RunOptions = {}) {
       }
 
       const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
       const repoMeta = repoMetaRes?.meta ?? null
       const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
-      const hasSkill = repo
-        ? (await repoFileExists(repo, 'SKILL.md', { token: opts.ghToken, fetchFn: f })) ||
-          (await repoFileExists(repo, '.opencode/skills', { token: opts.ghToken, fetchFn: f }))
-        : false
+      // one recursive tree call covers all path probes (was 2 contents HEAD calls)
+      const treeRes = repo && repoMeta?.defaultBranch
+        ? await fetchRepoTree(repo, repoMeta.defaultBranch, { token: opts.ghToken, fetchFn: f })
+        : null
+      if (treeRes?.status === 'rate-limited') rateLimitedCalls++
+      const hasSkill = !!treeRes?.paths &&
+        (treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills')))
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
 
       const entry: PluginEntry = {
@@ -226,37 +232,47 @@ export async function run(opts: RunOptions = {}) {
     await Promise.all(queue.slice(i, i + BATCH).map(worker))
   }
 
-  // 3b. github-topic candidates with no npm counterpart (D-1: ghList wiring)
+  // 3b. github-topic candidates with no npm counterpart (D-1: ghList wiring).
+  //     Search results already carry id/stars/createdAt/license/topics — no extra
+  //     api.github.com calls needed here. fetchMarketMeta hits raw.githubusercontent
+  //     (CDN, uncounted) so it stays free even under API quota exhaustion.
   const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
-  for (const c of ghList) {
-    if (coveredRepos.has(c.fullName)) continue
-    if (isBlocked(c.fullName, c.fullName)) continue
-    entries.push({
-      name: c.fullName,
-      slug: c.fullName.toLowerCase(),
-      aliases: [],
-      type: 'plugin',
-      discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
-      source: { kind: 'github', id: c.fullName, repo: c.fullName },
-      description: { en: c.description },
-      features: ['server'],
-      category: classify(c.fullName, c.fullName.toLowerCase(), c.description),
-      license: null,
-      deprecated: false,
-      deprecatedMessage: null,
-      replacement: null,
-      createdAt: null,
-      modifiedAt: null,
-      maintainers: [],
-      distTags: {},
-      firstSeenAt: now,
-      latestVersion: null,
-      publishedAt: null,
-      metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
-      capabilities: { scannedAt: null, findings: [], redFlags: [] },
-      verification: { status: 'skipped', level: 'install' },
-      compat: {},
-    })
+  const ghMissing = ghList.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
+  for (let i = 0; i < ghMissing.length; i += BATCH) {
+    const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
+      const mm = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
+      const entry: PluginEntry = {
+        name: c.fullName,
+        slug: c.fullName.toLowerCase(),
+        aliases: [],
+        type: 'plugin',
+        discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
+        source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}) },
+        description: { en: mm?.description?.en ?? c.description, ...(mm?.description?.zh ? { zh: mm.description.zh } : {}) },
+        features: ['server'],
+        category: mm?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
+        license: c.license,
+        deprecated: false,
+        deprecatedMessage: null,
+        replacement: null,
+        createdAt: c.createdAt,
+        modifiedAt: null,
+        maintainers: [],
+        distTags: {},
+        firstSeenAt: now,
+        latestVersion: null,
+        publishedAt: null,
+        metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
+        capabilities: { scannedAt: null, findings: [], redFlags: [] },
+        verification: { status: 'skipped', level: 'install' },
+        compat: {},
+      }
+      return entry
+    }))
+    entries.push(...batch)
+  }
+  if (rateLimitedCalls > 0) {
+    console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)
   }
 
   // 4. gone-check: old entries missing from fresh set — probe before tombstoning (F-2)
