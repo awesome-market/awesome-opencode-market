@@ -5,7 +5,7 @@ import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree } from './fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackageName } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
@@ -228,6 +228,15 @@ export async function run(opts: RunOptions = {}) {
       const hasSkill = !!treeRes?.paths &&
         (treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills')))
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      // npm↔repo correspondence: the repo's own package.json should name this
+      // package. A positive mismatch (claiming an unrelated popular repo to
+      // borrow its stars/trust) → finding; absence of evidence isn't proof.
+      if (repo) {
+        const { pkgName, status: pjStatus } = await fetchRepoPackageName(repo, { dir: pk.repositoryDir ?? undefined, fetchFn: f })
+        if (pjStatus === 'ok' && pkgName && pkgName !== cand.name && pkgName !== cand.name.split('/').pop()) {
+          scan.findings.push(`sec:repo-mismatch:${pkgName}`)
+        }
+      }
       // author-claimed fields precedence: repo .opencode-market.json > issue submission > auto-derived
       const sub = seedMeta.get(cand.name)
 

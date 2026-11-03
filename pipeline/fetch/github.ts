@@ -79,6 +79,27 @@ export async function fetchRepoTree(
   return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok' }
 }
 
+/** Cross-check npm↔repo correspondence: the repo's own package.json should name
+ *  the npm package. Uses the raw CDN (does not consume api.github.com quota).
+ *  `dir` handles monorepos (repository.directory). */
+export async function fetchRepoPackageName(
+  fullName: string,
+  opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
+): Promise<{ pkgName: string | null; status: RepoMetaStatus }> {
+  const f = opts.fetchFn ?? fetch
+  const dir = opts.dir ? `${opts.dir.replace(/^\/+|\/+$/g, '')}/` : ''
+  try {
+    const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
+    if (res.status === 404) return { pkgName: null, status: 'not-found' }
+    if (rateLimited(res)) return { pkgName: null, status: 'rate-limited' }
+    if (!res.ok) return { pkgName: null, status: 'error' }
+    const b = (await res.json()) as { name?: unknown }
+    return { pkgName: typeof b.name === 'string' ? b.name : null, status: 'ok' }
+  } catch {
+    return { pkgName: null, status: 'error' }
+  }
+}
+
 /** Probe whether a path exists in a repo (default branch). */
 export async function repoFileExists(
   fullName: string,

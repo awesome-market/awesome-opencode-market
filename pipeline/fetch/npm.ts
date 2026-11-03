@@ -8,6 +8,7 @@ export interface Packument {
   createdAt: string | null
   modifiedAt: string | null
   repository: string | null
+  repositoryDir: string | null     // monorepo subdirectory, e.g. "packages/foo"
   license: string | null
   tarballUrl: string | null
   deprecated: boolean
@@ -40,7 +41,7 @@ export async function fetchPackument(
     'dist-tags'?: { latest?: string } & Record<string, string>
     maintainers?: Array<{ name?: string } | string>
     versions?: Record<string, {
-      repository?: string | { url?: string }
+      repository?: string | { url?: string; directory?: string }
       license?: string | { type?: string }
       dist?: { tarball?: string }
       keywords?: string[]
@@ -64,6 +65,7 @@ export async function fetchPackument(
       createdAt: doc.time?.created ?? null,
       modifiedAt: doc.time?.modified ?? null,
       repository: repoUrl,
+      repositoryDir: typeof repo === 'object' && repo ? repo.directory ?? null : null,
       license: typeof lic === 'string' ? lic : lic?.type ?? null,
       tarballUrl: v?.dist?.tarball ?? null,
       deprecated: Boolean(v?.deprecated),

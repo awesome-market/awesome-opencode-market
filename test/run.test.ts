@@ -92,6 +92,34 @@ describe('pipeline/run seed injection', () => {
     expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg', 'o/r'])
     expect(idx.plugins.find(p => p.name === 'o/r')!.source.kind).toBe('github')
   })
+
+  it('repo package.json naming a different package → sec:repo-mismatch finding', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'runmm-'))
+    const base = mkFetch(mkTgz())
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('raw.githubusercontent.com') && url.includes('package.json'))
+        return new Response(JSON.stringify({ name: 'totally-other-pkg' }))
+      return base(input, init)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'index.json'), fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'good-pkg')!
+    expect(e.capabilities.findings).toContain('sec:repo-mismatch:totally-other-pkg')
+  })
+
+  it('repo package.json naming the same package → no finding', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'runmm-'))
+    const base = mkFetch(mkTgz())
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('raw.githubusercontent.com') && url.includes('package.json'))
+        return new Response(JSON.stringify({ name: 'good-pkg' }))
+      return base(input, init)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'index.json'), fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'good-pkg')!
+    expect(e.capabilities.findings.some(x => x.startsWith('sec:repo-mismatch'))).toBe(false)
+  })
 })
 
 describe('classify', () => {

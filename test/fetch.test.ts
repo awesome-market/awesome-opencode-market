@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from '../pipeline/fetch/npm.ts'
-import { fetchRepoMeta, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, repoFileExists, fetchRepoPackageName } from '../pipeline/fetch/github.ts'
 
 const mkRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
@@ -50,5 +50,15 @@ describe('fetch/github', () => {
   it('repoFileExists true/false on status', async () => {
     expect(await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => new Response('', { status: 200 })) as typeof fetch })).toBe(true)
     expect(await repoFileExists('o/r', 'NOPE', { fetchFn: (async () => new Response('', { status: 404 })) as typeof fetch })).toBe(false)
+  })
+  it('fetchRepoPackageName reads name from raw CDN + monorepo dir', async () => {
+    const urls: string[] = []
+    const f = (async (input: RequestInfo | URL) => { urls.push(String(input)); return mkRes({ name: 'sub-pkg' }) }) as typeof fetch
+    expect((await fetchRepoPackageName('o/mono', { dir: 'packages/sub', fetchFn: f })).pkgName).toBe('sub-pkg')
+    expect(urls[0]).toContain('packages/sub/package.json')
+  })
+  it('fetchRepoPackageName: 404 → not-found, non-json name → null', async () => {
+    expect((await fetchRepoPackageName('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
+    expect((await fetchRepoPackageName('o/r', { fetchFn: (async () => mkRes({ name: 42 })) as typeof fetch })).pkgName).toBeNull()
   })
 })
