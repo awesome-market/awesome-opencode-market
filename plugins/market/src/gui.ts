@@ -528,6 +528,7 @@ export default Plugin.define({
 
     const settingsPanel = () => {
       const root = el('div', 'padding:8px 12px;max-width:520px')
+      root.onmousedown = (ev) => { const t = (ev.target as HTMLElement)?.tagName ?? '?'; const tx = ((ev.target as HTMLElement)?.textContent ?? '').slice(0, 20); void safe.devlog?.(`settings mousedown on <${t}> ${tx}`).catch(() => {}) }
       const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
       // click gets swallowed between mousedown/mouseup in this webview —
