@@ -551,7 +551,7 @@ export default Plugin.define({
         } catch (x) { refStatus.textContent = `刷新失败: ${String(x)}` } finally {
           refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）'
         }
-      })
+      })()
       root.appendChild(refBtn); root.appendChild(refStatus)
       root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
       const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', '收藏、分组、备注存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。')
@@ -585,7 +585,7 @@ export default Plugin.define({
       cb.onchange = () => put({ devlog: cb.checked })
       const cbL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
       cbL.append(cb, document.createTextNode('记录调试日志（装包各阶段+错误，存本机）'))
-      const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap')
+      const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap;user-select:text;-webkit-user-select:text;cursor:text')
       const refresh = () => { logBox.textContent = devlog() ? (readLog().slice(-80).join('\n') || '暂无日志') : '开关关闭中' }
       refresh()
       const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '清空日志') as HTMLButtonElement
