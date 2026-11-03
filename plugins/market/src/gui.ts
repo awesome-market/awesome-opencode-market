@@ -135,7 +135,7 @@ export default Plugin.define({
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
         case 'installed':
           list = [...list.filter(p => installed()[p.name]),
-            ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [] } as unknown as MarketEntry))]
+            ...installedExtra().map(x => { const fake = { name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [] } as unknown as MarketEntry; fake.categories = categoriesOf(fake); return fake })]
           break
         case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
