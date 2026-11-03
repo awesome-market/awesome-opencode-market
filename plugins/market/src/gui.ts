@@ -135,7 +135,7 @@ export default Plugin.define({
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
         case 'installed':
           list = [...list.filter(p => installed()[p.name]),
-            ...installedExtra().map(x => { const fake = { name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [] } as unknown as MarketEntry; fake.categories = categoriesOf(fake); return fake })]
+            ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [], uncataloged: true } as unknown as MarketEntry))]
           break
         case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
@@ -300,7 +300,9 @@ export default Plugin.define({
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
       const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
       if (featuresOf(e).length) bottom.appendChild(partChips(true, featuresOf(e)))
-      for (const ct of categoriesOf(e)) {
+      if (e.uncataloged) {
+        bottom.appendChild(el('span', 'font-size:10px;padding:1px 8px;border:1px dashed rgba(128,128,128,.45);border-radius:10px;opacity:.6', '未收录'))
+      } else for (const ct of categoriesOf(e)) {
         const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
         bottom.appendChild(tg)

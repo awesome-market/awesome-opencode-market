@@ -1,5 +1,6 @@
 /** Shared catalog fetch — index.json is the single data plane (DEV §1). */
 export interface MarketEntry {
+  uncataloged?: boolean
   features?: ('server' | 'tui' | 'gui' | 'rpc')[]
   name: string
   slug: string
