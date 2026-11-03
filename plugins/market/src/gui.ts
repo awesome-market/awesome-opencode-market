@@ -100,7 +100,7 @@ export default Plugin.define({
       switch (tab()) {
         case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
         case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
-        case 'installed': list = list.filter(p => installed()[p.name] && !p.contains?.includes('skill')); break
+        case 'installed': list = list.filter(p => installed()[p.name]); break
         case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
         case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
         case 'discover': default: break
@@ -239,6 +239,7 @@ export default Plugin.define({
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
       title.append(nameBox)
+      title.appendChild(el('span', 'font-size:10px;opacity:.6;border:1px solid rgba(128,128,128,.4);border-radius:4px;padding:0 5px;flex-shrink:0;align-self:center', e.contains?.includes('skill') ? '技能' : '插件'))
       const btn = installBtn(e); btn.style.flexShrink = '0'
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')

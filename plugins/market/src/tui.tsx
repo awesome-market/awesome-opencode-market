@@ -103,7 +103,7 @@ export default Plugin.define({
           case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
           case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
           case 'favorites': list = list.filter(p => store.favorites[p.name]); break
-          case 'installed': list = list.filter(p => installed()[p.name] && !p.contains?.includes('skill')); break
+          case 'installed': list = list.filter(p => installed()[p.name]); break
           case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
           case 'discover': case 'settings': default: break
         }
@@ -465,6 +465,7 @@ export default Plugin.define({
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
+              <text fg={theme.text.faint}> {e.contains?.includes('skill') ? '技能' : '插件'} </text>
               <box backgroundColor={active() ? theme.background.action.primary.focused : undefined}>
                 <text fg={active() ? theme.text.action.primary.focused : verOf(e) ? theme.text.base : theme.text.muted}
                       onMouseDown={(ev) => {
