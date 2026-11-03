@@ -5,11 +5,12 @@
  *  skills are lifted to the source root preserving author IDs, prefixed with
  *  the package basename only on foreign collision. A .market-skills.json
  *  manifest records lifted paths so uninstall removes exactly what we made. */
-import { gunzipSync } from 'node:zlib'
-import { join, dirname } from 'node:path'
-import { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync } from 'node:fs'
 
-export function installSkillTar(opts: { name: string; gzipped: Uint8Array; root: string }): string {
+export async function installSkillTar(opts: { name: string; gzipped: Uint8Array; root: string }): Promise<string> {
+  const { gunzipSync } = await import('node:zlib')
+  const fs = await import('node:fs')
+  const { join, dirname } = await import('node:path')
+  const { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync } = fs
   const tar = gunzipSync(Buffer.from(opts.gzipped))
   const id = opts.name.split('/').pop()!
   const dest = join(opts.root, id)
@@ -59,7 +60,10 @@ export function installSkillTar(opts: { name: string; gzipped: Uint8Array; root:
   return `wrote ${wrote}, lifted ${paths.length}`
 }
 
-export function uninstallSkillDir(name: string, root: string): string {
+export async function uninstallSkillDir(name: string, root: string): Promise<string> {
+  const fs = await import('node:fs')
+  const { join } = await import('node:path')
+  const { readdirSync, readFileSync, rmSync, existsSync } = fs
   const id = name.split('/').pop()!
   const dest = join(root, id)
   const mf = join(dest, '.market-skills.json')
@@ -78,5 +82,8 @@ export function uninstallSkillDir(name: string, root: string): string {
   return 'removed'
 }
 
-export const GLOBAL_SKILLS_ROOT = join(
-  process.env.HOME ?? process.env.USERPROFILE ?? '', '.config', 'opencode', 'skills')
+export async function globalSkillsRoot(): Promise<string> {
+  const { homedir } = await import('node:os')
+  const { join } = await import('node:path')
+  return join(homedir(), '.config', 'opencode', 'skills')
+}

@@ -9,12 +9,8 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { spawn, execFile } from 'node:child_process'
-import { readdirSync, existsSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
-import { installSkillTar, uninstallSkillDir, GLOBAL_SKILLS_ROOT } from './skill-install.js'
+import { installSkillTar, uninstallSkillDir, globalSkillsRoot } from './skill-install.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
 const TABS: readonly (readonly [Tab, string])[] = [
@@ -67,12 +63,12 @@ export default Plugin.define({
       const [searchOn, setSearchOn] = createSignal(!!pendingQuery)
       const [settingsSel, setSettingsSel] = createSignal(0)
       const [findingsOpen, setFindingsOpen] = createSignal(false)
-      const jobs = new Map<string, ReturnType<typeof spawn>>()
+      const jobs = new Map<string, unknown>()
       let searchInput: { focus(): void; blur(): void } | undefined
 
       const log = (line: string) => {
         if (!store.devlog) return
-        try { appendFileSync(LOG_FILE, `${new Date().toLocaleString('sv-SE')} ${line}\n`) } catch { /* tmp unavailable */ }
+        void import('node:fs').then(fs => fs.appendFileSync(LOG_FILE, `${new Date().toLocaleString('sv-SE')} ${line}\n`)).catch(() => {})
       }
       const location = () => ctx.location ?? ctx.data.location.default()
       const refreshInstalled = async () => {
@@ -86,8 +82,11 @@ export default Plugin.define({
           await ctx.data.location.skill.sync(location())
           for (const s of ctx.data.location.skill.list(location()) ?? []) map[`__skill_${s.id}`] = 'local'
         } catch { /* server skill list unavailable */ }
+        const { readdirSync, existsSync } = await import('node:fs')
+        const { homedir } = await import('node:os')
+        const { join } = await import('node:path')
         Object.assign(map, scanSkillKeys(
-          [GLOBAL_SKILLS_ROOT, join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
+          [await globalSkillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
           d => readdirSync(d), p => existsSync(p)))
         setInstalled(map)
       }
@@ -145,12 +144,13 @@ export default Plugin.define({
         }, 0)
       })
 
-      const install = (e: MarketEntry) => {
+      const install = async (e: MarketEntry) => {
         const isSkill = e.contains?.includes('skill')
         log(`install start ${e.name} skill=${isSkill}`)
         if (isSkill) { void installSkill(e); return }
         setStatus(`installing ${e.name}…`)
-        const p = spawn('opencode', ['plugin', 'add', e.name], { env: process.env })
+        const { spawn } = await import('node:child_process')
+        const p = spawn('opencode', ['plugin', 'add', e.name])
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
@@ -168,7 +168,7 @@ export default Plugin.define({
           const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
           if (!url) throw new Error('no tarball')
           const buf = new Uint8Array(await (await fetch(url)).arrayBuffer())
-          const msg = installSkillTar({ name: e.name, gzipped: buf, root: GLOBAL_SKILLS_ROOT })
+          const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
           const v = e.latestVersion ?? 'local'
           await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
           setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: v })
@@ -184,13 +184,14 @@ export default Plugin.define({
         const isSkill = e.contains?.includes('skill')
         log(`uninstall ${e.name}`)
         if (isSkill) {
-          try { uninstallSkillDir(e.name, GLOBAL_SKILLS_ROOT) } catch (x) { setStatus(`uninstall fail: ${String(x)}`); return }
+          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(`uninstall fail: ${String(x)}`); return }
           const base = `__skill_${e.name.split('/').pop()}`
           const next = { ...installed() }
           for (const k of Object.keys(next)) if (k === e.name || k === base || k.startsWith(`${base}-`)) delete next[k]
           await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
           setInstalled(next); setStatus(`${e.name} removed`)
         } else {
+          const { execFile } = await import('node:child_process')
           execFile('opencode', ['plugin', 'remove', e.name], { timeout: 30_000 }, (err) => {
             if (err) { setStatus(`uninstall fail: ${err.message}`); return }
             const next = { ...installed() }; delete next[e.name]
@@ -233,13 +234,18 @@ export default Plugin.define({
         ])
 
       const settingsItems = createMemo<{ label: string; run: () => void }[]>(() => [
-        { label: '导出备份 → ~/opencode-market-backup.json', run: () => {
+        { label: '导出备份 → ~/opencode-market-backup.json', run: () => void (async () => {
+          const { homedir } = await import('node:os')
+          const { join } = await import('node:path')
+          const fs = await import('node:fs')
           const p = join(homedir(), 'opencode-market-backup.json')
-          try { writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(`export fail: ${String(x)}`) }
-        } },
-        { label: '恢复（输入备份文件路径）', run: () => openPrompt('恢复', '~/opencode-market-backup.json', v => {
+          try { fs.writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(`export fail: ${String(x)}`) }
+        })() },
+        { label: '恢复（输入备份文件路径）', run: () => openPrompt('恢复', '~/opencode-market-backup.json', async v => {
           if (!v) return
           try {
+            const { readFileSync } = await import('node:fs')
+            const { homedir } = await import('node:os')
             const d = JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as MarketState
             if (typeof d !== 'object' || !d) throw new Error('bad shape')
             void mutate(x => { Object.assign(x, { favorites: d.favorites ?? {}, groups: d.groups ?? {}, notes: d.notes ?? {}, skillVers: d.skillVers ?? {} }) })
@@ -254,19 +260,23 @@ export default Plugin.define({
           void mutate(d => { d.devlog = !d.devlog })
           setStatus(`devlog ${store.devlog ? 'off' : 'on'} → ${LOG_FILE}`)
         } },
-        { label: '查看日志', run: () => {
+        { label: '查看日志', run: () => void (async () => {
+          const { existsSync, readFileSync } = await import('node:fs')
           const tail = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, 'utf8').trim().split('\n').slice(-15) : ['(empty)']
           openMenu('开发日志（esc 关闭）', tail.map(line => ({ label: line, run: noop })))
-        } },
-        { label: `使用 HTTP catalog 源`, run: () => {
+        })() },
+        { label: `使用 HTTP catalog 源`, run: () => void (async () => {
+          const { homedir } = await import('node:os')
+          const { join } = await import('node:path')
+          const fs = await import('node:fs')
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
           try {
-            const d = existsSync(cfg) ? JSON.parse(readFileSync(cfg, 'utf8')) as { skills?: string[] } : {}
+            const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8')) as { skills?: string[] } : {}
             const list = d.skills ?? []
-            if (!list.includes(CATALOG_URL)) writeFileSync(cfg, JSON.stringify({ ...d, skills: [...list, CATALOG_URL] }, null, 2))
+            if (!list.includes(CATALOG_URL)) fs.writeFileSync(cfg, JSON.stringify({ ...d, skills: [...list, CATALOG_URL] }, null, 2))
             setStatus(`catalog source ${list.includes(CATALOG_URL) ? 'already enabled' : 'enabled'} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(`catalog fail: ${String(x)}`) }
-        } },
+        })() },
       ])
 
       const actionLabel = (e: MarketEntry) => {
@@ -415,17 +425,15 @@ export default Plugin.define({
         enabled: () => !searchOn(),
         commands: BINDS.split(' ').map(b => ({ bind: b, run: () => act(b) })),
       }))
+      // nav keys go through the modal keymap layer only — re-dispatching them
+      // here double-fired moves. useKeyboard stays for host-side fallback input.
       useKeyboard((ev) => {
         if (prompt()) {
           if (ev.name === 'escape') closePrompt(null)
           else if (ev.name === 'return') closePrompt(promptVal())
-          return
+        } else if (searchOn() && (ev.name === 'escape' || ev.name === 'return')) {
+          setSearchOn(false); (searchInput as { blur?(): void })?.blur?.()
         }
-        if (searchOn()) {
-          if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
-          return
-        }
-        act(ev.name)
       })
 
       const wrap2 = (s: string, w: number): string[] => {
@@ -457,12 +465,14 @@ export default Plugin.define({
             <box flexDirection="row">
               <text fg={active() ? theme.text.base : theme.text.muted}>{active() ? '› ' : '  '}{store.favorites[e.name] ? '★' : '☆'} {e.name} {badge(e)}</text>
               <box flexGrow={1} />
-              <text fg={verOf(e) ? theme.text.base : theme.text.muted}
-                    onMouseDown={(ev) => {
-                      ev.stopPropagation(); ev.preventDefault()
-                      const ver = verOf(e)
-                      if (ver) uninstall(e); else install(e)
-                    }}>{actionLabel(e)}</text>
+              <box backgroundColor={active() ? theme.background.action.primary.focused : undefined}>
+                <text fg={active() ? theme.text.action.primary.focused : verOf(e) ? theme.text.base : theme.text.muted}
+                      onMouseDown={(ev) => {
+                        ev.stopPropagation(); ev.preventDefault()
+                        const ver = verOf(e)
+                        if (ver) uninstall(e); else install(e)
+                      }}>{actionLabel(e)}</text>
+              </box>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(e.description?.en ?? '', 42)}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
@@ -557,6 +567,7 @@ export default Plugin.define({
                     <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()}</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
                     <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}
+                               onMouseDown={(ev) => ev.stopPropagation()}
                                ref={(r) => { listScroll = r as unknown as typeof listScroll }}>
                       <box flexDirection="column" paddingLeft={1}>
                         <For each={grid()}>{(pair, ri) => (
