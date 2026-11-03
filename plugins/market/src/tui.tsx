@@ -203,12 +203,11 @@ export default Plugin.define({
       const noop = () => {}
       const [prompt, setPrompt] = createSignal<{ title: string; done: (v: string) => void } | null>(null)
       const [promptVal, setPromptVal] = createSignal('')
-      let promptInput: { focus(): void } | undefined
       const openPrompt = (title: string, initial: string, done: (v: string) => void) => {
-        setPromptVal(initial); setPrompt({ title, done }); setSearchOn(true)
+        setPromptVal(initial); setPrompt({ title, done })
       }
       const closePrompt = (v: string | null) => {
-        const p = prompt(); setPrompt(null); setSearchOn(false)
+        const p = prompt(); setPrompt(null)
         if (v !== null && p) p.done(v)
       }
       const pickCategory = () =>
@@ -293,7 +292,7 @@ export default Plugin.define({
         row === 2 ? ['search', 'filter'] as const :
         ['cat', ...cats().slice(0, 6).map(c => `chip:${c}`)]
       const chromeGo = (d: number) =>
-        setChromeSel(i => Math.max(0, Math.min(chromeItems().length - 1, i + d)))
+        setChromeSel(i => { const n = chromeItems().length; return n ? ((i + d) % n + n) % n : 0 })
       const chromeFocused = (row: number, s: number) =>
         zone() === 'chrome' && chromeRow() === row && chromeSel() === s
       const chromeRun = () => {
@@ -308,6 +307,14 @@ export default Plugin.define({
       }
       const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
       const act = (k: string): void => {
+        if (prompt()) {
+          if (k === 'escape' || k === 'q') { closePrompt(null); return }
+          if (k === 'return') { closePrompt(promptVal()); return }
+          if (k === 'backspace' || k === 'delete') { setPromptVal(v => v.slice(0, -1)); return }
+          if (k === 'space') { setPromptVal(v => v + ' '); return }
+          if (k.length === 1) setPromptVal(v => v + k)
+          return  // every key is consumed while the prompt is open
+        }
         const m = menu()
         if (m) {
           if (k === 'escape' || k === 'q') { setMenu(null); return }
@@ -350,8 +357,12 @@ export default Plugin.define({
           move(-2); return
         }
         if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 1)) : move(2); return }
-        if ((k === 'left' || k === 'h') && tab() !== 'settings') { move(-1); return }
-        if ((k === 'right' || k === 'l') && tab() !== 'settings') { move(1); return }
+        if ((k === 'left' || k === 'h') && tab() !== 'settings') {
+          const n = pool().length; if (n) setSel(i => (i - 1 + n) % n); return
+        }
+        if ((k === 'right' || k === 'l') && tab() !== 'settings') {
+          const n = pool().length; if (n) setSel(i => (i + 1) % n); return
+        }
         if (k === 'return') {
           if (tab() === 'settings') { settingsItems()[settingsSel()]?.run(); return }
           const e = pick(); if (e) openDetail(e); return
@@ -372,7 +383,9 @@ export default Plugin.define({
         const d = Number(k)
         if (d >= 1 && d <= TABS.length) toTab(d - 1)
       }
-      const BINDS = 'escape up k down j left h right l return / f c i u * g n x r q tab U 1 2 3 4 5 6 7'
+      const BINDS = 'escape up down left right return tab backspace delete space ' +
+        'a b c d e f g h i j k l m n o p q r s t u v w x y z ' +
+        '0 1 2 3 4 5 6 7 8 9 / * - _ . : ~ @ U'
       ctx.keymap.layer(() => ({
         mode: 'modal',
         enabled: () => !searchOn(),
@@ -594,15 +607,7 @@ export default Plugin.define({
                  border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
                  backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>{p().title}</b>  (enter 确认 · esc 取消)</text>
-              <input
-                value={promptVal()}
-                onInput={(v: string) => setPromptVal(v)}
-                ref={(r) => { promptInput = r; setTimeout(() => r.focus(), 50) }}
-                onKeyDown={(ev: { name: string }) => {
-                  if (ev.name === 'return') closePrompt(promptVal())
-                  if (ev.name === 'escape') closePrompt(null)
-                }}
-              />
+              <text fg={theme.text.base}>{promptVal()}▌</text>
             </box>
           )}</Show>
         </box>
