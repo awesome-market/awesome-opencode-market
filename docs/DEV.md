@@ -397,10 +397,17 @@ failed 数据已留档 catalog；本地复查 `pipeline/verify` 可在隔离 env
 - macOS 本地 verify 读真实 `~/.config`（opencode 不吃 XDG）——仅本地，CI Linux 正常，见 BLOCKERS.md
 - npm 包 `oc-market-quail-zephyr-72a0`（随机名实测分发链）：0.0.1 已转正可装，hex 随机名触发 npm spam 检测须用词组名
 
-## 仓库定位（用户指示 2026-11-02）
+## 仓库定位（2026-11-04 迁移后）
 
-`terry2010/opencode-market-spike` = **测试专用库**——每天跑测试数据（verify/投稿/管线 CI 全在这过）。
-真实上线库 = 另一个库（只有真实数据、无测试数据）。spike 库不改名、不移正。
+- **dev** = `terry2010/awesome-opencode-market`(fork)——定时任务在这跑,
+  catalog/Pages/review issue 都是 dev 数据。
+- **prod** = `awesome-market/awesome-opencode-market`(组织仓)——Actions 常关,
+  抓取机制调好并在 fork 验证后才开;`main` 走 PR(catalog 分支不受影响)。
+- **spike** = `terry2010/opencode-market-spike`——Actions 已禁,仓库与 Pages
+  留作化石,不再维护。细节见 `docs/MIGRATION.md`。
+
+(原 2026-11-02 定位:spike 为测试专用库、上线另建库——已由 fork/prod
+分工落地。)
 
 ## load-failed 逐包归因（51 条）
 

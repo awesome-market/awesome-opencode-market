@@ -32,11 +32,13 @@ terry2010/awesome-opencode-market  # fork,用于开发和 workflow 测试(dev)
 | npm 组织 `awesome-market` | 已创建 |
 | npm 包 `awesome-opencode-market` | 已发 `0.0.1` 占位;挂在 npm 组织下 |
 | 开发包 `oc-market-quail-zephyr-72a0` | 保留 `0.0.3` |
-| GitHub 新仓 | 尚未创建 |
-| spike 仓库 | 保留不归档;迁移前停掉其 Actions |
+| GitHub 新仓 | ✅ prod `awesome-market/awesome-opencode-market` 已建(Actions 关)+ dev fork `terry2010/awesome-opencode-market` 已建(Actions 开,含全部 schedule)|
+| 三分支迁移 | ✅ `main`/`catalog`/`broken-fixture` 已推 prod,fork 继承 |
+| prod `main` 保护 | ✅ ruleset:必须 PR、禁删、禁 force-push(`catalog` 不受影响)|
+| Pages | ✅ prod 与 fork 均 `build_type=workflow`;fork 站已上线 |
+| spike 仓库 | ✅ Actions 已禁;保留不归档 |
 | spike 历史清理 | `main`/`catalog` 已重写移除 `docs/RESEARCH.md`;`broken-fixture` 本就不含该路径 |
-| 本地 origin | 仍指向 spike |
-| 待提交文件 | `README.md`、`README.zh.md`、`LICENSE`、`docs/MIGRATION.md`、`docs/market-panel.png` 均未跟踪 |
+| 本地 remote | ✅ `origin`→fork、`upstream`→prod;pre-push hook 拦 upstream |
 
 npm 包是无 scope 的裸名,安装名和页面地址保持
 `awesome-opencode-market` / `npmjs.com/package/awesome-opencode-market`。
@@ -105,6 +107,22 @@ npm 页面上某个版本的发布者显示的是执行发布的账号,不代表
 - dev 运行只允许写 fork 的 catalog 分支与预览 Pages,或 dev 专用的索引仓
   副本。
 
+### fork 开通实测备忘(2026-11-04)
+
+fork 不是开箱即用的镜像,实测要手动补四处:
+
+- **定时 workflow 是 `disabled_fork`**——`PUT actions/permissions` 开
+  Actions 只放行非定时类;`catalog`/`verify`/`submit`/`docket` 要逐个
+  `PUT actions/workflows/{id}/enable`(workflow 名不识别时用数字 ID)。
+- **Issues 默认关**——fork 不继承,`PATCH -F has_issues=true`;否则
+  alert/docket 这类开单 job 会失败。
+- **Pages 默认没有**——`POST /pages -f build_type=workflow`。
+- **rerun failed jobs 会撞 artifact**——`upload-pages-artifact` 按 run 累积,
+  重跑 site 前先删旧 `github-pages` artifact,否则 deploy-pages 报
+  "Multiple artifacts"。
+- **首个 Pages 部署别连环重试**——action 侧超时后服务端部署仍
+  in_progress,新部署会被后端挤掉;等队列里所有 deployment 落终态再重试。
+
 ### 5. 本地 remote 与服务端保护
 
 默认推送目标是 fork,组织仓作为生产 upstream:
@@ -116,9 +134,11 @@ git branch --set-upstream-to=origin/main main
 ```
 
 - 用组织 ruleset 保护生产 `main`:要求 PR 与通过检查,不给维护者账号
-  常规 bypass。
+  常规 bypass。(已建:PR 必走、0 审批、禁删、禁 force-push)
 - ruleset 只作用于 `main`,不要套到 `catalog`:目录发布器需要直接推
   `catalog`。
+- 装了本地 `.git/hooks/pre-push`:推 `upstream` 需 `ALLOW_PROD=1` 显式
+  确认。
 - 本地 `pre-push` hook 只是提醒,不是安全边界,可以被绕过。真正的保护靠
   服务端 ruleset 和最小权限凭据。
 - 当前 launchd 任务并未加载。以后如果要加本地定时任务,指向 dev checkout
@@ -202,7 +222,8 @@ if: github.repository == 'terry2010/awesome-opencode-market'
 
 ## 上线切换清单
 
-仅在 fork 验证通过、生产仓就绪后执行:
+prod Actions 保持关闭,直到**抓取机制调整完毕并在 fork 验证通过**——
+不是到达某个日期就开的例行步骤。
 
 1. 确认分支保护与仓库 Actions 权限设置。
 2. 在组织仓启用 Actions。
