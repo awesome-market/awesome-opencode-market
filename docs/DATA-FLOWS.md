@@ -362,8 +362,6 @@ UI（gui.ts webview / tui.tsx 终端）：
         （包根有 SKILL.md 时连 `skills/` 目录一起提）、
         撞名加 <id>- 前缀、写 .market-skills.json 清单（供精确卸载）、
         skillVers 记账 + __skill_<base> 安装键 → 真 update 检测
-  installSkillDir（host API，ver 可选）：手动侧信道——无 ver 仍取 latest；
-       目录驱动的安装都走 writeSkill（批准版字节已由渲染端取好）
   verifyActivation：隔离 HOME 起 serve → POST /api/session 触发懒加载
        → 轮询日志 canary → activated/not-loaded（GET-only 永远不触发——已修）
   skillSource：把 https://…/skills/ 加进 opencode.json skills[]（远程 catalog 源）

@@ -10,7 +10,7 @@ export function makeApi(over: Record<string, unknown> = {}) {
     cancelInstall: vi.fn(async () => 'ok'), verifyActivation: vi.fn(async () => 'activated'),
     uninstall: vi.fn(async () => 'removed'),
     writeSkill: vi.fn(async () => 'ok'), uninstallSkill: vi.fn(async () => 'ok'),
-    installSkillDir: vi.fn(async () => 'ok'), skillSource: vi.fn(async () => ({ url: '', enabled: false })),
+    skillSource: vi.fn(async () => ({ url: '', enabled: false })),
     skillPermission: vi.fn(async () => ({})), devlog: vi.fn(async () => 'ok'), readDevlog: vi.fn(async () => ''),
     ...over,
   }

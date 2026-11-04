@@ -25,7 +25,6 @@ const Market = Ipc.define({
     uninstall: { input: Schema.String, output: Schema.String },
     writeSkill: { input: Schema.Unknown, output: Schema.String },
     uninstallSkill: { input: Schema.String, output: Schema.String },
-    installSkillDir: { input: Schema.Unknown, output: Schema.String },
     skillSource: { output: Schema.Unknown },
     skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
     devlog: { input: Schema.String, output: Schema.String },
@@ -46,7 +45,6 @@ type Api = {
   uninstall(name: string): Promise<string>
   writeSkill(p: { name: string; b64: string }): Promise<string>
   uninstallSkill(name: string): Promise<string>
-  installSkillDir(p: { name: string; scope: 'global' | 'project'; ver?: string }): Promise<string>
   skillSource(): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   devlog(line: string): Promise<string>
@@ -828,21 +826,6 @@ export default Plugin.define({
           return installSkillTar({ name: p.name, gzipped: Buffer.from(p.b64, 'base64'),
             root: join(homedir(), '.config', 'opencode', 'skills') })
         },
-        installSkillDir: (p: { name: string; scope: 'global' | 'project'; ver?: string }) =>
-          new Promise<string>((resolve, reject) => {
-            const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            const { homedir } = require('node:os') as typeof import('node:os')
-            const { join } = require('node:path') as typeof import('node:path')
-            const base = p.scope === 'project' ? join(process.cwd(), '.opencode', 'skills')
-                                                 : join(homedir(), '.config', 'opencode', 'skills')
-            const id = p.name.split('/').pop()!
-            // caller pins via `ver`; unversioned still resolves npm latest —
-            // this is a manual side-channel API, catalog installs go through
-            // writeSkill which receives the approved-version tarball
-            const spec = p.ver ? `${p.name}@${p.ver}` : p.name
-            const script = `mkdir -p "${base}/_dl" && cd "${base}/_dl" && T=$(npm view "${spec}" dist.tarball 2>/dev/null) && curl -fsSL "$T" -o p.tgz && mkdir -p "${base}/${id}" && tar xzf p.tgz -C "${base}/${id}" --strip-components=1`
-            execFile('sh', ['-c', script], { timeout: 45_000 }, e => e ? reject(new Error(String(e))) : resolve(`installed → ${base}/${id}`))
-          }),
         skillSource: async () => {
           const { readFileSync, writeFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
           const { homedir } = require('node:os') as typeof import('node:os')
