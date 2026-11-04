@@ -276,8 +276,9 @@ flowchart TB
 plan job（contents:read）：
       catalog 分支取 index → targets 输入非空则按包名收窄 index
       → planTargets（retest 开关见下；cap=48/班）
-        选序 = index.plugins 的 name-asc 顺取，无年龄/优先级——
-        积压时字母序尾部排队，无饿死保护；手动 targets= 可插队
+        选序 = 两级：discoveredVia 含 'submission' 的先取（投稿优先），
+        其余按 index.plugins 的 name-asc 顺取；cap 不变，积压跨班排空——
+        一天取不完就取两三天；手动 targets= 仍可插队
         每个目标只消费一次：verified/failed 均永久离开 unverified 队列
         排队期间 npm 发新版 → pendingUpdate 换版，轮到验当前版；
         版本错配的结果 merge 时过期丢弃，不写错槽

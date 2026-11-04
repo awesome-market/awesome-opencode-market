@@ -154,6 +154,22 @@ describe('verify/plan', () => {
       entry({ name: `p${String(i).padStart(3, '0')}`, verification: verf('unverified') }))
     expect(planTargets(idx(es), 48)).toHaveLength(48)
   })
+  it('submission-originated targets sort ahead of the alphabetical queue', () => {
+    // index.plugins order is name-asc: acrawl, asub, zsub
+    const crawled = entry({ name: 'acrawl', discoveredVia: ['npm-keyword'], verification: verf('unverified') })
+    const subA = entry({ name: 'asub', discoveredVia: ['submission'], verification: verf('unverified') })
+    const subZ = entry({ name: 'zsub', discoveredVia: ['submission', 'npm-keyword'], verification: verf('unverified') })
+    const got = planTargets(idx([crawled, subA, subZ]))
+    expect(got.map(t => t.name)).toEqual(['asub', 'zsub', 'acrawl'])
+  })
+  it('submission tier also obeys the cap — overflow waits for the next run', () => {
+    const es = Array.from({ length: 50 }, (_, i) =>
+      entry({ name: `s${String(i).padStart(3, '0')}`, discoveredVia: ['submission'], verification: verf('unverified') }))
+    const got = planTargets(idx(es), 48)
+    expect(got).toHaveLength(48)
+    expect(got[0]!.name).toBe('s000')
+    expect(got.at(-1)!.name).toBe('s047')
+  })
   it('verifyTargetOf prefers the held slot', () => {
     const e = entry({
       verification: verf('verified'), features: ['server'],

@@ -23,17 +23,21 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
 }
 
 export function planTargets(index: CatalogIndex, cap = 48, retest = false): VerifyTarget[] {
-  const todo: VerifyTarget[] = []
+  const subs: VerifyTarget[] = []
+  const rest: VerifyTarget[] = []
   for (const p of index.plugins) {
     const t = verifyTargetOf(p)
     // retest (manual `targets` dispatch) may re-run failed/verified versions —
     // a failed slot is otherwise terminal with no retry path. Flagged stays
     // excluded in every mode: red-flagged code never executes here.
     if (!t.version || t.flagged || (!t.unverified && !retest)) continue
-    todo.push({ name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) })
-    if (todo.length >= cap) break
+    const target: VerifyTarget = { name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) }
+    // submission-originated entries verify first — a human asked for them.
+    // index.plugins is name-asc, so each tier stays alphabetical; backlog
+    // drains over as many runs as the cap requires.
+    ;(p.discoveredVia?.includes('submission') ? subs : rest).push(target)
   }
-  return todo
+  return [...subs, ...rest].slice(0, cap)
 }
 
 export function shard<T>(items: T[], size: number): T[][] {
