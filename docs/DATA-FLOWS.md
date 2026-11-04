@@ -137,7 +137,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 `generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额）→ `publish`（唯一 index writer：contents+issues 写权限）→ `site`（pages+id-token）→ `alert`（失败开 `pipeline-alert` issue）。整流 `concurrency: catalog-branch`——与 verify.yml、submit ingest 共享同一把分支写锁，写者串行。
 
 ```mermaid
-flowchart LR
+flowchart TB
   A["applyMatureVerdicts<br/>(旧index+verdicts)"] --> B["发现 npm+github"]
   B --> C["种子注入<br/>submissions.txt"]
   C --> D["入场过滤<br/>preAdmit+spam"]
@@ -210,7 +210,7 @@ discoverNpm + discoverGithub（并行）
 **实现**：`pipeline/submission.ts::parseSubmission/seedLine`（issue 解析+种子行）· `pipeline/review.ts::reviewPackage/verdict/renderReview`（机械审+报告）· workflow 内嵌 node 脚本（ingest 去重/verdict 写回/sweep）
 
 ```mermaid
-flowchart LR
+flowchart TB
   ISS["[submit] issue<br/>表单或纯文本"] --> PA["parseSubmission"]
   PA --> K{"KIND"}
   K -->|"npm"| RV["reviewPackage<br/>npm 存在性+证据+扫描"]
@@ -251,7 +251,7 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
 **实现**：`verify/plan.ts::verifyTargetOf/planTargets/shard`（目标+分片）· `verify/verify.ts::verifyPackage/xdgEnv/writeDummyProvider/loadedSignal`（L1/L1.5 沙箱验证）· `verify/tui.ts::checkTui/judgeTuiPane`（L2 tmux）· `verify/gui.ts::findGuiBundle/checkGuiBundle`（L3a jsdom 渲染）· `verify/merge.ts::mergeResults`（版本路由写槽）
 
 ```mermaid
-flowchart LR
+flowchart TB
   IDX[("index.json")] --> P["planTargets<br/>unverified+!flagged<br/>(手动 targets→retest)"]
   P --> SH["shard ×12<br/>matrix"]
   SH --> VP["verifyPackage<br/>隔离 HOME+XDG"]
@@ -368,7 +368,7 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 四条通道，全部写 `source:human` verdict：
 
 ```mermaid
-flowchart LR
+flowchart TB
   C1["① [review] 标签<br/>verdict:pass/concern"]
   C2["② [review] 评论<br/>/approve  /concern"]
   C3["③ 任意 issue<br/>/concern pkg@ver"]
@@ -512,7 +512,7 @@ pass → 需 mature（v.at ≤ lastDigestAt）
 **实现**：`pipeline/docket.ts::docketTargets/issueTitle`（目标+开单/关单，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts`
 
 ```mermaid
-flowchart LR
+flowchart TB
   IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai"]
   VJ[("ai-verdicts.jsonl")] --> DT
   DT --> W["wanted 集合<br/>[review] name@ver"]
@@ -549,7 +549,7 @@ workflow_run 触发只认 conclusion==='success'；无并发组（操作 issue �
 **实现**：`site/build.ts::isVisible/scanLabel/verifyLabel/approvalBadge/listPage/detailPage/buildSite/buildSkillCatalog`
 
 ```mermaid
-flowchart LR
+flowchart TB
   IDX[("catalog index.json<br/>现取不吃旧 artifact")] --> BS["buildSite"]
   IDX --> BSK["buildSkillCatalog"]
   BS --> P1["index.html 列表页<br/>isVisible 过滤 pending"]
