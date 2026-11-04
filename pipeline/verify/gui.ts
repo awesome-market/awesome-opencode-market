@@ -225,3 +225,10 @@ export function findGuiBundle(home: string, name: string): { path: string; src: 
   if (!existsSync(file)) return { error: `gui entrypoint missing: ${rel}` }
   return { path: file, src: readFileSync(file, 'utf8') }
 }
+
+/* v8 ignore next 8 — subprocess entry: sandboxed gui eval prints one JSON line */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  checkGuiBundle(readFileSync(process.argv[2]!, 'utf8'))
+    .then(r => { console.log(JSON.stringify(r)) })
+    .catch(e => { console.log(JSON.stringify({ ok: false, stage: 'evaluate', error: String(e) })) })
+}

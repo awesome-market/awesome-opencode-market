@@ -282,8 +282,8 @@ describe('verify/checkTui', () => {
 describe('verifyPackage feature routes', () => {
   const home = () => {
     const h = tmp('vf-')
-    mkdirSync(join(h, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(h, 'data', 'opencode', 'log', 'opencode.log'), 'msg="loading plugin" id=pkg')
+    writeFileSync(join(h, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
     return h
   }
   const okExec = (over: Record<string, 'fail' | string> = {}) =>

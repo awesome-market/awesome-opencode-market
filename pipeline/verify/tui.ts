@@ -22,12 +22,13 @@ export function judgeTuiPane(paneText: string, sessionAlive: boolean): TuiCheck 
 export async function checkTui(
   env: NodeJS.ProcessEnv,
   run: ExecFn,
-  opts: { settleMs?: number; cols?: number; rows?: number } = {},
+  opts: { settleMs?: number; cols?: number; rows?: number; command?: string } = {},
 ): Promise<TuiCheck> {
   const sess = `vtui-${process.pid}-${Date.now().toString(36)}`
   const settle = opts.settleMs ?? 8_000
   try {
-    await run('tmux', ['new-session', '-d', '-s', sess, '-x', String(opts.cols ?? 200), '-y', String(opts.rows ?? 50), 'opencode'],
+    await run('tmux', ['new-session', '-d', '-s', sess, '-x', String(opts.cols ?? 200), '-y', String(opts.rows ?? 50),
+      opts.command ?? 'opencode'],
       { env, timeout: 10_000 })
   } catch (e) {
     return { ok: false, log: `tmux spawn failed: ${(e as Error).message}` }

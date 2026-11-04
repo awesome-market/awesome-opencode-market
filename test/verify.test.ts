@@ -84,11 +84,10 @@ describe('verifyPackage (injected exec)', () => {
     expect(r.opencodeVersion).toBe('2.2.5')
     expect(r.logExcerpt).toContain('404')
   })
-  it('load signal present → verified/load', async () => {
+  it('api plugin entry present+active → verified/load', async () => {
     const home = vHome()
-    mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
-      'ts INFO msg="loading plugin" id=goodpkg entrypoint=file:///x')
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'goodpkg' }, state: { status: 'active' } }]))
     const fake = (async (_c: string, args: string[]) =>
       ({ stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
     const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
@@ -107,15 +106,26 @@ describe('verifyPackage (injected exec)', () => {
     expect(r.level).toBe('load')
   })
 
-  it('loading signal present → verified', async () => {
+  it('a forged log line alone does NOT verify — server api evidence required', async () => {
+    // V-1: the log file is writable by plugin code; only the /api/plugin
+    // response counts. A fake "loading plugin" line without the api entry fails.
     const home = vHome()
     mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
     writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
       'ts level=INFO msg="loading plugin" id=goodpkg entrypoint=file:///x\n')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
     const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+  })
+
+  it('api entry matching name@version spec → verified', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'goodpkg@2.3.4' }, state: { status: 'active' } }]))
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { version: '2.3.4', home, execFn: fake })
     expect(r.status).toBe('verified')
-    expect(r.logExcerpt).toBeUndefined()
   })
 
   it('ocVersion failure → opencodeVersion "unknown"', async () => {

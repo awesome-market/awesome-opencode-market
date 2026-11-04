@@ -1,8 +1,13 @@
-/** Install/activation verification (DEV §4). Runs in a permissions:{} CI job — never sees secrets. */
+/** Install/activation verification (DEV §4). Runs in a permissions:{} CI job — never sees secrets.
+ *  When `sandboxUser` is set (CI: VERIFY_SANDBOX_USER=nobody), every command that
+ *  executes untrusted plugin code runs under that uid via `sudo -n -u` — the
+ *  results file stays owned by the runner uid, so plugin code cannot forge its
+ *  own 'verified' verdict (V-1). */
 import { execFile } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
@@ -61,15 +66,8 @@ export function xdgEnv(home: string): NodeJS.ProcessEnv {
  * exists (end-to-end finding, see BLOCKERS.md). A dead localhost endpoint gets past
  * the provider check; plugin loading happens before the model call so no AI is used.
  */
-export function writeDummyProvider(home: string): void {
-  const dir = join(home, '.config', 'opencode')
-  mkdirSync(dir, { recursive: true })
-  // MERGE, don't overwrite — this runs after `plugin add` wrote the pinned
-  // spec into `plugins`; a blind writeFileSync erases it and the load check
-  // can never see the plugin (E2E rehearsal found this)
-  const cfgPath = join(dir, 'opencode.json')
-  const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8') || '{}') as Record<string, unknown> : {}
-  writeFileSync(cfgPath, JSON.stringify({
+export function dummyProviderConfig(cfg: Record<string, unknown>): Record<string, unknown> {
+  return {
     ...cfg,
     $schema: 'https://opencode.ai/config.json',
     provider: {
@@ -82,7 +80,18 @@ export function writeDummyProvider(home: string): void {
       },
     },
     model: 'fake/fake-model',
-  }))
+  }
+}
+
+export function writeDummyProvider(home: string): void {
+  const dir = join(home, '.config', 'opencode')
+  mkdirSync(dir, { recursive: true })
+  // MERGE, don't overwrite — this runs after `plugin add` wrote the pinned
+  // spec into `plugins`; a blind writeFileSync erases it and the load check
+  // can never see the plugin (E2E rehearsal found this)
+  const cfgPath = join(dir, 'opencode.json')
+  const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8') || '{}') as Record<string, unknown> : {}
+  writeFileSync(cfgPath, JSON.stringify(dummyProviderConfig(cfg)))
 }
 
 function readLog(home: string): string {
@@ -90,34 +99,98 @@ function readLog(home: string): string {
   return existsSync(p) ? readFileSync(p, 'utf8') : ''
 }
 
-/** The A3-verified canary: `msg="loading plugin" id=<name>` in the log file. */
+/** The A3-verified canary: `msg="loading plugin" id=<name>` in the log file.
+ *  Superseded by apiLoaded as the pass/fail signal — kept for diagnostics only:
+ *  plugin code shares the fs with the log file, so this line is forgeable (V-1). */
 export function loadedSignal(logText: string, name: string): boolean {
   const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return new RegExp(`loading plugin"\\s+id=${esc}`).test(logText) ||
     logText.includes(`loading plugin id=${name}`)
 }
 
+/** Forge-resistant load canary: the serve /api/plugin response lists an entry
+ *  whose server-side `source` is `type:'package'` with a target matching the
+ *  spec we installed, in `state.status:'active'`. Unlike the log file, the
+ *  response is built by opencode's own handler — plugin code cannot fabricate
+ *  it by writing files. (Residual: in-process runtime patching of the handler
+ *  is out of scope; the uid sandbox covers the fs-level attack.) */
+export function apiLoaded(pluginsJson: string, name: string): boolean {
+  let doc: unknown
+  try { doc = JSON.parse(pluginsJson) } catch { return false }
+  let hit = false
+  const walk = (v: unknown): void => {
+    if (hit || !v || typeof v !== 'object') return
+    if (Array.isArray(v)) { for (const x of v) walk(x); return }
+    const o = v as Record<string, unknown>
+    const src = o.source as Record<string, unknown> | undefined
+    const st = o.state as Record<string, unknown> | undefined
+    if (src && typeof src === 'object' && src.type === 'package' && typeof src.target === 'string') {
+      const t = src.target
+      if ((t === name || t.startsWith(`${name}@`) || t.endsWith(`/${name}`) || t.includes(`/${name}/`)) &&
+        st?.status === 'active') hit = true
+    }
+    for (const x of Object.values(o)) walk(x)
+  }
+  walk(doc)
+  return hit
+}
+
+interface Sandbox { user: string; wrapper: string; uh: string }
+
+/** Quote a value for single-quoted shell use inside the wrapper script. */
+const shq = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`
+
+/** Carve out a nobody-owned home inside the runner-owned verify home, then emit
+ *  a wrapper that re-runs any command under `sudo -n -u <user>` with the scrubbed
+ *  XDG env. Untrusted plugin code (install hooks, serve handlers, the TUI, gui
+ *  bundles) then runs as a uid that CANNOT write the shard's results file nor
+ *  read the shard process env. */
+async function setupSandbox(home: string, user: string, run: ExecFn): Promise<Sandbox> {
+  chmodSync(home, 0o711)
+  const uh = join(home, 'u')
+  await run('sudo', ['-n', '-u', user, 'mkdir', '-p', uh], { timeout: 10_000 })
+  const env = xdgEnv(uh)
+  const kvs = Object.entries(env).map(([k, v]) => shq(`${k}=${v ?? ''}`)).join(' ')
+  const wrapper = join(home, 'sb.sh')
+  writeFileSync(wrapper, `#!/bin/sh\nexec sudo -n -u ${user} env ${kvs} "$@"\n`, { mode: 0o755 })
+  return { user, wrapper, uh }
+}
+
 export async function verifyPackage(
   name: string,
   opts: { version?: string; features?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn;
+    sandboxUser?: string;
     tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {},
 ): Promise<VerifyResult> {
   const run = opts.execFn ?? exec
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
-  const env = xdgEnv(home)
+  const sb = opts.sandboxUser ? await setupSandbox(home, opts.sandboxUser, run) : null
+  // uh = the untrusted home. Sandboxed: nobody-owned <home>/u; otherwise home itself.
+  const uh = sb?.uh ?? home
+  const env = xdgEnv(uh)
+  // urun runs commands that may execute untrusted plugin code. Sandboxed, they
+  // go through the nobody-uid wrapper; extra opts.env keys are re-injected as
+  // `env K=V` args because sudo strips the child env.
+  const urun = ((cmd: string, args: string[], o: Record<string, unknown> = {}) => {
+    if (!sb) return run(cmd, args, { env, ...o })
+    const { env: oe, ...rest } = o
+    const extra = Object.entries((oe ?? {}) as Record<string, unknown>)
+      .filter(([k]) => !(k in env)).map(([k, v]) => `${k}=${v ?? ''}`)
+    return run(sb.wrapper, ['env', ...extra, cmd, ...args], { env: { PATH: env.PATH }, ...rest })
+  }) as ExecFn
   const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
   const spec = opts.version ? `${name}@${opts.version}` : name
   const base = {
     name,
     ...(opts.version ? { version: opts.version } : {}),
-    opencodeVersion: await ocVersion(env, run).catch(() => 'unknown'),
+    opencodeVersion: await ocVersion(env, urun).catch(() => 'unknown'),
     verifiedAt: new Date().toISOString(),
   }
 
   // install the PINNED spec (name@version) — the version users would get (DEV §4)
   try {
-    await run('opencode', ['plugin', 'add', spec], { env, timeout })
+    await urun('opencode', ['plugin', 'add', spec], { env, timeout })
   } catch (e) {
     return {
       ...base, status: 'failed', level: 'install',
@@ -125,36 +198,52 @@ export async function verifyPackage(
     }
   }
 
-  // activation: plugins load lazily on first API request (evidenced by
-  // http.span on `loading plugin` log lines), so: boot `serve` in background,
-  // wait for its listening+password lines, hit /api/plugin + /api/session to
-  // force the load, then kill. No provider needed; `run`'s service machinery
-  // hangs in CI so it isn't used. The dummy provider config is still written —
-  // the TUI check below needs it to get past first-run.
-  writeDummyProvider(home)
+  // activation: plugins load lazily on first API request, so: boot `serve` in
+  // background, wait for its listening+password lines, POST a session to force
+  // the load, then poll /api/plugin for the package entry. No provider needed;
+  // `run`'s service machinery hangs in CI so it isn't used. The dummy provider
+  // config is still written — the TUI check below needs it past first-run.
+  if (sb) {
+    const cfgPath = join(uh, '.config', 'opencode', 'opencode.json')
+    const existing = await urun('cat', [cfgPath], { timeout: 10_000 }).then(r => r.stdout).catch(() => '')
+    let cfg: Record<string, unknown> = {}
+    try { cfg = JSON.parse(existing || '{}') } catch { /* treat as empty */ }
+    const b64 = Buffer.from(JSON.stringify(dummyProviderConfig(cfg))).toString('base64')
+    await urun('sh', ['-c',
+      `mkdir -p ${shq(join(cfgPath, '..'))} && printf %s ${shq(b64)} | base64 -d > ${shq(cfgPath)}`], { timeout: 10_000 })
+  } else {
+    writeDummyProvider(uh)
+  }
   const boot = [
     `opencode serve --port 0 > serve.out 2>&1 &`,
     `SPID=$!`,
     `for i in $(seq 1 30); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done`,
     `PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1)`,
     `PW=$(sed -n 's/server password //p' serve.out | head -1)`,
-    `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/plugin"`,
     `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/session"`,
     // 2.2.5 loads plugins lazily on session CREATE — a GET alone never triggers
     // the load, so POST one (E2E rehearsal: GET-only left /api/plugin empty)
     `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'`,
-    // poll the log for the load signal — a fixed sleep races the writer
-    `for i in $(seq 1 24); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done`,
+    // poll the SERVER's plugin inventory — plugin code cannot fake this response
+    // the way it could append a forged line to the log file (V-1)
+    `for i in $(seq 1 24); do`,
+    `  [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o plugins.json "http://127.0.0.1:$PORT/api/plugin" 2>/dev/null`,
+    `  grep -qF "\\"$NAME" plugins.json 2>/dev/null && break`,
+    `  sleep 0.5`,
+    `done`,
     `kill $SPID 2>/dev/null; true`,
   ].join('\n')
   try {
-    await run('sh', ['-c', boot], { env: { ...env, LOG: join(home, 'data', LOG_REL) }, cwd: home, timeout: 30_000 })
+    await urun('sh', ['-c', boot], { env: { ...env, NAME: name }, cwd: uh, timeout: 30_000 })
   } catch {
-    // boot/curl failure still leaves whatever log was written — the canary decides
+    // boot/curl failure still leaves whatever was written — the canary decides
   }
-  const log = readLog(home)
-  if (!loadedSignal(log, name)) {
-    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(log) }
+  // the nobody uid's files may be 700 — open them up for runner-side reads
+  if (sb) await run('sudo', ['-n', 'chmod', '-R', 'a+rX', home], { timeout: 30_000 }).catch(() => {})
+  const log = readLog(uh)
+  const api = existsSync(join(uh, 'plugins.json')) ? readFileSync(join(uh, 'plugins.json'), 'utf8') : ''
+  if (!apiLoaded(api, name)) {
+    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${log}\n/api/plugin: ${api}`) }
   }
 
   // feature-routed depth checks (L2/L3a) — level records deepest stage passed
@@ -163,18 +252,32 @@ export async function verifyPackage(
 
   if (feats.includes('tui')) {
     const { checkTui } = await import('./tui.ts')
-    const tui = await checkTui(env, run, opts.tuiOpts ?? {})
+    const tui = await checkTui(env, run, { ...opts.tuiOpts, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
     if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
     level = 'interactive'
   }
 
   if (feats.includes('gui')) {
     const { checkGuiBundle, findGuiBundle } = await import('./gui.ts')
-    const found = findGuiBundle(home, name)
+    const found = findGuiBundle(uh, name)
     if ('error' in found) {
       return { ...base, status: 'failed', level: 'render', logExcerpt: found.error }
     }
-    const gui = await checkGuiBundle(found.src)
+    let gui: { ok: boolean; stage?: string; error?: string }
+    if (sb) {
+      // evaluate the bundle OUTSIDE the shard process: a vm-realm escape then
+      // lands on the nobody uid, which still cannot touch the results file
+      const guiEntry = fileURLToPath(new URL('./gui.ts', import.meta.url))
+      try {
+        const { stdout } = await urun('npx', ['tsx', guiEntry, found.path],
+          { cwd: process.cwd(), timeout: 90_000 })
+        gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
+      } catch (e) {
+        gui = { ok: false, stage: 'evaluate', error: `gui subprocess: ${String(e).slice(0, 500)}` }
+      }
+    } else {
+      gui = await checkGuiBundle(found.src)
+    }
     if (!gui.ok) {
       return { ...base, status: 'failed', level: 'render', logExcerpt: `gui ${gui.stage}: ${gui.error}` }
     }
@@ -191,7 +294,21 @@ async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
 
 /** Shard driver: verify a slice of {name,version,features} targets, write results JSON. */
 export async function verifyShard(targets: (VerifyTarget | string)[], outPath: string,
-  opts: { execFn?: ExecFn; home?: string; timeoutMs?: number; tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {}): Promise<VerifyResult[]> {
+  opts: { execFn?: ExecFn; home?: string; timeoutMs?: number; sandboxUser?: string;
+    tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {}): Promise<VerifyResult[]> {
+  // one sudo probe per shard — if `sudo -n` is unavailable (local dev), degrade
+  // to in-process verification rather than failing every target. verify.yml
+  // hard-gates on the probe before this runs, so CI never hits the fallback.
+  let sandboxUser = opts.sandboxUser
+  if (sandboxUser) {
+    const probe = opts.execFn ?? exec
+    const ok = await probe('sudo', ['-n', '-u', sandboxUser, 'true'], { timeout: 10_000 })
+      .then(() => true).catch(() => false)
+    if (!ok) {
+      console.warn(`sandbox user '${sandboxUser}' unavailable — running unconfined`)
+      sandboxUser = undefined
+    }
+  }
   // Untrusted code runs inside this process (L3a gui bundles). A fire-and-forget
   // rejection (e.g. a bare `import()` the vm sandbox refuses) must not crash the
   // shard and take every result with it — Node's fatal-on-unhandled policy is
@@ -208,11 +325,13 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
       writeFileSync(tmp, JSON.stringify(results, null, 2))
       renameSync(tmp, outPath)
     }
+    const { sandboxUser: _raw, ...passOpts } = opts   // probe result wins, not the raw opt
     for (const t of targets) {
       const target = coerceTarget(t)
       try {
         results.push(await verifyPackage(target.name, {
-          ...opts,
+          ...passOpts,
+          ...(sandboxUser ? { sandboxUser } : {}),
           ...(target.version ? { version: target.version } : {}),
           ...(target.features ? { features: target.features } : {}),
         }))
@@ -236,10 +355,12 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
   }
 }
 
-/* v8 ignore next 9 */
+/* v8 ignore next 11 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const namesFile = process.argv[2]!
   const out = process.argv[3]!
   const names: (VerifyTarget | string)[] = JSON.parse(readFileSync(namesFile, 'utf8'))
-  verifyShard(names, out).catch(e => { console.error(e); process.exit(1) })
+  verifyShard(names, out, {
+    ...(process.env.VERIFY_SANDBOX_USER ? { sandboxUser: process.env.VERIFY_SANDBOX_USER } : {}),
+  }).catch(e => { console.error(e); process.exit(1) })
 }

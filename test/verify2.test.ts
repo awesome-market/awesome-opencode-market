@@ -38,8 +38,8 @@ describe('verifyPackage pinning', () => {
       return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
     }) as unknown as ExecFn
     const home = vHome()
-    mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'), 'msg="loading plugin" id=pkg entrypoint=x')
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@2.3.4' }, state: { status: 'active' } }]))
     const r = await verifyPackage('pkg', { version: '2.3.4', home, execFn: fake })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg@2.3.4')).toBe(true)
     expect(r.version).toBe('2.3.4')
@@ -52,8 +52,8 @@ describe('verifyPackage pinning', () => {
       return { stdout: 'opencode v2.2.5', stderr: '' }
     }) as unknown as ExecFn
     const home = vHome()
-    mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'), 'msg="loading plugin" id=pkg entrypoint=x')
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg' }, state: { status: 'active' } }]))
     const r = await verifyPackage('pkg', { home, execFn: fake })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg')).toBe(true)
     expect(r.version).toBeUndefined()
@@ -217,6 +217,24 @@ describe('gui harness', () => {
     expect(r.ok).toBe(true)
     expect(r.registrations).toEqual(['Panel', 'SettingsPage'])
     expect(r.rendered).toBe(2)
+  })
+  it('bundle exporting define() directly (no .default) → ok', async () => {
+    const r = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => { const d = document.createElement('div'); d.textContent = 'x'; return d } }))
+      } })`)
+    expect(r.ok).toBe(true)
+  })
+  it('awaiting a host ipc stub does not hang (deepStub is non-thenable)', async () => {
+    const r = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ async setup(ctx) {
+        const client = ctx.main({})
+        await client.anything()
+        ctx.add(Panel, () => ({ render: () => { const d = document.createElement('div'); d.textContent = 'x'; return d } }))
+      } })`)
+    expect(r.ok).toBe(true)
   })
   it('non-whitelisted require → whitelist failure naming the module', async () => {
     const r = await checkGuiBundle(`require('fs'); module.exports = {}`)

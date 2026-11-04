@@ -67,6 +67,34 @@ describe('re-features main', () => {
     expect(r.failed).toContain('gone@9.9.9')
     expect(r.failed).toContain('netfail@1.0.0')
   })
+  it('pendingUpdate version absent from packument → skipped, not failed', async () => {
+    const f = join(mkdtempSync(join(tmpdir(), 'rf-')), 'index.json')
+    const e = mkEntry('pkg-p', {
+      features: [],
+      pendingUpdate: { version: '9.9.9', features: [], capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' },
+    })
+    writeFileSync(f, JSON.stringify(mkIndex([e])))
+    const fetchFn = (async () => packument({ '1.0.0': { main: 'm.js' } })) as typeof fetch
+    const r = await reFeatures(f, { dry: true, fetchFn })
+    // display slot recomputed fine; the held slot's missing doc just skips —
+    // it must NOT land in failed (that's display-slot-only)
+    expect(r.failed).toHaveLength(0)
+  })
+  it('>15 failed entries → overflow log path', async () => {
+    const f = join(mkdtempSync(join(tmpdir(), 'rf-')), 'index.json')
+    writeFileSync(f, JSON.stringify(mkIndex(
+      Array.from({ length: 18 }, (_, i) => mkEntry(`g${i}`, { latestVersion: '9.9.9' })))))
+    const fetchFn = (async () => packument({ '1.0.0': { main: 'm.js' } })) as typeof fetch
+    const r = await reFeatures(f, { dry: true, fetchFn })
+    expect(r.failed).toHaveLength(18)
+  })
+  it('packument fetch !ok → doc null → recorded failed', async () => {
+    const f = join(mkdtempSync(join(tmpdir(), 'rf-')), 'index.json')
+    writeFileSync(f, JSON.stringify(mkIndex([mkEntry('gone2')])))
+    const fetchFn = (async () => mkRes('not found', 404)) as typeof fetch
+    const r = await reFeatures(f, { dry: true, fetchFn })
+    expect(r.failed).toContain('gone2@1.0.0')
+  })
   it('same-set reorder counts as reorderOnly, not changed', async () => {
     const f = join(mkdtempSync(join(tmpdir(), 'rf-')), 'index.json')
     writeFileSync(f, JSON.stringify(mkIndex([mkEntry('pkg-c', { features: ['tui', 'server'] })])))

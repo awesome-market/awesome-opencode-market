@@ -71,11 +71,16 @@ jobs:
       - run: npm i -g @opencode/cli@2.2.5 && opencode --version
       - uses: actions/download-artifact@v4
         with: { name: shards, path: /tmp }
+      # V-1: untrusted plugin code must run as a different uid than the shard
+      # writing results-*.json — gate hard on the sandbox user existing so the
+      # job can never silently degrade to in-uid verification.
+      - run: sudo -n -u nobody true
       - name: verify shard
         env:
           XDG_CONFIG_HOME: /tmp/vhome/.config
           XDG_DATA_HOME: /tmp/vhome/data
           XDG_CACHE_HOME: /tmp/vhome/cache
+          VERIFY_SANDBOX_USER: nobody
         run: npx tsx pipeline/verify/verify.ts /tmp/shard-${{ matrix.shard }}.json /tmp/results-${{ matrix.shard }}.json
       # results are flushed per-target inside the shard — a timed-out shard still
       # leaves a partial file worth collecting (N-10)

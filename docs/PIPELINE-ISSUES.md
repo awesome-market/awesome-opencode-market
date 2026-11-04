@@ -424,3 +424,21 @@ Pipeline/CI 安全：
 | P-2 F-12 回归 | ⏪ 已回滚 | 见附四——本轮审计自抓 |
 
 **验证**：`npm run check` 449 tests 全过，branches 90.69%。
+
+---
+
+## 附六：verify.yml 数据流审计（V 系列，2026-11-04）
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| V-1 verify 结果无完整性保护——被验证的恶意包可伪造自己的 `verified` | ✅ | **uid 隔离**（优于 HMAC——env secret 会被同 uid 进程经 `/proc/<pid>/environ` 读到）：`sandboxUser` 模式下 `<home>/u` 归 nobody，所有执行不可信代码的命令（`plugin add`/`serve`/`tmux`/gui 检查）经 `sudo -n -u nobody env …` wrapper 运行；`results-N.json` 归 runner uid 且 `/tmp` sticky——插件既不能覆写结果也读不到 shard env。`verify.yml` 前置 `sudo -n -u nobody true` 硬闸，job 不会静默降级（本机 dev 探测失败才降级 + warn） |
+| V-1b 日志 canary 可伪造 | ✅ | 插件代码可往 opencode.log 追加 `loading plugin id=…` 行→旧 canary 必假阳性。改 `/api/plugin` 服务端应答：`source.type==='package' && target` 匹配安装 spec && `state.status==='active'`（`apiLoaded`，深遍历容忍响应包裹层）。`loadedSignal` 降级为 excerpt 诊断 |
+| V-1c gui 检查在 shard 进程内跑不可信代码 | ✅ | sandbox 模式下 `checkGuiBundle` 移到 `npx tsx gui.ts <bundle>` nobody 子进程——vm realm 逃逸也只拿到 nobody，写不了 results、读不到 shard env |
+| V-2 吞吐 96/天 硬编码无积压观测 | 仍开 | plan cap=48 × 2次/天；建议 digest 加 verify backlog 行 |
+| V-3 `failed` 终态不分暂态/确定性，唯一重试是手动 --retest | 仍开 | canary 误杀版本永死；建议近 7 天 failed 列进 digest 或有限自动重试 |
+| V-4 canary 时序赌博（12s 窗口）是 V-3 误杀主源 | 部分缓解 | apiLoaded 消除了伪造面，但响应慢仍可能假 failed |
+| V-5 单版本测试（cli@2.2.5），`compat:{}` 死字段 | 仍开 | 多版本矩阵才有"兼容"语义 |
+| V-6 rpc/skill/mcp/theme 等类型无验证层级 | 仍开 | 仅 server/tui/gui 有深度路由 |
+| V-8 merge 在 verify.yml 里顺带重建+发布 site，与 catalog.yml site job 双发布者 | 仍开 | continue-on-error 掩盖冲突，职责混合 |
+
+**验证**：typecheck 0 错；466 tests 全过（含新增 `verify-sandbox.test.ts` 14 用例）；branches 90.05%。`RESULTS_HMAC` secret 未使用——uid 隔离后 secret 前提不成立，已可删除。
