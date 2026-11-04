@@ -1,5 +1,6 @@
 /** Seed ingestion: awesome-list README → high-star repos → npm-candidate list → import into pipeline. */
 import { ghHeaders, normalizeRepoUrl } from './github.ts'
+import { withTimeout } from '../fetch/npm.ts'
 
 export const AWESOME_URL = 'https://raw.githubusercontent.com/awesome-opencode/awesome-opencode/main/README.md'
 
@@ -18,7 +19,7 @@ export async function filterByStars(
   repos: string[], minStars: number,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<{ repo: string; stars: number }[]> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const out: { repo: string; stars: number }[] = []
   for (const repo of repos) {
     const res = await f(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(opts.token) })
@@ -33,7 +34,7 @@ export async function filterByStars(
 export async function repoToNpm(
   repo: string, opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<string | null> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   for (const br of ['main', 'master']) {
     const res = await f(`https://raw.githubusercontent.com/${repo}/${br}/package.json`)
     if (!res.ok) continue
@@ -49,7 +50,7 @@ export async function repoToNpm(
 export async function buildSeedList(
   opts: { url?: string; minStars?: number; token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<string[]> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const res = await f(opts.url ?? AWESOME_URL)
   if (!res.ok) throw new Error(`awesome fetch failed: ${res.status}`)
   const repos = extractRepos(await res.text())

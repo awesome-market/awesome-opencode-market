@@ -33,9 +33,19 @@ export function coerceTarget(t: VerifyTarget | string): VerifyTarget {
 
 const LOG_REL = 'opencode/log/opencode.log'
 
+/** Env allowlist for the verify sandbox — NOT a process.env spread. The
+ *  spawned opencode process loads UNTRUSTED plugin code; ambient CI/agent
+ *  tokens (ACTIONS_*, *_TOKEN, GH_TOKEN, npm_*) must not reach it — anything
+ *  it writes into its own log can be captured by logExcerpt and published. */
 export function xdgEnv(home: string): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {}
+  for (const k of ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TERM', 'TMPDIR', 'TMP', 'TEMP',
+    'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE',
+    'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy',
+    'SystemRoot', 'COMSPEC', 'PATHEXT'])
+    if (process.env[k]) out[k] = process.env[k]
   return {
-    ...process.env,
+    ...out,
     // HOME override is load-bearing on macOS: XDG_* alone leaves opencode
     // resolving plugin config/state via the real ~ (E2E rehearsal: XDG-only
     // never loaded the pinned plugin). Full sandbox needs all four.
@@ -89,7 +99,8 @@ export function loadedSignal(logText: string, name: string): boolean {
 
 export async function verifyPackage(
   name: string,
-  opts: { version?: string; features?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn } = {},
+  opts: { version?: string; features?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn;
+    tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {},
 ): Promise<VerifyResult> {
   const run = opts.execFn ?? exec
   const home = opts.home ?? mkdtempSync(join(tmpdir(), 'verify-'))
@@ -152,7 +163,7 @@ export async function verifyPackage(
 
   if (feats.includes('tui')) {
     const { checkTui } = await import('./tui.ts')
-    const tui = await checkTui(env, run)
+    const tui = await checkTui(env, run, opts.tuiOpts ?? {})
     if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
     level = 'interactive'
   }

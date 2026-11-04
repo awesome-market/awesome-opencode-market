@@ -1,5 +1,6 @@
 /** GitHub fetch: repo metadata + file probes (SKILL.md, opencode.json, plugin entries). */
 import { ghHeaders } from '../discover/github.ts'
+import { withTimeout } from './npm.ts'
 
 export interface RepoMeta {
   id: number | null              // numeric repo id — repojacking detection (id changes on recreation)
@@ -25,7 +26,7 @@ export async function fetchRepoMeta(
   fullName: string,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<RepoMetaResult> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   let res: Response
   try {
     res = await f(`https://api.github.com/repos/${fullName}`, { headers: ghHeaders(opts.token) })
@@ -63,7 +64,7 @@ export async function fetchRepoTree(
   branch = 'HEAD',
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<RepoTreeResult> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   let res: Response
   try {
     res = await f(`https://api.github.com/repos/${fullName}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
@@ -86,7 +87,7 @@ export async function fetchRepoPackageName(
   fullName: string,
   opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<{ pkgName: string | null; status: RepoMetaStatus }> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const dir = opts.dir ? `${opts.dir.replace(/^\/+|\/+$/g, '')}/` : ''
   try {
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
@@ -106,7 +107,7 @@ export async function repoFileExists(
   path: string,
   opts: { token?: string | undefined; branch?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<boolean> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const url = `https://api.github.com/repos/${fullName}/contents/${path}${opts.branch ? `?ref=${opts.branch}` : ''}`
   try {
     const res = await f(url, { headers: ghHeaders(opts.token), method: 'HEAD' })
@@ -126,7 +127,7 @@ export async function fetchMarketMeta(
   fullName: string,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<MarketMeta | null> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   try {
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/.opencode-market.json`,
       { headers: ghHeaders(opts.token) })

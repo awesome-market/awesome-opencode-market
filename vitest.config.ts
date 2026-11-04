@@ -9,7 +9,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'plugins/market/test/**/*.test.ts'],
     setupFiles: ['test/helpers/setup.ts'],
     deps: { optimizer: { ssr: { include: ['solid-js', 'solid-js/web'] } } },
     coverage: {

@@ -9,8 +9,9 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir } from './skill-install.js'
+import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
@@ -28,6 +29,7 @@ const Market = Ipc.define({
     skillSource: { output: Schema.Unknown },
     skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
     devlog: { input: Schema.String, output: Schema.String },
+    setDevlog: { input: Schema.Boolean, output: Schema.String },
     readDevlog: { output: Schema.Unknown },
   },
   events: {
@@ -48,6 +50,7 @@ type Api = {
   skillSource(): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   devlog(line: string): Promise<string>
+  setDevlog(on: boolean): Promise<string>
   readDevlog(): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
@@ -106,9 +109,13 @@ export default Plugin.define({
     try { setState(loadState()) } catch { /* storage unavailable */ }
     const devlog = () => !!state().devlog
     const log = (msg: string) => { if (devlog()) { appendLog(msg); void safe.devlog?.(msg).catch(() => {}) } }
+    // keep the host-side file logger in sync with the toggle — host writes
+    // must not happen when the user turned logging off
+    void safe.setDevlog?.(devlog()).catch(() => {})
     const put = (patch: Partial<LocalState>) => {
       const s = { ...state(), ...patch }
       setState(s); try { saveState(s) } catch { /* noop */ }
+      if ('devlog' in patch) void safe.setDevlog?.(!!s.devlog).catch(() => {})
     }
     const toggleFav = (n: string) => {
       const f = { ...state().favorites }
@@ -169,7 +176,10 @@ export default Plugin.define({
       const s = statusOf(e)
       const b = el('span', 'margin-left:8px;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0', s)
       b.style.color = '#fff'
-      b.style.background = s.startsWith(t('installed')) ? '#1a7' : s === t('verified') || s === 'verified' ? '#1a7' : s === 'failed' ? '#c33' : s === 'skipped' ? '#885' : '#666'
+      // color comes from the raw status, not the localized label — comparing
+      // translated text to English literals silently breaks in zh mode
+      const st = installed()[e.name] ? 'installed' : e.verification?.status ?? 'unverified'
+      b.style.background = st === 'installed' || st === 'verified' ? '#1a7' : st === 'failed' ? '#c33' : st === 'skipped' ? '#885' : '#666'
       return b
     }
     // two-step confirm: first click arms (3s window), second click executes
@@ -191,7 +201,7 @@ export default Plugin.define({
           async () => {
             log(`uninstall ${e.name}`)
             // drop every key this entry could own: plugin id, skill dir, <base>-* lifts
-            const base = `__skill_${e.name.split('/').pop()}`
+            const base = `__skill_${skillId(e.name)}`
             const next = { ...installed() }
             delete next[e.name]
             for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
@@ -209,7 +219,7 @@ export default Plugin.define({
               setFeatMap(fresh.features)
             }
           },
-          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = 'failed'; b.title = String(x) },
+          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = `failed — ${t('retry')}`; b.title = String(x) },
         )
       }
       return b
@@ -231,8 +241,14 @@ export default Plugin.define({
         b.appendChild(el('span', 'width:10px;height:10px;border:2px solid rgba(128,128,128,.35);border-top-color:currentColor;border-radius:50%;display:inline-block;animation:oc-mk-spin .7s linear infinite'))
         return b
       }
-      if (pr?.done && !pr.ok)
-        return el('button', 'font-size:12px;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `failed — ${pr.lines[pr.lines.length - 1] ?? ''}`)
+      if (pr?.done && !pr.ok) {
+        // inert-looking failure button — clicking opens the detail view where
+        // the error context + export-log affordance live (AGENTS: 报错必须有下一步)
+        const fb = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `failed — ${t('retry')}?`) as HTMLButtonElement
+        fb.title = pr.lines[pr.lines.length - 1] ?? ''
+        fb.onclick = ev => { ev.stopPropagation(); setView({ kind: 'detail', e }) }
+        return fb
+      }
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
       if (ver && !hasUpdate(e, ver))
         return tab() === 'installed' || tab() === 'mySkills'
@@ -245,7 +261,7 @@ export default Plugin.define({
         b.disabled = true; b.textContent = '…'
         setProg({ ...prog(), [e.name]: { lines: ['installing…'], done: false, ok: false } })
         const failOut = (x: unknown) => {
-          b.textContent = 'failed'; b.title = String(x); b.style.color = '#c66'
+          b.disabled = false; b.textContent = `failed — ${t('retry')}`; b.title = String(x); b.style.color = '#c66'
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
         }
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
@@ -254,10 +270,11 @@ export default Plugin.define({
           // pin to the catalog-approved version — dist-tags.latest is the
           // pendingUpdate users are NOT allowed to get yet (hold semantics)
           if (!e.latestVersion) throw new Error('no approved version to install')
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { versions: Record<string, { dist: { tarball: string } }> }
+          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`, { signal: AbortSignal.timeout(15_000) })).json() as { versions: Record<string, { dist: { tarball: string } }> }
           const url = approvedTarballUrl(pk, e)
           if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
-          const buf = await (await fetch(url)).arrayBuffer()
+          const buf = await (await fetch(url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer()
+          if (buf.byteLength > 48 * 1024 * 1024) throw new Error('tarball too large')
           const u8 = new Uint8Array(buf)
           let bin = ''
           for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768))
@@ -271,7 +288,7 @@ export default Plugin.define({
             if (isSkill) {
               // optimistic + version bookkeeping → real update detection later
               const v = e.latestVersion ?? 'local'
-              setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: v })
+              setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
               put({ skillVers: { ...state().skillVers, [e.name]: v } })
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
@@ -529,22 +546,27 @@ export default Plugin.define({
       const v = e.verification
       const info = el('div', 'font-size:12px;opacity:.8;margin:10px 0')
       const caps = e.capabilities
-      info.innerHTML = [
+      for (const line of [
         `version: ${e.latestVersion ?? '?'}`,
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
-        `findings: ${caps?.findings.length ?? 0} · redFlags: ${caps?.redFlags.length ?? 0}`,
+        `findings: ${caps?.findings?.length ?? 0} · redFlags: ${caps?.redFlags?.length ?? 0}`,
         `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
-      ].join('<br>')
+      ]) info.appendChild(el('div', '', line))
       root.appendChild(info)
       root.appendChild(el('p', 'font-size:13px;line-height:1.5', e.description?.en ?? ''))
-      if (caps?.redFlags.length) {
-        root.appendChild(el('h4', 'color:#c66;margin:12px 0 4px', t('redFlags')))
-        for (const f of caps.redFlags.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', `⚠ ${f}`))
+      // findings/redFlags stay collapsed into a <details> — AGENTS: 默认收起进详情页
+      const fold = (title: string, items: string[], warn: boolean) => {
+        const d = document.createElement('details')
+        d.style.cssText = 'margin:10px 0'
+        const s = el('summary', `cursor:pointer;font-size:13px;${warn ? 'color:#c66' : ''}`, `${title} (${items.length})`)
+        d.appendChild(s)
+        for (const f of items.slice(0, 20)) d.appendChild(el('div', 'font-size:12px;opacity:.7;padding:2px 0 2px 14px', `${warn ? '⚠ ' : ''}${f}`))
+        return d
       }
-      if (caps?.findings.length) {
-        root.appendChild(el('h4', 'margin:12px 0 4px', t('findings')))
-        for (const f of caps.findings.slice(0, 20)) root.appendChild(el('div', 'font-size:12px;opacity:.7', f))
-      }
+      if (caps?.redFlags?.length) root.appendChild(fold(t('redFlags'), caps.redFlags, true))
+      if (caps?.findings?.length) root.appendChild(fold(t('findings'), caps.findings, false))
+      if (!caps?.findings?.length && !caps?.redFlags?.length)
+        root.appendChild(el('div', 'font-size:11px;opacity:.55;margin:8px 0', t('notSafe')))
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
       if (skillInstalledVer(installed(), e.name)) {
@@ -612,9 +634,8 @@ export default Plugin.define({
       const imp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '恢复') as HTMLButtonElement
       imp.onclick = () => {
         try {
-          const s = JSON.parse(ta.value)
-          if (typeof s !== 'object' || s === null) throw new Error('bad json')
-          put({ favorites: s.favorites ?? {}, groups: s.groups ?? {}, notes: s.notes ?? {} })
+          // field-shape validation — a crafted paste must not corrupt state
+          put(sanitizeState(JSON.parse(ta.value)))
           status.textContent = '已恢复'
         } catch { status.textContent = '恢复失败：不是有效的备份 JSON' }
       }
@@ -645,7 +666,13 @@ export default Plugin.define({
         head.style.display = (data() && view().kind === 'list') ? '' : 'none'
       })
       insert(body, () => {
-        if (err()) return el('div', 'padding:12px;color:#c66', `error: ${err()}`)
+        if (err()) {
+          const d = el('div', 'padding:12px;color:#c66', `error: ${err()}`)
+          const rb = el('button', 'margin-left:8px;font-size:12px;cursor:pointer', t('retry')) as HTMLButtonElement
+          rb.onclick = () => { setErr(''); safe.index().then(i => setData(i), e => setErr(String(e))) }
+          d.appendChild(rb)
+          return d
+        }
         if (!data()) return el('div', 'padding:12px;opacity:.6', t('loading'))
         const v = view()
         if (tab() === 'advanced') return settingsPanel()
@@ -685,6 +712,18 @@ export default Plugin.define({
       const specByName: Record<string, string> = {}
       const idByName: Record<string, string> = {}
       const featByName: Record<string, Record<string, true> | undefined> = {}
+    // host-side file logging — per-user path, size-bounded, honors the
+    // renderer's devlog toggle via setDevlog (no silent writes when off)
+    let devlogOn = false
+    const lg = (s: string) => {
+      if (!devlogOn) return
+      void marketLogPath().then(p => appendBounded(p, `${new Date().toLocaleString('sv-SE')} ${s}\n`)).catch(() => {})
+    }
+    const cfgPath = async () => {
+      const { homedir } = require('node:os') as typeof import('node:os')
+      const { join } = require('node:path') as typeof import('node:path')
+      return join(homedir(), '.config', 'opencode', 'opencode.json')
+    }
     m.provide(Market, {
         index: () => fetchIndexCached() as Promise<MarketIndex>,
         refreshIndex: () => fetchIndexCached(undefined, true) as Promise<MarketIndex>,
@@ -699,7 +738,7 @@ export default Plugin.define({
           try {
             if (m.client?.plugin?.list) {
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
-              try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}\n`) } catch { /* */ }
+              lg(`installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}`)
               Object.assign(featByName, featuresMap(res.data ?? []))
               for (const p of res.data ?? []) {
                 if (p.source?.type === 'package' && p.source.target) {
@@ -742,8 +781,9 @@ export default Plugin.define({
         install: (p: { name: string; spec?: string }) =>
           new Promise<string>((resolve, reject) => {
             const { spawn } = require('node:child_process') as typeof import('node:child_process')
+            try { assertSpecForName(p.name, p.spec) } catch (e) { reject(e); return }
             const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
-            const child = spawn('opencode', ['plugin', 'add', spec], { env: process.env })
+            const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
             jobs.set(p.name, child)
             const push = (line: string) => m.emit?.('progress', { name: p.name, line })
             child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
@@ -757,12 +797,11 @@ export default Plugin.define({
             child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); reject(e) })
           }),
         update: async (p: { name: string; spec?: string }) => {
-          const { appendFileSync } = require('node:fs') as typeof import('node:fs')
-          const lg = (s: string) => { try { appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} update ${p.name}: ${s}\n`) } catch { /* */ } }
-          lg('called')
+          assertSpecForName(p.name, p.spec)
+          lg(`update ${p.name}: called`)
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
-          lg(`pin=${pin} clean=${clean}`)
+          lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name: p.name, line: '', done: true, ok })
           try {
@@ -773,7 +812,7 @@ export default Plugin.define({
             push(`install ${pin}`)
             await new Promise<void>((res, rej) => {
               const { spawn } = require('node:child_process') as typeof import('node:child_process')
-              const child = spawn('opencode', ['plugin', 'add', pin], { env: process.env })
+              const child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
               jobs.set(p.name, child)
               child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
               child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
@@ -782,95 +821,92 @@ export default Plugin.define({
               child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
             })
             {
-              const fs = require('node:fs') as typeof import('node:fs')
-              const { homedir } = require('node:os') as typeof import('node:os')
-              const { join } = require('node:path') as typeof import('node:path')
-              const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-              const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
-              const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+              const cfg = await cfgPath()
+              const d = await readJson(cfg)
+              const list = strArrayField(d, 'plugins')
               const before = list.filter(s => cleanSpec(s) === clean)
               d.plugins = dedupeToSpec(list, pin)
-              fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-              if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`config rewritten (${before.length} specs → ${pin})`) }
+              await writeJsonAtomic(cfg, d)
+              if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`update ${p.name}: config rewritten (${before.length} specs → ${pin})`) }
             }
-            lg('pinned update ok'); done(true); return 'updated'
-          } catch (x) { push(`update failed: ${String(x)}`); lg(`FAILED ${String(x)}`); done(false); throw x }
+            lg(`update ${p.name}: pinned update ok`); done(true); return 'updated'
+          } catch (x) { push(`update failed: ${String(x)}`); lg(`update ${p.name}: FAILED ${String(x)}`); done(false); throw x }
         },
         cancelInstall: async (name: string) => {
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
         uninstall: async (name: string) => {
-          const lg = (s: string) => { try { require('node:fs').appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} uninstall ${name}: ${s}\n`) } catch { /* */ } }
-          lg('called')
+          assertPkgName(name)
+          lg(`uninstall ${name}: called`)
           // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
           // takes a spec, not the catalog name, and silently misses pinned specs
-          const fs = require('node:fs') as typeof import('node:fs')
-          const { homedir } = require('node:os') as typeof import('node:os')
-          const { join } = require('node:path') as typeof import('node:path')
-          // (cleanSpec imported)
-          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-          const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
-          const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+          const cfg = await cfgPath()
+          const d = await readJson(cfg)
+          const list = strArrayField(d, 'plugins')
           let keep: string[]
           try { keep = removeSpec(list, name, idByName) }
-          catch { lg(`no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
+          catch { lg(`uninstall ${name}: no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
           d.plugins = keep
-          fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-          lg(`removed ${list.length - keep.length} spec(s)`)
+          await writeJsonAtomic(cfg, d)
+          lg(`uninstall ${name}: removed ${list.length - keep.length} spec(s)`)
           return 'removed'
         },
         // skills are file-system installs: fetch tarball → extract into config/skills/<name>
         writeSkill: async (p: { name: string; b64: string }) => {
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join } = require('node:path') as typeof import('node:path')
+          assertSkillId(p.name)
+          if (typeof p.b64 !== 'string' || p.b64.length > 64 * 1024 * 1024) throw new Error('invalid skill payload')
           return installSkillTar({ name: p.name, gzipped: Buffer.from(p.b64, 'base64'),
             root: join(homedir(), '.config', 'opencode', 'skills') })
         },
         skillSource: async () => {
-          const { readFileSync, writeFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
-          const { homedir } = require('node:os') as typeof import('node:os')
-          const { join } = require('node:path') as typeof import('node:path')
           const url = 'https://terry2010.github.io/opencode-market-spike/skills/'
-          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-          const d = existsSync(cfg) ? JSON.parse(readFileSync(cfg, 'utf8')) : {}
-          const list: string[] = d.skills ?? []
-          if (!list.includes(url)) { d.skills = [...list, url]; writeFileSync(cfg, JSON.stringify(d, null, 2)) }
+          const cfg = await cfgPath()
+          const d = await readJson(cfg)
+          const list = strArrayField(d, 'skills')
+          if (!list.includes(url)) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
           return { url, enabled: true }
         },
-        skillPermission: (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) =>
-          new Promise(resolve => {
-            const { readFileSync, writeFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
-            const { homedir } = require('node:os') as typeof import('node:os')
-            const { join } = require('node:path') as typeof import('node:path')
-            const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-            const d = existsSync(cfg) ? JSON.parse(readFileSync(cfg, 'utf8')) : {}
-            const perms: { action: string; resource: string; effect: string }[] = d.permissions ?? []
-            const rest = perms.filter(r => !(r.action === 'skill' && r.resource === p.id))
-            if (p.mode) rest.push({ action: 'skill', resource: p.id, effect: p.mode })
-            d.permissions = rest
-            writeFileSync(cfg, JSON.stringify(d, null, 2))
-            resolve(Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect])))
-          }),
+        skillPermission: async (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) => {
+          if (typeof p.id !== 'string' || !p.id || p.id.length > 200 || /[\\/]/.test(p.id))
+            throw new Error('invalid skill id')
+          if (p.mode !== 'allow' && p.mode !== 'deny' && p.mode !== 'ask' && p.mode !== null)
+            throw new Error('invalid permission mode')
+          const cfg = await cfgPath()
+          const d = await readJson(cfg)
+          const raw = d.permissions
+          const perms = (Array.isArray(raw) ? raw : []).filter(
+            (r): r is { action: string; resource: string; effect: string } =>
+              !!r && typeof r === 'object' && typeof r.action === 'string' && typeof r.resource === 'string' && typeof r.effect === 'string')
+          const rest = perms.filter(r => !(r.action === 'skill' && r.resource === p.id))
+          if (p.mode) rest.push({ action: 'skill', resource: p.id, effect: p.mode })
+          d.permissions = rest
+          await writeJsonAtomic(cfg, d)
+          return Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
+        },
         readDevlog: async () => {
           try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
-            return readFileSync('/tmp/opencode-market.log', 'utf8').split('\n').filter(Boolean).slice(-100).join('\n')
+            return readFileSync(await marketLogPath(), 'utf8').split('\n').filter(Boolean).slice(-100).join('\n')
           } catch { return '' }
         },
         devlog: async (line: string) => {
-          const { appendFileSync } = require('node:fs') as typeof import('node:fs')
-          appendFileSync('/tmp/opencode-market.log', `${new Date().toLocaleString('sv-SE')} ${line}\n`)
+          if (!devlogOn) return 'off'
+          await appendBounded(await marketLogPath(), `${new Date().toLocaleString('sv-SE')} ${String(line).slice(0, 2000)}\n`)
           return 'ok'
         },
+        setDevlog: async (on: boolean) => { devlogOn = !!on; return 'ok' },
         uninstallSkill: (name: string) =>
           new Promise<string>((resolve, reject) => {
             const { homedir } = require('node:os') as typeof import('node:os')
             const { join } = require('node:path') as typeof import('node:path')
-            try { resolve(uninstallSkillDir(name, join(homedir(), '.config', 'opencode', 'skills'))) }
+            try { assertSkillId(name); resolve(uninstallSkillDir(name, join(homedir(), '.config', 'opencode', 'skills'))) }
             catch (e) { reject(e instanceof Error ? e : new Error(String(e))) }
           }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict
         verifyActivation: (name: string) =>
-          new Promise<string>((resolve) => {
+          new Promise<string>((resolve, reject) => {
+            try { assertPkgName(name) } catch (e) { reject(e); return }
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
             const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
             const { tmpdir } = require('node:os') as typeof import('node:os')
@@ -878,7 +914,7 @@ export default Plugin.define({
             const home = mkdtempSync(join(tmpdir(), 'mkt-verify-'))
             mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
             writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [name] }))
-            const env = { ...process.env, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') }
+            const env = restrictedEnv({ XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') })
             // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
             // triggers the load (same fix as pipeline/verify/verify.ts), then
             // poll the log for the canary instead of a fixed sleep (races writer)

@@ -1,4 +1,5 @@
 /** GitHub discovery: topic search + repo metadata. Unauthenticated works (60 req/h); GH_TOKEN raises limits. */
+import { withTimeout } from '../fetch/npm.ts'
 
 export const GH_API = 'https://api.github.com'
 export const TOPICS = ['opencode-plugin', 'opencode', 'agent-skill', 'opencode-skill'] as const
@@ -30,7 +31,7 @@ export async function searchTopic(
   topic: string,
   opts: { token?: string | undefined; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<GhRepo[]> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const out: GhRepo[] = []
   for (let page = 1; page <= (opts.maxPages ?? 5); page++) {
     const url = `${GH_API}/search/repositories?q=topic:${encodeURIComponent(topic)}&sort=updated&per_page=100&page=${page}`

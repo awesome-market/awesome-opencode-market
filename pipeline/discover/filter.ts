@@ -36,13 +36,19 @@ export function hasPluginEvidence(pkg: {
   keywords?: string[]
   main?: string | undefined
   exports?: unknown
-  readme?: string
+  readme?: string | undefined
 }): { ok: boolean; via: string[] } {
   const via: string[] = []
   const kw = (pkg.keywords ?? []).map(k => k.toLowerCase())
   if (kw.some(k => k.includes('opencode'))) via.push('keyword')
   if (pkg.main || pkg.exports) via.push('entry')
-  if (pkg.readme && /opencode\.json|"plugin"|plugin add/i.test(pkg.readme)) via.push('readme-install')
-  // evidence gate: keyword alone is NOT enough (DEV §4.5)
-  return { ok: via.length >= 2 || via.includes('entry'), via }
+  if (pkg.readme && /opencode/i.test(pkg.readme) && /opencode\.json|"plugin"|plugin add/i.test(pkg.readme))
+    via.push('readme-install')
+  // evidence gate (DEV §4.5): an opencode-SPECIFIC signal is required —
+  // 'entry' alone means any npm package with a main/exports, which is just
+  // "a package exists", not "a plugin exists". keyword alone isn't enough
+  // either (unrelated package squatting on the keyword).
+  const opencodeSpecific = via.includes('keyword') || via.includes('readme-install')
+  const artifact = via.includes('entry') || via.includes('readme-install')
+  return { ok: opencodeSpecific && artifact, via }
 }

@@ -119,8 +119,14 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
   const entries: { name: string; version: string; files: string[] }[] = []
+  // conditional ids (same rule as market installSkillTar): bare basename for
+  // singletons; same-basename packages all get the namespaced `a--test` form
+  const baseOf = (n: string) => n.split('/').pop()!.replace(/^@/, '')
+  const counts = new Map<string, number>()
+  for (const s of skills) { const b = baseOf(s.name); counts.set(b, (counts.get(b) ?? 0) + 1) }
   for (const s of skills) {
-    const id = s.name.split('/').pop()!.replace(/^@/, '') || s.slug
+    const base = baseOf(s.name)
+    const id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     const dest = join(dir, id)
     try {
       // pin to the approved version — `npm view <name>` resolves dist-tags.latest

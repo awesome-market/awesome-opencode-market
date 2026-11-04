@@ -17,7 +17,7 @@ export interface Review {
 export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch } = {}): Promise<Review> {
   const { pk } = await fetchPackument(name, opts)
   if (!pk) return { name, exists: false, evidence: [], findings: [], redFlags: [], downloads30d: null, repo: null, createdAt: null }
-  const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports })
+  const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
   let findings: string[] = [], redFlags: string[] = []
   if (pk.tarballUrl) {
     try {
@@ -37,6 +37,9 @@ export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch
 /** Machine verdict driving the auto label/close in submit.yml. */
 export function verdict(r: Review): 'clean' | 'flagged' | 'invalid' {
   if (!r.exists) return 'invalid'
+  // an opencode-specific evidence signal is required — otherwise any npm
+  // package with a main/exports would auto-approve into submissions.txt
+  if (!r.evidence.some(v => v === 'keyword' || v === 'readme-install')) return 'invalid'
   return r.redFlags.length ? 'flagged' : 'clean'
 }
 

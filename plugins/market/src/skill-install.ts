@@ -5,15 +5,45 @@
  *  skills are lifted to the source root preserving author IDs, prefixed with
  *  the package basename only on foreign collision. A .market-skills.json
  *  manifest records lifted paths so uninstall removes exactly what we made. */
+import { assertSkillId, skillId } from './hostx.js'
+
+/** A tar entry path must stay inside `dest`: reject absolute paths, `.`/`..`
+ *  segments (incl. after ./ or package/ prefix stripping), and backslashes
+ *  (path separator on Windows — a crafted `..\` name must not survive). */
+export function safeTarRel(raw: string): string | null {
+  const rel = raw.replace(/\\/g, '/').replace(/^(\.\/)?(package\/)?/, '')
+  if (!rel || rel.startsWith('/') || rel.split('/').some(p => p === '..' || p === '.' || p === '')) return null
+  return rel
+}
 
 export async function installSkillTar(opts: { name: string; gzipped: Uint8Array; root: string }): Promise<string> {
   const { gunzipSync } = await import('node:zlib')
   const fs = await import('node:fs')
-  const { join, dirname } = await import('node:path')
+  const { join, dirname, resolve, sep } = await import('node:path')
   const { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync } = fs
   const tar = gunzipSync(Buffer.from(opts.gzipped))
-  const id = opts.name.split('/').pop()!
+  const base = assertSkillId(opts.name)
+  const ns = skillId(opts.name)
+  const manifestOwner = (dir: string): string | undefined => {
+    try { return (JSON.parse(readFileSync(join(dir, '.market-skills.json'), 'utf8')) as { name?: string }).name } catch { return undefined }
+  }
+  // Default: install at the bare basename. A namespaced dir wins on reinstall;
+  // a basename dir owned by a DIFFERENT package namespaces both sides.
+  let id = base
+  const destBase = join(opts.root, base)
+  if (ns !== base && existsSync(join(opts.root, ns)) && manifestOwner(join(opts.root, ns)) === opts.name) id = ns
+  else if (ns !== base && existsSync(destBase)) {
+    const owner = manifestOwner(destBase)
+    if (owner !== opts.name) {
+      if (owner) {
+        const renamed = join(opts.root, skillId(owner))
+        if (!existsSync(renamed)) renameSync(destBase, renamed)
+      }
+      id = ns
+    }
+  }
   const dest = join(opts.root, id)
+  if (!resolve(dest).startsWith(resolve(opts.root) + sep)) throw new Error(`dest escapes skills root: ${dest}`)
   mkdirSync(dest, { recursive: true })
   let off = 0, wrote = 0
   while (off + 512 <= tar.length) {
@@ -22,11 +52,13 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
     const type = tar.toString('utf8', off + 156, off + 157)
     const body = off + 512
-    const rel = f.replace(/^(\.\/)?(package\/)?/, '')
-    if (rel.split('/').pop()!.startsWith('._')) { off = body + Math.ceil(size / 512) * 512; continue }  // macOS AppleDouble junk
-    if (rel && type === '5') mkdirSync(join(dest, rel), { recursive: true })
-    if (rel && (type === '0' || type === '' || type === ' ')) {
-      const fp = join(dest, rel); mkdirSync(dirname(fp), { recursive: true })
+    const rel = safeTarRel(f)
+    if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = body + Math.ceil(size / 512) * 512; continue }  // unsafe name or macOS AppleDouble junk
+    if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
+    if (type === '0' || type === '' || type === ' ') {
+      const fp = join(dest, rel)
+      if (!resolve(fp).startsWith(resolve(dest) + sep)) { off = body + Math.ceil(size / 512) * 512; continue }
+      mkdirSync(dirname(fp), { recursive: true })
       writeFileSync(fp, tar.subarray(body, body + size)); wrote++
     }
     off = body + Math.ceil(size / 512) * 512
@@ -48,35 +80,47 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     let subs: string[]
     try { subs = readdirSync(nd) } catch { continue }
     for (const sub of subs) {
-      if (sub.startsWith('.')) continue
+      if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
       let rel = sub
       if (existsSync(join(root, rel)) && !owned.has(rel)) rel = `${id}-${sub}`
-      rmSync(join(root, rel), { recursive: true, force: true })
-      renameSync(join(nd, sub), join(root, rel)); paths.push(rel)
+      const target = join(root, rel)
+      if (!resolve(target).startsWith(resolve(root) + sep)) continue
+      rmSync(target, { recursive: true, force: true })
+      renameSync(join(nd, sub), target); paths.push(rel)
     }
     rmSync(nd, { recursive: true, force: true })
   }
-  writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ paths }))
+  writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
   return `wrote ${wrote}, lifted ${paths.length}`
 }
 
 export async function uninstallSkillDir(name: string, root: string): Promise<string> {
   const fs = await import('node:fs')
-  const { join } = await import('node:path')
+  const { join, resolve, sep } = await import('node:path')
   const { readdirSync, readFileSync, rmSync, existsSync } = fs
-  const id = name.split('/').pop()!
-  const dest = join(root, id)
+  const rootRes = resolve(root)
+  assertSkillId(name)
+  // conditional ids: a same-basename package lives at the namespaced dir —
+  // check it first so a foreign basename dir is never touched; singletons
+  // live at the bare basename
+  let dest = resolve(root, skillId(name))
+  if (!dest.startsWith(rootRes + sep)) throw new Error(`dest escapes skills root: ${dest}`)
+  if (!existsSync(dest)) {
+    const bare = resolve(root, name.split('/').pop()!)
+    if (bare.startsWith(rootRes + sep) && existsSync(bare)) dest = bare
+  }
   const mf = join(dest, '.market-skills.json')
   if (existsSync(mf)) {
     // manifest of lifted paths — remove exactly what installSkillTar created
     const m = JSON.parse(readFileSync(mf, 'utf8')) as { paths?: string[] }
     for (const rel of m.paths ?? []) {
-      const t = join(root, rel)
-      if (t.startsWith(`${root}/`)) rmSync(t, { recursive: true, force: true })
+      const t = resolve(rootRes, rel)
+      if (t.startsWith(rootRes + sep)) rmSync(t, { recursive: true, force: true })
     }
-  } else for (const d of readdirSync(root)) {
-    // legacy layout: lifted dirs were named <id>-*
-    if (d.startsWith(`${id}-`)) rmSync(join(root, d), { recursive: true, force: true })
+  } else for (const d of readdirSync(rootRes)) {
+    // collision-prefixed lifts were named <installId>-* — same as basename(dest)
+    const destId = dest.slice(rootRes.length + 1)
+    if (d.startsWith(`${destId}-`)) rmSync(join(rootRes, d), { recursive: true, force: true })
   }
   rmSync(dest, { recursive: true, force: true })
   return 'removed'

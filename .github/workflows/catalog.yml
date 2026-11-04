@@ -69,8 +69,16 @@ jobs:
           git config user.name "market-bot"
           # catalog branch is data-only (no pipeline sources) — use a worktree so
           # the main checkout keeps pipeline/*.ts runnable throughout the loop.
-          git fetch origin catalog 2>/dev/null || true
-          git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
+          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+            git fetch origin catalog
+            git worktree add /tmp/cat origin/catalog
+          else
+            # first run ever: no catalog branch — create it as an ORPHAN so the
+            # data-only branch never inherits the whole main source tree
+            git worktree add --detach /tmp/cat
+            git -C /tmp/cat checkout --orphan catalog
+            git -C /tmp/cat rm -rf . >/dev/null 2>&1 || true
+          fi
           ok=0
           for i in 1 2 3 4; do
             git fetch origin catalog 2>/dev/null || true

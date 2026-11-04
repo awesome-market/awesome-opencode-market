@@ -1,4 +1,6 @@
 /** Shared catalog fetch — index.json is the single data plane (DEV §1). */
+import { skillId } from './hostx.js'
+
 export interface MarketEntry {
   uncataloged?: boolean
   features?: ('server' | 'tui' | 'gui' | 'rpc')[]
@@ -37,19 +39,42 @@ export function sanitize(s: string): string {
     .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '')                   // remaining C0/C1
 }
 
+const strArr = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map(sanitize) : []
+const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? sanitize(v) : null)
+
+/** index.json is untrusted network data: drop entries without a usable
+ *  name/slug, sanitize EVERY string field that can reach a terminal/DOM
+ *  (incl. version/metrics timestamps/verification strings/findings), and
+ *  tolerate missing array fields instead of crashing the whole catalog. */
 export function sanitizeIndex(idx: MarketIndex): MarketIndex {
-  return {
-    ...idx,
-    plugins: idx.plugins.map(e => ({
-      ...e,
-      name: sanitize(e.name),
-      slug: sanitize(e.slug),
-      ...(e.description
-        ? { description: { ...(e.description.en ? { en: sanitize(e.description.en) } : {}), ...(e.description.zh ? { zh: sanitize(e.description.zh) } : {}) } }
-        : {}),
-      category: e.category.map(sanitize),
-    })),
-  }
+  const plugins = (Array.isArray(idx?.plugins) ? idx.plugins : [])
+    .filter((e): e is MarketEntry => !!e && typeof e.name === 'string' && typeof e.slug === 'string')
+    .map(e => {
+      const caps = e.capabilities
+      const v = e.verification
+      return {
+        ...e,
+        name: sanitize(e.name),
+        slug: sanitize(e.slug),
+        ...(typeof e.latestVersion === 'string' ? { latestVersion: sanitize(e.latestVersion) } : {}),
+        ...(typeof e.publishedAt === 'string' ? { publishedAt: sanitize(e.publishedAt) } : {}),
+        ...(typeof e.firstSeenAt === 'string' ? { firstSeenAt: sanitize(e.firstSeenAt) } : {}),
+        ...(e.description
+          ? { description: { ...(e.description.en ? { en: sanitize(e.description.en) } : {}), ...(e.description.zh ? { zh: sanitize(e.description.zh) } : {}) } }
+          : {}),
+        category: strArr(e.category),
+        ...(Array.isArray(e.features) ? { features: e.features.filter((f): f is NonNullable<MarketEntry['features']>[number] => ['server', 'tui', 'gui', 'rpc'].includes(String(f))) } : {}),
+        ...(caps ? { capabilities: { scannedAt: strOrNull(caps.scannedAt), findings: strArr(caps.findings), redFlags: strArr(caps.redFlags) } } : {}),
+        ...(v ? { verification: {
+            status: typeof v.status === 'string' ? sanitize(v.status) : '',
+            ...(typeof v.level === 'string' ? { level: sanitize(v.level) } : {}),
+            ...(typeof v.verifiedAt === 'string' ? { verifiedAt: sanitize(v.verifiedAt) } : {}),
+            ...(typeof v.opencodeVersion === 'string' ? { opencodeVersion: sanitize(v.opencodeVersion) } : {}),
+          } } : {}),
+      }
+    })
+  return { ...idx, plugins }
 }
 
 /** User-visible entries only — pending (under-review) entries never reach the
@@ -60,19 +85,25 @@ export function isVisible(e: MarketEntry): boolean {
 
 /** The npm spec users should install: pinned to the catalog-approved version
  *  so `plugin add` resolves exactly what review passed (implicit-latest is a
- *  bypass — a pending version must never reach a user machine). */
+ *  bypass — a pending version must never reach a user machine). A version
+ *  with anything outside semver-ish chars is index-corruption, not a pin —
+ *  fall back to the bare name rather than building an unsafe spec. */
+const VER_SAFE = /^[A-Za-z0-9._+~-]+$/
 export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string {
-  return e.latestVersion ? `${e.name}@${e.latestVersion}` : e.name
+  return e.latestVersion && VER_SAFE.test(e.latestVersion) ? `${e.name}@${e.latestVersion}` : e.name
 }
 
 /** Tarball URL for the catalog-APPROVED version only — never dist-tags.latest:
  *  latest is the pendingUpdate users must not receive yet (hold semantics).
- *  All skill-install paths (TUI, GUI, site catalog) go through this rule. */
+ *  All skill-install paths (TUI, GUI, site catalog) go through this rule.
+ *  https only — a packument-returned http: (or odder scheme) is rejected. */
 export function approvedTarballUrl(
   pk: { versions?: Record<string, { dist?: { tarball?: string } }> },
   e: Pick<MarketEntry, 'latestVersion'>,
 ): string | null {
-  return e.latestVersion ? pk.versions?.[e.latestVersion]?.dist?.tarball ?? null : null
+  if (!e.latestVersion) return null
+  const url = pk.versions?.[e.latestVersion]?.dist?.tarball
+  return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null
 }
 
 export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
@@ -92,7 +123,7 @@ export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> 
 /** Sorted rows for UI views (verified first, then unverified, redFlag last). */
 export function rows(entries: MarketEntry[]): MarketEntry[] {
   const rank = (e: MarketEntry) =>
-    e.verification?.status === 'verified' ? 0 : e.capabilities?.redFlags.length ? 2 : 1
+    e.verification?.status === 'verified' ? 0 : e.capabilities?.redFlags?.length ? 2 : 1
   return [...entries].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
 }
 
@@ -151,8 +182,30 @@ export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
 
 const LS_KEY = 'opencode-market.state.v1'
 export function loadState(): LocalState {
-  try { return { ...EMPTY_STATE, ...(JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')) } }
+  try { return { ...EMPTY_STATE, ...sanitizeState(JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')) } }
   catch { return { ...EMPTY_STATE } }
+}
+
+/** Validate a backup/storage blob → LocalState. Rejects non-object roots and
+ *  malformed field shapes (backup paste / corrupt localStorage / hostile
+ *  index-adjacent JSON must not poison groups/notes/skillVers). */
+export function sanitizeState(x: unknown): LocalState {
+  const s: LocalState = { favorites: {}, groups: {}, notes: {} }
+  if (typeof x !== 'object' || x === null) return s
+  const o = x as Record<string, unknown>
+  const strMap = (v: unknown): Record<string, string> =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).filter(([, val]) => typeof val === 'string'))
+      : {}
+  const fav = o.favorites
+  s.favorites = fav && typeof fav === 'object' && !Array.isArray(fav)
+    ? Object.fromEntries(Object.entries(fav).filter(([, v]) => !!v).map(([k]) => [k, true as const]))
+    : {}
+  s.groups = strMap(o.groups)
+  s.notes = strMap(o.notes)
+  s.skillVers = strMap(o.skillVers)
+  if (typeof o.devlog === 'boolean') s.devlog = o.devlog
+  return s
 }
 export function saveState(s: LocalState): void {
   localStorage.setItem(LS_KEY, JSON.stringify(s))
@@ -188,9 +241,10 @@ export function indexAge(idx: MarketIndex | null): string {
 
 const zh = /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
 /** Minimal i18n — zh/en user-facing strings. */
-export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'
-const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?' }
-const ZH: Record<I18nKey, string> = { verified: '已实测可装', failed: '装不上/加载失败', skipped: '有高危信号未跑', unverified: '未验证', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？' }
+export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'
+const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry' }
+// AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
+const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试' }
 export function t(key: I18nKey): string {
   return (zh ? ZH : EN)[key]
 }
@@ -266,15 +320,19 @@ export function scanSkillKeys(bases: string[], ls: (dir: string) => string[], ha
   return map
 }
 
-/** Installed-version lookup for a skill package: plugin key, `__skill_<basename>`
- *  dir key, or any normalized `<basename>-*` sibling dir (multi-skill packages
- *  are lifted to top level by writeSkill). */
+/** Installed-version lookup for a skill package: plugin key, `__skill_<id>`
+ *  dir key (namespaced when a same-basename package was present, else the
+ *  bare basename), or `<id>-*` sibling dirs for lifted multi-skill packages. */
 export function skillInstalledVer(installed: Record<string, string>, pkgName: string): string | undefined {
-  const base = `__skill_${pkgName.split('/').pop() ?? pkgName}`
+  const base = `__skill_${skillId(pkgName)}`
   if (installed[pkgName]) return installed[pkgName]
   if (installed[base]) return installed[base]
-  const prefix = `${base}-`
-  return Object.keys(installed).some(k => k.startsWith(prefix)) ? 'local' : undefined
+  const bare = `__skill_${pkgName.split('/').pop() ?? pkgName}`
+  if (bare !== base && installed[bare]) return installed[bare]
+  const keys = Object.keys(installed)
+  if (keys.some(k => k.startsWith(`${base}-`))) return 'local'
+  if (bare !== base && keys.some(k => k.startsWith(`${bare}-`))) return 'local'
+  return undefined
 }
 
 // ── dev log ring buffer (localStorage, opt-in) ─────────────────────────

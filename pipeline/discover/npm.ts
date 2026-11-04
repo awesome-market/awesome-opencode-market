@@ -1,4 +1,5 @@
 /** npm registry discovery: keyword search with pagination + rank filtering. */
+import { withTimeout } from '../fetch/npm.ts'
 
 export const NPM_SEARCH_URL = 'https://registry.npmjs.org/-/v1/search'
 export const NPM_REGISTRY = 'https://registry.npmjs.org'
@@ -30,7 +31,7 @@ export async function searchByKeyword(
   keyword: string,
   opts: { size?: number; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<NpmSearchResult[]> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const size = opts.size ?? 250
   const maxPages = opts.maxPages ?? 10 // registry caps ~1000 results anyway
   const out: NpmSearchResult[] = []

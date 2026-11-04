@@ -220,7 +220,7 @@ export async function run(opts: RunOptions = {}) {
 
       const { pk } = await fetchPackument(cand.name, { fetchFn: f })
       if (!pk) return
-      const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports })
+      const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
       if (!ev.ok) return
 
       const repo = normalizeRepoUrl(pk.repository)
@@ -422,6 +422,9 @@ export async function run(opts: RunOptions = {}) {
       }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
+    // github-kind entries never pass through the candidate filters, so a
+    // missing one is by definition filter/evidence loss, not 'unknown'
+    else if (e.source.kind === 'github') reason = 'filtered'
     removedNow.push({
       slug: e.slug, name: e.name, lastSource: e.source,
       disappearedAt: now, reason,

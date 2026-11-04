@@ -20,7 +20,7 @@
  *       HF_HOME/GALVANIZE_DIR for L0.5. */
 import { readFileSync, appendFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { argv, exit, env } from 'node:process'
+import { exit, env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
@@ -116,12 +116,17 @@ export function unreviewedTargets(
   })
 }
 
-async function main(): Promise<void> {
-  const arg = (k: string) => argv[argv.indexOf(k) + 1]
+export async function main(
+  args: string[] = process.argv,
+  deps: { l05?: typeof l05Score; ornith?: typeof ornithReview } = {},
+): Promise<void> {
+  const l05 = deps.l05 ?? l05Score
+  const ornith = deps.ornith ?? ornithReview
+  const arg = (k: string) => args[args.indexOf(k) + 1]
   const [idxPath, verdictsPath, outPath] = ['--index', '--verdicts', '--out'].map(arg)
-  const limit = argv.includes('--limit') ? Number(arg('--limit')) : Infinity
-  const names = argv.includes('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim())) : null
-  const dry = argv.includes('--dry')
+  const limit = args.includes('--limit') ? Number(arg('--limit')) : Infinity
+  const names = args.includes('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim())) : null
+  const dry = args.includes('--dry')
   if (!idxPath || !verdictsPath || !outPath) exit('usage: --index <p> --verdicts <p> --out <p> [--limit N] [--name a,b] [--dry]')
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
@@ -136,7 +141,7 @@ async function main(): Promise<void> {
     const material = reviewMaterial(e)
     let l05flag: { zh: string; en: string } | null = null
     try {
-      const scores = l05Score(material)
+      const scores = l05(material)
       const top = [...scores.entries()].sort((a, b) => b[1] - a[1])[0]
       if (top && top[1] >= L05_THRESHOLD) l05flag = {
         zh: `L0.5 命中注入信号（score ${top[1].toFixed(3)} ≥ ${L05_THRESHOLD}，块 ${top[0]}）`,
@@ -146,7 +151,7 @@ async function main(): Promise<void> {
     } catch (x) { console.error(`[diagnose] L0.5 failed for ${e.name}: ${x}`) }
 
     try {
-      const r = await ornithReview(e, material)
+      const r = await ornith(e, material)
       console.log(`[diagnose] ${e.name}@${ver} ornith=${r.verdict} ${r.reasonZh.slice(0, 80)}`)
       if (l05flag) { // L0.5 red flag outranks the LLM's own call — honest layering
         out.push(verdictRecord(e, 'concern',
@@ -166,6 +171,7 @@ async function main(): Promise<void> {
   console.log(`[diagnose] wrote ${out.length} verdicts → ${outPath}`)
 }
 
+/* v8 ignore next 4 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(x => { console.error(x); exit(1) })
 }

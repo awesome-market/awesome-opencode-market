@@ -3,11 +3,11 @@
  *  Usage: npx tsx pipeline/backfill.ts index.json > index.backfilled.json */
 import { readFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
-import { fetchPackument } from './fetch/npm.ts'
+import { fetchPackument, withTimeout } from './fetch/npm.ts'
 import { fetchRepoMeta } from './fetch/github.ts'
 
 export async function backfill(index: CatalogIndex, opts: { ghToken?: string | undefined; fetchFn?: typeof fetch | undefined } = {}): Promise<CatalogIndex> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const out = structuredClone(index)
   const BATCH = 10
   const queue = out.plugins.filter(e =>

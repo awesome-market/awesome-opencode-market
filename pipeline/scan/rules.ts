@@ -29,7 +29,7 @@ export const RULES: Rule[] = [
     id: 'network-call', sev: 'medium',
     test: (_p, c) => {
       if (c == null) return null
-      const m = c.match(/fetch\(|http\.request|require\(['"]https?['"]|axios|curl |wget /)
+      const m = c.match(/fetch\(|http\.request|require\(['"]https?['"]|axios|\bcurl\s|\bwget\s/)
       return m ? `network indicator: ${m[0]}` : null
     },
   },

@@ -84,7 +84,8 @@ describe('discover/filter', () => {
   it('evidence: keyword alone insufficient', () => {
     expect(hasPluginEvidence({ keywords: ['opencode'] }).ok).toBe(false)
     expect(hasPluginEvidence({ keywords: ['opencode'], main: 'dist/index.js' }).ok).toBe(true)
-    expect(hasPluginEvidence({ main: 'x.js' }).ok).toBe(true)
+    // an entry point alone is not plugin evidence — any npm package has one
+    expect(hasPluginEvidence({ main: 'x.js' }).ok).toBe(false)
     expect(hasPluginEvidence({ keywords: ['opencode'], readme: 'add to opencode.json plugin list' }).ok).toBe(true)
     expect(hasPluginEvidence({}).ok).toBe(false)
   })

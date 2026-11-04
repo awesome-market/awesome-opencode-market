@@ -10,7 +10,7 @@
  *    tsx pipeline/ai/digest.ts --index index.json --verdicts ai-verdicts.jsonl \
  *      --state digest-state.json --out-dir . [--date YYYY-MM-DD] [--dry] */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
-import { argv, exit } from 'node:process'
+import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { loadVerdicts } from '../verdicts.ts'
@@ -64,11 +64,11 @@ generated ${now.toISOString()}
 `
 }
 
-async function main(): Promise<void> {
-  const arg = (k: string) => argv[argv.indexOf(k) + 1]
+export async function main(args: string[] = process.argv): Promise<void> {
+  const arg = (k: string) => args[args.indexOf(k) + 1]
   const [idxPath, verdictsPath, statePath, outDir] = ['--index', '--verdicts', '--state', '--out-dir'].map(arg)
-  const dry = argv.includes('--dry')
-  const now = argv.includes('--date') ? new Date(`${arg('--date')}T21:00:00Z`) : new Date()
+  const dry = args.includes('--dry')
+  const now = args.includes('--date') ? new Date(`${arg('--date')}T21:00:00Z`) : new Date()
   if (!idxPath || !verdictsPath || !statePath || !outDir)
     exit('usage: --index <p> --verdicts <p> --state <p> --out-dir <d> [--date YYYY-MM-DD] [--dry]')
 
@@ -90,6 +90,7 @@ async function main(): Promise<void> {
   console.log(`[digest] wrote ${digestPath}; lastDigestAt=${now.toISOString()}`)
 }
 
+/* v8 ignore next 4 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(x => { console.error(x); exit(1) })
 }

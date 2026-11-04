@@ -18,16 +18,24 @@ export interface Packument {
   exports: unknown
   maintainers: string[]
   distTags: Record<string, string>
+  /** package readme (capped) — readme-install evidence check */
+  readme: string | null
 }
 
 export type PackumentStatus = 'ok' | 'not-found' | 'error'
 export interface PackumentResult { pk: Packument | null; status: PackumentStatus }
 
+/** Default fetch wrapper: timeout guard — a hung registry/repo response must
+ *  not stall a worker for the whole 60-minute job budget. Custom fetchFn
+ *  (tests, proxies) is passed the signal too; implementations may ignore it. */
+export const withTimeout = (f: typeof fetch, timeoutMs: number): typeof fetch =>
+  (input, init) => f(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(timeoutMs) })
+
 export async function fetchPackument(
   name: string,
   opts: { registry?: string; fetchFn?: typeof fetch } = {},
 ): Promise<PackumentResult> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const base = opts.registry ?? 'https://registry.npmjs.org'
   let res: Response
   try {
@@ -50,6 +58,7 @@ export async function fetchPackument(
       deprecated?: string
     }>
     time?: Record<string, string>
+    readme?: string
   }
   const distTags = (doc['dist-tags'] ?? {}) as Record<string, string>
   const latest = distTags.latest ?? null
@@ -75,19 +84,25 @@ export async function fetchPackument(
       exports: v?.exports ?? null,
       maintainers: (doc.maintainers ?? []).map(m => typeof m === 'string' ? m : m.name ?? '').filter(Boolean),
       distTags,
+      readme: typeof doc.readme === 'string' ? doc.readme.slice(0, 200_000) : null,
     },
     status: 'ok',
   }
 }
 
+const TARBALL_MAX = 64 * 1024 * 1024
 export async function fetchTarball(
   url: string,
   opts: { fetchFn?: typeof fetch } = {},
 ): Promise<Buffer> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 30_000)
   const res = await f(url)
   if (!res.ok) throw new Error(`tarball fetch failed: ${res.status}`)
-  return Buffer.from(await res.arrayBuffer())
+  const len = Number(res.headers.get('content-length') ?? 0)
+  if (len > TARBALL_MAX) throw new Error(`tarball too large: ${len} bytes`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  if (buf.length > TARBALL_MAX) throw new Error(`tarball too large: ${buf.length} bytes`)
+  return buf
 }
 
 /** npm download counts, last-30-days window (field name stays honest: this is not installs). */
@@ -95,7 +110,7 @@ export async function fetchDownloads30d(
   name: string,
   opts: { fetchFn?: typeof fetch } = {},
 ): Promise<number | null> {
-  const f = opts.fetchFn ?? fetch
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   try {
     const res = await f(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`)
     if (!res.ok) return null

@@ -27,11 +27,15 @@ export function markNotified(index: CatalogIndex, lines: string[]): { lines: str
   return { lines: out, issues }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const index = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2]!, 'utf8')))
-  const path = process.argv[3]!
+export function main(argv: string[] = process.argv): void {
+  const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2]!, 'utf8')))
+  const path = argv[3]!
   const lines = readFileSync(path, 'utf8').split('\n')
   const { lines: out, issues } = markNotified(index, lines)
   writeFileSync(path, out.join('\n'))
   for (const i of issues) console.log(i)
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
 }

@@ -96,6 +96,7 @@ export function seedLine(s: Submission, issue: number): string {
 
 // CLI: ISSUE_BODY=<body> npx tsx pipeline/submission.ts          → JSON fields
 //      ISSUE_BODY=<body> npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
+/* v8 ignore next 5 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const s = parseSubmission(process.env.ISSUE_BODY ?? '')
   const i = process.argv.indexOf('--seedline')

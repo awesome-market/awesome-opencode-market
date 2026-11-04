@@ -72,7 +72,7 @@ describe('fetch/npm.ts + review.ts branches', () => {
   })
   it('renderReview: >30 flags truncated, clean verdict on empty', () => {
     const r = {
-      name: 'p', exists: true, evidence: [], downloads30d: 5, repo: null, createdAt: null,
+      name: 'p', exists: true, evidence: ['keyword'], downloads30d: 5, repo: null, createdAt: null,
       findings: Array.from({ length: 35 }, (_, i) => `f${i}`),
       redFlags: Array.from({ length: 35 }, (_, i) => `r${i}`),
     }

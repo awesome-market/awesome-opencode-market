@@ -336,7 +336,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | # | 卡点 | 应对 |
 |---|---|---|
 | D1 | quarantine 积压无人兜底 → 合法件永 pending | 申诉通道（issue 模板）+ 每月人工清队 |
-| D2 | AI 诊断需 LLM API key（P4 才引入 secret） | key 只进 P4 job，verify job 永无 secret。**本地开发端点**：`http://localhost:8001`，key `sk-omlx-IwR34vV1H4dzFvIX0EA510Ra`，模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（仅本地可达，用户授权记录；CI 无法访问，上线需另配托管 key） |
+| D2 | AI 诊断需 LLM API key（P4 才引入 secret） | key 只进 P4 job，verify job 永无 secret。**本地开发端点**：`http://localhost:8001`，key 放 `~/.config/opencode-market/ai.env`（不入库），模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（仅本地可达，用户授权记录；CI 无法访问，上线需另配托管 key） |
 | D3 | 官方市场（dobord PR）落地时点未知 | P5 已解冻（用户裁定必做）；catalog 按 source 格式设计，官方落地时可转为其数据源而非废弃 |
 | D5 | ~~GUI SDK 第三方加载~~ ✅ 已实证可行 | 剩风险：`experimental` 面随上游变 + 依赖必须全打进 bundle（白名单 require） |
 | D4 | spam/恶意投稿 | P4 才开投稿；此前目录全由爬虫决定 |

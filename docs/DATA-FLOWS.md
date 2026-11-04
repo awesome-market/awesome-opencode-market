@@ -164,8 +164,11 @@ discoverNpm + discoverGithub（并行）
       + looksLikeTemplateSpam（owner 级 ≥6 近同名）
   → 确定性排序 name-asc → cap（--max，默认 500；workflow 传 2000）
   → 逐候选 worker（10 并发）：
-      增量短路：候选版本 == prev.pendingUpdate?.version ?? prev.latestVersion
-                且 ruleset 同 → 整体复用（>7d 只刷 metrics+身份字段+repoId）
+      更新检测三条路（本轮 vs 旧 index）：
+        ① 版本变了（pk.version ≠ latestVersion）→ 走全流程，hold 进 pendingUpdate
+        ② 版本同 + ruleset 同 → 增量短路整体复用（metrics.checkedAt >7d
+           才 refreshMeta 重拉 packument/stars/downloads；否则零请求）
+        ③ 旧有条目候选里没有 → gone-check 探活（见下）
       fetchPackument → hasPluginEvidence（via ≥2 或含 'entry'——仅 keyword 不算数）
       → fetchTarball+scanTarball → capabilities{findings,redFlags,rulesetVersion}
         redFlags>0 → verification={status:'skipped'}（高危信号没跑）
@@ -272,7 +275,13 @@ flowchart TB
 ```
 plan job（contents:read）：
       catalog 分支取 index → targets 输入非空则按包名收窄 index
-      → planTargets（retest 开关见下）→ shard 12/组 → matrix 输出
+      → planTargets（retest 开关见下；cap=48/班）
+        选序 = index.plugins 的 name-asc 顺取，无年龄/优先级——
+        积压时字母序尾部排队，无饿死保护；手动 targets= 可插队
+        每个目标只消费一次：verified/failed 均永久离开 unverified 队列
+        排队期间 npm 发新版 → pendingUpdate 换版，轮到验当前版；
+        版本错配的结果 merge 时过期丢弃，不写错槽
+        → shard 顺序切片 12/组（items.slice，非 hash）→ matrix 输出片索引
       手动 targets= 逗号包名 → 定向验证 + --retest（failed/verified 可重验；
         否则 failed 槽是终态，永远没机会重跑——修补前的死穴）
 verify job（permissions:{} 零权限 + harden-runner egress 白名单
@@ -840,3 +849,44 @@ skills/index.json + skills/<id>/   HTTP skill 源（latestVersion 钉版 tarball
 health.json       {ok, entries, generatedAt}
 privacy.html
 ```
+
+---
+
+## 15. 官方能力 vs 市场覆盖（缺口清单）
+
+opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方支持" ≠ "市场有入口"**——底层手动都能用，缺的是目录侧的扫/验/装闭环。
+
+| opencode 官方方式 | 市场支持 | 缺口 |
+|---|---|---|
+| npm `name@ver` | ✅ `pinSpec` 钉批准版装 | — |
+| **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ❌ github-kind 只展示 | **最大缺口**：实测 `opencode plugin add owner/repo` 真装上（写入 `plugins:["owner/repo"]`，git 缓存在 `~/.cache/opencode/npm/git-<pkg>-<commit>/`），但目录上 1399+ 条 github-kind 全部"无可装" |
+| git `owner/repo#commit` 钉版 | ❌ | catalog `source.version` 对 github-kind 为 null——记上 head commit 即可达到与 npm `name@ver` 同级的钉版+审计 |
+| github 条目静态扫描 | ❌ | `scanTarball` 只吃 npm tarball；GitHub 有免 npm 的 `codeload.github.com/<owner>/<repo>/tar.gz/refs/heads/<br>` |
+| github 条目云验证 | ❌ | `planTargets` 要求 version；`opencode plugin add owner/repo` 可验但槽位模型（verification/pendingUpdate 按 version 索引）没留位置 |
+| github repo 内容探测 | ❌ | `fetchRepoTree` 只跑 npm 候选；github-kind 条目的 `contains` 恒 null——repo 里有 SKILL.md 也看不到 |
+| `~/.config/opencode/plugins/` 全局目录 | ❌ | 官方本地插件路径，方向不同（丢文件非装包），市场不覆盖 |
+| `.opencode/plugins/` + 项目 `opencode.json` 项目级 | ❌ | 市场只写全局 `~/.config/opencode/opencode.json`；项目级完全不支持 |
+| `file:`/本地路径 spec | ❌ | opencode CLI 同样拒绝（"must be npm registry package or Git package specifier"）——**一致，不算缺口** |
+| skills 本地目录安装 | ✅ `installSkillTar` | — |
+| skills 远程 HTTP catalog | ✅ `skillSource` 写 `skills[]` | — |
+| 目录外已装（uncataloged） | ⚠️ extras 卡片可见 | 无更新检测 |
+
+### skill 安装目录命名（已实现的条件规则）
+
+`installSkillTar` 的落地目录 **默认用包 basename**，只有 basename 已被**另一个包**占用时双方才换全名编码 `scope--name`（`.market-skills.json` 记 `name` 判归属）：
+
+| 场景 | `~/.config/opencode/skills/` 下 |
+|---|---|
+| 单装 `@a/test` | `test/` |
+| 再装 `@b/test` | `a--test/` + `b--test/`（原 `test/` 改名） |
+| 外来 `test/`（无 manifest） | 新包落 `b--test/`，外来目录不动 |
+| `uninstall` | 先查 `a--test/`，回落 `test/` |
+
+站点 `skills/<id>/` 同源：`buildSkillCatalog` 对目录内 skill 包做 basename 计数，>1 才上全名 id。`skillInstalledVer` 同时认 `__skill_<ns>`、`__skill_<base>` 及 `<id>-*` lifted 兄弟键。
+
+### 补齐 github-kind 的最小路径（按工作量）
+
+1. **客户端放开按钮**（最小）：github-kind 条目的 `pinSpec` 已返回 `owner/repo`——给个"安装(git)"动作即可，opencode 原生认
+2. **catalog 记 commit sha**（小）：`source.version` 记 head commit → `owner/repo#sha` 钉版
+3. **扫描/验证接 codeload**（中）：tar.gz → `scanTarball` 复用 + verify 槽位按 commit 索引
+4. **fetchRepoTree 对 github-kind 补跑**（小）：让 `contains:[skill]` 不再恒 null

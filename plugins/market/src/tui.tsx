@@ -9,9 +9,10 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, sanitizeState, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { dedupeToSpec, removeSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot } from './skill-install.js'
+import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
 const TABS: readonly (readonly [Tab, string])[] = [
@@ -21,7 +22,9 @@ const TABS: readonly (readonly [Tab, string])[] = [
 const SORTS = [['downloads', '按 npm 下载量'], ['stars', '按 Star'], ['name', '按名称'], ['verified', '按验证状态']] as const
 const RANGES = [[0, '全部时间'], [1, '1 天内'], [7, '7 天内'], [30, '30 天内'], [90, '90 天内'], [365, '1 年内']] as const
 const CATALOG_URL = 'https://terry2010.github.io/opencode-market-spike/skills/'
-const LOG_FILE = '/tmp/opencode-market.log'
+// per-user debug log (not a predictable world-writable /tmp path) — resolved
+// lazily; the label falls back to the display form until the real path is in
+let LOG_FILE = '~/.config/opencode/market.log'
 
 interface MarketState extends LocalState { devlog?: boolean }
 
@@ -69,7 +72,7 @@ export default Plugin.define({
 
       const log = (line: string) => {
         if (!store.devlog) return
-        void import('node:fs').then(fs => fs.appendFileSync(LOG_FILE, `${new Date().toLocaleString('sv-SE')} ${line}\n`)).catch(() => {})
+        void marketLogPath().then(p => { LOG_FILE = p; return appendBounded(p, `${new Date().toLocaleString('sv-SE')} ${line}\n`) }).catch(() => {})
       }
       const location = () => ctx.location ?? ctx.data.location.default()
       const refreshInstalled = async () => {
@@ -123,11 +126,15 @@ export default Plugin.define({
         if (tab() === 'skills' || tab() === 'mySkills') list = list.filter(p => p.contains?.includes('skill'))
         return allCategories(list)
       })
-      // two-column grid: rows of card pairs
+      // card grid adapts to terminal width — 2 cols only when a card still
+      // gets ~48 chars; narrow screens collapse to a single column
+      const cols = () => (dims().width ?? 120) >= 104 ? 2 : 1
+      const descW = () => cols() === 2 ? 42 : Math.max(20, (dims().width ?? 120) - 14)
       const grid = createMemo(() => {
         const out: MarketEntry[][] = []
         const l = pool()
-        for (let i = 0; i < l.length; i += 2) out.push(l.slice(i, i + 2))
+        const c = cols()
+        for (let i = 0; i < l.length; i += c) out.push(l.slice(i, i + c))
         return out
       })
       const verOf = (e: MarketEntry) => {
@@ -141,7 +148,7 @@ export default Plugin.define({
         setTimeout(() => {
           const r = listScroll
           if (!r) return
-          const top = Math.floor(sel() / 2) * 8
+          const top = Math.floor(sel() / cols()) * 8
           const vp = Math.max(6, dims().height - 12)
           if (top < r.scrollTop) r.scrollTo(top)
           else if (top + 8 > r.scrollTop + vp) r.scrollTo(top + 8 - vp)
@@ -158,22 +165,22 @@ export default Plugin.define({
         // pin to the catalog-approved version — `plugin add` accepts name@ver
         // and never silently resolves past what review allowed
         const pin = pinSpec(e)
+        try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return }
         const updating = !!(ver && hasUpdate(e, ver))
         const afterAdd = async () => {
           if (!updating) return
           // `plugin add` appends rather than dedupes — rewrite config down to
           // exactly the pinned spec so no stale/duplicate specs linger
-          const fs = await import('node:fs')
           const { homedir } = await import('node:os')
           const { join } = await import('node:path')
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-          const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') : {}
-          const list: string[] = Array.isArray(d.plugins) ? d.plugins : []
+          const d = await readJson(cfg)
+          const list = strArrayField(d, 'plugins')
           d.plugins = dedupeToSpec(list, pin)
-          fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+          await writeJsonAtomic(cfg, d)
         }
         if (updating) setStatus(`updating ${e.name} → ${e.latestVersion ?? '?'}…`)
-        const p = spawn('opencode', ['plugin', 'add', pin])
+        const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
@@ -185,9 +192,9 @@ export default Plugin.define({
               void refreshInstalled()
             }).catch(x => setStatus(`update fail: ${String(x)}`))
           }
-          else { setStatus(`${e.name} install failed (exit ${code})`); log(`install fail ${e.name}: exit ${code}`) }
+          else { setStatus(`${e.name} install failed (exit ${code}) — 再按 i 重试`); log(`install fail ${e.name}: exit ${code}`) }
         })
-        p.on('error', x => { jobs.delete(e.name); setStatus(`install throw: ${x.message}`); log(`install throw ${e.name}: ${x}`) })
+        p.on('error', x => { jobs.delete(e.name); setStatus(`install throw: ${x.message} — 再按 i 重试`); log(`install throw ${e.name}: ${x}`) })
       }
       const installSkill = async (e: MarketEntry) => {
         try {
@@ -202,9 +209,9 @@ export default Plugin.define({
           const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
           const v = e.latestVersion ?? 'local'
           await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
-          setInstalled({ ...installed(), [`__skill_${e.name.split('/').pop()}`]: v })
+          setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
           setStatus(`${e.name} ${t('installed')} (${msg})`)
-        } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); log(`install fail ${e.name}: ${String(x)}`) }
+        } catch (x) { setStatus(`install fail ${e.name}: ${String(x)} — 再按 i 重试`); log(`install fail ${e.name}: ${String(x)}`) }
       }
       const uninstall = (e: MarketEntry) =>
         openMenu(`${e.name} — ${t('confirmUninstall')}`, [
@@ -215,8 +222,8 @@ export default Plugin.define({
         const isSkill = e.contains?.includes('skill')
         log(`uninstall ${e.name}`)
         if (isSkill) {
-          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(`uninstall fail: ${String(x)}`); return }
-          const base = `__skill_${e.name.split('/').pop()}`
+          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(`uninstall fail: ${String(x)} — 重试按 u`); return }
+          const base = `__skill_${skillId(e.name)}`
           const next = { ...installed() }
           for (const k of Object.keys(next)) if (k === e.name || k === base || k.startsWith(`${base}-`)) delete next[k]
           await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
@@ -226,14 +233,14 @@ export default Plugin.define({
           // spec, not the catalog name, and silently misses pinned specs
           // (same fix as the GUI host uninstall)
           try {
-            const fs = await import('node:fs')
+            const { homedir } = await import('node:os')
             const { join } = await import('node:path')
             const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
-            const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') as { plugins?: string[] } : {}
-            const list = Array.isArray(d.plugins) ? d.plugins : []
+            const d = await readJson(cfg)
+            const list = strArrayField(d, 'plugins')
             d.plugins = removeSpec(list, e.name)
-            fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
-          } catch (x) { setStatus(`uninstall fail: ${String(x)}`); return }
+            await writeJsonAtomic(cfg, d)
+          } catch (x) { setStatus(`uninstall fail: ${String(x)} — 重试按 u`); return }
           const next = { ...installed() }; delete next[e.name]
           setInstalled(next); setStatus(`${e.name} removed`)
         }
@@ -285,11 +292,11 @@ export default Plugin.define({
           try {
             const { readFileSync } = await import('node:fs')
             const { homedir } = await import('node:os')
-            const d = JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as MarketState
-            if (typeof d !== 'object' || !d) throw new Error('bad shape')
-            void mutate(x => { Object.assign(x, { favorites: d.favorites ?? {}, groups: d.groups ?? {}, notes: d.notes ?? {}, skillVers: d.skillVers ?? {} }) })
+            // field-shape validation — a crafted backup file must not corrupt state
+            const d = sanitizeState(JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as unknown) as MarketState
+            void mutate(x => { Object.assign(x, { favorites: d.favorites, groups: d.groups, notes: d.notes, skillVers: d.skillVers }) })
             setStatus('restored')
-          } catch (x) { setStatus(`restore fail: ${String(x)}`) }
+          } catch (x) { setStatus(`restore fail: ${String(x)} — 检查备份文件后重试` ) }
         }) },
         { label: '清空数据（收藏/分组/备注）', run: () => openMenu('清空数据 — 不可撤销，确认？', [
           { label: '✗ 清空', run: () => void mutate(d => { d.favorites = {}; d.groups = {}; d.notes = {}; d.skillVers = {} }) },
@@ -301,20 +308,20 @@ export default Plugin.define({
         } },
         { label: '查看日志', run: () => void (async () => {
           const { existsSync, readFileSync } = await import('node:fs')
-          const tail = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, 'utf8').trim().split('\n').slice(-15) : ['(empty)']
+          const p = await marketLogPath()
+          const tail = existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').slice(-15) : ['(empty)']
           openMenu('开发日志（esc 关闭）', tail.map(line => ({ label: line, run: noop })))
         })() },
         { label: `使用 HTTP catalog 源`, run: () => void (async () => {
           const { homedir } = await import('node:os')
           const { join } = await import('node:path')
-          const fs = await import('node:fs')
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
           try {
-            const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8')) as { skills?: string[] } : {}
-            const list = d.skills ?? []
-            if (!list.includes(CATALOG_URL)) fs.writeFileSync(cfg, JSON.stringify({ ...d, skills: [...list, CATALOG_URL] }, null, 2))
+            const d = await readJson(cfg)
+            const list = strArrayField(d, 'skills')
+            if (!list.includes(CATALOG_URL)) await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
             setStatus(`catalog source ${list.includes(CATALOG_URL) ? 'already enabled' : 'enabled'} — ${t('restartNeeded')}`)
-          } catch (x) { setStatus(`catalog fail: ${String(x)}`) }
+          } catch (x) { setStatus(`catalog fail: ${String(x)} — 检查 ${cfg} 后重试`) }
         })() },
       ])
 
@@ -423,10 +430,10 @@ export default Plugin.define({
             if (settingsSel() === 0) { setZone('chrome'); setChromeRow(1); setChromeSel(6); return }
             setSettingsSel(i => Math.max(0, i - 1)); return
           }
-          if (sel() < 2) { setZone('chrome'); setChromeRow(3); setChromeSel(0); return }
-          move(-2); return
+          if (sel() < cols()) { setZone('chrome'); setChromeRow(3); setChromeSel(0); return }
+          move(-cols()); return
         }
-        if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 1)) : move(2); return }
+        if (k === 'down' || k === 'j') { tab() === 'settings' ? setSettingsSel(i => Math.min(settingsItems().length - 1, i + 1)) : move(cols()); return }
         if ((k === 'left' || k === 'h') && tab() !== 'settings') {
           if (sel() === 0) {
             const items = chromeItems(3)
@@ -517,7 +524,7 @@ export default Plugin.define({
               </box>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
-            <For each={wrap2(e.description?.en ?? '', 42)}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
+            <For each={wrap2(e.description?.en ?? '', descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
             <text fg={theme.text.faint}>{categoriesOf(e).join('  ')}</text>
           </box>
         )
@@ -606,7 +613,7 @@ export default Plugin.define({
                     )}</For>
                   </box>
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
-                    <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()}</text></Show>
+                    <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()} — 按 r 重试</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
                     <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}
                                onMouseDown={(ev) => ev.stopPropagation()}
@@ -614,7 +621,7 @@ export default Plugin.define({
                       <box flexDirection="column" paddingLeft={1}>
                         <For each={grid()}>{(pair, ri) => (
                           <box flexDirection="row" marginTop={ri() === 0 ? 0 : 1}>
-                            <For each={pair}>{(e, ci) => <Card e={e} i={ri() * 2 + ci()} />}</For>
+                            <For each={pair}>{(e, ci) => <Card e={e} i={ri() * cols() + ci()} />}</For>
                           </box>
                         )}</For>
                         <Show when={idx() && !pool().length}><text fg={theme.text.muted}>  {t('noMatch')}</text></Show>

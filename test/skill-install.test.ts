@@ -26,11 +26,25 @@ beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'sk-')) })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 describe('installSkillTar', () => {
-  it('extracts package files into root/<id>', async () => {
+  it('extracts package files into root/<basename>', async () => {
     const gz = makeGz(['package/README.md', 'hi'], ['package/SKILL.md', '# skill'])
     await installSkillTar({ name: '@x/my-skill', gzipped: gz, root })
     expect(readFileSync(join(root, 'my-skill', 'README.md'), 'utf8')).toBe('hi')
     expect(readFileSync(join(root, 'my-skill', 'SKILL.md'), 'utf8')).toBe('# skill')
+  })
+
+  it('same-basename packages both get namespaced dirs', async () => {
+    const gz = makeGz(['package/SKILL.md', '# s'])
+    await installSkillTar({ name: '@a/test', gzipped: gz, root })
+    expect(existsSync(join(root, 'test', 'SKILL.md'))).toBe(true)   // singleton → basename
+    await installSkillTar({ name: '@b/test', gzipped: gz, root })
+    expect(existsSync(join(root, 'a--test', 'SKILL.md'))).toBe(true) // first renamed
+    expect(existsSync(join(root, 'b--test', 'SKILL.md'))).toBe(true) // second namespaced
+    expect(existsSync(join(root, 'test'))).toBe(false)
+    // reinstall of the first package must land back at a--test, not test
+    await installSkillTar({ name: '@a/test', gzipped: gz, root })
+    expect(existsSync(join(root, 'a--test', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(root, 'test'))).toBe(false)
   })
 
   it('lifts nested .opencode/skills/* to root and writes manifest', async () => {
@@ -79,6 +93,21 @@ describe('uninstallSkillDir', () => {
     await uninstallSkillDir('old-pkg', root)
     expect(existsSync(join(root, 'old-pkg-sub'))).toBe(false)
     expect(readdirSync(root)).toEqual([])
+  })
+
+  it('uninstall prefers the namespaced dir, falls back to basename', async () => {
+    // collided install lives at a--test — a foreign `test` dir must survive
+    mkdirSync(join(root, 'a--test'), { recursive: true })
+    writeFileSync(join(root, 'a--test', '.market-skills.json'), JSON.stringify({ name: '@a/test', paths: [] }))
+    writeFileSync(join(root, 'a--test', 'SKILL.md'), '#')
+    mkdirSync(join(root, 'test'), { recursive: true })
+    writeFileSync(join(root, 'test', 'SKILL.md'), '# foreign')
+    await uninstallSkillDir('@a/test', root)
+    expect(existsSync(join(root, 'a--test'))).toBe(false)
+    expect(existsSync(join(root, 'test', 'SKILL.md'))).toBe(true)   // foreign untouched
+    // singleton install lives at basename
+    await uninstallSkillDir('@a/test', root)
+    expect(existsSync(join(root, 'test'))).toBe(false)
   })
 
   it('manifest paths cannot escape the root', async () => {

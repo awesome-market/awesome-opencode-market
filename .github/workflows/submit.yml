@@ -189,7 +189,27 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      - name: actor gate — labeled events carry no author_association for the labeler
+        if: github.event_name == 'issues' && github.event.action == 'labeled'
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: |
+          PERM=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || echo none)
+          echo "actor=$ACTOR permission=$PERM"
+          case "$PERM" in
+            admin|maintain|write) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
+            *) gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
+               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（$PERM）——标签已移除。仅 maintainer 可用 verdict 标签。"
+               echo "allowed=0" >> "$GITHUB_OUTPUT"
+               exit 0 ;;
+          esac
       - name: parse submission + resolve verdict record
+        if: steps.gate.outputs.allowed != '0'
         id: v
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
@@ -236,10 +256,13 @@ jobs:
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
       - name: append to ai-verdicts.jsonl on catalog branch
-        if: steps.v.outputs.skip != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINE: ${{ steps.v.outputs.line }}
+          VERDICT: ${{ steps.v.outputs.verdict }}
+          TARGET: ${{ steps.v.outputs.target }}
+          ISSUE: ${{ github.event.issue.number }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
@@ -250,14 +273,14 @@ jobs:
             touch ai-verdicts.jsonl
             echo "$LINE" >> ai-verdicts.jsonl
             git add ai-verdicts.jsonl
-            git commit -m "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.v.outputs.target }} (issue #${{ github.event.issue.number }})" || { echo "no changes"; PUSHED=1; break; }
+            git commit -m "verdict: human $VERDICT $TARGET (issue #$ISSUE)" || { echo "no changes"; PUSHED=1; break; }
             git push origin catalog && { PUSHED=1; break; }
             echo "push rejected (attempt $i) — retrying"
             sleep 3
           done
           [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
       - name: acknowledge on issue
-        if: steps.v.outputs.skip != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         uses: actions/github-script@v7
         env:
           V: ${{ steps.v.outputs.verdict }}

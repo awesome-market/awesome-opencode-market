@@ -9,7 +9,7 @@
  *  Usage: tsx pipeline/docket.ts --index index.json --verdicts ai-verdicts.jsonl
  *    [--dry]        (gh cli + GH_TOKEN env; GH_REPO=owner/repo) */
 import { readFileSync } from 'node:fs'
-import { argv, exit, env } from 'node:process'
+import { exit, env } from 'node:process'
 import { execFileSync } from 'node:child_process'
 import { CatalogIndex, AiVerdict } from '../src/schema.ts'
 import { vkey, latestVerdicts, loadVerdicts } from './verdicts.ts'
@@ -50,10 +50,13 @@ export function docketTargets(index: CatalogIndex, verdicts: AiVerdict[]): Docke
 const gh = (args: string[]) =>
   execFileSync('gh', args, { encoding: 'utf8', env: { ...process.env, GH_TOKEN: env.GITHUB_TOKEN ?? env.GH_TOKEN } })
 
-async function main(): Promise<void> {
-  const arg = (k: string) => argv[argv.indexOf(k) + 1]
+export async function main(
+  args: string[] = process.argv,
+  ghFn: typeof gh = gh,
+): Promise<void> {
+  const arg = (k: string) => args[args.indexOf(k) + 1]
   const [idxPath, verdictsPath] = ['--index', '--verdicts'].map(arg)
-  const dry = argv.includes('--dry')
+  const dry = args.includes('--dry')
   const repo = env.GH_REPO
   if (!idxPath || !verdictsPath || !repo)
     exit('usage: --index <p> --verdicts <p> [--dry]   (GH_REPO=owner/repo required)')
@@ -63,7 +66,7 @@ async function main(): Promise<void> {
   const targets = docketTargets(index, verdicts)
   const wanted = new Map(targets.map(t => [issueTitle(t), t]))
 
-  const open = JSON.parse(gh(['issue', 'list', '-R', repo, '--label', 'review:pending',
+  const open = JSON.parse(ghFn(['issue', 'list', '-R', repo, '--label', 'review:pending',
     '--state', 'open', '--json', 'number,title', '--limit', '500'])) as { number: number; title: string }[]
   const openByTitle = new Map(open.map(i => [i.title, i.number]))
 
@@ -84,7 +87,7 @@ async function main(): Promise<void> {
     ].filter(l => l !== '').join('\n')
     console.log(`[docket] create ${title}`)
     if (!dry) {
-      gh(['issue', 'create', '-R', repo, '--title', title,
+      ghFn(['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', '--label', `ai:${t.verdict}`, '--body', body])
     }
   }
@@ -93,14 +96,15 @@ async function main(): Promise<void> {
     if (wanted.has(i.title)) continue
     console.log(`[docket] close #${i.number} ${i.title} (已决议/已放行)`)
     if (!dry) {
-      gh(['issue', 'comment', '-R', repo, String(i.number),
+      ghFn(['issue', 'comment', '-R', repo, String(i.number),
         '--body', '该版本的审核单已自动关闭：verdict 已决议或版本已放行（见 catalog 分支 ai-verdicts.jsonl）。'])
-      gh(['issue', 'close', '-R', repo, String(i.number)])
+      ghFn(['issue', 'close', '-R', repo, String(i.number)])
     }
   }
   console.log(`[docket] ${wanted.size} open-decision targets, ${open.length} review issues open`)
 }
 
+/* v8 ignore next 4 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(x => { console.error(x); exit(1) })
 }

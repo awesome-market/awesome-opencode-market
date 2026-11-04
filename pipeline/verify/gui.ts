@@ -45,11 +45,6 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
   try {
     // ---- whitelist require ----
     let Plugin: unknown, Ipc: unknown, contributionKinds: Record<string, { name: string }>
-    const guiHost = {
-      get Plugin() { return Plugin },
-      get Ipc() { return Ipc },
-      get kinds() { return contributionKinds },
-    }
     class Contrib { static cname = 'Contribution' }
     class Panel extends Contrib { static override cname = 'Panel' }
     class SettingsPage extends Contrib { static override cname = 'SettingsPage' }
@@ -117,7 +112,9 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
       log: () => {},
     }
     try {
-      def.setup(ctx)
+      // async setups are legal — a contribution registered after an await
+      // must still count, or every async plugin fails this gate falsely
+      await def.setup(ctx)
     } catch (e) {
       return { ok: false, stage: 'setup', error: (e as Error).message, registrations: registrations.map(r => r.kind) }
     }
@@ -165,7 +162,9 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
 export function findGuiBundle(home: string, name: string): { path: string; src: string } | { error: string } {
   const npmRoot = join(home, 'cache', 'opencode', 'npm')
   if (!existsSync(npmRoot)) return { error: `no plugin cache at ${npmRoot}` }
-  const norm = name.startsWith('@') ? name : name.split('/').pop() ?? name
+  // spec dirs are named by the bare package segment — a scoped '@s/p@ver'
+  // spec dir can't exist ('/' isn't a valid path segment), it's 'p@ver'
+  const norm = name.split('/').pop() ?? name
   let pkgDir: string | null = null
   for (const spec of readdirSync(npmRoot)) {
     if (!spec.startsWith(`${name}@`) && !spec.startsWith(`${norm}@`)) continue

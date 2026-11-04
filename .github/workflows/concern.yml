@@ -51,10 +51,8 @@ jobs:
                echo "allowed=0" >> "$GITHUB_OUTPUT"
                exit 0 ;;
           esac
-      - name: stop on unauthorized labeler
-        if: steps.gate.outputs.allowed == '0'
-        run: exit 0
       - name: resolve verdict record
+        if: steps.gate.outputs.allowed != '0'
         id: v
         env:
           EVENT: ${{ github.event_name }}
@@ -128,7 +126,7 @@ jobs:
             console.log(JSON.stringify({ name, ver, verdict, reason }))
           })()'
       - name: target must exist in catalog index
-        if: steps.v.outputs.skip != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         id: exists
         env:
           NAME: ${{ steps.v.outputs.name }}
@@ -144,11 +142,13 @@ jobs:
           fi
           echo "exists=1" >> "$GITHUB_OUTPUT"
       - name: resolve version + tarball sha (npm names; blank ver → latest)
-        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         id: n
         env:
           NAME: ${{ steps.v.outputs.name }}
           VER: ${{ steps.v.outputs.ver }}
+          VERDICT: ${{ steps.v.outputs.verdict }}
+          REASON: ${{ steps.v.outputs.reason }}
         run: |
           V="$VER"; SHA=""
           # owner/repo (no @scope, contains /) → github-kind, version null
@@ -158,6 +158,9 @@ jobs:
             [ -z "$V" ] && V=$(npm view "$NAME" version 2>/dev/null || true)
             [ -n "$V" ] && SHA=$(npm view "$NAME@$V" dist.integrity 2>/dev/null || true)
           fi
+          # defense-in-depth: a version is only ever semver-ish chars — anything
+          # else (e.g. a crafted [review] title like "pkg@$(cmd)") is discarded
+          [ -n "$V" ] && [[ ! "$V" =~ ^[A-Za-z0-9._+~-]+$ ]] && V=""
           node -e '
             const rec = {
               name: process.argv[1],
@@ -169,15 +172,18 @@ jobs:
               ...(process.argv[5] ? { sha: process.argv[5] } : {}),
             }
             console.log(JSON.stringify(rec))
-          ' "$NAME" "$V" "${{ steps.v.outputs.verdict }}" "${{ steps.v.outputs.reason }}" "$SHA" > /tmp/verdict.line
+          ' "$NAME" "$V" "$VERDICT" "$REASON" "$SHA" > /tmp/verdict.line
           cat /tmp/verdict.line
           echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "target=$NAME${V:+@$V}" >> "$GITHUB_OUTPUT"
       - name: append to ai-verdicts.jsonl on catalog branch
-        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINE: ${{ steps.n.outputs.line }}
+          VERDICT: ${{ steps.v.outputs.verdict }}
+          TARGET: ${{ steps.n.outputs.target }}
+          ISSUE: ${{ github.event.issue.number }}
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
@@ -188,14 +194,14 @@ jobs:
             touch ai-verdicts.jsonl
             echo "$LINE" >> ai-verdicts.jsonl
             git add ai-verdicts.jsonl
-            git commit -m "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.n.outputs.target }} (issue #${{ github.event.issue.number }})" || { echo "no changes"; PUSHED=1; break; }
+            git commit -m "verdict: human $VERDICT $TARGET (issue #$ISSUE)" || { echo "no changes"; PUSHED=1; break; }
             git push origin catalog && { PUSHED=1; break; }
             echo "push rejected (attempt $i) — retrying"
             sleep 3
           done
           [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
       - name: acknowledge + mark decided
-        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         uses: actions/github-script@v7
         env:
           V: ${{ steps.v.outputs.verdict }}
