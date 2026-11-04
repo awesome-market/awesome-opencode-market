@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { fetchIndex, rows, DEFAULT_INDEX_URL } from '../src/catalog.ts'
@@ -8,6 +10,18 @@ import type { MarketEntry, MarketIndex } from '../src/catalog.ts'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(dir, '../package.json'), 'utf8'))
+
+// hermetic index server — these tests must not depend on live network/proxy
+const CANNED = { version: '1', generatedAt: 't', categories: {}, removed: [],
+  plugins: [{ name: 'test-pkg', slug: 'test-pkg', verification: { status: 'unverified' } }] }
+const serveIndex = async () => {
+  const srv = createServer((_req, res) => {
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify(CANNED))
+  })
+  await new Promise<void>(r => srv.listen(0, '127.0.0.1', r))
+  return { url: `http://127.0.0.1:${(srv.address() as AddressInfo).port}/index.json`, close: () => srv.close() }
+}
 
 const mkEntry = (name: string, status: string, red = 0): MarketEntry => ({
   name, slug: name, type: 'plugin', category: [],
@@ -32,8 +46,12 @@ describe('market plugin', () => {
     expect(code).not.toMatch(/^export\s+(default|\{)/m)
   })
   it('fetchIndex parses index shape', async () => {
-    const idx = await fetchIndex().catch(() => null) // network optional in tests
-    if (idx) expect(idx.plugins).toBeInstanceOf(Array)
+    const s = await serveIndex()
+    try {
+      const idx = await fetchIndex(s.url)
+      expect(idx.plugins).toBeInstanceOf(Array)
+      expect(idx.plugins.length).toBeGreaterThan(0)
+    } finally { s.close() }
     expect(DEFAULT_INDEX_URL).toContain('index.json')
   })
   it('rows: verified first, redFlag last, name order within', () => {
@@ -58,13 +76,13 @@ describe('catalog helpers', () => {
     expect(keyLines('a\nb\nnpm error 404 not found\nc').some(l => l.includes('404'))).toBe(true)
     expect(keyLines('x1\nx2\nx3', 2)).toEqual(['x2', 'x3'])
   })
-  it('state roundtrip + allGroups + empty fallback', async () => {
-    const { loadState, saveState, allGroups, EMPTY_STATE } = await import('../src/catalog.ts')
+  it('state roundtrip + empty fallback', async () => {
+    const { loadState, saveState, EMPTY_STATE } = await import('../src/catalog.ts')
     const store: Record<string, string> = {}
     globalThis.localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v } } as unknown as Storage
-    saveState({ ...EMPTY_STATE, groups: { a: 'g2', b: 'g1' }, notes: { a: 'n' } })
+    saveState({ ...EMPTY_STATE, favorites: { a: true } })
     const s = loadState()
-    expect(s.notes.a).toBe('n'); expect(allGroups(s)).toEqual(['g1', 'g2'])
+    expect(s.favorites.a).toBe(true)
     store['opencode-market.state.v1'] = '{bad'
     expect(loadState()).toEqual(EMPTY_STATE)
     delete (globalThis as Record<string, unknown>).localStorage
@@ -120,10 +138,13 @@ describe('catalog helpers', () => {
   })
   it('fetchIndex returns plugins list shape', async () => {
     const { fetchIndex } = await import('../src/catalog.ts')
-    const idx = await fetchIndex()
-    expect(Array.isArray(idx.plugins)).toBe(true)
-    expect(idx.plugins.length).toBeGreaterThan(0)
-  }, 15000)
+    const s = await serveIndex()
+    try {
+      const idx = await fetchIndex(s.url)
+      expect(Array.isArray(idx.plugins)).toBe(true)
+      expect(idx.plugins.length).toBeGreaterThan(0)
+    } finally { s.close() }
+  })
   it('indexAge/hasUpdate/t basics', async () => {
     const { indexAge, hasUpdate, t } = await import('../src/catalog.ts')
     expect(indexAge({ generatedAt: '2026-11-02T06:00:00Z' } as MarketIndex)).toBe('2026-11-02 06:00')
@@ -141,10 +162,12 @@ describe('catalog helpers', () => {
       setItem: (k: string, v: string) => { store[k] = v },
       removeItem: (k: string) => { delete store[k] },
     } as unknown as Storage
+    const s = await serveIndex()
     // fresh fetch caches
-    const a = await fetchIndexCached()
+    const a = await fetchIndexCached(s.url)
     expect(a.plugins.length).toBeGreaterThan(0)
     expect(store['opencode-market.index.v1']).toBeTruthy()
+    s.close()
     // second call hits TTL cache (no error even if offline now)
     const b = await fetchIndexCached('http://127.0.0.1:9/dead')
     expect(b.plugins.length).toBe(a.plugins.length)
@@ -167,7 +190,9 @@ describe('catalog helpers', () => {
     } as unknown as Storage
     // seed an EXPIRED cache entry
     store['opencode-market.index.v1'] = JSON.stringify({ at: 1, index: { version: 'old', generatedAt: '', plugins: [] } })
-    const idx = await fetchIndexCached()   // must refetch, not serve stale
+    const s = await serveIndex()
+    const idx = await fetchIndexCached(s.url)   // must refetch, not serve stale
+    s.close()
     expect(idx.plugins.length).toBeGreaterThan(0)
     // poison network + valid cache → fallback serves cached
     store['opencode-market.index.v1'] = JSON.stringify({ at: Date.now() - 7200_000, index: { version: 'snap', generatedAt: '', plugins: [{ name: 'snap-pkg' }] } })
@@ -178,14 +203,6 @@ describe('catalog helpers', () => {
     await expect(fetchIndexCached('http://127.0.0.1:9/dead')).rejects.toThrow()
     delete (globalThis as Record<string, unknown>).localStorage
   }, 20000)
-  it('looksLikePlugin classification', async () => {
-    const { looksLikePlugin } = await import('../src/catalog.ts')
-    expect(looksLikePlugin(null)).toBe('maybe')
-    expect(looksLikePlugin({ opencode: { plugin: 'x.js' } })).toBe('plugin')
-    expect(looksLikePlugin({ exports: { './tui': 'x.js' } })).toBe('plugin')
-    expect(looksLikePlugin({ main: 'index.js' })).toBe('maybe')
-    expect(looksLikePlugin({})).toBe('no')
-  })
   it('i18n tables: zh covers all keys', async () => {
     const { t } = await import('../src/catalog.ts')
     // en path already exercised; verify a zh key renders non-en text when zh set at module load
@@ -197,11 +214,11 @@ describe('catalog helpers', () => {
     const { categoriesOf, allCategories } = await import('../src/catalog.ts')
     const mk = (name: string, en = '', cat: string[] = []): MarketEntry => ({ name, slug: name, type: 'p', category: cat, description: { en } })
     expect(categoriesOf(mk('x', '', ['显式']))).toEqual(['显式'])           // declared wins
-    expect(categoriesOf(mk('theme-packer', 'colors fonts'))).toEqual(['主题与外观'])
-    expect(categoriesOf(mk('token-usage', 'llm pricing'))).toContain('模型与接入')
-    expect(categoriesOf(mk('zzz', 'nothing matches'))).toEqual(['其他'])   // fallback
+    expect(categoriesOf(mk('theme-packer', 'colors fonts'))).toEqual(['appearance'])
+    expect(categoriesOf(mk('token-usage', 'llm pricing'))).toContain('models')
+    expect(categoriesOf(mk('zzz', 'nothing matches'))).toEqual(['other'])   // fallback
     const all = allCategories([mk('a', 'git review'), mk('b', 'slack qq')])
-    expect(all).toContain('开发流程'); expect(all).toContain('集成与移动')
+    expect(all).toContain('workflow'); expect(all).toContain('integrations')
   })
   it('scanSkillKeys: dirs w/ content, md files, skips hidden+staging', async () => {
     const { scanSkillKeys } = await import('../src/catalog.ts')

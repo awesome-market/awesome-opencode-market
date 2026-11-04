@@ -15,9 +15,16 @@ export function markNotified(index: CatalogIndex, lines: string[]): { lines: str
     const t = l.trim()
     if (!t.startsWith('{')) return l
     try {
-      const s = JSON.parse(t) as { name?: string; issue?: number; notified?: boolean }
-      const e = s.name ? byName.get(s.name) : undefined
-      if (s.name && s.issue && !s.notified && e && e.approval !== 'pending') {
+      const s = JSON.parse(t) as { name?: string; repo?: string; issue?: number; notified?: boolean }
+      // repo-only submissions carry `repo` not `name` — match either the entry
+      // name (github-kind entries are named owner/repo) or source.repo, else
+      // their issue never gets notified+closed
+      const e = s.name ? byName.get(s.name)
+        : s.repo ? index.plugins.find(p =>
+            p.source.repo?.toLowerCase() === s.repo!.toLowerCase() ||
+            p.name.toLowerCase() === s.repo!.toLowerCase())
+        : undefined
+      if ((s.name ?? s.repo) && s.issue && !s.notified && e && e.approval !== 'pending') {
         issues.push(s.issue)
         return JSON.stringify({ ...s, notified: true })
       }

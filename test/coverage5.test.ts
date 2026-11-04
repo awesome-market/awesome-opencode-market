@@ -9,6 +9,7 @@ import { reviewPackage, verdict, renderReview } from '../pipeline/review.ts'
 import { verifyPackage } from '../pipeline/verify/verify.ts'
 import { versionCmp } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const mkRes = (body: unknown, status = 200) =>
@@ -111,7 +112,7 @@ describe('run.ts remaining branches', () => {
     deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
     metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
-    capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
+    capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
   })
@@ -190,7 +191,7 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
     deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
     metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
-    capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
+    capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
     ...over,

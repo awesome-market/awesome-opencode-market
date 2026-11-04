@@ -1,6 +1,6 @@
 /** Install/activation verification (DEV §4). Runs in a permissions:{} CI job — never sees secrets. */
 import { execFile } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -190,21 +190,50 @@ async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
 }
 
 /** Shard driver: verify a slice of {name,version,features} targets, write results JSON. */
-export async function verifyShard(targets: (VerifyTarget | string)[], outPath: string, opts: { execFn?: ExecFn } = {}): Promise<VerifyResult[]> {
-  const results: VerifyResult[] = []
-  for (const t of targets) {
-    const target = coerceTarget(t)
-    results.push(await verifyPackage(target.name, {
-      ...opts,
-      ...(target.version ? { version: target.version } : {}),
-      ...(target.features ? { features: target.features } : {}),
-    }))
-    console.log(`verify ${target.name}@${target.version ?? 'latest'}: ${results.at(-1)!.status}`)
+export async function verifyShard(targets: (VerifyTarget | string)[], outPath: string,
+  opts: { execFn?: ExecFn; home?: string; timeoutMs?: number; tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {}): Promise<VerifyResult[]> {
+  // Untrusted code runs inside this process (L3a gui bundles). A fire-and-forget
+  // rejection (e.g. a bare `import()` the vm sandbox refuses) must not crash the
+  // shard and take every result with it — Node's fatal-on-unhandled policy is
+  // the wrong default for a sacrificial sandbox, so swallow with a log line.
+  const onRej = (reason: unknown) => console.error('stray unhandled rejection (ignored):', reason)
+  process.on('unhandledRejection', onRej)
+  try {
+    const results: VerifyResult[] = []
+    mkdirSync(join(outPath, '..'), { recursive: true })
+    // incremental flush — a hard crash (OOM/job timeout) mid-shard loses only
+    // the in-flight target; merge collects whatever completed
+    const flush = () => {
+      const tmp = `${outPath}.tmp`
+      writeFileSync(tmp, JSON.stringify(results, null, 2))
+      renameSync(tmp, outPath)
+    }
+    for (const t of targets) {
+      const target = coerceTarget(t)
+      try {
+        results.push(await verifyPackage(target.name, {
+          ...opts,
+          ...(target.version ? { version: target.version } : {}),
+          ...(target.features ? { features: target.features } : {}),
+        }))
+      } catch (e) {
+        // one bad target must not take the shard down — record it as failed
+        results.push({
+          name: target.name,
+          ...(target.version ? { version: target.version } : {}),
+          status: 'failed', level: 'install',
+          opencodeVersion: 'unknown',
+          verifiedAt: new Date().toISOString(),
+          logExcerpt: `harness error: ${String(e).slice(0, 2000)}`,
+        })
+      }
+      console.log(`verify ${target.name}@${target.version ?? 'latest'}: ${results.at(-1)!.status}`)
+      flush()
+    }
+    return results
+  } finally {
+    process.off('unhandledRejection', onRej)
   }
-  mkdirSync(join(outPath, '..'), { recursive: true })
-  const { writeFileSync } = await import('node:fs')
-  writeFileSync(outPath, JSON.stringify(results, null, 2))
-  return results
 }
 
 /* v8 ignore next 9 */

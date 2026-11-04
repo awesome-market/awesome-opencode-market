@@ -16,75 +16,90 @@ import { detectFeatures } from '../src/features.ts'
 import { scanTarball } from './scan/scan.ts'
 import { fetchTarball, withTimeout } from './fetch/npm.ts'
 
-const [,, file, ...flags] = process.argv
-if (!file) { console.error('usage: re-features <index.json> [--dry]'); process.exit(2) }
-const dry = flags.includes('--dry')
-
 interface VerDoc { main?: string; exports?: unknown; dist?: { tarball?: string } }
 interface PkDoc { versions?: Record<string, VerDoc> }
 
-const f = withTimeout(fetch, 15_000)
-const docCache = new Map<string, PkDoc | null>()
-async function packument(name: string): Promise<PkDoc | null> {
-  if (docCache.has(name)) return docCache.get(name)!
-  try {
-    const res = await f(`https://registry.npmjs.org/${name.replace('/', '%2f')}`)
-    const doc = res.ok ? await res.json() as PkDoc : null
-    docCache.set(name, doc)
-    return doc
-  } catch { docCache.set(name, null); return null }
+export interface ReFeaturesResult {
+  changed: string[]
+  failed: string[]
+  reorderOnly: number
+  githubCleared: number
 }
 
-const tarFiles = new Map<string, string[]>()
-async function filesOf(v: VerDoc): Promise<string[]> {
-  const url = v.dist?.tarball
-  if (!url) return []
-  if (!tarFiles.has(url)) tarFiles.set(url, (await scanTarball(await fetchTarball(url))).files)
-  return tarFiles.get(url)!
-}
-
-const index = CatalogIndex.parse(JSON.parse(readFileSync(file, 'utf8')))
-const changed: string[] = [], failed: string[] = []
-let reorderOnly = 0, githubCleared = 0   // same-set reorders / github-kind → []
-const same = (a?: string[], b?: string[]) => JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
-const sameSet = (a?: string[], b?: string[]) =>
-  (a ?? []).length === (b ?? []).length && (a ?? []).every(x => (b ?? []).includes(x))
-
-const BATCH = 10
-const queue = [...index.plugins]
-for (let i = 0; i < queue.length; i += BATCH) {
-  await Promise.all(queue.slice(i, i + BATCH).map(async e => {
+export async function main(file: string, opts: { dry?: boolean; fetchFn?: typeof fetch } = {}): Promise<ReFeaturesResult> {
+  const dry = opts.dry ?? false
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
+  const docCache = new Map<string, PkDoc | null>()
+  const packument = async (name: string): Promise<PkDoc | null> => {
+    if (docCache.has(name)) return docCache.get(name)!
     try {
-      if (e.source.kind !== 'npm') {
-        if ((e.features?.length ?? 0) > 0) { e.features = []; githubCleared++ }
-        return
-      }
-      const doc = await packument(e.name)
-      for (const slot of [e, ...(e.pendingUpdate ? [e.pendingUpdate] : [])] as Array<{ version?: string; latestVersion?: string | null; features?: string[] }>) {
-        const ver = slot.version ?? slot.latestVersion
-        if (!ver) continue
-        const v = doc?.versions?.[ver]
-        if (!v) { if (slot === e) failed.push(`${e.name}@${ver}`); continue }
-        const next = detectFeatures({ exports: v.exports, main: v.main ?? null, files: (!v.exports && !v.main) ? await filesOf(v) : undefined })
-        if (!same(slot.features, next)) {
-          if (sameSet(slot.features, next)) reorderOnly++
-          else changed.push(`${e.name}@${ver}: [${slot.features}]→[${next}]`)
-          slot.features = next
+      const res = await f(`https://registry.npmjs.org/${name.replace('/', '%2f')}`)
+      const doc = res.ok ? await res.json() as PkDoc : null
+      docCache.set(name, doc)
+      return doc
+    } catch { docCache.set(name, null); return null }
+  }
+
+  const tarFiles = new Map<string, string[]>()
+  const filesOf = async (v: VerDoc): Promise<string[]> => {
+    const url = v.dist?.tarball
+    if (!url) return []
+    if (!tarFiles.has(url)) tarFiles.set(url, (await scanTarball(await fetchTarball(url, { fetchFn: f }))).files)
+    return tarFiles.get(url)!
+  }
+
+  const index = CatalogIndex.parse(JSON.parse(readFileSync(file, 'utf8')))
+  const changed: string[] = [], failed: string[] = []
+  let reorderOnly = 0, githubCleared = 0   // same-set reorders / github-kind → []
+  const same = (a?: string[], b?: string[]) => JSON.stringify(a ?? []) === JSON.stringify(b ?? [])
+  const sameSet = (a?: string[], b?: string[]) =>
+    (a ?? []).length === (b ?? []).length && (a ?? []).every(x => (b ?? []).includes(x))
+
+  const BATCH = 10
+  const queue = [...index.plugins]
+  for (let i = 0; i < queue.length; i += BATCH) {
+    await Promise.all(queue.slice(i, i + BATCH).map(async e => {
+      try {
+        if (e.source.kind !== 'npm') {
+          if ((e.features?.length ?? 0) > 0) { e.features = []; githubCleared++ }
+          return
         }
-      }
-    } catch { failed.push(e.name) }
-  }))
+        const doc = await packument(e.name)
+        for (const slot of [e, ...(e.pendingUpdate ? [e.pendingUpdate] : [])] as Array<{ version?: string; latestVersion?: string | null; features?: string[] }>) {
+          const ver = slot.version ?? slot.latestVersion
+          if (!ver) continue
+          const v = doc?.versions?.[ver]
+          if (!v) { if (slot === e) failed.push(`${e.name}@${ver}`); continue }
+          const files = (!v.exports && !v.main) ? await filesOf(v) : undefined
+          const next = detectFeatures({ exports: v.exports, main: v.main ?? null, ...(files ? { files } : {}) })
+          if (!same(slot.features, next)) {
+            if (sameSet(slot.features, next)) reorderOnly++
+            else changed.push(`${e.name}@${ver}: [${slot.features}]→[${next}]`)
+            slot.features = next
+          }
+        }
+      } catch { failed.push(e.name) }
+    }))
+  }
+
+  console.log(`re-features: ${changed.length} slot(s) semantic-corrected, ${githubCleared} github-kind emptied, ${reorderOnly} order-normalized, ${failed.length} skipped`)
+  changed.slice(0, 30).forEach(c => console.log(`  ${c}`))
+  if (changed.length > 30) console.log(`  … +${changed.length - 30} more`)
+  if (failed.length) console.log(`  skipped: ${failed.slice(0, 15).join(', ')}${failed.length > 15 ? '…' : ''}`)
+
+  if (!dry) {
+    writeFileSync(file, JSON.stringify({ ...index, generatedAt: new Date().toISOString() }, null, 2))
+    CatalogIndex.parse(JSON.parse(readFileSync(file, 'utf8')))   // post-write validation
+    console.log('index.json written + revalidated')
+  } else {
+    console.log('(dry — index.json untouched)')
+  }
+  return { changed, failed, reorderOnly, githubCleared }
 }
 
-console.log(`re-features: ${changed.length} slot(s) semantic-corrected, ${githubCleared} github-kind emptied, ${reorderOnly} order-normalized, ${failed.length} skipped`)
-changed.slice(0, 30).forEach(c => console.log(`  ${c}`))
-if (changed.length > 30) console.log(`  … +${changed.length - 30} more`)
-if (failed.length) console.log(`  skipped: ${failed.slice(0, 15).join(', ')}${failed.length > 15 ? '…' : ''}`)
-
-if (!dry) {
-  writeFileSync(file, JSON.stringify({ ...index, generatedAt: new Date().toISOString() }, null, 2))
-  CatalogIndex.parse(JSON.parse(readFileSync(file, 'utf8')))   // post-write validation
-  console.log('index.json written + revalidated')
-} else {
-  console.log('(dry — index.json untouched)')
+/* v8 ignore next 6 */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const file = process.argv[2]
+  if (!file) { console.error('usage: re-features <index.json> [--dry]'); process.exit(2) }
+  main(file, { dry: process.argv.includes('--dry') }).catch(e => { console.error(e); process.exit(1) })
 }

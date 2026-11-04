@@ -6,16 +6,16 @@ import mod from '../plugins/market/src/gui.ts'
 async function mount(over = {}) {
   const api = makeApi(over)
   const { ctx, mounted } = fakeCtx(api)
-  mod.setup?.(ctx)
+  mod.setup?.(ctx as never)
   const root = await remount(mounted)
   await flush()
-  return { api, root, mounted }
+  return { api, ctx, root, mounted }
 }
 
 describe('L3 mount: window-side behavior', () => {
-  it('全部更新 updates every outdated plugin', async () => {
+  it('update-all updates every outdated plugin', async () => {
     const { root, api } = await mount()
-    const updAll = find(root, '全部更新')!
+    const updAll = find(root, 'update all')!
     updAll.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     await flush()
     expect(api.update).toHaveBeenCalledWith({ name: '@x/old', spec: '@x/old@2.0.0' })
@@ -50,13 +50,32 @@ describe('L3 mount: window-side behavior', () => {
     expect(api.cancelInstall).toHaveBeenCalled()
   })
 
-  it('settings tab exposes 更新数据/导出备份/清空 controls (remount)', async () => {
+  it('settings tab exposes refresh/backup/clear controls (remount)', async () => {
     const { root, mounted } = await mount()
-    find(root, '设置')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    find(root, 'settings')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     const root2 = await remount(mounted)
     const texts = [...root2.querySelectorAll('button')].map(b => b.textContent)
+    expect(texts.some(t => t?.includes('refresh data'))).toBe(true)
+    expect(texts.some(t => t?.includes('backup') || t?.includes('clear'))).toBe(true)
+  })
+
+  it('language switch persists and re-renders labels in zh', async () => {
+    localStorage.clear()
+    const { root, mounted } = await mount()
+    find(root, 'settings')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const root2 = await remount(mounted)
+    const zhBtn = [...root2.querySelectorAll('button')].find(b => (b as HTMLButtonElement).dataset.lang === 'zh')!
+    zhBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    const root3 = await remount(mounted)
+    const texts = [...root3.querySelectorAll('button')].map(b => `${b.textContent}${b.getAttribute('aria-label') ?? ''}`)
+    expect(texts.some(t => t?.includes('设置'))).toBe(true)
     expect(texts.some(t => t?.includes('更新数据'))).toBe(true)
-    expect(texts.some(t => t?.includes('备份') || t?.includes('清空'))).toBe(true)
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').lang).toBe('zh')
+    // restore for other tests
+    const enBtn = [...root3.querySelectorAll('button')].find(b => (b as HTMLButtonElement).dataset.lang === 'en')
+    enBtn?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    localStorage.clear()
   })
 
   it('favorite toggle flips ☆→★ on the card', async () => {
@@ -68,13 +87,14 @@ describe('L3 mount: window-side behavior', () => {
     expect(fav!.textContent).toBe('★')
   })
 
-  it('detail open on card enter/click shows detail view', async () => {
-    const { root, mounted } = await mount()
-    const card = root.querySelector('[data-name], .card') ?? [...root.querySelectorAll('*')].find(el => el.textContent?.includes('@x/old'))
-    expect(card).toBeTruthy()
-    card!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    const root2 = await remount(mounted)
-    expect(root2.textContent!.length).toBeGreaterThan(0)
+  it('card name click opens the entry page; body click does not navigate', async () => {
+    const { root, ctx } = await mount()
+    const name = [...root.querySelectorAll('span')].find(s => s.textContent?.includes('@x/old') && s.title)!
+    name.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(ctx.system.openExternal).toHaveBeenCalledWith(name.title)
+    expect(name.title).toMatch(/^https:/)
+    const back = [...root.querySelectorAll('button')].find(b => b.textContent?.includes('back'))
+    expect(back).toBeUndefined()
   })
 
   it('verifyActivation result shows on the button after install', async () => {

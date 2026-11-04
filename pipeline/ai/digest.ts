@@ -53,7 +53,7 @@ ${passes.length ? table(passes) : '_无_'}
 
 ## ② 审核队列积压（held — ${held.length}）
 
-${held.length ? held.map(e => `- \`${e.name}\` ${e.pendingUpdate ? `v${e.pendingUpdate.version}` : '(未发布过)'}`).join('\n') : '_空_'}
+${held.length ? held.map(e => `- \`${e.name}\` ${e.pendingUpdate ? `v${e.pendingUpdate.version}` : e.latestVersion === null ? '(repo-only — AI 不审，需人工)' : '(未发布过)'}`).join('\n') : '_空_'}
 
 ## ③ Concerns（${concerns.length}）
 

@@ -126,3 +126,18 @@ describe('site honest labels', () => {
     expect(specs).toEqual(['@3', 'sk-empty@1.0.0'])   // sk-nover never reached tarballOf
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
+
+describe('buildSkillCatalog failure paths', () => {
+  it('tarball fetch failure → skill skipped, tmp dir cleaned', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-dead', contains: ['skill'], latestVersion: '9' })], removed: [] }
+    // https URL that refuses — curl -f fails fast on a refused connection
+    buildSkillCatalog(idx, out, () => 'https://127.0.0.1:1/nope.tgz')
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills).toHaveLength(0)
+    expect(existsSync(join(out, 'skills', 'sk-dead.tmp'))).toBe(false)
+    rmSync(out, { recursive: true, force: true })
+  })
+})

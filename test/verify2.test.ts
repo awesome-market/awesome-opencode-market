@@ -269,6 +269,30 @@ describe('gui harness', () => {
     await checkGuiBundle(okBundle)
     expect((globalThis as Record<string, unknown>)['document']).toBe(before)
   })
+  it('process is not reachable inside the sandbox realm', async () => {
+    const r = await checkGuiBundle(`process.exit(1); module.exports = {}`)
+    expect(r.ok).toBe(false)
+    expect(r.stage).toBe('evaluate')
+    expect(r.error).toMatch(/process is not defined/)
+  })
+  it('dynamic import() in setup → deterministic failure, not a stray rejection', async () => {
+    const r = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ async setup(ctx) {
+        await import('node:fs')
+        ctx.add(Panel, () => ({ render: () => document.createElement('div') }))
+      } })`)
+    expect(r.ok).toBe(false)
+    expect(r.stage).toBe('setup')
+    // whitelist msg when vm-modules is enabled; the stock-node message otherwise
+    expect(r.error).toMatch(/whitelist|dynamic import/i)
+  })
+  it('sync infinite loop in eval dies by the vm timeout', async () => {
+    const r = await checkGuiBundle(`while(1){}; module.exports = {}`)
+    expect(r.ok).toBe(false)
+    expect(r.stage).toBe('evaluate')
+    expect(r.error).toMatch(/timed out/i)
+  }, 15000)
 
   it('findGuiBundle locates the gui export in the plugin cache layout', () => {
     const home = mkdtempSync(join(tmpdir(), 'gh-'))
@@ -282,5 +306,26 @@ describe('gui harness', () => {
   it('findGuiBundle reports missing package dir', () => {
     const home = mkdtempSync(join(tmpdir(), 'gh2-'))
     expect(findGuiBundle(home, 'nope')).toMatchObject({ error: expect.stringContaining('cache') })
+  })
+})
+
+describe('verifyShard', () => {
+  it('a harness-failing target records failed + flushes results incrementally', async () => {
+    const { verifyShard } = await import('../pipeline/verify/verify.ts')
+    const { readFileSync } = await import('node:fs')
+    const home = mkdtempSync(join(tmpdir(), 'vs-'))
+    const out = join(home, 'results.json')
+    // home as a FILE → writeDummyProvider's mkdirSync throws ENOTDIR out of
+    // verifyPackage entirely → the per-target catch records 'harness error'
+    const notDir = join(home, 'afile')
+    writeFileSync(notDir, 'x')
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const results = await verifyShard(['a', 'b'], out, { home: notDir, execFn: fake })
+    expect(results).toHaveLength(2)
+    expect(results.every(r => r.status === 'failed')).toBe(true)
+    expect(results[0]!.logExcerpt).toContain('harness error')
+    // incremental flush — the file exists even though every target failed
+    const onDisk = JSON.parse(readFileSync(out, 'utf8')) as { name: string }[]
+    expect(onDisk.map(r => r.name)).toEqual(['a', 'b'])
   })
 })

@@ -6,6 +6,7 @@
  */
 import type { CatalogIndex, PluginEntry, RemovedEntry } from '../../src/schema.ts'
 import { CatalogIndex as CatalogIndexSchema } from '../../src/schema.ts'
+import { CAT_NAMES, catId } from '../../src/categories.ts'
 
 /** Host opencode version used for verification cache keys (name@version+host, DEV §4).
  *  Bump in lockstep with verify.yml's installed @opencode/cli version. */
@@ -245,10 +246,17 @@ export function buildIndex(
       !aliveNames.has(r.name) && (Number.isNaN(Date.parse(r.disappearedAt)) || Date.parse(r.disappearedAt) > cutoff)),
     ...(opts.removed ?? []),
   ]
-  // categories registry: union of old labels + ids actually used (I-3)
-  const categories = { ...(old?.categories ?? {}) }
+  // categories registry (I-3): english ids are canonical — legacy zh labels
+  // in old entries/dict keys normalize through catId() on every merge, so a
+  // single scheduled run migrates the whole index without a repair pass
+  for (const e of merged) e.category = (e.category ?? []).map(catId)
+  const categories: CatalogIndex['categories'] = {}
+  for (const [k, v] of Object.entries(old?.categories ?? {})) {
+    const id = catId(k)
+    categories[id] ??= CAT_NAMES[id] ?? v
+  }
   for (const e of merged) for (const id of e.category) {
-    categories[id] ??= { en: id }
+    categories[id] ??= CAT_NAMES[id] ?? { en: id }
   }
   const index = CatalogIndexSchema.parse({
     version: '1',

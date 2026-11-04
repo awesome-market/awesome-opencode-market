@@ -23,7 +23,10 @@ jobs:
     concurrency:                       # one review per issue at a time — edited/opened
       group: sub-review-${{ github.event.issue.number }}   # bursts can't double-comment
       cancel-in-progress: true
-    permissions: { issues: write }     # comments/labels only; pipeline runs here but executes no plugin code
+    # ZERO permissions: review.ts downloads + untars the ATTACKER-CONTROLLED
+    # tarball in this job. A tar-parser exploit here must yield nothing —
+    # comments/labels happen in the separate `report` job holding issues:write.
+    permissions: {}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -85,10 +88,30 @@ jobs:
           # inject a fake 'verdict: clean' earlier in the file.
           V=$(grep -oE 'verdict: (clean|flagged|invalid)' /tmp/review.md | tail -1 | awk '{print $2}')
           echo "v=${V:-invalid}" >> "$GITHUB_OUTPUT"
+      - name: hand report to the privileged comment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-md-${{ github.event.issue.number }}
+          path: /tmp/review.md
+          retention-days: 1
+          if-no-files-found: error
+
+  # privileged half of the review: holds issues:write but only reads the
+  # artifact the zero-permission `review` job produced — it never parses the
+  # attacker tarball itself (N-6 / privilege separation).
+  report:
+    needs: review
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: review-md-${{ github.event.issue.number }}
+          path: /tmp
       - name: post review comment (+ next-step guidance)
         uses: actions/github-script@v7
         env:
-          VERDICT: ${{ steps.scan.outputs.v }}
+          VERDICT: ${{ needs.review.outputs.verdict }}
         with:
           script: |
             const fs = require('fs')
@@ -109,7 +132,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
-          V: ${{ steps.scan.outputs.v }}
+          V: ${{ needs.review.outputs.verdict }}
         run: |
           gh label create "submission"            --color 0969da -d "plugin submission"   --force 2>/dev/null || true
           gh label create "submission:approved"   --color 0e8a16 -d "review passed"       --force 2>/dev/null || true

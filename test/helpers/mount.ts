@@ -33,8 +33,9 @@ export function fakeCtx(api: ReturnType<typeof makeApi>) {
     options: {},
     sessions: { current: () => null },
     layout: { open: () => {} },
+    system: { openExternal: vi.fn() },
   }
-  return { ctx: ctx as never, mounted }
+  return { ctx, mounted }
 }
 export const flush = async (n = 5) => { for (let i = 0; i < n; i++) await new Promise(r => setTimeout(r, 10)) }
 
@@ -48,4 +49,4 @@ export async function remount(mounted: { content?: () => HTMLElement }) {
   return root
 }
 export const find = (root: ParentNode, text: string) =>
-  [...root.querySelectorAll('button')].find(b => b.textContent?.includes(text)) as HTMLButtonElement | undefined
+  [...root.querySelectorAll('button')].find(b => b.textContent?.includes(text) || b.title === text || b.getAttribute('aria-label') === text) as HTMLButtonElement | undefined

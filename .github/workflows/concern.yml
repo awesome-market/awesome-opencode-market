@@ -223,3 +223,23 @@ jobs:
             }
             if (isReview || process.env.EVENT === 'issues')
               await github.rest.issues.update({ ...ref, state: 'closed' })
+
+  # non-maintainer [concern] issue: the verdict job above deliberately skips
+  # (form is maintainer-only) — without this job the issue would sit open
+  # forever with nobody told why (N-18)
+  triage:
+    if: >-
+      github.event_name == 'issues' && github.event.action == 'opened'
+      && startsWith(github.event.issue.title, '[concern]')
+      && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: explain + close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE" -R "$GH_REPO" --body "⚠️ 本通道（[concern] 表单）仅限 maintainer 提交人工裁决。发现包的问题请：① 在该包的 [review] issue 里描述情况，或 ② 用普通 issue 报告——maintainer 会转为正式 concern。本 issue 已自动关闭。"
+          gh issue close "$ISSUE" -R "$GH_REPO"

@@ -16,12 +16,20 @@ export function safeTarRel(raw: string): string | null {
   return rel
 }
 
+/** Compressed ceiling — callers also gate on response size, but the tarball
+ *  is untrusted bytes either way. 48MB matches the GUI fetch cap. */
+export const MAX_SKILL_TGZ = 48 * 1024 * 1024
+/** Decompressed ceiling — a 48MB gzip can expand 20x+; maxOutputLength makes
+ *  zlib throw instead of OOMing the host process (zip-bomb guard). */
+export const MAX_SKILL_TAR = 256 * 1024 * 1024
+
 export async function installSkillTar(opts: { name: string; gzipped: Uint8Array; root: string }): Promise<string> {
   const { gunzipSync } = await import('node:zlib')
   const fs = await import('node:fs')
   const { join, dirname, resolve, sep } = await import('node:path')
   const { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync } = fs
-  const tar = gunzipSync(Buffer.from(opts.gzipped))
+  if (opts.gzipped.byteLength > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${opts.gzipped.byteLength} bytes)`)
+  const tar = gunzipSync(Buffer.from(opts.gzipped), { maxOutputLength: MAX_SKILL_TAR })
   const base = assertSkillId(opts.name)
   const ns = skillId(opts.name)
   const manifestOwner = (dir: string): string | undefined => {
@@ -46,22 +54,45 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
   if (!resolve(dest).startsWith(resolve(opts.root) + sep)) throw new Error(`dest escapes skills root: ${dest}`)
   mkdirSync(dest, { recursive: true })
   let off = 0, wrote = 0
+  // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
+  // ustar stores paths ≤255B as prefix(155B @345) + '/' + name(100B @0).
+  let pendingLong: string | null = null
+  const paxPath = (rec: string): string | null => {
+    let i = 0
+    while (i < rec.length) {
+      const sp = rec.indexOf(' ', i)
+      if (sp < 0) return null
+      const len = parseInt(rec.slice(i, sp), 10)
+      if (!len || i + len > rec.length) return null
+      const kv = rec.slice(sp + 1, i + len - 1)
+      const eq = kv.indexOf('=')
+      if (eq > 0 && kv.slice(0, eq) === 'path') return kv.slice(eq + 1)
+      i += len
+    }
+    return null
+  }
   while (off + 512 <= tar.length) {
-    const f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
+    let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
     if (!f) break
+    const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
     const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
     const type = tar.toString('utf8', off + 156, off + 157)
     const body = off + 512
+    const next = body + Math.ceil(size / 512) * 512
+    if (type === 'L') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
+    if (type === 'x') { pendingLong = paxPath(tar.toString('utf8', body, body + size)) ?? pendingLong; off = next; continue }
+    if (pendingLong) { f = pendingLong; pendingLong = null }
+    else if (prefix) f = `${prefix}/${f}`
     const rel = safeTarRel(f)
-    if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = body + Math.ceil(size / 512) * 512; continue }  // unsafe name or macOS AppleDouble junk
+    if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
     if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
     if (type === '0' || type === '' || type === ' ') {
       const fp = join(dest, rel)
-      if (!resolve(fp).startsWith(resolve(dest) + sep)) { off = body + Math.ceil(size / 512) * 512; continue }
+      if (!resolve(fp).startsWith(resolve(dest) + sep)) { off = next; continue }
       mkdirSync(dirname(fp), { recursive: true })
       writeFileSync(fp, tar.subarray(body, body + size)); wrote++
     }
-    off = body + Math.ceil(size / 512) * 512
+    off = next
   }
   if (!wrote) throw new Error('empty tarball')
   const root = dirname(dest)
@@ -81,8 +112,13 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     try { subs = readdirSync(nd) } catch { continue }
     for (const sub of subs) {
       if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
+      // collision → try <id>-<sub>, then <id>-<sub>-2, … — but NEVER rmSync a
+      // path we don't own (a foreign dir that happens to match the prefixed
+      // name would otherwise be deleted). Give up on that skill instead.
       let rel = sub
-      if (existsSync(join(root, rel)) && !owned.has(rel)) rel = `${id}-${sub}`
+      for (let n = 0; n < 100 && existsSync(join(root, rel)) && !owned.has(rel); n++)
+        rel = `${id}-${sub}${n ? `-${n}` : ''}`
+      if (existsSync(join(root, rel)) && !owned.has(rel)) continue
       const target = join(root, rel)
       if (!resolve(target).startsWith(resolve(root) + sep)) continue
       rmSync(target, { recursive: true, force: true })

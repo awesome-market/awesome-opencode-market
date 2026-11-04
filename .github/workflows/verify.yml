@@ -47,7 +47,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30                 # 12 targets serial ≈ 15min worst-case; 20 was too thin (N-21)
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
@@ -77,7 +77,10 @@ jobs:
           XDG_DATA_HOME: /tmp/vhome/data
           XDG_CACHE_HOME: /tmp/vhome/cache
         run: npx tsx pipeline/verify/verify.ts /tmp/shard-${{ matrix.shard }}.json /tmp/results-${{ matrix.shard }}.json
-      - uses: actions/upload-artifact@v4
+      # results are flushed per-target inside the shard — a timed-out shard still
+      # leaves a partial file worth collecting (N-10)
+      - if: always() && hashFiles('/tmp/results-${{ matrix.shard }}.json') != ''
+        uses: actions/upload-artifact@v4
         with:
           name: results-${{ matrix.shard }}
           path: /tmp/results-${{ matrix.shard }}.json
@@ -85,6 +88,9 @@ jobs:
 
   merge:
     needs: verify
+    # collect partial results: one hung package kills its shard but the other
+    # shards' results are still valid — merge whatever landed (N-10)
+    if: always() && needs.verify.result != 'cancelled' && needs.verify.result != 'skipped'
     runs-on: ubuntu-latest
     permissions: { contents: write, pages: write, id-token: write }    # only job that writes — never executes untrusted code
     steps:

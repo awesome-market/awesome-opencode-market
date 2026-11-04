@@ -12,6 +12,7 @@
  *  renderer-side modules the host provides). Anything else → load failure. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
 
 export interface GuiCheck {
@@ -29,18 +30,31 @@ const GUI_GLOBALS = [
   'Event', 'KeyboardEvent', 'MouseEvent', 'MutationObserver', 'localStorage', 'sessionStorage',
   'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle', 'DOMParser', 'XMLSerializer',
 ] as const
+// host-provided conveniences a legit gui bundle may use — still NOT process,
+// require, dynamic import(), or any node builtin
+const HOST_GLOBALS = [
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask',
+  'console', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder', 'structuredClone',
+  'fetch', 'AbortSignal', 'AbortController', 'btoa', 'atob', 'performance',
+] as const
 
-/** Run a gui bundle's setup+render inside a fresh jsdom. Self-contained by
- *  design — never leaves mutated globals behind (finally-restore). */
+const EVAL_TIMEOUT = 5_000
+const STAGE_TIMEOUT = 8_000
+
+/** Reject if `p` doesn't settle within `ms` — bounds async hangs inside
+ *  untrusted setup()/render() (sync loops are already bound by the vm timeout). */
+function deadline<T>(p: Promise<T> | T, ms: number, label: string): Promise<T> {
+  return Promise.race([Promise.resolve(p), new Promise<never>((_, rj) => setTimeout(() => rj(new Error(`${label} timed out`)), ms))])
+}
+
+/** Run a gui bundle's setup+render inside a fresh jsdom, evaluated in a
+ *  node:vm realm so the module whitelist is REAL: the bundle has no
+ *  process/require/import()/node builtins — only the globals we inject.
+ *  (A `new Function` eval would leave all host globals reachable.)
+ *  No globalThis mutation either — the old swap/restore machinery is gone. */
 export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
   const dom = new JSDOM('', { pretendToBeVisual: true, url: 'https://verify.local/' })
   const w = dom.window as unknown as Record<string, unknown>
-  // descriptor-level swap: several globals (navigator…) are getter-only in Node
-  const saved = new Map<string, PropertyDescriptor | undefined>()
-  for (const k of GUI_GLOBALS) {
-    saved.set(k, Object.getOwnPropertyDescriptor(globalThis, k))
-    Object.defineProperty(globalThis, k, { value: w[k], writable: true, configurable: true, enumerable: true })
-  }
   const registrations: { kind: string; contrib: Record<string, unknown> }[] = []
   try {
     // ---- whitelist require ----
@@ -73,11 +87,26 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
       throw new Error(`module not in gui host whitelist: ${name}`)
     }
 
-    // ---- evaluate the bundle (CJS shape; ESM bundles arrive pre-wrapped) ----
+    // ---- sandbox: a fresh vm realm containing only what we inject ----
     const mod: { exports: Record<string, unknown> } = { exports: {} }
-    let def: { setup?: (ctx: unknown) => void } | undefined
+    const sandbox: Record<string, unknown> = { module: mod, exports: mod.exports, require: req }
+    for (const k of GUI_GLOBALS) sandbox[k] = w[k]
+    for (const k of HOST_GLOBALS) sandbox[k] = (w[k] ?? (globalThis as Record<string, unknown>)[k])
+    const vctx = vm.createContext(sandbox)
+
+    // ---- evaluate the bundle (CJS shape; ESM bundles arrive pre-wrapped) ----
+    // importModuleDynamically: a bundle's dynamic import() fails with the same
+    // deterministic whitelist error as require() instead of an obscure
+    // ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING (fire-and-forget import() would
+    // otherwise surface as a stray unhandled rejection — see verifyShard's
+    // process-level guard)
+    const script = new vm.Script(bundleSrc, {
+      filename: 'gui-bundle.cjs',
+      importModuleDynamically: () => Promise.reject(new Error('module not in gui host whitelist: (dynamic import)')),
+    })
+    let def: { setup?: (ctx: unknown) => unknown } | undefined
     try {
-      new Function('module', 'exports', 'require', bundleSrc)(mod, mod.exports, req)
+      script.runInContext(vctx, { timeout: EVAL_TIMEOUT })
       def = (mod.exports.default ?? mod.exports) as typeof def
     } catch (e) {
       const msg = (e as Error).message
@@ -111,10 +140,15 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
       config: () => ({}),
       log: () => {},
     }
+    // run setup inside the realm too — a sync `while(1)` in plugin code must
+    // die by the vm timeout, not hang the shard (Promise.race can't preempt
+    // a blocked event loop)
+    sandbox.__def = def
+    sandbox.__ctx = ctx
     try {
       // async setups are legal — a contribution registered after an await
       // must still count, or every async plugin fails this gate falsely
-      await def.setup(ctx)
+      await deadline(vm.runInContext('__def.setup(__ctx)', vctx, { timeout: STAGE_TIMEOUT }) as Promise<unknown>, STAGE_TIMEOUT, 'setup')
     } catch (e) {
       return { ok: false, stage: 'setup', error: (e as Error).message, registrations: registrations.map(r => r.kind) }
     }
@@ -125,12 +159,14 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     // ---- let async IPC settle, then render every contribution ----
     await new Promise(r => setTimeout(r, 500))
     let rendered = 0
-    for (const reg of registrations) {
+    for (let i = 0; i < registrations.length; i++) {
+      const reg = registrations[i]!
       const render = reg.contrib['render']
       if (typeof render !== 'function') continue
+      sandbox.__contrib = reg.contrib
       let el: unknown
       try {
-        el = (render as () => unknown).call(reg.contrib)
+        el = await deadline(vm.runInContext('__contrib.render()', vctx, { timeout: STAGE_TIMEOUT }) as Promise<unknown>, STAGE_TIMEOUT, `${reg.kind}.render`)
       } catch (e) {
         return { ok: false, stage: 'render', error: `${reg.kind}.render threw: ${(e as Error).message}`, registrations: registrations.map(r => r.kind) }
       }
@@ -148,11 +184,6 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     }
     return { ok: true, registrations: registrations.map(r => r.kind), rendered }
   } finally {
-    for (const k of GUI_GLOBALS) {
-      const d = saved.get(k)
-      if (d) Object.defineProperty(globalThis, k, d)
-      else delete (globalThis as Record<string, unknown>)[k]
-    }
     dom.window.close()
   }
 }

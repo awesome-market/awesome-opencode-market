@@ -123,11 +123,11 @@ describe('pipeline/run seed injection', () => {
 })
 
 describe('classify', () => {
-  it('assigns categories by keywords, declared fallback 其他', async () => {
+  it('assigns english category ids by keywords, declared fallback other', async () => {
     const { classify } = await import('../src/categories.ts')
-    expect(classify('theme-x', 'x', 'colors and fonts')).toContain('主题与外观')
-    expect(classify('x', 'x', 'git commit review')).toContain('开发流程')
-    expect(classify('x', 'x', 'zzz nothing')).toEqual(['其他'])
+    expect(classify('theme-x', 'x', 'colors and fonts')).toContain('appearance')
+    expect(classify('x', 'x', 'git commit review')).toContain('workflow')
+    expect(classify('x', 'x', 'zzz nothing')).toEqual(['other'])
     expect(classify('tok', 'x', 'llm pricing token').length).toBeLessThanOrEqual(2)
   })
 })

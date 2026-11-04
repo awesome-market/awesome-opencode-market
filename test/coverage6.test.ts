@@ -864,7 +864,7 @@ describe('run.ts remaining arms', () => {
     const out = await run({ outPath: join(d, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const p = out.plugins.find(x => x.name === 'declared-pkg')!
     expect(p.type).toBe('skill')
-    expect(p.category).toEqual(['其他'])
+    expect(p.category).toEqual(['other'])   // zh declared label normalized to id at merge
     expect(p.description.en).toBe('mine')
     expect(p.description.zh).toBe('我的')
   })
@@ -971,7 +971,7 @@ describe('run.ts remaining arms', () => {
     const g = out.plugins.find(p => p.name === 'o/only')!
     expect(g.source.kind).toBe('github')
     expect(g.description.zh).toBe('只有中文')
-    expect(g.category).toEqual(['集成与移动'])
+    expect(g.category).toEqual(['integrations'])   // zh marketMeta label normalized to id at merge
     expect(g.source.repoId).toBeUndefined()
   })
 })

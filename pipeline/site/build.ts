@@ -1,7 +1,7 @@
 /** Thin static site generator — renders index.json to plain HTML. Astro can replace this later without changing data. */
-import { writeFileSync, mkdirSync, rmSync, renameSync } from 'node:fs'
-import { execSync } from 'node:child_process'
-import { join, dirname } from 'node:path'
+import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { join, dirname, relative } from 'node:path'
 import type { CatalogIndex, PluginEntry } from '../../src/schema.ts'
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
@@ -59,8 +59,11 @@ export function detailPage(e: PluginEntry): string {
   const s = scanLabel(e), v = verifyLabel(e)
   const rows = (o: Record<string, string | undefined>) =>
     Object.entries(o).filter(([, x]) => x !== undefined).map(([k, x]) => `<tr><td>${k}</td><td>${x}</td></tr>`).join('')
+  // AGENTS: findings/redFlags 默认收起 — collapsed into <details> even on the
+  // detail page; red-flag lines get a marker so they stand out when expanded
+  const rf = new Set(e.capabilities.redFlags)
   const findings = e.capabilities.findings.length
-    ? `<ul>${e.capabilities.findings.map(f => `<li><code>${esc(f)}</code>`).join('')}</ul>` : '<p class=muted>none</p>'
+    ? `<details><summary>findings (${e.capabilities.findings.length}${e.capabilities.redFlags.length ? `, ${e.capabilities.redFlags.length} red flag` : ''})</summary><ul>${e.capabilities.findings.map(f => `<li><code>${esc(f)}</code>${rf.has(f) ? ' <span class=bad>red flag</span>' : ''}</li>`).join('')}</ul></details>` : '<p class=muted>none</p>'
   const underReview = e.pendingUpdate
     ? `<tr><td>next version</td><td><code>v${esc(e.pendingUpdate.version)}</code> <span class=muted>under review — not installable yet</span></td></tr>` : ''
   return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}</h1><p>${esc(e.description.en ?? '')}</p>
@@ -79,7 +82,7 @@ export function detailPage(e: PluginEntry): string {
       deprecated: e.deprecated ? '<span class=bad>deprecated</span>' : undefined,
     })}${underReview}</table>
     <h2>scan findings</h2>${findings}
-    ${e.verification.logExcerpt ? `<h2>failure log</h2><pre>${esc(e.verification.logExcerpt)}</pre>` : ''}
+    ${e.verification.logExcerpt ? `<details><summary><b>failure log</b></summary><pre>${esc(e.verification.logExcerpt)}</pre></details>` : ''}
     <p class=meta><a href="../index.html">← all plugins</a> · install: <code>opencode plugin add ${esc(e.source.id)}${e.latestVersion ? `@${esc(e.latestVersion)}` : ''}</code></p>`)
 }
 
@@ -114,7 +117,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  *  catalog's skills loadable — files update whenever version bumps. */
 export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   tarballOf: (spec: string) => string | null =
-    (spec) => { try { return execSync(`npm view "${spec}" dist.tarball`, { encoding: 'utf8', timeout: 20_000 }).trim() || null } catch { return null } }): void {
+    // execFile argv, not a shell string — this job holds pages:write + id-token,
+    // so an index-derived spec/URL must never reach a shell (N-4)
+    (spec) => {
+      try {
+        const u = execFileSync('npm', ['view', spec, 'dist.tarball'], { encoding: 'utf8', timeout: 20_000 }).trim()
+        // packument-derived URL is registry-controlled in practice but treat as
+        // untrusted: https only. Injected tarballOf impls (tests) own their scheme.
+        return /^https:\/\//i.test(u) ? u : null
+      } catch { return null }
+    }): void {
   const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
@@ -124,26 +136,45 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   const baseOf = (n: string) => n.split('/').pop()!.replace(/^@/, '')
   const counts = new Map<string, number>()
   for (const s of skills) { const b = baseOf(s.name); counts.set(b, (counts.get(b) ?? 0) + 1) }
+  const mdFiles = (root: string): string[] => {
+    const out: string[] = []
+    const walk = (d: string) => {
+      for (const ent of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, ent.name)
+        if (ent.isDirectory()) walk(p)
+        else if (ent.isFile() && ent.name.toLowerCase().endsWith('.md')) out.push(p)
+      }
+    }
+    try { walk(root) } catch { /* unreadable dir → empty */ }
+    return out.slice(0, 20)
+  }
   for (const s of skills) {
     const base = baseOf(s.name)
     const id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     const dest = join(dir, id)
+    const tmp = `${dest}.tmp`
     try {
       // pin to the approved version — `npm view <name>` resolves dist-tags.latest
       // which is the pendingUpdate users must not receive (hold semantics)
       const tb = s.latestVersion ? tarballOf(`${s.name}@${s.latestVersion}`) : null
       if (!tb) continue
-      const res = execSync(
-        `rm -rf "${dest}.tmp" && mkdir -p "${dest}.tmp" && curl -fsSL "${tb.replace(/'/g, "'\''")}" | tar xz -C "${dest}.tmp" --strip-components=1 2>/dev/null; ` +
-        `find "${dest}.tmp" -name 'SKILL.md' -o -name '*.md' | head -20`,
-        { encoding: 'utf8', timeout: 30_000 })
-      const files = res.split('\n').filter(Boolean).map((f) => f.replace(`${dest}.tmp/`, ''))
+      rmSync(tmp, { recursive: true, force: true })
+      mkdirSync(tmp, { recursive: true })
+      const tgz = join(tmp, 'pkg.tgz')
+      execFileSync('curl', ['-fsSL', tb, '-o', tgz], { timeout: 30_000 })
+      // GNU tar refuses '..' members by default — same extraction semantics as
+      // the old shell pipeline; a non-zero exit skips the skill entirely
+      execFileSync('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1'], { timeout: 30_000 })
+      rmSync(tgz, { force: true })
+      const files = mdFiles(tmp).map((f) => relative(tmp, f))
       if (!files.length) continue
       rmSync(dest, { recursive: true, force: true })
-      renameSync(`${dest}.tmp`, dest)
-      const stripped = files.map((f) => f.replace(/^package\//, ''))
-      entries.push({ name: id, version: s.latestVersion ?? '1', files: stripped })
-    } catch { /* tarball fetch failed — skip skill */ }
+      renameSync(tmp, dest)
+      entries.push({ name: id, version: s.latestVersion ?? '1', files })
+    } catch {
+      rmSync(tmp, { recursive: true, force: true })
+      /* tarball fetch failed — skip skill */
+    }
   }
   writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries }))
 }

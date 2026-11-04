@@ -1,7 +1,7 @@
 name: spike-verify
 on:
-  push:
-  workflow_dispatch:
+  workflow_dispatch:    # manual-only — this is a P0 experiment, not CI; every push
+                        # burned a 15min runner + a live model call for nothing (N-17)
 permissions: {}
 jobs:
   spike:

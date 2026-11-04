@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cleanSpec, dedupeSpecs, removeSpec, featuresMap, buildExtras } from '../plugins/market/src/spec.ts'
+import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from '../plugins/market/src/spec.ts'
 
 describe('cleanSpec', () => {
   it('keeps scoped names (leading @ is scope, not version)', () => {
@@ -16,12 +16,12 @@ describe('cleanSpec', () => {
   })
 })
 
-describe('dedupeSpecs', () => {
-  it('collapses pinned + bare duplicates', () => {
-    expect(dedupeSpecs(['@x/y@0.4.1', '@x/y'], '@x/y')).toEqual(['@x/y'])
+describe('dedupeToSpec', () => {
+  it('collapses pinned + bare duplicates, keeping the pin', () => {
+    expect(dedupeToSpec(['@x/y@0.4.1', '@x/y'], '@x/y@0.5.0')).toEqual(['@x/y@0.5.0'])
   })
   it('keeps unrelated specs', () => {
-    expect(dedupeSpecs(['a', '@x/y@0.4.1', 'b'], '@x/y')).toEqual(['a', 'b', '@x/y'])
+    expect(dedupeToSpec(['a', '@x/y@0.4.1', 'b'], '@x/y@0.4.1')).toEqual(['a', 'b', '@x/y@0.4.1'])
   })
 })
 

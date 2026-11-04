@@ -22,10 +22,25 @@ const TEXT_EXT = /\.(js|mjs|cjs|ts|mts|cts|json|md|txt|yml|yaml|sh|toml)$/i
 /** Benign media/doc assets — shipping these is normal, not a binary-blob signal. */
 const MEDIA_EXT = /\.(png|jpe?g|gif|ico|svg|webp|avif|woff2?|ttf|otf|eot|pdf|mp4|webm|mp3|wav)$/i
 
+/** Zip-bomb guard: the fetch cap bounds the COMPRESSED tarball (64MB), not what
+ *  it inflates to. A 64MB gzip can decompress to GBs — track cumulative bytes
+ *  and abort the scan rather than OOM the generate job. */
+const MAX_UNPACKED = 512 * 1024 * 1024
+/** Findings ceiling — a pathological package (10k files, all matching) would
+ *  otherwise write an unbounded array into index.json. */
+const MAX_FINDINGS = 500
+
 export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
   const findings: ScanFinding[] = []
   const files: string[] = []
-  let fileCount = 0
+  let fileCount = 0, unpacked = 0, capped = false
+  const pushFinding = (f: ScanFinding) => {
+    if (findings.length < MAX_FINDINGS) findings.push(f)
+    else if (!capped) {
+      capped = true
+      findings.push({ rule: 'scan-capped', severity: 'low', file: '(index)', detail: `findings truncated at ${MAX_FINDINGS}` })
+    }
+  }
   await new Promise<void>((resolve, reject) => {
     const parser = extract({
       onentry(entry) {
@@ -35,20 +50,24 @@ export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
         fileCount++
         files.push(entry.path)
         const chunks: Buffer[] = []
-        entry.on('data', (c: Buffer) => chunks.push(c))
+        entry.on('data', (c: Buffer) => {
+          chunks.push(c)
+          unpacked += c.length
+          if (unpacked > MAX_UNPACKED) parser.abort(new Error(`unpacked size exceeds ${MAX_UNPACKED} — possible zip bomb`))
+        })
         entry.on('end', () => {
           const buf = Buffer.concat(chunks)
           const path = entry.path
           if (isBinary(buf)) {
             if (!MEDIA_EXT.test(path)) {
-              findings.push({ rule: 'binary-blob', severity: 'high', file: path, detail: 'binary file in package' })
+              pushFinding({ rule: 'binary-blob', severity: 'high', file: path, detail: 'binary file in package' })
             }
             return
           }
           const text = TEXT_EXT.test(path) || isPkgJson(path) ? buf.toString('utf8') : null
           for (const r of RULES) {
             const detail = r.test(path, text)
-            if (detail) findings.push({ rule: r.id, severity: r.sev, file: path, detail })
+            if (detail) pushFinding({ rule: r.id, severity: r.sev, file: path, detail })
           }
         })
       },

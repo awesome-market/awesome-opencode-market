@@ -334,3 +334,51 @@ market 插件拉 index 失败应有 last-good 缓存兜底而非白板；长期�
 **存量测试**：新增 `test/sec.test.ts` 21 例覆盖 SEC 比对/delta 分级/降级/slug 愈合/tombstone/sanitize/gone-check 三分支。
 
 **遗留（非本轮范围）**：gui.ts/spec.ts/gui-mount/contract 的存量 typecheck 错误；`test/dbg.test.ts` 未追踪调试文件（solid-js 未装）。
+
+---
+
+## 附三：第二轮审计修复（2026-11 审计项 N-1…N-21）
+
+用户面 bug：
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| N-1 verifyActivation macOS 隔离失效 | ✅ | `plugins/market/src/gui.ts`：`HOME` 连同全部 XDG 指到临时目录；且改为按 `pinSpec(e)` 测批准版本（不再测 dist-tags.latest） |
+| N-3 TUI skill 安装无体积上限 | ✅ | `skill-install.ts`：`installSkillTar` 压缩+解压双上限（48MB/192MB）、longname/pax/ustar prefix、foreign-dir 防误删；`tui.tsx` fetch 加压缩上限 |
+| N-8 pinSpec VER_SAFE 回退裸名 | ✅ | `catalog.ts`：非法版本抛错而非回退裸名（裸名装的是未批准 latest = hold 旁路） |
+| N-9 Node 侧目录缓存失效 | ✅ | `catalog.ts`：无 localStorage 时回落模块级 `memIdx`，TTL+快照语义不变；backend 每次调用时探测（不再模块加载绑死） |
+| N-14 GUI document click 泄漏 | ✅ | `gui.ts`：handler 自检 `menu.isConnected`，面板销毁后第一次点击自摘 |
+| N-20 site findings/redFlags 未收起 | ✅ | `site/build.ts`：findings + 失败日志进 `<details>`，red flag 行打标 |
+
+Pipeline/CI 安全：
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| N-2 checkGuiBundle 进程内执行+无超时 | ✅ | `verify/gui.ts`：换 `node:vm` 独立 realm（无 process/require/import()），eval 5s/stage 8s 超时；`verify.ts`：unhandledRejection 兜底 + 逐目标 try/catch + 增量写结果 |
+| N-4 buildSkillCatalog shell 拼接 | ✅ | `site/build.ts`：`execFileSync` 数组参数（npm view/curl/tar），tarball URL 限 https（默认实现内），`find` 换 Node 遍历，失败清临时目录 |
+| N-5 github-kind pending 死路 | ✅ | `docket.ts`：repo-only pending 无 verdict 时建 standing `[review]` issue（verdict:'none'，无 ai: 标签）；`digest.ts` held 列表标注 repo-only；`notify-published.ts` seed 按 `repo` 匹配 |
+| N-6 submit review 权限未拆 | ✅ | `submit.yml`：review job 降 `permissions:{}`（解析攻击者 tarball 零 token），report job（`issues:write`）只读 artifact 发评论/标签 |
+| N-7 scan 解压+findings 上限 | ✅ | `scan.ts`：累计解压 >512MB `parser.abort`（防 zip bomb）；findings 上限 500 + `scan-capped` 标记 |
+| N-10 verify merge 依赖整矩阵 | ✅ | `verify.yml`：results 上传 `if: always()`；merge `if: always()` 收部分结果（取消/skipped 除外） |
+| N-11 规则缺口 | ✅ | `rules.ts`：RULESET_VERSION `r2→r3`；lifecycle 补 prepublish/prepublishOnly/prepack/postpack/install；私有 IPv4+IPv6 豁免（loopback/link-local/ULA/multicast/doc 段，v6 须含 hex 字母）；`atob`/大 base64 拆为 medium `base64-blob` |
+| N-21 shard 超时余量 | ✅ | `verify.yml` timeout 20→30min（12 目标串行 ~15min 最坏） |
+
+流程/整洁：
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| N-12 搜索只查英文 + source 未 sanitize | ✅ | `catalog.ts`：`search()` 覆盖 en+zh 描述；`source.kind/id/repo/version` 已在 sanitizeIndex 范围内 |
+| N-13 测试类型 `ctx as never` | ✅ | `test/helpers/mount.ts` 返回结构类型；`gui-mount.test.ts` setup 调用处显式 cast |
+| N-15/16 死代码+死资源 | ✅ | 删 `sel`/`dedupeSpecs`/`looksLikePlugin`（测试改测 `dedupeToSpec`）；`plugins/market/index.json` 760KB 过期快照从 `files` 移除并删除 |
+| N-17 spike.yml on:push | ✅ | 改 `workflow_dispatch` only（每次 push 烧 15min runner+模型调用） |
+| N-18 非 maintainer [concern] 无人管 | ✅ | `concern.yml` 新增 `triage` job：非 maintainer 开的 [concern] issue → 说明 + 关闭 |
+| N-19 skill tar 解析 | ✅ | 同 N-3（`installSkillTar` 重写：L/x/ustar-prefix、大小上限、撞名安全删） |
+
+**顺带修复**：
+- `test/*` 全部 ruleset fixture `'r2'`→`RULESET_VERSION`（r3 bump 暴露的测试脆弱点——fixture 本意是"当前规则集"）
+- `plugins/market/test/market.test.ts` 外网依赖改本地 http server（undici 不读 HTTPS_PROXY，直连挂代理环境必挂）
+- `re-features.ts` 重构为 `main(file,{dry,fetchFn})`（原顶层执行不可测，0%→65% 分支）
+
+**仍开（有意保留/后续）**：S-2 pending 队列（未到规模）、D-4 `.opencode-market.json` 已有 fetchMarketMeta 半实现（repo 根约定文件），B-7 index checksum 签名（last-good 缓存已有）、uninstall 两步确认（产品判断：可重装≈可撤销）、verifyShard unhandledRejection 仍存理论残余（进程内 vm 的 fire-and-forget 侧信道——已有进程级兜底）。
+
+**验证**：`npx tsc --noEmit` 0 错；`npx vitest run` 427 全过；`npm run coverage` statements 98.0% / branches 90.1% / functions 96.3% / lines 99.2%（90% 门槛全过）。

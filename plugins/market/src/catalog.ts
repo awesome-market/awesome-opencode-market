@@ -7,6 +7,7 @@ export interface MarketEntry {
   name: string
   slug: string
   type: string
+  source?: { kind?: string; id?: string; repo?: string; version?: string }
   contains?: ('plugin' | 'skill' | 'mcp' | 'command' | 'agent' | 'hook')[]
   description?: { en?: string; zh?: string }
   category: string[]
@@ -64,6 +65,12 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
           ? { description: { ...(e.description.en ? { en: sanitize(e.description.en) } : {}), ...(e.description.zh ? { zh: sanitize(e.description.zh) } : {}) } }
           : {}),
         category: strArr(e.category),
+        ...(e.source ? { source: {
+            ...(typeof e.source.kind === 'string' ? { kind: sanitize(e.source.kind) } : {}),
+            ...(typeof e.source.id === 'string' ? { id: sanitize(e.source.id) } : {}),
+            ...(typeof e.source.repo === 'string' ? { repo: sanitize(e.source.repo) } : {}),
+            ...(typeof e.source.version === 'string' ? { version: sanitize(e.source.version) } : {}),
+          } } : {}),
         ...(Array.isArray(e.features) ? { features: e.features.filter((f): f is NonNullable<MarketEntry['features']>[number] => ['server', 'tui', 'gui', 'rpc'].includes(String(f))) } : {}),
         ...(caps ? { capabilities: { scannedAt: strOrNull(caps.scannedAt), findings: strArr(caps.findings), redFlags: strArr(caps.redFlags) } } : {}),
         ...(v ? { verification: {
@@ -87,10 +94,14 @@ export function isVisible(e: MarketEntry): boolean {
  *  so `plugin add` resolves exactly what review passed (implicit-latest is a
  *  bypass — a pending version must never reach a user machine). A version
  *  with anything outside semver-ish chars is index-corruption, not a pin —
- *  fall back to the bare name rather than building an unsafe spec. */
+ *  throwing beats falling back to the bare name, which would resolve
+ *  dist-tags.latest (the UNAPPROVED pending version) and silently bypass
+ *  the hold gate. */
 const VER_SAFE = /^[A-Za-z0-9._+~-]+$/
 export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string {
-  return e.latestVersion && VER_SAFE.test(e.latestVersion) ? `${e.name}@${e.latestVersion}` : e.name
+  if (e.latestVersion && !VER_SAFE.test(e.latestVersion))
+    throw new Error(`unsafe version in catalog entry: ${e.latestVersion.slice(0, 40)}`)
+  return e.latestVersion ? `${e.name}@${e.latestVersion}` : e.name
 }
 
 /** Tarball URL for the catalog-APPROVED version only — never dist-tags.latest:
@@ -127,12 +138,15 @@ export function rows(entries: MarketEntry[]): MarketEntry[] {
   return [...entries].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
 }
 
-/** Client-side search over name+description (case-insensitive substring). */
+/** Client-side search over name + both descriptions (zh-only descriptions
+ *  must still match zh keywords). Case-insensitive substring. */
 export function search(entries: MarketEntry[], q: string): MarketEntry[] {
   const needle = q.trim().toLowerCase()
   if (!needle) return entries
   return entries.filter(e =>
-    e.name.toLowerCase().includes(needle) || (e.description?.en ?? '').toLowerCase().includes(needle))
+    e.name.toLowerCase().includes(needle) ||
+    (e.description?.en ?? '').toLowerCase().includes(needle) ||
+    (e.description?.zh ?? '').toLowerCase().includes(needle))
 }
 
 const sortKey = (e: MarketEntry, k: string): number | string => {
@@ -173,13 +187,11 @@ export function keyLines(text: string, max = 8): string[] {
 
 export interface LocalState {
   favorites: Record<string, true>
-  groups: Record<string, string>      // plugin name → group name
-  notes: Record<string, string>       // plugin name → note
   devlog?: boolean                    // write detailed debug logs (default off)
   lang?: LangMode                     // UI language override (default 'auto' → navigator.language)
   skillVers?: Record<string, string>  // pkg name → version installed via market (enables real update checks)
 }
-export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
+export const EMPTY_STATE: LocalState = { favorites: {} }
 
 const LS_KEY = 'opencode-market.state.v1'
 export function loadState(): LocalState {
@@ -191,7 +203,7 @@ export function loadState(): LocalState {
  *  malformed field shapes (backup paste / corrupt localStorage / hostile
  *  index-adjacent JSON must not poison groups/notes/skillVers). */
 export function sanitizeState(x: unknown): LocalState {
-  const s: LocalState = { favorites: {}, groups: {}, notes: {} }
+  const s: LocalState = { favorites: {} }
   if (typeof x !== 'object' || x === null) return s
   const o = x as Record<string, unknown>
   const strMap = (v: unknown): Record<string, string> =>
@@ -202,8 +214,6 @@ export function sanitizeState(x: unknown): LocalState {
   s.favorites = fav && typeof fav === 'object' && !Array.isArray(fav)
     ? Object.fromEntries(Object.entries(fav).filter(([, v]) => !!v).map(([k]) => [k, true as const]))
     : {}
-  s.groups = strMap(o.groups)
-  s.notes = strMap(o.notes)
   s.skillVers = strMap(o.skillVers)
   if (typeof o.devlog === 'boolean') s.devlog = o.devlog
   if (o.lang === 'auto' || o.lang === 'zh' || o.lang === 'en') s.lang = o.lang
@@ -212,23 +222,40 @@ export function sanitizeState(x: unknown): LocalState {
 export function saveState(s: LocalState): void {
   localStorage.setItem(LS_KEY, JSON.stringify(s))
 }
-export function allGroups(s: LocalState): string[] {
-  return [...new Set(Object.values(s.groups))].sort()
-}
+
 
 const LS_IDX = 'opencode-market.index.v1'
 const TTL_MS = 3600_000
 
 interface CachedIndex { at: number; index: MarketIndex }
 
+/** Storage backend — localStorage in the webview; a module-level slot on
+ *  Node (TUI/main have no localStorage, so without this every dialog open
+ *  refetches the full index). In-memory still honors TTL + snapshot fallback
+ *  within the process lifetime. */
+// resolved per call — the webview can expose localStorage after module load,
+// and tests swap globalThis.localStorage between cases (N-9)
+const lsIdx = (): Storage | null => {
+  try { const l = globalThis.localStorage; if (l) { l.getItem(LS_IDX); return l } } catch { /* node or disabled */ }
+  return null
+}
+let memIdx: CachedIndex | null = null
+const readIdxCache = (): CachedIndex | null => {
+  try { const l = lsIdx(); return l ? JSON.parse(l.getItem(LS_IDX) ?? 'null') as CachedIndex | null : memIdx } catch { return null }
+}
+const writeIdxCache = (c: CachedIndex) => {
+  const l = lsIdx()
+  if (l) { try { l.setItem(LS_IDX, JSON.stringify(c)) } catch { /* quota */ } }
+  else memIdx = c
+}
+
 /** TTL-cached fetch with snapshot fallback (dsh registry.ts pattern). */
 export async function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): Promise<MarketIndex> {
-  let cached: CachedIndex | null = null
-  try { cached = JSON.parse(localStorage.getItem(LS_IDX) ?? 'null') } catch { /* noop */ }
+  const cached = readIdxCache()
   if (!force && cached && Date.now() - cached.at < TTL_MS) return cached.index
   try {
     const idx = await fetchIndex(url)
-    try { localStorage.setItem(LS_IDX, JSON.stringify({ at: Date.now(), index: idx })) } catch { /* quota */ }
+    writeIdxCache({ at: Date.now(), index: idx })
     return idx
   } catch (e) {
     if (cached) return cached.index          // snapshot fallback beats failure
@@ -249,12 +276,36 @@ export const [langMode, setLangMode] = createSignal<LangMode>('auto')
 const browserZh = () => /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
 const zhNow = () => langMode() === 'auto' ? browserZh() : langMode() === 'zh'
 
-export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'|'lang'|'langAuto'|'langZh'|'langEn'
-const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English' }
+export type I18nKey =
+  'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'|'lang'|'langAuto'|'langZh'|'langEn'|
+  'partsHint'|'installing'|'installFailed'|'failedRetry'|'verifying'|'installedPending'|'skill'|'plugin'|'uncataloged'|'updateAll'|'needRestartDesk'|'allLatest'|'updatingN'|'updatedOk'|'updatedMix'|
+  'tabDiscover'|'tabPlugins'|'tabSkills'|'tabFavorites'|'tabInstalled'|'tabMySkills'|'tabAdvanced'|'filter'|'sortField'|'sortDownloads'|'sortStars'|'sortName'|'sortVerified'|'sortDirLabel'|'sortDesc'|'sortAsc'|'publishRange'|'rangeAll'|'range1d'|'range7d'|'range30d'|'range90d'|'range1y'|'allN'|
+  'refreshData'|'refreshing'|'refreshedN'|'refreshFailed'|'timeout25'|'backupRestore'|'backupDesc'|'exportBackup'|'exportedN'|'pasteBackup'|'restore'|'restored'|'restoreInvalid'|'clearData'|'confirmClear'|'cleared'|'devlogLabel'|'devlogDesc'|'noLogs'|'clearLogs'|
+  'cat'|'keysHint'|'menuSettings'|'exportBackupTui'|'restoreTui'|'restorePrompt'|'clearDataTui'|'confirmClearTui'|'clearConfirm'|'devlogTui'|'devlogOn'|'devlogOff'|'viewLogs'|'devlogMenu'|'useHttpCatalog'|'retryKey'|'updateN'|'confirmEnter'|
+  'all'|'expand'|'installingN'|'updatedN'|'removedN'|'installFailN'|'uninstallFail'|'updateFail'|'exportFail'|'restoreFail'|'catalogFail'|'catalogAlready'|'catalogEnabled'
+const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English',
+  partsHint: '{k} parts (multi-select)', installing: 'installing…', installFailed: 'install failed', failedRetry: 'failed — retry', verifying: 'verifying…', installedPending: 'installed (verify pending)', skill: 'skill', plugin: 'plugin', uncataloged: 'uncataloged', updateAll: 'update all', needRestartDesk: 'restart desktop required', allLatest: 'all up to date', updatingN: 'updating {n}/{total}…', updatedOk: 'updated {ok}', updatedMix: 'updated {ok}, {fail} failed',
+  tabDiscover: 'discover', tabPlugins: 'plugins', tabSkills: 'skills', tabFavorites: 'favorites', tabInstalled: 'my plugins', tabMySkills: 'my skills', tabAdvanced: 'settings', filter: 'filter', sortField: 'sort by', sortDownloads: 'npm downloads (30d)', sortStars: 'stars', sortName: 'name', sortVerified: 'verification', sortDirLabel: 'direction', sortDesc: 'descending', sortAsc: 'ascending', publishRange: 'published', rangeAll: 'all time', range1d: 'last 1 day', range7d: 'last 7 days', range30d: 'last 30 days', range90d: 'last 90 days', range1y: 'last year', allN: 'all({n})',
+  refreshData: 'refresh data (force index reload)', refreshing: 'refreshing…', refreshedN: 'refreshed {n} entries', refreshFailed: 'refresh failed: {err}', timeout25: 'timeout 25s', backupRestore: 'backup & restore', backupDesc: 'favorites live in localStorage. Export a backup as JSON; paste it back to restore.', exportBackup: 'export backup', exportedN: 'exported {file}', pasteBackup: 'paste backup JSON…', restore: 'restore', restored: 'restored', restoreInvalid: 'restore failed: not a valid backup JSON', clearData: 'clear data', confirmClear: 'clear all favorites?', cleared: 'cleared', devlogLabel: 'dev log', devlogDesc: 'record debug logs (install stages + errors, stored locally)', noLogs: 'no logs yet', clearLogs: 'clear logs',
+  cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
+  all: 'all', expand: 'expand', installingN: 'installing {name}…', updatedN: '{name} updated', removedN: '{name} removed', installFailN: '{name} install failed{exit} — press {key} to retry', uninstallFail: 'uninstall failed: {err} — press {key} to retry', updateFail: 'update failed: {err}', exportFail: 'export failed: {err}', restoreFail: 'restore failed: {err} — check the backup file and retry', catalogFail: 'catalog source failed: {err} — check {cfg} and retry', catalogAlready: 'already enabled', catalogEnabled: 'enabled' }
 // AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
-const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English' }
+const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English',
+  partsHint: '{k} 部件（可多选）', installing: '安装中…', installFailed: '安装失败', failedRetry: '失败 — 重试', verifying: '验证中…', installedPending: '已安装（等待验证）', skill: '技能', plugin: '插件', uncataloged: '未收录', updateAll: '全部更新', needRestartDesk: '需重启桌面端', allLatest: '全部已是最新', updatingN: '更新中 {n}/{total}…', updatedOk: '已更新 {ok} 个', updatedMix: '更新 {ok} 成功 {fail} 失败',
+  tabDiscover: '发现', tabPlugins: '插件', tabSkills: '技能', tabFavorites: '收藏', tabInstalled: '我的插件', tabMySkills: '我的技能', tabAdvanced: '设置', filter: '筛选', sortField: '排序字段', sortDownloads: 'npm 下载量（近 30 天）', sortStars: 'Star 数', sortName: '名称', sortVerified: '验证状态', sortDirLabel: '排序方向', sortDesc: '降序', sortAsc: '升序', publishRange: '发布时间范围', rangeAll: '全部时间', range1d: '最近 1 天', range7d: '最近 7 天', range30d: '最近 30 天', range90d: '最近 90 天', range1y: '最近 1 年', allN: '全部({n})',
+  refreshData: '更新数据（强制刷新索引）', refreshing: '刷新中…', refreshedN: '已刷新 {n} 条', refreshFailed: '刷新失败: {err}', timeout25: '超时 25s', backupRestore: '备份与恢复', backupDesc: '收藏存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。', exportBackup: '导出备份', exportedN: '已导出 {file}', pasteBackup: '粘贴备份 JSON…', restore: '恢复', restored: '已恢复', restoreInvalid: '恢复失败：不是有效的备份 JSON', clearData: '清空数据', confirmClear: '清空所有收藏？', cleared: '已清空', devlogLabel: '开发日志', devlogDesc: '记录调试日志（装包各阶段+错误，存本机）', noLogs: '暂无日志', clearLogs: '清空日志',
+  cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
+  all: '全部', expand: '展开', installingN: '{name} 安装中…', updatedN: '{name} 已更新', removedN: '{name} 已卸载', installFailN: '{name} 安装失败{exit} — 按 {key} 重试', uninstallFail: '卸载失败: {err} — 按 {key} 重试', updateFail: '更新失败: {err}', exportFail: '导出失败: {err}', restoreFail: '恢复失败: {err} — 检查备份文件后重试', catalogFail: 'catalog 源失败: {err} — 检查 {cfg} 后重试', catalogAlready: '已开启', catalogEnabled: '已启用' }
 export function t(key: I18nKey): string {
   return (zhNow() ? ZH : EN)[key]
+}
+/** Interpolated variant — `{name}` placeholders in the dict string. */
+export function tf(key: I18nKey, vars: Record<string, string | number>): string {
+  return t(key).replace(/\{(\w+)\}/g, (m, k: string) => (vars[k] !== undefined ? String(vars[k]) : m))
+}
+/** Localized catalog description — zh text when zh mode and available, en fallback. */
+export function descOf(e: MarketEntry): string {
+  return (zhNow() ? e.description?.zh ?? e.description?.en : e.description?.en) ?? ''
 }
 
 /** Latest-version compare for the update button. */
@@ -263,40 +314,52 @@ export function hasUpdate(e: MarketEntry, installedVer?: string): boolean {
   return e.latestVersion !== installedVer
 }
 
-/** Does the packument look installable-as-plugin (has exports/opencode field)? */
-export function looksLikePlugin(pk: { exports?: Record<string, unknown>; opencode?: unknown; main?: string } | null): 'plugin' | 'maybe' | 'no' {
-  if (!pk) return 'maybe'
-  if (pk.opencode) return 'plugin'
-  const ex = pk.exports ?? {}
-  const keys = Object.keys(ex)
-  if (keys.some(k => /opencode|plugin|tui|gui|server/.test(k))) return 'plugin'
-  if (pk.main || keys.length) return 'maybe'
-  return 'no'
+/** Keyword category classifier — catalog entries mostly ship category:[],
+ *  the UI derives display categories at render time (dsh-style chips).
+ *  English ids are canonical (mirrors src/categories.ts in the pipeline);
+ *  CAT_NAMES holds the bilingual display names. */
+const CAT_NAMES: Record<string, { en: string; zh: string }> = {
+  appearance: { en: 'appearance', zh: '主题与外观' },
+  models: { en: 'models & providers', zh: '模型与接入' },
+  sessions: { en: 'sessions', zh: '会话与消息' },
+  memory: { en: 'memory', zh: '记忆' },
+  notifications: { en: 'notifications', zh: '通知' },
+  security: { en: 'security & permissions', zh: '安全与权限' },
+  workflow: { en: 'dev workflow', zh: '开发流程' },
+  tools: { en: 'tools & capabilities', zh: '工具与能力' },
+  integrations: { en: 'integrations', zh: '集成与移动' },
+  other: { en: 'other', zh: '其他' },
 }
-
-/** Keyword category classifier — catalog entries mostly ship category:[], so
- *  the UI derives display categories at render time (dsh-style chips). */
+const ZH_TO_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(CAT_NAMES).map(([id, d]) => [d.zh, id]))
 const CAT_RULES: [string, RegExp][] = [
-  ['主题与外观', /theme|color|icon|font|appearance|ui-|css|style/i],
-  ['模型与接入', /model|provider|llm|gpt|claude|deepseek|ollama|api[-_ ]key|pricing|token|usage|cost|billing/i],
-  ['会话与消息', /session|chat|conversation|message|history|compaction|context/i],
-  ['记忆', /memory|remember|recall|knowledge|note|persist/i],
-  ['通知', /notif|alert|toast|sound|remind|bell/i],
-  ['安全与权限', /secur|guard|permission|policy|audit|sandbox|auth|firewall|protect/i],
-  ['开发流程', /git|commit|review|test|lint|ci|deploy|release|debug|refactor|scaffold|spec|project|template|starter|suite|kit|workflow|task[-_ ]?runner/i],
-  ['工具与能力', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp|manage|track|monitor|watch|dashboard|status|quota|limit|metric/i],
-  ['集成与移动', /integrat|qq|wechat|slack|discord|telegram|feishu|mobile|remote|browser|chrome/i],
+  ['appearance', /theme|color|icon|font|appearance|ui-|css|style/i],
+  ['models', /model|provider|llm|gpt|claude|deepseek|ollama|api[-_ ]key|pricing|token|usage|cost|billing/i],
+  ['sessions', /session|chat|conversation|message|history|compaction|context/i],
+  ['memory', /memory|remember|recall|knowledge|note|persist/i],
+  ['notifications', /notif|alert|toast|sound|remind|bell/i],
+  ['security', /secur|guard|permission|policy|audit|sandbox|auth|firewall|protect/i],
+  ['workflow', /git|commit|review|test|lint|ci|deploy|release|debug|refactor|scaffold|spec|project|template|starter|suite|kit|workflow|task[-_ ]?runner/i],
+  ['tools', /tool|command|search|fetch|browse|file|terminal|shell|exec|agent|skill|mcp|manage|track|monitor|watch|dashboard|status|quota|limit|metric/i],
+  ['integrations', /integrat|qq|wechat|slack|discord|telegram|feishu|mobile|remote|browser|chrome/i],
 ]
 export function categoriesOf(e: MarketEntry): string[] {
   if (e.category?.length) return e.category
   const hay = `${e.name} ${e.slug ?? ''} ${e.description?.en ?? ''}`
   const hits = CAT_RULES.filter(([, r]) => r.test(hay)).map(([c]) => c)
-  return hits.length ? hits.slice(0, 2) : ['其他']
+  return hits.length ? hits.slice(0, 2) : ['other']
 }
 export function allCategories(entries: MarketEntry[]): string[] {
   const s = new Set<string>()
   for (const e of entries) for (const c of categoriesOf(e)) s.add(c)
   return [...s].sort()
+}
+/** Category display name — raw values are english ids (canonical) or legacy
+ *  zh labels from pre-id data; both resolve through the bilingual table.
+ *  Unknown/custom categories pass through untouched. */
+export function catLabel(c: string): string {
+  const d = CAT_NAMES[c] ?? CAT_NAMES[ZH_TO_ID[c] ?? '']
+  return d ? (zhNow() ? d.zh : d.en) : c
 }
 
 /** Entries published within N days (publishedAt ?? firstSeenAt). */

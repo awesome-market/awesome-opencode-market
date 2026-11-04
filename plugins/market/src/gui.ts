@@ -9,8 +9,8 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, allGroups, hasUpdate, indexAge, t, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
-import { installSkillTar, uninstallSkillDir } from './skill-install.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, indexAge, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
 
 const Market = Ipc.define({
@@ -43,7 +43,7 @@ type Api = {
   install(p: { name: string; spec?: string }): Promise<string>
   update(p: { name: string; spec?: string }): Promise<string>
   cancelInstall(name: string): Promise<string>
-  verifyActivation(name: string): Promise<string>
+  verifyActivation(spec: string): Promise<string>
   uninstall(name: string): Promise<string>
   writeSkill(p: { name: string; b64: string }): Promise<string>
   uninstallSkill(name: string): Promise<string>
@@ -64,6 +64,9 @@ export default Plugin.define({
     try { api = ctx.main(Market) as Api } catch { /* diagnosed below */ }
     if (!api?.index) return {}
     const safe = api as Api
+    // single document listener slot — chrome() rebuilds once per mount, so each
+    // new build replaces the previous handler instead of accumulating listeners
+    let docClick: ((ev: Event) => void) | null = null
     const [data, setData] = createSignal<MarketIndex | null>(null)
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
     const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
@@ -80,8 +83,8 @@ export default Plugin.define({
       const all = ([['server','server'],['tui','tui'],['gui','gui'],['rpc','rpc']] as const)
       const segs = only ? all.filter(([k]) => only.includes(k)) : all
       for (const [i, [k, label]] of segs.entries()) {
-        const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;${i ? 'border-left:1px solid rgba(128,128,128,.35);' : ''}background:transparent;color:inherit;${featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
-        seg.title = `${k} 部件（可多选）`
+        const seg = el('button', `font-size:${compact ? '10' : '11'}px;cursor:pointer;padding:${compact ? '0 5px' : '2px 8px'};border:none;${i ? 'border-left:1px solid rgba(128,128,128,.35);' : ''}background:transparent;color:inherit;${!only && featFilter().has(k) ? 'background:#556;color:#fff' : ''}`, label) as HTMLButtonElement
+        seg.title = tf('partsHint', { k })
         seg.onclick = (ev) => { ev.stopPropagation(); toggleFeat(k) }
         grp.appendChild(seg)
       }
@@ -100,7 +103,6 @@ export default Plugin.define({
     const [view, setView] = createSignal<View>({ kind: 'list' })
     const [state, setState] = createSignal<LocalState>(EMPTY_STATE)
     const [favOnly, setFavOnly] = createSignal(false)
-    const [groupFilter, setGroupFilter] = createSignal('')
     const [tab, setTab] = createSignal<'discover'|'plugins'|'skills'|'favorites'|'installed'|'mySkills'|'advanced'>('discover')
     const [filterOpen, setFilterOpen] = createSignal(false)
     const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
@@ -151,10 +153,8 @@ export default Plugin.define({
       }
     }
     const filtered = () => {
-      const c = cat(); const s = state()
+      const c = cat()
       let list = c ? tabPool().filter(p => categoriesOf(p).includes(c)) : tabPool()
-      const g = groupFilter()
-      if (g) list = list.filter(p => s.groups[p.name] === g)
       if (rangeDays()) list = list.filter(p => inDays(p, rangeDays()))
       const ff = featFilter()
       if (ff.size) list = list.filter(p => featuresOf(p).some(f => ff.has(f)))
@@ -222,7 +222,7 @@ export default Plugin.define({
               setFeatMap(fresh.features)
             }
           },
-          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = `failed — ${t('retry')}`; b.title = String(x) },
+          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = t('failedRetry'); b.title = String(x) },
         )
       }
       return b
@@ -247,7 +247,7 @@ export default Plugin.define({
       if (pr?.done && !pr.ok) {
         // inert-looking failure button — clicking opens the detail view where
         // the error context + export-log affordance live (AGENTS: 报错必须有下一步)
-        const fb = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `failed — ${t('retry')}?`) as HTMLButtonElement
+        const fb = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `${t('failedRetry')}?`) as HTMLButtonElement
         fb.title = pr.lines[pr.lines.length - 1] ?? ''
         fb.onclick = ev => { ev.stopPropagation(); setView({ kind: 'detail', e }) }
         return fb
@@ -257,14 +257,14 @@ export default Plugin.define({
         return tab() === 'installed' || tab() === 'mySkills'
           ? uninstallBtn(e)
           : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
-      const label = ver ? `update → v${e.latestVersion}` : 'add'
+      const label = ver ? `${t('update')} → v${e.latestVersion}` : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
         setProg({ ...prog(), [e.name]: { lines: ['installing…'], done: false, ok: false } })
         const failOut = (x: unknown) => {
-          b.disabled = false; b.textContent = `failed — ${t('retry')}`; b.title = String(x); b.style.color = '#c66'
+          b.disabled = false; b.textContent = t('failedRetry'); b.title = String(x); b.style.color = '#c66'
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
         }
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
@@ -277,7 +277,7 @@ export default Plugin.define({
           const url = approvedTarballUrl(pk, e)
           if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
           const buf = await (await fetch(url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer()
-          if (buf.byteLength > 48 * 1024 * 1024) throw new Error('tarball too large')
+          if (buf.byteLength > MAX_SKILL_TGZ) throw new Error('tarball too large')
           const u8 = new Uint8Array(buf)
           let bin = ''
           for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768))
@@ -306,9 +306,9 @@ export default Plugin.define({
                 setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features)
               }
               const okNow = (fresh?.versions ?? installed())[e.name]
-              b.textContent = okNow ? 'verifying…' : `${t('installed')} (verify pending)`
-              const verdict = await safe.verifyActivation?.(e.name).catch(() => '')
-              b.textContent = verdict === 'activated' ? `${t('installed')} · activated` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : `${t('installed')} (verify pending)`
+              b.textContent = okNow ? t('verifying') : t('installedPending')
+              const verdict = await safe.verifyActivation?.(pinSpec(e)).catch(() => '')
+              b.textContent = verdict === 'activated' ? `${t('installed')} · ${t('activated')}` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : t('installedPending')
               b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
             }
           },
@@ -317,19 +317,35 @@ export default Plugin.define({
       }
       return b
     }
+    // repo page when the pipeline knows it, npm page otherwise — always a real landing
+    const entryUrl = (e: MarketEntry) => e.source?.repo
+      ? `https://github.com/${e.source.repo}`
+      : `https://www.npmjs.com/package/${encodeURIComponent(e.name)}`
+
     const row = (e: MarketEntry) => {
-      const d = el('div', 'padding:12px 14px;cursor:pointer;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box;position:relative')
+      const d = el('div', 'padding:12px 14px;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box;position:relative')
       // official [data-component=settings-list]: bg-layer-01 + 0.5px inset hairline via box-shadow
       d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'
       d.style.boxShadow = 'inset 0 0 0 0.5px var(--v2-border-border-muted, color-mix(in srgb, CanvasText 14%, transparent))'
-      d.onmouseenter = () => { d.style.background = 'var(--v2-background-bg-layer-02, color-mix(in srgb, CanvasText 7%, Canvas))'; typeBadge.style.background = d.style.background }
-      d.onmouseleave = () => { d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'; typeBadge.style.background = d.style.background }
-      d.onclick = () => setView({ kind: 'detail', e })
+      d.onmouseenter = () => {
+        d.style.background = 'var(--v2-background-bg-layer-02, color-mix(in srgb, CanvasText 7%, Canvas))'; typeBadge.style.background = d.style.background; expander.style.background = d.style.background
+        // card hover marks the action button with the settings-page focus ring
+        if (btn.tagName === 'BUTTON') btn.style.boxShadow = 'inset 0 0 0 1.5px var(--v2-border-border-focus, #5b8def)'
+      }
+      d.onmouseleave = () => {
+        d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'; typeBadge.style.background = d.style.background; expander.style.background = d.style.background
+        if (btn.tagName === 'BUTTON') btn.style.boxShadow = ''
+      }
       const title = el('div', 'font-weight:600;font-size:14px;display:flex;align-items:flex-start;gap:6px')
       const nameBox = el('span', 'flex:1;min-width:0;word-break:break-all;line-height:1.35')
       nameBox.append(e.name, badge(e))
+      nameBox.style.cursor = 'pointer'
+      nameBox.title = entryUrl(e)
+      nameBox.onmouseenter = () => { nameBox.style.textDecoration = 'underline'; nameBox.style.textDecorationColor = 'rgba(128,128,128,.4)' }
+      nameBox.onmouseleave = () => { nameBox.style.textDecoration = 'none' }
+      nameBox.onclick = ev => { ev.stopPropagation(); try { ctx.system?.openExternal?.(entryUrl(e)) } catch { /* noop */ } }
       title.append(nameBox)
-      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-8px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', e.contains?.includes('skill') ? '技能' : '插件')
+      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-8px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', e.contains?.includes('skill') ? t('skill') : t('plugin'))
       // outline only for the ~9px above the card edge — inside part stays fused
       typeBadge.appendChild(el('span', 'position:absolute;inset:0 0 auto;height:8px;box-sizing:border-box;border:0.5px solid var(--v2-border-border-muted,color-mix(in srgb, CanvasText 14%, transparent));border-bottom:none;border-radius:8px 8px 0 0;pointer-events:none'))
       d.appendChild(typeBadge)
@@ -340,13 +356,26 @@ export default Plugin.define({
       meta.textContent = [`v${e.latestVersion ?? '?'}`,
         dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
         .filter(Boolean).join(' · ')
-      const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1', (e.description?.en ?? '').slice(0, 160))
+      // desc clamps at 2 lines; ⌄ sits at the end of the last visible line and flips to ⌃ once expanded
+      const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;position:relative', descOf(e))
+      const expander = el('div', 'font-size:11px;line-height:14px;opacity:.5;cursor:pointer;user-select:none;display:none;position:absolute;right:0;bottom:0;padding-left:6px', '⌄')
+      expander.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'
+      const setClamp = (on: boolean) => {
+        desc.style.display = on ? '-webkit-box' : 'block'
+        desc.style.webkitLineClamp = on ? '2' : 'unset'
+        desc.style.cursor = on ? 'pointer' : 'default'
+        expander.textContent = on ? '⌄' : '⌃'
+      }
+      desc.onclick = () => { if (desc.style.display !== 'block') setClamp(false) }
+      expander.onclick = ev => { ev.stopPropagation(); setClamp(desc.style.display === 'block') }
+      desc.appendChild(expander)
+      requestAnimationFrame(() => { if (desc.scrollHeight > desc.clientHeight + 2) { expander.style.display = ''; desc.style.cursor = 'pointer' } })
       const bottom = el('div', 'margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap')
       if (featuresOf(e).length) bottom.appendChild(partChips(true, featuresOf(e)))
       if (e.uncataloged) {
-        bottom.appendChild(el('span', 'font-size:10px;padding:1px 8px;border:1px dashed rgba(128,128,128,.45);border-radius:10px;opacity:.6', '未收录'))
+        bottom.appendChild(el('span', 'font-size:10px;padding:1px 8px;border:1px dashed rgba(128,128,128,.45);border-radius:10px;opacity:.6', t('uncataloged')))
       } else for (const ct of categoriesOf(e)) {
-        const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', ct)
+        const tg = el('span', 'font-size:10px;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:10px;opacity:.75', catLabel(ct))
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
         bottom.appendChild(tg)
       }
@@ -356,13 +385,11 @@ export default Plugin.define({
       syncFav()
       favBtn.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); syncFav() }
       bottom.appendChild(favBtn)
-      const note = state().notes[e.name]
       d.append(title, meta, desc, bottom)
-      if (note) d.appendChild(el('div', 'font-size:11px;opacity:.55;font-style:italic', `📝 ${note}`))
       const p = prog()[e.name]
       if (p && !p.done) {
         const bar = el('div', 'font-size:11px;opacity:.6;max-height:60px;overflow:hidden')
-        bar.textContent = p.lines[p.lines.length - 1] ?? 'installing…'
+        bar.textContent = p.lines[p.lines.length - 1] ?? t('installing')
         const cx = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', t('cancel'))
         cx.onclick = ev => { ev.stopPropagation(); void safe.cancelInstall(e.name) }
         bar.appendChild(cx)
@@ -370,7 +397,7 @@ export default Plugin.define({
       }
       if (p?.done && p.ok === false) {
         const errBox = el('div', 'font-size:11px;color:#c66')
-        errBox.textContent = keyLines(p.lines.join('\n')).join(' · ').slice(0, 200) || 'install failed'
+        errBox.textContent = keyLines(p.lines.join('\n')).join(' · ').slice(0, 200) || t('installFailed')
         const ex = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', t('exportLog'))
         ex.onclick = ev => {
           ev.stopPropagation()
@@ -384,15 +411,6 @@ export default Plugin.define({
     }
     const fmtN = (n: number | null | undefined) =>
       n == null ? '—' : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-    const sel = (opts: string[], cur: () => string, set: (v: string) => void, label = '') => {
-      const s = document.createElement('select')
-      s.style.cssText = 'margin-right:6px;font-size:12px'
-      if (label) s.append(new Option(label, ''))
-      for (const o of opts) s.append(new Option(o, o))
-      s.value = cur()
-      s.onchange = () => set(s.value)
-      return s
-    }
 
     const listView = () => {
       const root = el('div', '')
@@ -402,7 +420,7 @@ export default Plugin.define({
       // first page + auto-load on scroll (sentinel) keeps tab switches instant
       const PAGE = 60
       const [visible, setVisible] = createSignal(PAGE)
-      createEffect(() => { tab(); cat(); query(); sort(); sortDir(); favOnly(); groupFilter(); rangeDays(); featFilter(); setVisible(PAGE) })
+      createEffect(() => { tab(); cat(); query(); sort(); sortDir(); favOnly(); rangeDays(); featFilter(); setVisible(PAGE) })
       insert(list, () => {
         const items = filtered()
         const rows = items.slice(0, visible()).map(row)
@@ -430,51 +448,91 @@ export default Plugin.define({
 
     // static chrome — built ONCE so the search input never loses focus to a
     // reactive re-render (the insert below only owns the body region)
-    const chrome = () => {
+    const chrome = (surface: 'panel' | 'settings') => {
       const root = el('div', 'padding:12px 12px 0;box-sizing:border-box')
       // header: title + pkg version + far-right 全部更新 (hardcoded placeholder)
       const head = el('div', 'display:flex;align-items:baseline;margin-bottom:10px')
       head.appendChild(el('h3', 'margin:0;font-size:15px;font-weight:600', 'opencode market'))
       head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', 'opencode-market v0.0.3'))
-      const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', '全部更新') as HTMLButtonElement
+      const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', t('updateAll')) as HTMLButtonElement
+      updAll.dataset.act = 'updateAll'   // dispatch marker — text changes per state/lang, this doesn't
       const runUpdateAll = async () => {
-        if (typeof safe.update !== 'function') { updAll.textContent = '需重启桌面端'; return }
+        if (typeof safe.update !== 'function') { updAll.textContent = t('needRestartDesk'); return }
         const outdated = (data()?.plugins ?? []).filter(e => { const v = installed()[e.name]; return !!v && hasUpdate(e, v) })
-        if (!outdated.length) { updAll.textContent = '全部已是最新'; setTimeout(() => { updAll.textContent = '全部更新' }, 3000); return }
+        if (!outdated.length) { updAll.textContent = t('allLatest'); setTimeout(() => { updAll.textContent = t('updateAll') }, 3000); return }
         updAll.disabled = true
         let ok = 0, fail = 0
         for (const e of outdated) {
-          updAll.textContent = `更新中 ${ok + fail + 1}/${outdated.length}…`
+          updAll.textContent = tf('updatingN', { n: ok + fail + 1, total: outdated.length })
           try { await safe.update({ name: e.name, spec: pinSpec(e) }); ok++ } catch { fail++ }
         }
         await new Promise(r => setTimeout(r, 2000))
         const fresh = await safe.installed?.().catch(() => null)
         if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
         updAll.disabled = false
-        updAll.textContent = fail ? `更新 ${ok} 成功 ${fail} 失败` : `已更新 ${ok} 个`
-        setTimeout(() => { updAll.textContent = '全部更新' }, 4000)
+        updAll.textContent = fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })
+        setTimeout(() => { updAll.textContent = t('updateAll') }, 4000)
       }
       // same webview quirk as the refresh button — dispatch on the parent
-      head.onmousedown = (ev) => { const t = ev.target as HTMLElement; if (t?.tagName === 'BUTTON' && t.textContent?.includes('全部更新')) void runUpdateAll() }
+      head.onmousedown = (ev) => { const t = ev.target as HTMLElement; if (t?.dataset?.act === 'updateAll') void runUpdateAll() }
       head.appendChild(updAll)
       root.appendChild(head)
-      // functional tabs: 发现/插件/skill/收藏/已安装/高级 (dsh top-nav style)
-      const tabs = el('div', 'display:flex;gap:2px;margin-bottom:10px')
-      const TABS: [typeof tab extends () => infer V ? V : never, string][] = [
-        ['discover', '发现'], ['plugins', '插件'], ['skills', '技能'],
-        ['favorites', '收藏'], ['installed', '我的插件'], ['mySkills', '我的技能'], ['advanced', '设置']]
-      for (const [id, label] of TABS) {
-        const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit', label) as HTMLButtonElement
-        const sync = () => { const on = tab() === id; tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; tb.style.fontWeight = on ? '600' : '400' }
-        sync()
-        tb.onmouseenter = () => { if (tab() !== id) tb.style.background = 'var(--v2-overlay-simple-overlay-hover, rgba(128,128,128,.1))' }
-        tb.onmouseleave = () => { if (tab() !== id) tb.style.background = 'transparent' }
-        tb.onclick = () => {
-          setTab(id); setFavOnly(id === 'favorites')
-          for (const x of Array.from(tabs.children) as HTMLButtonElement[]) { const on = x === tb; x.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; x.style.fontWeight = on ? '600' : '400' }
-        }
-        tabs.appendChild(tb)
+      // panel tabs: two morphing slots + discover + ≡ (right edge)
+      // at rest the row shows the long my-* tabs; hovering discover latches catalog mode where the
+      // slots flip to plugins/skills — a slot click selects whichever label is showing. a selected
+      // catalog tab echoes right of discover once the row settles back; my-*/discover/settings
+      // selections highlight in place only.
+      // settings surface skips the morphing — all five tabs render plainly in one row.
+      const tabs = el('div', 'display:flex;gap:4px;margin-bottom:10px;overflow-x:auto;scrollbar-width:thin')
+      const swaps: [HTMLElement, HTMLElement][] = []
+      const slots: { tb: HTMLButtonElement; shortId: 'plugins' | 'skills'; longId: 'installed' | 'mySkills' }[] = []
+      const fixed: { tb: HTMLButtonElement; id: string }[] = []
+      const marker = el('button', 'font-size:13px;padding:3px 12px;border:none;border-radius:6px;background:rgba(128,128,128,.18);color:inherit;white-space:nowrap;font-weight:600;display:none;cursor:default;pointer-events:none;flex-shrink:0', '') as HTMLButtonElement
+      let expandLatch = false
+      const expanded = () => expandLatch
+      const paint = () => {
+        const ex = expanded(), id = tab()
+        for (const [a, b] of swaps) { a.style.visibility = ex ? 'hidden' : 'visible'; b.style.visibility = ex ? 'visible' : 'hidden' }
+        for (const s of slots) { const on = id === (ex ? s.shortId : s.longId); s.tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; s.tb.style.fontWeight = on ? '600' : '400' }
+        for (const f of fixed) { const on = id === f.id; f.tb.style.background = on ? 'rgba(128,128,128,.18)' : 'transparent'; f.tb.style.fontWeight = on ? '600' : '400' }
+        const show = !expanded() && (id === 'plugins' || id === 'skills')
+        marker.style.display = show ? '' : 'none'
+        if (show) marker.textContent = t(id === 'plugins' ? 'tabPlugins' : 'tabSkills')
       }
+      const hover = 'var(--v2-overlay-simple-overlay-hover, rgba(128,128,128,.1))'
+      if (surface === 'settings') {
+        for (const [id, key] of [['discover', 'tabDiscover'], ['plugins', 'tabPlugins'], ['skills', 'tabSkills'], ['installed', 'tabInstalled'], ['mySkills', 'tabMySkills']] as const) {
+          const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit;white-space:nowrap;flex-shrink:0', t(key)) as HTMLButtonElement
+          tb.onmouseenter = () => { tb.style.background = hover }
+          tb.onmouseleave = () => paint()
+          tb.onclick = () => { setTab(id); setFavOnly(false); paint() }
+          fixed.push({ tb, id }); tabs.appendChild(tb)
+        }
+      } else {
+        for (const [shortId, longId, shortKey, longKey] of [['plugins', 'installed', 'tabPlugins', 'tabInstalled'], ['skills', 'mySkills', 'tabSkills', 'tabMySkills']] as const) {
+          const tb = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit;white-space:nowrap;flex-shrink:0;display:grid;justify-items:center', '') as HTMLButtonElement
+          const a = el('span', 'grid-area:1/1', t(longKey))                    // long label — default
+          const b = el('span', 'grid-area:1/1;visibility:hidden', t(shortKey)) // short label — shown while expanded
+          tb.append(a, b); swaps.push([a, b])
+          tb.onmouseenter = () => { tb.style.background = hover }
+          tb.onmouseleave = () => paint()
+          tb.onclick = () => { setTab(expanded() ? shortId : longId); setFavOnly(false); paint() }
+          slots.push({ tb, shortId, longId }); tabs.appendChild(tb)
+        }
+        const dc = el('button', 'font-size:13px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit;white-space:nowrap;flex-shrink:0', t('tabDiscover')) as HTMLButtonElement
+        dc.onmouseenter = () => { expandLatch = true; paint(); dc.style.background = hover }
+        dc.onmouseleave = () => paint()
+        dc.onclick = () => { setTab('discover'); setFavOnly(false); paint() }
+        fixed.push({ tb: dc, id: 'discover' }); tabs.appendChild(dc); tabs.appendChild(marker)
+      }
+      const st = el('button', 'font-size:19px;cursor:pointer;padding:3px 12px;border:none;border-radius:6px;background:transparent;color:inherit;white-space:nowrap;flex-shrink:0;margin-left:auto', '≡') as HTMLButtonElement
+      st.title = t('tabAdvanced'); st.setAttribute('aria-label', t('tabAdvanced'))
+      st.onmouseenter = () => { st.style.background = hover }
+      st.onmouseleave = () => paint()
+      st.onclick = () => { setTab('advanced'); setFavOnly(false); paint() }
+      fixed.push({ tb: st, id: 'advanced' }); tabs.appendChild(st)
+      tabs.onmouseleave = () => { expandLatch = false; paint() }
+      paint()
       root.appendChild(tabs)
       // search row
       const controls = el('div', 'display:flex;align-items:center;margin-bottom:8px')
@@ -493,7 +551,7 @@ export default Plugin.define({
       ic.appendChild(mag)
       wrap.append(ic, q)
       controls.appendChild(wrap)
-      const filt = el('button', 'font-size:12px;cursor:pointer;padding:4px 12px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', '筛选') as HTMLButtonElement
+      const filt = el('button', 'font-size:12px;cursor:pointer;padding:4px 12px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('filter')) as HTMLButtonElement
       filt.onclick = () => setFilterOpen(!filterOpen())
       controls.appendChild(filt)
       root.appendChild(controls)
@@ -518,42 +576,49 @@ export default Plugin.define({
         return s
       }
       menu.append(
-        section('排序字段', [
-          ['npm 下载量（近 30 天）', () => sort() === 'downloads', () => setSort('downloads')],
-          ['Star 数', () => sort() === 'stars', () => setSort('stars')],
-          ['名称', () => sort() === 'name', () => setSort('name')],
-          ['验证状态', () => sort() === 'verified', () => setSort('verified')],
+        section(t('sortField'), [
+          [t('sortDownloads'), () => sort() === 'downloads', () => setSort('downloads')],
+          [t('sortStars'), () => sort() === 'stars', () => setSort('stars')],
+          [t('sortName'), () => sort() === 'name', () => setSort('name')],
+          [t('sortVerified'), () => sort() === 'verified', () => setSort('verified')],
         ]),
-        section('排序方向', [
-          ['降序', () => sortDir() === 'desc', () => setSortDir('desc')],
-          ['升序', () => sortDir() === 'asc', () => setSortDir('asc')],
+        section(t('sortDirLabel'), [
+          [t('sortDesc'), () => sortDir() === 'desc', () => setSortDir('desc')],
+          [t('sortAsc'), () => sortDir() === 'asc', () => setSortDir('asc')],
         ]),
-        section('发布时间范围', [
-          ['全部时间', () => rangeDays() === 0, () => setRangeDays(0)],
-          ['最近 1 天', () => rangeDays() === 1, () => setRangeDays(1)],
-          ['最近 7 天', () => rangeDays() === 7, () => setRangeDays(7)],
-          ['最近 30 天', () => rangeDays() === 30, () => setRangeDays(30)],
-          ['最近 90 天', () => rangeDays() === 90, () => setRangeDays(90)],
-          ['最近 1 年', () => rangeDays() === 365, () => setRangeDays(365)],
+        section(t('publishRange'), [
+          [t('rangeAll'), () => rangeDays() === 0, () => setRangeDays(0)],
+          [t('range1d'), () => rangeDays() === 1, () => setRangeDays(1)],
+          [t('range7d'), () => rangeDays() === 7, () => setRangeDays(7)],
+          [t('range30d'), () => rangeDays() === 30, () => setRangeDays(30)],
+          [t('range90d'), () => rangeDays() === 90, () => setRangeDays(90)],
+          [t('range1y'), () => rangeDays() === 365, () => setRangeDays(365)],
         ]),
       )
       createEffect(() => { menu.style.display = filterOpen() ? '' : 'none' })
       filt.onclick = () => setFilterOpen(!filterOpen())
-      document.addEventListener('click', ev => { if (!menu.contains(ev.target as Node) && ev.target !== filt) setFilterOpen(false) })
+      if (docClick) document.removeEventListener('click', docClick)
+      document.addEventListener('click', docClick = (ev: Event) => {
+        // self-unhook once the panel is gone — the host has no unmount hook,
+        // so a closed panel's listener would fire (harmlessly but forever)
+        // on every document click until remount (N-14)
+        if (!menu.isConnected) { document.removeEventListener('click', docClick!); docClick = null; return }
+        if (!menu.contains(ev.target as Node) && ev.target !== filt) setFilterOpen(false)
+      })
       root.appendChild(menu)
       // category chips row (dsh style)
-      const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
+      const chips = el('div', 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px')
       insert(chips, () => {
         if (tab() === 'advanced') return []
         const pool = tabPool()
         const mk = (id: string, label: string) => {
-          const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
+          const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 8px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
           if (id && cat() === id) { c.style.background = '#556'; c.style.color = '#fff' }
           c.onclick = () => setCat(cat() === id ? '' : id)  // re-click deselects → 全部
           return c
         }
-        const cats = [mk('', `全部(${pool.length})`), partChips() as unknown as HTMLButtonElement,
-          ...allCategories(pool).slice(0, 12).map(c => mk(c, c))]
+        const cats = [mk('', tf('allN', { n: pool.length })), partChips() as unknown as HTMLButtonElement,
+          ...allCategories(pool).slice(0, 12).map(c => mk(c, catLabel(c)))]
         return cats
       })
       root.appendChild(chips)
@@ -577,7 +642,7 @@ export default Plugin.define({
         `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
       ]) info.appendChild(el('div', '', line))
       root.appendChild(info)
-      root.appendChild(el('p', 'font-size:13px;line-height:1.5', e.description?.en ?? ''))
+      root.appendChild(el('p', 'font-size:13px;line-height:1.5', descOf(e)))
       // findings/redFlags stay collapsed into a <details> — AGENTS: 默认收起进详情页
       const fold = (title: string, items: string[], warn: boolean) => {
         const d = document.createElement('details')
@@ -593,23 +658,13 @@ export default Plugin.define({
         root.appendChild(el('div', 'font-size:11px;opacity:.55;margin:8px 0', t('notSafe')))
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
-      if (skillInstalledVer(installed(), e.name)) {
+      // detail page keeps an uninstall affordance even on non-manage tabs,
+      // where the primary element is just a '✓ installed' span — but never
+      // render a second uninstall next to a real uninstall button
+      if (btn.tagName !== 'BUTTON') {
         const un = uninstallBtn(e); un.style.marginLeft = '8px'
         root.appendChild(un)
       }
-      // local state: group + note
-      root.appendChild(el('h4', 'margin:14px 0 4px', 'group'))
-      const gi = document.createElement('input')
-      gi.placeholder = t('group'); gi.value = state().groups[e.name] ?? ''
-      gi.style.cssText = 'padding:4px;font-size:12px;width:200px'
-      gi.onchange = () => { const gr = { ...state().groups }; gi.value ? gr[e.name] = gi.value : delete gr[e.name]; put({ groups: gr }) }
-      root.appendChild(gi)
-      root.appendChild(el('h4', 'margin:14px 0 4px', 'note'))
-      const ni = document.createElement('input')
-      ni.placeholder = t('note'); ni.value = state().notes[e.name] ?? ''
-      ni.style.cssText = 'padding:4px;font-size:12px;width:100%;box-sizing:border-box'
-      ni.onchange = () => { const ns = { ...state().notes }; ni.value ? ns[e.name] = ni.value : delete ns[e.name]; put({ notes: ns }) }
-      root.appendChild(ni)
       return root
     }
 
@@ -624,7 +679,7 @@ export default Plugin.define({
       // root though) — dispatch from the root listener instead
       root.onmousedown = (ev) => {
         const t = ev.target as HTMLElement
-        const hit = t?.tagName === 'BUTTON' && !!t.textContent?.includes('更新数据')
+        const hit = t?.dataset?.act === 'refresh'
         void safe.devlog?.(`md root <${t?.tagName}> ${(t?.textContent ?? '').slice(0, 16)} hit=${hit}`).catch(() => {})
         if (hit) void doRefresh()
         const lm = t?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
@@ -645,65 +700,66 @@ export default Plugin.define({
       root.appendChild(langRow)
       const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
       refStatus.textContent = refText()
-      const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
+      const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', t('refreshData')) as HTMLButtonElement
+      refBtn.dataset.act = 'refresh'
       const doRefresh = () => void (async () => {
         void safe.devlog?.('refBtn fire').catch(() => {})
-        refBtn.disabled = true; refBtn.textContent = '刷新中…'; setRefText(''); refStatus.textContent = ''
-        const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('超时 25s')), 25_000))])
+        refBtn.disabled = true; refBtn.textContent = t('refreshing'); setRefText(''); refStatus.textContent = ''
+        const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('timeout25'))), 25_000))])
         try {
           const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex() : safe.index())
           if (idx) setData(idx)
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-          setRefText(`已刷新 ${idx?.plugins?.length ?? '?'} 条，${new Date().toLocaleTimeString()}`)
-        } catch (x) { setRefText(`刷新失败: ${String(x)}`) } finally {
-          refBtn.disabled = false; refBtn.textContent = '更新数据（强制刷新索引）'
+          setRefText(`${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${new Date().toLocaleTimeString()}`)
+        } catch (x) { setRefText(tf('refreshFailed', { err: String(x) })) } finally {
+          refBtn.disabled = false; refBtn.textContent = t('refreshData')
         }
       })()
       root.appendChild(refBtn); root.appendChild(refStatus)
-      root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', '备份与恢复'))
-      const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', '收藏、分组、备注存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。')
+      root.appendChild(el('h4', 'margin:0 0 10px;font-weight:600', t('backupRestore')))
+      const desc = el('div', 'font-size:12px;opacity:.6;margin-bottom:12px', t('backupDesc'))
       root.appendChild(desc)
       const status = el('div', 'font-size:11px;opacity:.6;margin-top:8px')
-      const exp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-right:8px', '导出备份') as HTMLButtonElement
+      const exp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-right:8px', t('exportBackup')) as HTMLButtonElement
       exp.onclick = () => {
         const blob = new Blob([JSON.stringify(state(), null, 2)], { type: 'application/json' })
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob); a.download = 'opencode-market-backup.json'; a.click()
-        status.textContent = '已导出 opencode-market-backup.json'
+        status.textContent = tf('exportedN', { file: 'opencode-market-backup.json' })
       }
       const ta = document.createElement('textarea')
-      ta.placeholder = '粘贴备份 JSON…'
+      ta.placeholder = t('pasteBackup')
       ta.style.cssText = 'width:100%;height:80px;margin-top:8px;font-size:11px;box-sizing:border-box;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid rgba(128,128,128,.3);border-radius:6px;padding:6px'
-      const imp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '恢复') as HTMLButtonElement
+      const imp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', t('restore')) as HTMLButtonElement
       imp.onclick = () => {
         try {
           // field-shape validation — a crafted paste must not corrupt state
           put(sanitizeState(JSON.parse(ta.value)))
-          status.textContent = '已恢复'
-        } catch { status.textContent = '恢复失败：不是有效的备份 JSON' }
+          status.textContent = t('restored')
+        } catch { status.textContent = t('restoreInvalid') }
       }
-      const clr = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(200,50,50,.5);border-radius:6px;background:transparent;color:#c55;margin-top:6px;margin-left:8px', '清空数据') as HTMLButtonElement
-      clr.onclick = () => { if (confirm('清空所有收藏/分组/备注？')) { put(EMPTY_STATE); status.textContent = '已清空' } }
+      const clr = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(200,50,50,.5);border-radius:6px;background:transparent;color:#c55;margin-top:6px;margin-left:8px', t('clearData')) as HTMLButtonElement
+      clr.onclick = () => { if (confirm(t('confirmClear'))) { put(EMPTY_STATE); status.textContent = t('cleared') } }
       root.append(exp, ta, imp, clr, status)
       // 开发日志开关（默认关）
-      const dv = el('h4', 'margin:20px 0 6px;font-weight:600', '开发日志')
+      const dv = el('h4', 'margin:20px 0 6px;font-weight:600', t('devlogLabel'))
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = devlog()
       cb.onchange = () => put({ devlog: cb.checked })
       const cbL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
-      cbL.append(cb, document.createTextNode('记录调试日志（装包各阶段+错误，存本机）'))
+      cbL.append(cb, document.createTextNode(t('devlogDesc')))
       const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap;user-select:text;-webkit-user-select:text;cursor:text')
-      const refresh = () => { void safe.readDevlog?.().then(t => { logBox.textContent = t || '暂无日志' }).catch(() => {}) }
+      const refresh = () => { void safe.readDevlog?.().then(txt => { logBox.textContent = txt || t('noLogs') }).catch(() => {}) }
       refresh()
-      const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', '清空日志') as HTMLButtonElement
+      const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', t('clearLogs')) as HTMLButtonElement
       clrL.onclick = () => { clearLog(); refresh() }
       root.append(dv, cbL, logBox, clrL)
       return root
     }
 
-    const mount = (parent: HTMLElement) => {
+    const mount = (parent: HTMLElement, surface: 'panel' | 'settings') => {
       const shell = el('div', 'overflow:auto;height:100%')
-      const head = chrome()          // built ONCE — signal reads here don't get tracked
+      const head = chrome(surface)   // built ONCE — signal reads here don't get tracked
       const body = el('div')
       shell.append(head, body)
       createEffect(() => {
@@ -725,17 +781,17 @@ export default Plugin.define({
         return n
       })
       parent.appendChild(shell)
-      remounts.set(parent, () => { parent.replaceChildren(); mount(parent) })
+      remounts.set(parent, () => { parent.replaceChildren(); mount(parent, surface) })
     }
 
     ctx.add(SettingsPage, {
       id: 'market', title: 'Market', icon: 'marketplace' as any,
-      render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+      render: () => { const host = el('div', 'height:100%'); mount(host, 'settings'); return host },
     })
     ctx.add(Panel, {
       id: 'market', title: 'Market', region: 'side' as const, transient: true,
       list: () => [{ id: 'market', title: 'Market' }],
-      render: () => { const host = el('div', 'height:100%'); mount(host); return host },
+      render: () => { const host = el('div', 'height:100%'); mount(host, 'panel'); return host },
     })
     const openMarket = () => {
       const s = ctx.sessions.current()
@@ -948,18 +1004,25 @@ export default Plugin.define({
             try { assertSkillId(name); resolve(uninstallSkillDir(name, join(homedir(), '.config', 'opencode', 'skills'))) }
             catch (e) { reject(e instanceof Error ? e : new Error(String(e))) }
           }),
-        // self-confirm: isolated serve + API hit → real "did it load" verdict
-        verifyActivation: (name: string) =>
+        // self-confirm: isolated serve + API hit → real "did it load" verdict.
+        // input is the pinned spec (name@approvedVersion) — a bare name would
+        // resolve dist-tags.latest and test a version the user never got.
+        verifyActivation: (spec: string) =>
           new Promise<string>((resolve, reject) => {
-            try { assertPkgName(name) } catch (e) { reject(e); return }
+            let name: string
+            try { name = cleanSpec(String(spec)); assertSpecForName(name, spec) } catch (e) { reject(e); return }
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
             const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
             const { tmpdir } = require('node:os') as typeof import('node:os')
             const { join } = require('node:path') as typeof import('node:path')
             const home = mkdtempSync(join(tmpdir(), 'mkt-verify-'))
             mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
-            writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [name] }))
-            const env = restrictedEnv({ XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') })
+            writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [spec] }))
+            // HOME override is load-bearing on macOS: XDG_* alone leaves opencode
+            // resolving config/state via the real ~ (the canary would read the
+            // user's real config — false activated if the plugin is already in it,
+            // permanent not-loaded otherwise). Same fix as pipeline/verify's xdgEnv.
+            const env = restrictedEnv({ HOME: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') })
             // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
             // triggers the load (same fix as pipeline/verify/verify.ts), then
             // poll the log for the canary instead of a fixed sleep (races writer)

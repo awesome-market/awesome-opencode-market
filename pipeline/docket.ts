@@ -17,7 +17,9 @@ import { vkey, latestVerdicts, loadVerdicts } from './verdicts.ts'
 export interface DocketTarget {
   name: string
   version: string | null
-  verdict: 'pass' | 'concern'
+  /** 'none' = repo-only pending — AI never reviews version-less entries, so the
+   *  standing review issue is the ONLY human channel for them */
+  verdict: 'pass' | 'concern' | 'none'
   reason?: string
   reasonEn?: string
   verification?: string
@@ -33,7 +35,20 @@ export function docketTargets(index: CatalogIndex, verdicts: AiVerdict[]): Docke
   for (const e of index.plugins) {
     const ver = e.pendingUpdate ? e.pendingUpdate.version
       : e.approval === 'pending' ? e.latestVersion : null
-    if (!ver && e.latestVersion !== null) continue
+    if (!ver) {
+      // repo-only pending (latestVersion null): unreviewedTargets requires a
+      // version, so AI never writes a verdict — without a standing issue the
+      // entry sits invisible+pending forever. Keep one open until any verdict
+      // (human, by construction) lands on name\0.
+      if (e.approval === 'pending' && e.latestVersion === null && !latest.has(vkey(e.name, null))) {
+        out.push({
+          name: e.name, version: null, verdict: 'none',
+          ...(e.verification?.status ? { verification: e.verification.status } : {}),
+        })
+        continue
+      }
+      if (e.latestVersion !== null) continue
+    }
     const rec = latest.get(vkey(e.name, ver))
     if (rec?.source !== 'ai') continue
     out.push({
@@ -74,7 +89,9 @@ export async function main(
     if (openByTitle.has(title)) continue
     const body = [
       `## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '',
-      `- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${t.reason}` : ''}`,
+      t.verdict === 'none'
+        ? '- 当前 AI 判定：**无**（repo-only 条目无可装 npm 包，AI 不审——只能人工裁决）'
+        : `- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${t.reason}` : ''}`,
       t.reasonEn ? `  - ${t.reasonEn}` : '',
       t.verification ? `- 验证状态：${t.verification}` : '- 验证状态：unverified',
       `- 数据：catalog 分支 \`index.json\` / \`ai-verdicts.jsonl\``, '',
@@ -88,7 +105,7 @@ export async function main(
     console.log(`[docket] create ${title}`)
     if (!dry) {
       ghFn(['issue', 'create', '-R', repo, '--title', title,
-        '--label', 'review:pending', '--label', `ai:${t.verdict}`, '--body', body])
+        '--label', 'review:pending', ...(t.verdict === 'none' ? [] : ['--label', `ai:${t.verdict}`]), '--body', body])
     }
   }
 

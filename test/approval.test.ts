@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { applyMatureVerdicts, latestVerdicts, loadVerdicts, loadLastDigestAt } from '../pipeline/verdicts.ts'
 import { mergeEntries } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const mkEntry = (name: string, over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -348,15 +349,13 @@ describe('run — hold semantics end-to-end', () => {
   })
   it('held version is not rescanned — reuse compares vs pendingUpdate', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'run-reuse-'))
-    const pu = mkPu('1.1.0', { capabilities: { scannedAt: 'earlier', rulesetVersion: 'r2', findings: ['x'], redFlags: [] } })
+    const pu = mkPu('1.1.0', { capabilities: { scannedAt: 'earlier', rulesetVersion: RULESET_VERSION, findings: ['x'], redFlags: [] } })
     const old = mkIndex([mkEntry('mypkg', {
       latestVersion: '1.0.0', approval: 'approved', pendingUpdate: pu,
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
       metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-02-02T00:00:00Z' },
     })])
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(old))
-    // RULESET_VERSION is 'r' in code? — fetch actual to keep test honest
-    const { RULESET_VERSION } = await import('../pipeline/scan/rules.ts')
     const idxOld = mkIndex([mkEntry('mypkg', {
       latestVersion: '1.0.0', approval: 'approved',
       pendingUpdate: { ...pu, capabilities: { ...pu.capabilities, rulesetVersion: RULESET_VERSION } },

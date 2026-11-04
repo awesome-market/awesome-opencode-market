@@ -42,6 +42,18 @@ describe('docketTargets', () => {
   it('no verdict yet → AI queue will handle, no human ask', () => {
     expect(docketTargets(idx([e()]), [])).toEqual([])
   })
+  it('repo-only pending (latestVersion null, no verdict) → standing human review issue', () => {
+    const t = docketTargets(idx([e({ latestVersion: null })]), [])
+    expect(t).toEqual([{ name: 'pkg', version: null, verdict: 'none', verification: 'verified' }])
+  })
+  it('repo-only pending WITH a human verdict → decided, no standing issue', () => {
+    const t = docketTargets(idx([e({ latestVersion: null })]),
+      [v({ version: null, source: 'human', verdict: 'pass' })])
+    expect(t).toEqual([])
+  })
+  it('non-pending repo entry → nothing to decide', () => {
+    expect(docketTargets(idx([e({ latestVersion: null, approval: 'approved' })]), [])).toEqual([])
+  })
   it('latest wins: ai pass then human concern → excluded', () => {
     const t = docketTargets(idx([e()]), [
       v({ at: '2026-01-01T00:00:00Z' }),
@@ -53,5 +65,36 @@ describe('docketTargets', () => {
     expect(issueTitle({ name: 'pkg', version: '1.0.0' })).toBe('[review] pkg@1.0.0')
     expect(issueTitle({ name: '@s/p', version: '2.0.0' })).toBe('[review] @s/p@2.0.0')
     expect(issueTitle({ name: 'o/r', version: null })).toBe('[review] o/r')
+  })
+})
+
+describe('docket main', () => {
+  it('creates a label-free-of-ai verdict issue for repo-only pendings + closes decided ones', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ latestVersion: null })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{ number: 9, title: '[review] stale/x' }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))
+    expect(create).toBeTruthy()
+    expect(create!.join(' ')).toContain('[review] pkg')
+    // 'none' verdicts carry no ai: label — the body itself says "AI 不审"
+    expect(create!.join(' ')).not.toContain('ai:')
+    expect(calls.some(c => c.includes('close') && c.includes('9'))).toBe(true)
   })
 })

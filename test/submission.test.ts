@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseSubmission, seedLine } from '../pipeline/submission.ts'
@@ -102,6 +102,28 @@ describe('markNotified', () => {
     expect(JSON.parse(out[1]!).notified).toBe(false)
     expect(out[3]).toBe('plain-legacy-line')
   })
+  it('repo-only seeds match the github-kind entry by repo, not name', () => {
+    const ghIdx = CatalogIndex.parse({
+      version: '1', generatedAt: 't', categories: {},
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'approved' }],
+      removed: [],
+    })
+    const seed = ['{"repo":"o/r","issue":11,"notified":false}',
+      '{"repo":"o/other","issue":12,"notified":false}']
+    const { lines: out, issues } = markNotified(ghIdx, seed)
+    expect(issues).toEqual([11])
+    expect(JSON.parse(out[0]!).notified).toBe(true)
+    expect(JSON.parse(out[1]!).notified).toBe(false)
+  })
+  it('repo seed stays quiet while the entry is still pending', () => {
+    const ghIdx = CatalogIndex.parse({
+      version: '1', generatedAt: 't', categories: {},
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'pending' }],
+      removed: [],
+    })
+    const { issues } = markNotified(ghIdx, ['{"repo":"o/r","issue":11,"notified":false}'])
+    expect(issues).toEqual([])
+  })
 })
 
 const mkRes = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status })
@@ -130,7 +152,7 @@ describe('run: JSONL seed declared metadata', () => {
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'seed-pkg')!
     expect(e.type).toBe('skill')
-    expect(e.category).toEqual(['记忆'])
+    expect(e.category).toEqual(['memory'])   // zh declared label normalized to id at merge
     expect(e.description.en).toBe('declared en')
     expect(e.description.zh).toBe('声明的中文')
     expect(e.discoveredVia).toContain('submission')
@@ -149,5 +171,25 @@ describe('run: JSONL seed declared metadata', () => {
     const e = idx.plugins.find(p => p.name === 'o/repo-skill')!
     expect(e.source.kind).toBe('github')
     expect(e.discoveredVia).toContain('submission')
+  })
+})
+
+describe('notify-published main', () => {
+  it('rewrites the seed file in place and prints landed issue numbers', () => {
+    const { main } = require('../pipeline/notify-published.ts') as typeof import('../pipeline/notify-published.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'np-'))
+    const idxPath = join(dir, 'index.json')
+    const seedPath = join(dir, 'subs.txt')
+    writeFileSync(idxPath, JSON.stringify({
+      version: '1', generatedAt: 't', categories: {}, removed: [],
+      plugins: [{ name: 'p1', slug: 'p1', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: '1', publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {}, approval: 'approved' }],
+    }))
+    writeFileSync(seedPath, '{"name":"p1","issue":3,"notified":false}\n')
+    const logs: string[] = []
+    const orig = console.log
+    console.log = (...a: unknown[]) => { logs.push(String(a[0])) }
+    try { main(['x', 'y', idxPath, seedPath]) } finally { console.log = orig }
+    expect(logs).toEqual(['3'])
+    expect(readFileSync(seedPath, 'utf8')).toContain('"notified":true')
   })
 })

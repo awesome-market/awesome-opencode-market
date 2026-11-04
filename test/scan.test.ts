@@ -61,4 +61,37 @@ describe('scan/scanTarball', () => {
     expect(rules).toContain('binary-blob')
     expect(r.redFlags.length).toBeGreaterThan(0)
   })
+
+  it('findings are capped at 500 with a scan-capped marker', async () => {
+    // each planted file hits ~6 rules — 120 files ≫ the 500-finding ceiling
+    const dir = mkdtempSync(join(tmpdir(), 'scanfat-'))
+    mkdirSync(join(dir, 'pkg'), { recursive: true })
+    writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'fat', version: '1.0.0' }))
+    for (let i = 0; i < 120; i++) {
+      writeFileSync(join(dir, 'pkg', `f${i}.js`),
+        `eval(x); fetch('https://a.example'); require('child_process'); fs.readFileSync('/root/.ssh/id_rsa'); connect('45.33.32.156'); const b='${'A'.repeat(220)}'`)
+    }
+    const out = join(dir, 'f.tgz')
+    execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    const r = await scanTarball(readFileSync(out))
+    // 500 real findings + 1 scan-capped marker
+    expect(r.findings.length).toBe(501)
+    expect(r.findings.some(f => f.rule === 'scan-capped')).toBe(true)
+    expect(r.findings.filter(f => f.rule === 'scan-capped')).toHaveLength(1)
+  }, 30000)
+
+  it('r3 rules: private IPv4 ignored, public v6 flagged, times not flagged', () => {
+    const ip = RULES.find(r => r.id === 'literal-ip')!
+    expect(ip.test('f.js', '10.0.0.1')).toBeNull()
+    expect(ip.test('f.js', '192.168.1.5')).toBeNull()
+    expect(ip.test('f.js', '172.16.0.9')).toBeNull()
+    expect(ip.test('f.js', 'meet at 12:30:45')).toBeNull()
+    expect(ip.test('f.js', '2001:db8::1')).toBeNull()       // doc range
+    expect(ip.test('f.js', 'fd00::dead:beef')).toBeNull()  // ULA
+    expect(ip.test('f.js', '2404:6800:4003:c02::64')).toBeTruthy() // public v6
+    const lc = RULES.find(r => r.id === 'lifecycle-script')!
+    for (const hook of ['preinstall', 'postinstall', 'install', 'prepublish', 'prepublishOnly', 'prepack', 'postpack'])
+      expect(lc.test('package/package.json', `{"scripts":{"${hook}":"x"}}`), hook).toBeTruthy()
+    expect(lc.test('package/package.json', '{"scripts":{"test":"x"}}')).toBeNull()
+  })
 })

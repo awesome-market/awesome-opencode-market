@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { mergeEntries, trustFlags, dedupeSlugs, buildIndex } from '../pipeline/publish/merge.ts'
 import { sanitize, sanitizeIndex } from '../plugins/market/src/catalog.ts'
 import { run } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -14,7 +15,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['alice'], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
   metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
-  capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
+  capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',
   ...over,
@@ -59,14 +60,14 @@ describe('trustFlags (SEC-2/3)', () => {
   it('new lifecycle script in same ruleset → strong redFlag', () => {
     const prev = mkEntry('a', '1.0.0')
     const fresh = mkEntry('a', '2.0.0', {
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: ['lifecycle-script:package.json'], redFlags: ['lifecycle-script:package.json'] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['lifecycle-script:package.json'], redFlags: ['lifecycle-script:package.json'] },
     })
     expect(trustFlags(prev, fresh).redFlags).toContain('sec-delta:lifecycle-script')
   })
   it('new weak finding → findings only', () => {
     const prev = mkEntry('a', '1.0.0')
     const fresh = mkEntry('a', '2.0.0', {
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: ['network-call:src/x.ts'], redFlags: [] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['network-call:src/x.ts'], redFlags: [] },
     })
     const tf = trustFlags(prev, fresh)
     expect(tf.findings).toContain('sec-delta:network-call')
@@ -77,7 +78,7 @@ describe('trustFlags (SEC-2/3)', () => {
       capabilities: { scannedAt: 't', rulesetVersion: 'r1', findings: [], redFlags: [] },
     })
     const fresh = mkEntry('a', '1.0.0', {
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: ['lifecycle-script:package.json'], redFlags: [] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['lifecycle-script:package.json'], redFlags: [] },
     })
     expect(trustFlags(prev, fresh).redFlags).toEqual([])
   })
@@ -90,7 +91,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
       discoveredVia: ['submission'], verification: { status: 'verified', level: 'load' },
     })
     const fresh = mkEntry('a', '2.0.0')
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r2')
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
     expect(m!.firstSeenAt).toBe('2025-01-01')
     expect(m!.slug).toBe('o/a-repo')
     expect(m!.aliases).toContain('x')
@@ -100,11 +101,11 @@ describe('mergeEntries two-layer keys (I-2)', () => {
   })
   it('per-version cache reused only when name@version+host+ruleset all match', () => {
     const prev = mkEntry('a', '1.0.0', {
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: ['f1'], redFlags: [] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['f1'], redFlags: [] },
       verification: { status: 'verified', level: 'load' },
     })
     const same = mkEntry('a', '1.0.0')
-    const [m] = mergeEntries([same], mkIndex([prev]), '2.2.5', 'r2')
+    const [m] = mergeEntries([same], mkIndex([prev]), '2.2.5', RULESET_VERSION)
     expect(m!.verification.status).toBe('verified')
     expect(m!.capabilities.findings).toEqual(['f1'])
   })
@@ -114,9 +115,9 @@ describe('mergeEntries two-layer keys (I-2)', () => {
       verification: { status: 'verified', level: 'load' },
     })
     const fresh = mkEntry('a', '1.0.0', {
-      capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: ['new'], redFlags: [] },
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['new'], redFlags: [] },
     })
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r2')
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
     expect(m!.capabilities.findings).toEqual(['new'])
     expect(m!.verification.status).toBe('verified')
   })
@@ -129,7 +130,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
     const fresh = mkEntry('a', '1.0.0', {
       source: { kind: 'npm', id: 'a', repo: 'o/r', repoId: 999 },   // repojacking fires
     })
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r2')
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
     expect(m!.verification.status).toBe('skipped')
     expect(m!.capabilities.redFlags).toContain('sec:repo-recreated')
   })

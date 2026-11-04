@@ -5,13 +5,9 @@
  *  '@scope/name' must NOT be stripped (leading @ is the scope). */
 export const cleanSpec = (s: string): string => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
 
-/** Replace every spec resolving to `clean` with a single clean spec. */
-export function dedupeSpecs(list: readonly string[], clean: string): string[] {
-  return [...list.filter(s => cleanSpec(s) !== clean), clean]
-}
-
-/** Same as dedupeSpecs but keeps an exact spec (may carry a @version pin) —
- *  update flow: dedupe old specs down to the approved pinned spec. */
+/** Replace every spec resolving to the same name with a single exact spec —
+ *  the pinned form survives (update flow: dedupe old specs down to the
+ *  approved pinned spec). */
 export function dedupeToSpec(list: readonly string[], spec: string): string[] {
   return [...list.filter(s => cleanSpec(s) !== cleanSpec(spec)), spec]
 }

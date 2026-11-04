@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r2'
+export const RULESET_VERSION = 'r3'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -17,8 +17,11 @@ const isPkgJson = (p: string) => /(^|\/)package\.json$/.test(p)
 export const RULES: Rule[] = [
   {
     id: 'lifecycle-script', sev: 'high',
-    test: (p, c) => isPkgJson(p) && c != null && /"(pre|post)?install"\s*:\s*"[^"]+"/.test(c)
-      ? 'npm lifecycle script (pre/post/install) — code runs at install time' : null,
+    // every script npm can execute at install/pack time — prepublish is
+    // deprecated but still runs in old npm; prepack/prepublishOnly/postpack
+    // run on npm pack (a git/tarball-install vector)
+    test: (p, c) => isPkgJson(p) && c != null && /"(preinstall|postinstall|install|prepublish|prepublishOnly|prepack|postpack)"\s*:\s*"[^"]+"/.test(c)
+      ? 'npm lifecycle script (install/pack stage) — code runs at install time' : null,
   },
   {
     id: 'prepare-script', sev: 'high',
@@ -37,20 +40,34 @@ export const RULES: Rule[] = [
     id: 'literal-ip', sev: 'medium',
     test: (_p, c) => {
       if (c == null) return null
-      const m = c.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)
-      if (!m) return null
-      // ignore documentation/well-known ranges that are almost never endpoints
-      if (/^(0\.0\.0\.0|127\.|255\.|169\.254\.|198\.51\.100\.|203\.0\.113\.|192\.0\.2\.)/.test(m[0])) return null
-      return `literal IP ${m[0]}`
+      const v4 = c.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)
+      if (v4 && !/^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|255\.)/.test(v4[0]))
+        return `literal IP ${v4[0]}`
+      // IPv6: hex-ish token with ≥2 colons AND ≥1 hex letter (the letter test
+      // keeps 12:30:45-style times/ratios out; doc/loopback/ULA excluded too)
+      const v6 = c.match(/\b(?=[0-9a-fA-F:]*[a-fA-F])[0-9a-fA-F]*(?::[0-9a-fA-F]*){2,}\b/)
+      if (v6 && !/^(::1|::|fe80:|f[cd][0-9a-fA-F]{0,2}:|ff[0-9a-fA-F]{0,2}:|2001:db8:)/i.test(v6[0]))
+        return `literal IPv6 ${v6[0]}`
+      return null
     },
   },
   {
     id: 'obfuscation', sev: 'high',
     test: (_p, c) => {
       if (c == null) return null
-      if (/eval\(|new Function|atob\(/.test(c)) return 'eval/Function/atob usage'
+      if (/eval\(|new Function/.test(c)) return 'eval/Function usage'
       if (/(\\x[0-9a-fA-F]{2}){8,}/.test(c)) return 'long hex-escaped blob'
       return null
+    },
+  },
+  {
+    // split from obfuscation (r3): bare base64 decode is common in legit code —
+    // suspicious as a signal, not execution-capable on its own
+    id: 'base64-blob', sev: 'medium',
+    test: (_p, c) => {
+      if (c == null) return null
+      const m = c.match(/atob\(|Buffer\.from\(['"][A-Za-z0-9+/=]{200,}/)
+      return m ? `base64 payload decode: ${m[0].slice(0, 40)}` : null
     },
   },
   {

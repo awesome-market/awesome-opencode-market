@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { fetchRepoMeta, fetchMarketMeta, repoFileExists } from '../pipeline/fetch/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
 import { run, replacementOf } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const mkRes = (body: unknown, status = 200) =>
@@ -17,7 +18,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
   metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
-  capabilities: { scannedAt: 't', rulesetVersion: 'r2', findings: [], redFlags: [] },
+  capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',
   ...over,

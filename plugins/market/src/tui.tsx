@@ -3,24 +3,26 @@
  * Opens via ctx.ui.dialog (same as other plugins), not a full route page.
  * Keys: 1-7 tabs · / search · f filter · c category · arrows/hjkl 2D grid
  * nav · enter detail · i install · u uninstall (native confirm) ·
- * * favorite · g group · n note · esc back/close. Mouse: hover selects,
+ * * favorite · esc back/close. Mouse: hover selects,
  * click opens detail.
  */
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, sanitizeState, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { dedupeToSpec, removeSpec } from './spec.js'
-import { installSkillTar, uninstallSkillDir, globalSkillsRoot } from './skill-install.js'
+import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
-const TABS: readonly (readonly [Tab, string])[] = [
-  ['discover', '发现'], ['plugins', '插件'], ['skills', '技能'],
-  ['favorites', '收藏'], ['installed', '我的插件'], ['mySkills', '我的技能'], ['settings', '设置'],
+// labels go through t() — must be functions, not module consts, or they'd
+// freeze at import-time language
+const TABS = (): readonly (readonly [Tab, string])[] => [
+  ['discover', t('tabDiscover')], ['plugins', t('tabPlugins')], ['skills', t('tabSkills')],
+  ['favorites', t('tabFavorites')], ['installed', t('tabInstalled')], ['mySkills', t('tabMySkills')], ['settings', t('tabAdvanced')],
 ]
-const SORTS = [['downloads', '按 npm 下载量'], ['stars', '按 Star'], ['name', '按名称'], ['verified', '按验证状态']] as const
-const RANGES = [[0, '全部时间'], [1, '1 天内'], [7, '7 天内'], [30, '30 天内'], [90, '90 天内'], [365, '1 年内']] as const
+const SORTS = () => [['downloads', t('sortDownloads')], ['stars', t('sortStars')], ['name', t('sortName')], ['verified', t('sortVerified')]] as const
+const RANGES = () => [[0, t('rangeAll')], [1, t('range1d')], [7, t('range7d')], [30, t('range30d')], [90, t('range90d')], [365, t('range1y')]] as const
 const CATALOG_URL = 'https://terry2010.github.io/opencode-market-spike/skills/'
 // per-user debug log (not a predictable world-writable /tmp path) — resolved
 // lazily; the label falls back to the display form until the real path is in
@@ -99,6 +101,7 @@ export default Plugin.define({
         setInstalled(map)
       }
       onMount(() => {
+        setLangMode(store.lang ?? 'auto')
         fetchIndexCached().then(setIdx, e => setIdxErr(String(e)))
         void refreshInstalled()
         if (searchOn()) setTimeout(() => searchInput?.focus(), 50)
@@ -160,7 +163,7 @@ export default Plugin.define({
         const isSkill = e.contains?.includes('skill')
         log(`install start ${e.name} skill=${isSkill}`)
         if (isSkill) { void installSkill(e); return }
-        setStatus(`installing ${e.name}…`)
+        setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
         // pin to the catalog-approved version — `plugin add` accepts name@ver
@@ -180,7 +183,7 @@ export default Plugin.define({
           d.plugins = dedupeToSpec(list, pin)
           await writeJsonAtomic(cfg, d)
         }
-        if (updating) setStatus(`updating ${e.name} → ${e.latestVersion ?? '?'}…`)
+        if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
         jobs.set(e.name, p)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
@@ -189,46 +192,51 @@ export default Plugin.define({
           jobs.delete(e.name)
           if (code === 0) {
             void afterAdd().then(() => {
-              setStatus(updating ? `updated ${e.name}` : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
+              setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
               void refreshInstalled()
-            }).catch(x => setStatus(`update fail: ${String(x)}`))
+            }).catch(x => setStatus(tf('updateFail', { err: String(x) })))
           }
-          else { setStatus(`${e.name} install failed (exit ${code}) — 再按 i 重试`); log(`install fail ${e.name}: exit ${code}`) }
+          else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`) }
         })
-        p.on('error', x => { jobs.delete(e.name); setStatus(`install throw: ${x.message} — 再按 i 重试`); log(`install throw ${e.name}: ${x}`) })
+        p.on('error', x => { jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`) })
       }
       const installSkill = async (e: MarketEntry) => {
         try {
-          setStatus(`installing ${e.name}…`)
+          setStatus(tf('installingN', { name: e.name }))
           // pin to the catalog-approved version — dist-tags.latest is the
           // pendingUpdate users are NOT allowed to get yet (hold semantics)
           if (!e.latestVersion) throw new Error('no approved version to install')
           const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { versions: Record<string, { dist: { tarball: string } }> }
           const url = approvedTarballUrl(pk, e)
           if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
-          const buf = new Uint8Array(await (await fetch(url)).arrayBuffer())
+          // zip-bomb guard: refuse before buffering the whole body; the
+          // decompressed ceiling inside installSkillTar is the second wall
+          const tgz = await fetch(url)
+          const cl = Number(tgz.headers.get('content-length') ?? 0)
+          if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
+          const buf = new Uint8Array(await tgz.arrayBuffer())
           const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
           const v = e.latestVersion ?? 'local'
           await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
           setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
           setStatus(`${e.name} ${t('installed')} (${msg})`)
-        } catch (x) { setStatus(`install fail ${e.name}: ${String(x)} — 再按 i 重试`); log(`install fail ${e.name}: ${String(x)}`) }
+        } catch (x) { setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`) }
       }
       const uninstall = (e: MarketEntry) =>
         openMenu(`${e.name} — ${t('confirmUninstall')}`, [
           { label: `✗ ${t('uninstall')}`, run: () => void doUninstall(e) },
-          { label: '取消', run: noop },
+          { label: t('cancel'), run: noop },
         ])
       const doUninstall = async (e: MarketEntry) => {
         const isSkill = e.contains?.includes('skill')
         log(`uninstall ${e.name}`)
         if (isSkill) {
-          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(`uninstall fail: ${String(x)} — 重试按 u`); return }
+          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
           const base = `__skill_${skillId(e.name)}`
           const next = { ...installed() }
           for (const k of Object.keys(next)) if (k === e.name || k === base || k.startsWith(`${base}-`)) delete next[k]
           await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
-          setInstalled(next); setStatus(`${e.name} removed`)
+          setInstalled(next); setStatus(tf('removedN', { name: e.name }))
         } else {
           // rewrite config plugins[] directly — CLI `plugin remove` takes a
           // spec, not the catalog name, and silently misses pinned specs
@@ -241,19 +249,14 @@ export default Plugin.define({
             const list = strArrayField(d, 'plugins')
             d.plugins = removeSpec(list, e.name)
             await writeJsonAtomic(cfg, d)
-          } catch (x) { setStatus(`uninstall fail: ${String(x)} — 重试按 u`); return }
+          } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
           const next = { ...installed() }; delete next[e.name]
-          setInstalled(next); setStatus(`${e.name} removed`)
+          setInstalled(next); setStatus(tf('removedN', { name: e.name }))
         }
       }
       const toggleFav = (e: MarketEntry) =>
         void mutate(d => { if (d.favorites[e.name]) delete d.favorites[e.name]; else d.favorites[e.name] = true })
-      const editGroup = (e: MarketEntry) =>
-        openPrompt(t('group'), store.groups[e.name] ?? '', v =>
-          void mutate(d => { if (v) d.groups[e.name] = v; else delete d.groups[e.name] }))
-      const editNote = (e: MarketEntry) =>
-        openPrompt(t('note'), store.notes[e.name] ?? '', v =>
-          void mutate(d => { if (v) d.notes[e.name] = v; else delete d.notes[e.name] }))
+
       // host dialogs are a single slot — dialog.select/confirm/prompt would
       // replace (and on close, destroy) the market dialog. Inline overlays
       // keep the market mounted under a floating panel instead.
@@ -271,49 +274,56 @@ export default Plugin.define({
         if (v !== null && p) p.done(v)
       }
       const pickCategory = () =>
-        openMenu('分类', [{ label: '全部', run: () => setCat('') },
-          ...cats().map(c => ({ label: c, run: () => toggleCat(c) }))])
+        openMenu(t('cat'), [{ label: t('all'), run: () => setCat('') },
+          ...cats().map(c => ({ label: catLabel(c), run: () => toggleCat(c) }))])
       const pickFilter = () =>
-        openMenu('筛选', [
-          ...SORTS.map(([k, label]) => ({ label: `${sortKey() === k ? '✓ ' : ''}${label}`, run: () => setSortKey(k) })),
-          { label: `${asc() ? '✓ ' : ''}升序`, run: () => setAsc(!asc()) },
-          ...RANGES.map(([d, label]) => ({ label: `${days() === d ? '✓ ' : ''}${label}`, run: () => setDays(d) })),
+        openMenu(t('filter'), [
+          ...SORTS().map(([k, label]) => ({ label: `${sortKey() === k ? '✓ ' : ''}${label}`, run: () => setSortKey(k) })),
+          { label: `${asc() ? '✓ ' : ''}${t('sortAsc')}`, run: () => setAsc(!asc()) },
+          ...RANGES().map(([d, label]) => ({ label: `${days() === d ? '✓ ' : ''}${label}`, run: () => setDays(d) })),
         ])
 
+      const langLabel = () => store.lang === 'zh' ? t('langZh') : store.lang === 'en' ? t('langEn') : t('langAuto')
+      const setLang = (m: 'auto' | 'zh' | 'en') => { void mutate(d => { d.lang = m }); setLangMode(m) }
       const settingsItems = createMemo<{ label: string; run: () => void }[]>(() => [
-        { label: '导出备份 → ~/opencode-market-backup.json', run: () => void (async () => {
+        { label: `${t('lang')}: [${langLabel()}]`, run: () => openMenu(t('lang'), [
+          { label: t('langAuto'), run: () => setLang('auto') },
+          { label: t('langZh'), run: () => setLang('zh') },
+          { label: t('langEn'), run: () => setLang('en') },
+        ]) },
+        { label: t('exportBackupTui'), run: () => void (async () => {
           const { homedir } = await import('node:os')
           const { join } = await import('node:path')
           const fs = await import('node:fs')
           const p = join(homedir(), 'opencode-market-backup.json')
-          try { fs.writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(`export fail: ${String(x)}`) }
+          try { fs.writeFileSync(p, JSON.stringify(store, null, 2)); setStatus(`exported → ${p}`) } catch (x) { setStatus(tf('exportFail', { err: String(x) })) }
         })() },
-        { label: '恢复（输入备份文件路径）', run: () => openPrompt('恢复', '~/opencode-market-backup.json', async v => {
+        { label: t('restoreTui'), run: () => openPrompt(t('restorePrompt'), '~/opencode-market-backup.json', async v => {
           if (!v) return
           try {
             const { readFileSync } = await import('node:fs')
             const { homedir } = await import('node:os')
             // field-shape validation — a crafted backup file must not corrupt state
             const d = sanitizeState(JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as unknown) as MarketState
-            void mutate(x => { Object.assign(x, { favorites: d.favorites, groups: d.groups, notes: d.notes, skillVers: d.skillVers }) })
-            setStatus('restored')
-          } catch (x) { setStatus(`restore fail: ${String(x)} — 检查备份文件后重试` ) }
+            void mutate(x => { Object.assign(x, { favorites: d.favorites, skillVers: d.skillVers }) })
+            setStatus(t('restored'))
+          } catch (x) { setStatus(tf('restoreFail', { err: String(x) })) }
         }) },
-        { label: '清空数据（收藏/分组/备注）', run: () => openMenu('清空数据 — 不可撤销，确认？', [
-          { label: '✗ 清空', run: () => void mutate(d => { d.favorites = {}; d.groups = {}; d.notes = {}; d.skillVers = {} }) },
-          { label: '取消', run: noop },
+        { label: t('clearDataTui'), run: () => openMenu(t('confirmClearTui'), [
+          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {} }) },
+          { label: t('cancel'), run: noop },
         ]) },
-        { label: `开发日志: [${store.devlog ? '开' : '关'}]（${LOG_FILE}）`, run: () => {
+        { label: `${t('devlogTui')}: [${store.devlog ? t('devlogOn') : t('devlogOff')}]（${LOG_FILE}）`, run: () => {
           void mutate(d => { d.devlog = !d.devlog })
           setStatus(`devlog ${store.devlog ? 'off' : 'on'} → ${LOG_FILE}`)
         } },
-        { label: '查看日志', run: () => void (async () => {
+        { label: t('viewLogs'), run: () => void (async () => {
           const { existsSync, readFileSync } = await import('node:fs')
           const p = await marketLogPath()
-          const tail = existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').slice(-15) : ['(empty)']
-          openMenu('开发日志（esc 关闭）', tail.map(line => ({ label: line, run: noop })))
+          const tail = existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').slice(-15) : [t('noLogs')]
+          openMenu(t('devlogMenu'), tail.map(line => ({ label: line, run: noop })))
         })() },
-        { label: `使用 HTTP catalog 源`, run: () => void (async () => {
+        { label: t('useHttpCatalog'), run: () => void (async () => {
           const { homedir } = await import('node:os')
           const { join } = await import('node:path')
           const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
@@ -321,16 +331,16 @@ export default Plugin.define({
             const d = await readJson(cfg)
             const list = strArrayField(d, 'skills')
             if (!list.includes(CATALOG_URL)) await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
-            setStatus(`catalog source ${list.includes(CATALOG_URL) ? 'already enabled' : 'enabled'} — ${t('restartNeeded')}`)
-          } catch (x) { setStatus(`catalog fail: ${String(x)} — 检查 ${cfg} 后重试`) }
+            setStatus(`catalog source ${list.includes(CATALOG_URL) ? t('catalogAlready') : t('catalogEnabled')} — ${t('restartNeeded')}`)
+          } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
       ])
 
       const actionLabel = (e: MarketEntry) => {
         const ver = verOf(e)
         if (ver && !hasUpdate(e, ver)) return `✓ ${t('installed')}`
-        if (ver) return `update → v${e.latestVersion}`
-        return 'add'
+        if (ver) return `${t('update')} → v${e.latestVersion}`
+        return t('add')
       }
       const badge = (e: MarketEntry) => {
         if (installed()[e.name] || skillInstalledVer(installed(), e.name)) return `[${t('installed')}]`
@@ -345,8 +355,8 @@ export default Plugin.define({
       const move = (d: number) => setSel(i => Math.max(0, Math.min(pool().length - 1, i + d)))
       const updateAll = () => {
         const targets = (idx()?.plugins ?? []).filter(e => { const v = verOf(e); return v && hasUpdate(e, v) })
-        if (!targets.length) { setStatus('全部已是最新'); return }
-        setStatus(`更新 ${targets.length} 项…`)
+        if (!targets.length) { setStatus(t('allLatest')); return }
+        setStatus(tf('updateN', { n: targets.length }))
         targets.forEach(install)
       }
 
@@ -360,7 +370,7 @@ export default Plugin.define({
       // rows: 0 全部更新 | 1 tabs | 2 search+filter | 3 'c'+chips — enter from grid lands on chips
       const chromeItems = (row = chromeRow()) =>
         row === 0 ? ['updateAll'] as const :
-        row === 1 ? TABS.map(t => `tab:${t[0]}` as const) :
+        row === 1 ? TABS().map(t => `tab:${t[0]}` as const) :
         row === 2 ? ['search', 'filter'] as const :
         ['cat', ...cats().slice(0, 6).map(c => `chip:${c}`)]
       const chromeGo = (d: number) =>
@@ -370,14 +380,14 @@ export default Plugin.define({
       const chromeRun = () => {
         const item = chromeItems()[chromeSel()]
         if (!item) return
-        if (item.startsWith('tab:')) { toTab(TABS.findIndex(([id]) => id === item.slice(4))); return }
+        if (item.startsWith('tab:')) { toTab(TABS().findIndex(([id]) => id === item.slice(4))); return }
         if (item === 'updateAll') { updateAll(); return }
         if (item === 'search') { setSearchOn(true); searchInput?.focus(); return }
         if (item === 'filter') { pickFilter(); return }
         if (item === 'cat') { pickCategory(); return }
         if (item.startsWith('chip:')) toggleCat(item.slice(5))
       }
-      const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
+      const toTab = (i: number) => { setTab(TABS()[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
       const act = (k: string): void => {
         if (prompt()) {
           if (k === 'escape' || k === 'q') { closePrompt(null); return }
@@ -422,7 +432,7 @@ export default Plugin.define({
             return
           }
           if (k === 'return') { chromeRun(); return }
-          if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
+          if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }
           return
         }
         if (k === 'up' || k === 'k') {
@@ -457,15 +467,14 @@ export default Plugin.define({
         if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) install(e); return }
         if (k === 'u') { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e); return }
         if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }
-        if (k === 'g') { const e = detail() ?? pick(); if (e) editGroup(e); return }
-        if (k === 'n') { const e = detail() ?? pick(); if (e) editNote(e); return }
+
         if (k === 'x') { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()); return }
         if (k === 'r') { setIdxErr(''); fetchIndexCached().then(setIdx, e => setIdxErr(String(e))); void refreshInstalled(); return }
         if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
-        if (k === 'tab') { toTab((TABS.findIndex(([id]) => id === tab()) + 1) % TABS.length); return }
+        if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }
         const d = Number(k)
-        if (d >= 1 && d <= TABS.length) toTab(d - 1)
+        if (d >= 1 && d <= TABS().length) toTab(d - 1)
       }
       const BINDS = 'escape up down left right return tab backspace delete space pageup pagedown ' +
         'a b c d e f g h i j k l m n o p q r s t u v w x y z ' +
@@ -525,8 +534,8 @@ export default Plugin.define({
               </box>
             </box>
             <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
-            <For each={wrap2(e.description?.en ?? '', descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
-            <text fg={theme.text.faint}>{categoriesOf(e).join('  ')}</text>
+            <For each={wrap2(descOf(e), descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
+            <text fg={theme.text.faint}>{categoriesOf(e).map(catLabel).join('  ')}</text>
           </box>
         )
       }
@@ -542,11 +551,11 @@ export default Plugin.define({
               <box backgroundColor={chromeFocused(0, 0) ? theme.background.action.primary.focused : undefined}>
                 <text fg={chromeFocused(0, 0) ? theme.text.action.primary.focused : theme.text.muted}
                       onMouseOver={() => { setZone('chrome'); setChromeRow(0); setChromeSel(0) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); updateAll() }}>[U] 全部更新</text>
+                      onMouseDown={(ev) => { ev.stopPropagation(); updateAll() }}>[U] {t('updateAll')}</text>
               </box>
             </box>
             <box flexDirection="row" paddingLeft={1}>
-              <For each={TABS}>{([id, label], i) => (
+              <For each={TABS()}>{([id, label], i) => (
                 <box backgroundColor={chromeFocused(1, i()) ? theme.background.action.primary.focused : undefined}>
                   <text fg={chromeFocused(1, i()) ? theme.text.action.primary.focused : id === tab() ? theme.text.base : theme.text.faint}
                         onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(i()) }}
@@ -576,7 +585,7 @@ export default Plugin.define({
                 <box backgroundColor={chromeFocused(2, 1) ? theme.background.action.primary.focused : undefined}>
                   <text fg={chromeFocused(2, 1) ? theme.text.action.primary.focused : theme.text.muted}
                         onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(1) }}
-                        onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]筛选 {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                        onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]{t('filter')} {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
                 </box>
               </box>
               <box flexDirection="row" paddingLeft={1}>
@@ -585,7 +594,7 @@ export default Plugin.define({
                         onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(0) }}
                         onMouseDown={(ev) => { ev.stopPropagation(); pickCategory() }}>[c] </text>
                 </box>
-                <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>全部({pool().length}) </text>
+                <text fg={!cat() ? theme.text.base : theme.text.muted} onMouseDown={() => setCat('')}>{tf('allN', { n: pool().length })} </text>
                 <For each={cats().slice(0, 6)}>{(c, i) => (
                   <box backgroundColor={chromeFocused(3, 1 + i()) ? theme.background.action.primary.focused : undefined}>
                     <text fg={chromeFocused(3, 1 + i()) ? theme.text.action.primary.focused : cat() === c ? theme.text.base : theme.text.muted}
@@ -601,7 +610,7 @@ export default Plugin.define({
             fallback={
               tab() === 'settings'
                 ? <box flexDirection="column" paddingLeft={1} flexGrow={1} minHeight={Math.max(6, dims().height - 10)}>
-                    <text fg={theme.text.base}><b>设置</b></text>
+                    <text fg={theme.text.base}><b>{t('tabAdvanced')}</b></text>
                     <box height={1} />
                     <For each={settingsItems()}>{(item, i) => (
                       <box backgroundColor={i() === settingsSel() && zone() === 'grid' ? theme.background.action.primary.focused : undefined}>
@@ -614,7 +623,7 @@ export default Plugin.define({
                     )}</For>
                   </box>
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
-                    <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()} — 按 r 重试</text></Show>
+                    <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()} — {tf('retryKey', { key: 'r' })}</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
                     <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}
                                onMouseDown={(ev) => ev.stopPropagation()}
@@ -641,16 +650,15 @@ export default Plugin.define({
                       <box flexGrow={1} />
                       <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
                     </box>
-                    <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : '', categoriesOf(e).join(' ')].filter(Boolean).join(' · ')}</text>
+                    <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
                     <box height={1} />
                     <text fg={theme.text.base}>{e.description?.en ?? ''}</text>
                     <Show when={e.description?.zh}><text fg={theme.text.muted}>{e.description?.zh}</text></Show>
                     <box height={1} />
-                    <text fg={theme.text.muted}>{t('group')}: {store.groups[e.name] || '—'}   {t('note')}: {store.notes[e.name] || '—'}</text>
-                    <text fg={theme.text.base}>[i] install/update   [u] {t('uninstall')}   [*] {t('favorites')}   [g] {t('group')}   [n] {t('note')}</text>
+                    <text fg={theme.text.base}>[i] {t('add')}/{t('update')}   [u] {t('uninstall')}   [*] {t('favorites')}</text>
                     <Show when={caps?.redFlags?.length}>
                       <box height={1} />
-                      <text fg={theme.text.base}>{t('redFlags')} ({caps!.redFlags.length}){!findingsOpen() ? '  [x] 展开' : ''}</text>
+                      <text fg={theme.text.base}>{t('redFlags')} ({caps!.redFlags.length}){!findingsOpen() ? `  [x] ${t('expand')}` : ''}</text>
                       <Show when={findingsOpen()}><For each={caps!.redFlags}>{(f) => <text fg={theme.text.muted}>  ! {f}</text>}</For></Show>
                     </Show>
                     <Show when={findingsOpen() && caps?.findings.length}>
@@ -667,7 +675,7 @@ export default Plugin.define({
           </Show>
           <box flexDirection="row" paddingLeft={1} flexShrink={0}>
             <text fg={theme.text.muted}>
-              {status() || '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · 1-7/tab 切页 · esc 返回'}
+              {status() || t('keysHint')}
             </text>
           </box>
           <Show when={menu()}>{(m) => (
@@ -692,7 +700,7 @@ export default Plugin.define({
                  onMouseDown={(ev) => ev.stopPropagation()}
                  border={['top', 'right', 'bottom', 'left']} borderColor={theme.border.base}
                  backgroundColor={theme.background.base} paddingLeft={1} paddingRight={1}>
-              <text fg={theme.text.base}><b>{p().title}</b>  (enter 确认 · esc 取消)</text>
+              <text fg={theme.text.base}><b>{p().title}</b>  ({t('confirmEnter')})</text>
               <text fg={theme.text.base}>{promptVal()}▌</text>
             </box>
           )}</Show>
