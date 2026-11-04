@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, type PluginEntry } from '../../src/schema.ts'
-import { loadVerdicts } from '../verdicts.ts'
+import { loadVerdicts, latestVerdicts, vkey } from '../verdicts.ts'
 import { verifyTargetOf } from '../verify/plan.ts'
 
 export interface DigestInput {
@@ -43,6 +43,24 @@ export function renderDigest({ index, verdicts, lastDigestAt, now }: DigestInput
     return v.status === 'failed' && Number.isFinite(Date.parse(v.verifiedAt ?? '')) && Date.parse(v.verifiedAt!) >= weekAgo
   }).length
   const oldestWait = queue
+    .map(e => e.pendingUpdate?.heldAt ?? e.firstSeenAt)
+    .filter((d): d is string => Number.isFinite(Date.parse(d ?? '')))
+    .sort()[0]
+
+  // review backlog (D-7): held versions with NO verdict yet — the diagnose
+  // queue made visible. A stalled local LLM shows up here long before the
+  // 48h watchdog trips. Mirrors unreviewedTargets' version predicate.
+  const latest = latestVerdicts(verdicts)
+  const pendingReview = index.plugins.filter(e => {
+    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
+    return !!ver && !latest.has(vkey(e.name, ver))
+  })
+  const dayAgo = now.getTime() - 86_400_000
+  const freshDay = verdicts.filter(v => {
+    const t = Date.parse(v.at)
+    return Number.isFinite(t) && t > dayAgo && t <= now.getTime()
+  }).length
+  const oldestReview = pendingReview
     .map(e => e.pendingUpdate?.heldAt ?? e.firstSeenAt)
     .filter((d): d is string => Number.isFinite(Date.parse(d ?? '')))
     .sort()[0]
@@ -80,6 +98,10 @@ ${concerns.length ? table(concerns) : '_无_'}
 
 - 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}
 
+## ⑤ 评审积压（pending review — ${pendingReview.length}）
+
+- 待评审 ${pendingReview.length} / 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'}
+
 ---
 generated ${now.toISOString()}
 `
@@ -104,11 +126,17 @@ export async function main(args: string[] = process.argv): Promise<void> {
   const md = renderDigest({ index, verdicts, lastDigestAt, now })
   const day = now.toISOString().slice(0, 10)
   const digestPath = join(outDir, 'digest', `${day}.md`)
-  if (dry) { console.log(md); console.log(`[digest] lastDigestAt ${lastDigestAt ?? '∅'} → ${now.toISOString()}`); return }
+  // Maturity anchor = max `at` over verdicts this digest actually SAW — not
+  // `now`. A verdict pushed to the branch between our fetch and this write
+  // (local diagnose runs on another clock entirely) would otherwise carry
+  // at ≤ lastDigestAt and mature without ever appearing in a digest.
+  const nowIso = now.toISOString()
+  const anchor = verdicts.reduce((m, v) => (v.at <= nowIso && v.at > m ? v.at : m), lastDigestAt ?? '') || nowIso
+  if (dry) { console.log(md); console.log(`[digest] lastDigestAt ${lastDigestAt ?? '∅'} → ${anchor}`); return }
   mkdirSync(join(outDir, 'digest'), { recursive: true })
   writeFileSync(digestPath, md)
-  writeFileSync(statePath, JSON.stringify({ lastDigestAt: now.toISOString() }, null, 2))
-  console.log(`[digest] wrote ${digestPath}; lastDigestAt=${now.toISOString()}`)
+  writeFileSync(statePath, JSON.stringify({ lastDigestAt: anchor }, null, 2))
+  console.log(`[digest] wrote ${digestPath}; lastDigestAt=${anchor}`)
 }
 
 /* v8 ignore next 4 */

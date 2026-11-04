@@ -450,27 +450,29 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - [x] `opencode plugin add name@x.y.z` 版本 spec 实测可用（v2.2.5，
       wakatime@1.3.8 / oh-my-opencode@5.1.59 验证；精确 pin 为硬底，
       `plugin update` 无法越过；升级=改写 `plugins` spec 后 resolve）
-- [ ] clean 投稿 → ingest → entry 落 `pending`，不展示不安装
-- [ ] AI pass → **上过日报后**下趟 catalog 变 `approved` 展示；
+- [x] clean 投稿 → ingest → entry 落 `pending`，不展示不安装
+- [x] AI pass → **上过日报后**下趟 catalog 变 `approved` 展示；
       未上日报的不释放；run 开头先应用成熟 verdict 再跑发现比对
-- [ ] AI concern → 立即保持 pending + reason，进人工
-- [ ] 红旗件 AI 写 concern + 草稿 reason（顺 verdict 进日报）
-- [ ] `source:ai` 的 pass 落在 redFlags 条目 → run.ts 拦截忽略；
+- [x] AI concern → 立即保持 pending + reason，进人工
+- [x] 红旗件 AI 写 concern + 草稿 reason（顺 verdict 进日报）
+- [x] `source:ai` 的 pass 落在 redFlags 条目 → run.ts 拦截忽略；
       `source:human` 的 pass 放行（走 verdict 通道留审计）
-- [ ] **release gate**：目标版 `verification.status==='verified'`
+- [x] **release gate**：目标版 `verification.status==='verified'`
       才释放；verify 未回/失败时成熟 pass 不释放（fail-closed）
-- [ ] 同 `name@version` 多 verdict 取最新；concern 落展示版 →
+- [x] 同 `name@version` 多 verdict 取最新；concern 落展示版 →
       approval 打回 pending 撤下（人工刹车）
-- [ ] verdict 记录带 `sha`；同 sha re-tag 复用判词
-- [ ] 版本 bump → pendingUpdate 挂起，展示字段钉旧版；pass 后升级
-- [ ] 挂起版不重复全量扫；rollback 检测不误报；sec-delta 归
+- [x] verdict 记录带 `sha`；同 sha re-tag 复用判词
+      （`integrityOf` 查 dist.integrity；同版本 sha 漂移自动重审）
+- [x] 版本 bump → pendingUpdate 挂起，展示字段钉旧版；pass 后升级
+- [x] 挂起版不重复全量扫；rollback 检测不误报；sec-delta 归
       pendingUpdate、身份级 flag 留展示层
-- [ ] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 只降级
+- [x] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 只降级
       物料，不降 release 门槛）
-- [ ] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
+- [x] verify-failed → 直接写 concern 带 verify 摘要，不调 LLM
+- [x] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
 - [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
       `plugins` spec → reload；**列表/搜索/详情过滤 pending**
-- [ ] 人批准按 npm view 解析当下版本落 verdict（含预批准）
-- [ ] 日报三节齐全；非投稿条目可在日报 issue `/approve <name>`
-- [ ] 存量条目 `approval: legacy` 正常展示
-- [ ] 断网时段静默，恢复补跑
+- [x] 人批准按 npm view 解析当下版本落 verdict（含预批准）
+- [x] 日报三节齐全；非投稿条目可在日报 issue `/approve <name>`
+- [x] 存量条目 `approval: legacy` 正常展示
+- [x] 断网时段静默，恢复补跑

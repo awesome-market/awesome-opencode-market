@@ -442,3 +442,20 @@ Pipeline/CI 安全：
 | V-8 merge 在 verify.yml 里顺带重建+发布 site，与 catalog.yml site job 双发布者 | ✅ | site 发布抽成独立 `site.yml`（唯一 Pages 发布者，bot push 不触发 `on:push` 故走 dispatch）；catalog publish 与 verify merge 推送后 `gh workflow run site.yml`（各加 `actions:write`，merge 去掉 pages/id-token）——验证标签即时上站且不再双写 |
 
 **验证**：typecheck 0 错；500 tests 全过；branches 90.62%。`RESULTS_HMAC` secret 未使用——uid 隔离后 secret 前提不成立，已可删除。
+
+## 附七：AI 诊断链审计（D-1…D-8）
+
+`bin/ai-diagnose.sh`（launchd 每小时）→ `diagnose.ts`（sha复用→verify短路→L0.5→ornith）→ ai-verdicts.jsonl → `applyMatureVerdicts`。
+
+|---|---|---|
+| D-1 omlx 死透烧满 45min 预算（每候选 5min 超时串行） | ✅ | `omlxAlive` 探活：main 在 LLM 候选存在时先 `GET /models`（任何 HTTP 响应算活，连接失败才算死）；死 → 免费 verdict（sha复用/verify短路）照写、LLM 候选留 held、flagged/L0.5 兜底 concern 照出 |
+| D-2 drift 检查每条 pending 已判条目一次 `npm view` 且 works 重复查 | ✅ 部分 | `shaFor` 缓存：drift sweep 与 works 共享 `name\0ver` 单查（消除重复）；保留同步 `integrityOf` 实现（并行 WIP 已定其 API+测试契约），批量 fetch 留作后续 |
+| D-3 恒败候选每小时白烧一次 LLM 无上限 | ✅ | `--state` 持久化连续失败计数（本地文件，不进共享 schema）；真实 LLM 失败才计数（探活跳过不算）；≥5 次 → 写「工具故障非安全结论」concern（停止烧 token + 人类可见 + `--force` 可重审）；成功清零 |
+| D-4 launchd 不防重入 + 日志无轮转 | ✅ | `mkdir` 原子锁（macOS 无 flock）+ 拿锁后立即挂 EXIT trap（早退不死锁）；日志 >5MB 截尾 1MB |
+| D-5 `integrityOf` 失败 → verdict 裸奔无 drift 保护 | 部分 | registry 抖动概率低且 npm 重发本就罕见——维持「降级不阻塞」，D-2 的 dedup 顺带降了失败面 |
+| D-6 `--limit` 默认 Infinity 会把全积压塞进 LLM | ✅ | 默认改 50（与脚本一致） |
+| D-7 诊断积压无观测面（watchdog 只管死活不管快慢） | ✅ | digest「⑤ 评审积压」段：待评审 N / 近 24h 新判 X / 最老待审日期 |
+| D-8 heldAt 缺失 → NaN → 立即审不 defer | 确认 | fail-open 方向只浪费一次 token，安全语义不变 |
+| ⚠️ 审计中差点误报：`verify` 块跳 L0.5 看似漏掉攻击者文本 | 非问题 | logExcerpt 只在 verification failed 时有值，而 failed 走短路不到 LLM；真正含自由文本的块（manifest/finding/flag/prev-findings）全部打分 |
+
+**验证**：typecheck 0 错；508 tests 全过；branches 90.43%；新增 `test/diagnose-ops.test.ts` 8 用例。

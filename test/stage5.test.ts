@@ -112,6 +112,30 @@ describe('unreviewedTargets (diagnose candidate pick)', () => {
     const old = v({ name: 'pkg', version: '1.0.0' })
     expect(unreviewedTargets(idx([bump]), seen([old])).map(e => e.name)).toEqual(['pkg'])
   })
+  it('unverified <48h defers to the verify run; past 48h reviews anyway', () => {
+    const young = entry({ name: 'young', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
+    const old = entry({ name: 'old', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-01T00:00:00Z' })
+    const verified = entry({ name: 'done', approval: 'pending', verification: { status: 'verified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
+    const now = '2026-01-10T00:00:00Z'
+    expect(unreviewedTargets(idx([young, old, verified]), seen([]), null, { now }).map(e => e.name))
+      .toEqual(['old', 'done'])  // young unverified waits; verified never waits
+  })
+  it('NaN heldAt/firstSeenAt is treated as old (reviewable, not stuck)', () => {
+    const nan = entry({ name: 'nan', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: 'not-a-date' })
+    expect(unreviewedTargets(idx([nan]), seen([]), null, { now: '2026-01-10T00:00:00Z' })).toHaveLength(1)
+  })
+  it('targets sort oldest-held first (FIFO, not name order)', () => {
+    const z = entry({ name: 'zzz', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
+    const a = entry({ name: 'aaa', approval: 'pending', firstSeenAt: '2026-01-05T00:00:00Z' })
+    expect(unreviewedTargets(idx([a, z]), seen([])).map(e => e.name)).toEqual(['zzz', 'aaa'])
+  })
+  it('force re-reviews a verdicted target', () => {
+    const pend = entry({ approval: 'pending' })
+    const av = v({ version: '1.0.0' })
+    const s = seen([av])
+    expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']))).toEqual([])
+    expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']), { force: true })).toHaveLength(1)
+  })
 })
 
 describe('reviewMaterial', () => {

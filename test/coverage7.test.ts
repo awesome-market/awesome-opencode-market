@@ -12,12 +12,14 @@ vi.mock('node:child_process', () => ({
     execCalls.push({ cmd, args, env: opts.env, input: opts.input })
     if (cmd === 'python3') return JSON.stringify([{ id: 'a', score: 0.5 }, { id: 'b', score: 0.9 }])
     if (cmd === 'gh') return '[]'
+    if (cmd === 'npm' && args.some(a => a.includes('missing-pkg'))) throw new Error('E404')
+    if (cmd === 'npm') return 'sha512-abc\n'
     throw new Error(`unexpected exec ${cmd}`)
   },
   execFile: () => { throw new Error('unused') },
 }))
 
-import { l05Score } from '../pipeline/ai/diagnose.ts'
+import { l05Score, integrityOf } from '../pipeline/ai/diagnose.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -48,6 +50,18 @@ describe('l05Score', () => {
     const call = execCalls.find(c => c.cmd === 'python3')!
     expect(call.args[0]).toContain('l05_score.py')
     expect(JSON.parse(call.input!)).toHaveLength(2)
+  })
+})
+
+describe('integrityOf', () => {
+  it('null version → undefined (github-kind, no npm call)', () => {
+    const before = execCalls.filter(c => c.cmd === 'npm').length
+    expect(integrityOf('o/r', null)).toBeUndefined()
+    expect(execCalls.filter(c => c.cmd === 'npm').length).toBe(before)
+  })
+  it('returns trimmed dist.integrity; registry error → undefined', () => {
+    expect(integrityOf('pkg', '1.0.0')).toBe('sha512-abc')
+    expect(integrityOf('missing-pkg', '1.0.0')).toBeUndefined()
   })
 })
 

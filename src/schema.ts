@@ -149,6 +149,11 @@ export const AiVerdict = z.object({
   source: z.enum(['ai', 'human']),
   /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */
   sha: z.string().optional(),
+  /** reviewer model id (audit metadata, AI-DIAGNOSIS §5 — absent on verdicts
+   *  written without an LLM call, e.g. verify-fail short-circuit / sha reuse) */
+  model: z.string().optional(),
+  /** L0.5 classifier evidence: which model + its max score over the material */
+  l05: z.object({ model: z.string(), score: z.number() }).optional(),
 })
 export type AiVerdict = z.infer<typeof AiVerdict>
 

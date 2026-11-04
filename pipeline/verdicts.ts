@@ -9,10 +9,15 @@ import { AiVerdict, DigestState, type CatalogIndex } from '../src/schema.ts'
 export function loadVerdicts(path?: string): AiVerdict[] {
   if (!path) return []
   try {
-    return readFileSync(path, 'utf8').split('\n').map(l => l.trim()).filter(Boolean)
+    let bad = 0
+    const out = readFileSync(path, 'utf8').split('\n').map(l => l.trim()).filter(Boolean)
       .flatMap(l => {
-        try { return [AiVerdict.parse(JSON.parse(l))] } catch { return [] }
+        try { return [AiVerdict.parse(JSON.parse(l))] } catch { bad++; return [] }
       })
+    // append-only audit log: a corrupt line (truncated write, merge artifact)
+    // must not silently vanish — count it so ops can notice
+    if (bad) console.warn(`[verdicts] dropped ${bad} malformed line(s) from ${path}`)
+    return out
   } catch { return [] }
 }
 

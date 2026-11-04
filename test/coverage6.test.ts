@@ -64,11 +64,13 @@ describe('ai/diagnose.main', () => {
     ['tsx', 'diagnose.ts', '--index', ip, '--verdicts', vp, '--out', op, ...extra]
   const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
 
+  const noSha = () => undefined
   it('l05 clean + ornith pass → pass verdict written', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['manifest', 0.1]]),
+      l05: () => new Map([['pkg\0manifest', 0.1]]),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('pass')
@@ -79,28 +81,32 @@ describe('ai/diagnose.main', () => {
   it('l05 flag + ornith pass → composite concern (layering wins)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['finding:x', 0.9]]),
+      l05: () => new Map([['pkg\0manifest', 0.9]]),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('concern')
     expect(got.reason).toContain('L0.5')
     expect(got.reason).toContain('没问题')
     expect(got.reasonEn).toContain('injection')
+    expect(got.l05?.score).toBe(0.9)
   })
   it('l05 throws → ornith still runs', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => { throw new Error('python gone') },
       ornith: async () => ({ verdict: 'concern', reasonZh: '可疑', reasonEn: 'sus' }),
+      sha: noSha,
     })
     expect((JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict).verdict).toBe('concern')
   })
   it('ornith fails + l05 flag → concern still written (fail-closed via L0.5)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['m', 0.99]]),
+      l05: () => new Map([['pkg\0manifest', 0.99]]),
       ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('concern')
@@ -111,8 +117,88 @@ describe('ai/diagnose.main', () => {
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => new Map(),
       ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
     })
     expect(readFileSync(op, 'utf8')).toBe('')
+  })
+  it('verify-failed → direct concern with excerpt, LLM never called', async () => {
+    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load' }, heldAt: 't' } })
+    const { ip, vp, op } = files([failed])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => new Map(),
+      ornith: async () => { called = true; throw new Error('must not be called') },
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('装测失败')
+    expect(got.reason).toContain('boom on load')
+    expect(got.model).toBeUndefined()
+    expect(called).toBe(false)
+  })
+  it('red-flagged entry → concern draft even when LLM says pass', async () => {
+    const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const { ip, vp, op } = files([flagged])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => new Map(),
+      ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('草稿')
+    expect(got.reason).toContain('没问题')
+  })
+  it('red-flagged + ornith down → still concern (fail-safe), flags as reason', async () => {
+    const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const { ip, vp, op } = files([flagged])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => new Map(),
+      ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('sec:exec:a.js')
+  })
+  it('same-sha twin verdict reused — no LLM, no L0.5', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: '之前判过', sha: 'sha512-same' })])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => { called = true; return new Map() },
+      ornith: async () => { called = true; throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.version).toBe('2.0.0')
+    expect(got.reason).toContain('复用')
+    expect(got.sha).toBe('sha512-same')
+    expect(called).toBe(false)
+  })
+  it('sha drift on a verdicted version → auto re-review', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-old' })])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => new Map(),
+      ornith: async () => ({ verdict: 'pass', reasonZh: '重审', reasonEn: 're' }),
+      sha: () => 'sha512-new',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.reason).toBe('重审')
+    expect(got.sha).toBe('sha512-new')
+  })
+  it('--budget 0 → LLM never called, candidates stay held', async () => {
+    const { ip, vp, op } = files([held])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op, ['--budget', '0']), {
+      l05: () => new Map(),
+      ornith: async () => { called = true; throw new Error('x') },
+      sha: noSha,
+    })
+    expect(readFileSync(op, 'utf8')).toBe('')
+    expect(called).toBe(false)
   })
   it('--dry prints instead of writing; --name + --limit narrow candidates', async () => {
     const other = e({ name: 'other', slug: 'o/other' })
@@ -122,6 +208,7 @@ describe('ai/diagnose.main', () => {
       await diagnoseMain(argv(ip, vp, op, ['--dry', '--name', 'pkg']), {
         l05: () => new Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+        sha: noSha,
       })
       expect(existsSync(op)).toBe(false)
       expect(log.mock.calls.flat().join(' ')).toContain('"name":"pkg"')
@@ -129,15 +216,17 @@ describe('ai/diagnose.main', () => {
       await diagnoseMain(argv(ip, vp, op, ['--limit', '1']), {
         l05: () => new Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+        sha: noSha,
       })
       expect(readFileSync(op, 'utf8').trim().split('\n')).toHaveLength(1)
     } finally { log.mockRestore() }
   })
-  it('existing verdict (any source) excludes the target', async () => {
-    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0' })])
+  it('existing verdict (any source) excludes the target; matching sha = no drift', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-x' })])
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => new Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+      sha: () => 'sha512-x',
     })
     expect(readFileSync(op, 'utf8')).toBe('')
   })
@@ -153,7 +242,9 @@ describe('ai/digest.main', () => {
     const md = readFileSync(join(d, 'digest', '2026-02-02.md'), 'utf8')
     expect(md).toContain('marketplace digest 2026-02-02')
     expect(md).toContain('pkg')
-    expect(JSON.parse(readFileSync(sp, 'utf8')).lastDigestAt).toContain('2026-02-02')
+    // anchor = max seen verdict.at (not render-time now): a verdict pushed to
+    // the branch after our fetch must never mature unannounced
+    expect(JSON.parse(readFileSync(sp, 'utf8')).lastDigestAt).toBe('2026-02-01T00:00:00Z')
   })
   it('existing state anchors the window; --dry prints without writing', async () => {
     const d = tmp('dig2-')
@@ -753,6 +844,24 @@ describe('ornithReview (mocked global fetch)', () => {
       () => ornithReview(held, [])) as { reasonZh: string; reasonEn: string }
     expect(r.reasonZh).toBe('')
     expect(r.reasonEn).toBe('')
+  })
+  it('nested JSON (signals array) parses — the old flat regex could not', async () => {
+    const r = await withFetch(
+      () => chat('{"verdict":"concern","reason_zh":"嵌套","reason_en":"nested","signals":[{"finding":"x","tp":true}]}'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('concern')
+  })
+  it('verdict buried mid-think after other braces → span scan finds it', async () => {
+    const r = await withFetch(
+      () => chat('thinking {"partial":1} hmm {"verdict":"pass","reason_zh":"可","reason_en":"ok"} done'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('pass')
+  })
+  it('code-fenced whole-body response parses', async () => {
+    const r = await withFetch(
+      () => chat('```json\n{"verdict":"concern","reason_zh":"栏","reason_en":"f"}\n```'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('concern')
   })
 })
 
