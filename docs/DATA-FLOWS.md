@@ -3,21 +3,60 @@
 > 本体 = `catalog` 分支上的数据文件；其它一切（站点、客户端、issue、workflow）都是它的投影或写入端。
 > 核心不变量：**hold 是默认态**——任何版本必须先过机械红线、云验证、AI/人工裁决、日报公示，才会变成用户可见可装的版本。
 
+```mermaid
+flowchart TB
+  subgraph SRC["数据源 / 触发"]
+    NPM[("npm registry")]
+    GH[("GitHub repos/topics")]
+    ISS["投稿 issue"]
+    HUM["人工：标签 / /approve /concern / 表单"]
+    AII["AI：L0.5 + Ornith"]
+  end
+
+  subgraph JOB["写入方（workflows / launchd）"]
+    SUB["submit.yml"]
+    CAT["catalog.yml"]
+    VER["verify.yml"]
+    DIA["ai-diagnose.sh"]
+    CON["concern.yml"]
+    DIG["publish-digest.sh"]
+    DOC["docket.yml"]
+  end
+
+  subgraph DB["catalog 分支 = 数据面"]
+    IDX[("index.json")]
+    VJ[("ai-verdicts.jsonl")]
+    SL[("submissions.txt")]
+    DS[("digest-state.json<br/>成熟度锚点")]
+    DG[("digest/*.md")]
+  end
+
+  subgraph OUT["消费面"]
+    SITE["Pages 站点"]
+    CLI["客户端插件"]
+    REV["[review] issues"]
+  end
+
+  NPM --> CAT
+  GH --> CAT
+  SL --> CAT
+  ISS --> SUB --> SL
+  IDX --> VER --> IDX
+  IDX --> DIA
+  AII --> DIA --> VJ
+  HUM --> CON --> VJ
+  VJ --> DIG --> DS
+  DIG --> DG
+  IDX --> DOC --> REV
+  VJ --> DOC
+  VJ --> CAT
+  DS --> CAT
+  CAT --> IDX
+  IDX --> SITE
+  IDX --> CLI
 ```
-投稿issue ──┐                                    ┌─ ai-diagnose.sh ─→ ai-verdicts.jsonl
-            │  submissions.txt                   │
-npm/GitHub ─┼─→ catalog.yml ──→ index.json ──────┼─→ verify.yml ────→ index.json（verification 槽）
-  发现      │  （发现+扫描+合并）                  │
-            │                                    ├─ concern/submit ─→ ai-verdicts.jsonl（人工裁决）
-            │                                    │
-            │                                    ├─ publish-digest ─→ digest/*.md + digest-state.json
-            │                                    │                         （成熟度锚点 lastDigestAt）
-            │                                    │
-            │                                    ├─ docket.yml ──────→ [review] issues ⇄ verdict 标签
-            │                                    │
-            └────────────────────────────────────┴─→ 下一次 catalog run 前置
-                                               applyMatureVerdicts → 放行/拦截 → Pages 站点 → 客户端
-```
+
+> 读法：`catalog.yml` 是心脏——每班先把 verdicts+digest-state 吃进旧 index（`applyMatureVerdicts` 放行），再发现/扫描/合并写回；`verify.yml` 只写 verification 槽；裁决全部 append-only 进 jsonl；站点和客户端只是 index 的投影。
 
 ---
 
@@ -96,6 +135,24 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 **实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r2'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
 `generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额）→ `publish`（唯一 index writer：contents+issues 写权限）→ `site`（pages+id-token）→ `alert`（失败开 `pipeline-alert` issue）。整流 `concurrency: catalog-branch`——与 verify.yml、submit ingest 共享同一把分支写锁，写者串行。
+
+```mermaid
+flowchart LR
+  A["applyMatureVerdicts<br/>(旧index+verdicts)"] --> B["发现 npm+github"]
+  B --> C["种子注入<br/>submissions.txt"]
+  C --> D["入场过滤<br/>preAdmit+spam"]
+  D --> E["排序+cap 2000"]
+  E --> F["worker ×10<br/>packument→证据<br/>→tarball 扫描"]
+  F --> G["repo 元数据<br/>SKILL 探测"]
+  G --> H["组装+hold 手术"]
+  H --> I["github-kind 补集"]
+  I --> J["gone-check<br/>墓碑"]
+  J --> K["mergeEntries<br/>+corruptionGate"]
+  K --> L[("index.json<br/>publish→catalog")]
+  L --> M["notify-published<br/>投稿通知"]
+```
+
+逐步细节：
 
 ```
 discoverNpm + discoverGithub（并行）
@@ -176,6 +233,25 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
 
 **实现**：`verify/plan.ts::verifyTargetOf/planTargets/shard`（目标+分片）· `verify/verify.ts::verifyPackage/xdgEnv/writeDummyProvider/loadedSignal`（L1/L1.5 沙箱验证）· `verify/tui.ts::checkTui/judgeTuiPane`（L2 tmux）· `verify/gui.ts::findGuiBundle/checkGuiBundle`（L3a jsdom 渲染）· `verify/merge.ts::mergeResults`（版本路由写槽）
 
+```mermaid
+flowchart LR
+  IDX[("index.json")] --> P["planTargets<br/>unverified+!flagged<br/>(手动 targets→retest)"]
+  P --> SH["shard ×12<br/>matrix"]
+  SH --> VP["verifyPackage<br/>隔离 HOME+XDG"]
+  VP --> L1["L1 install 45s"]
+  L1 --> L15["L1.5 serve<br/>POST /api/session<br/>canary 轮询"]
+  L15 --> L2["L2 tmux (tui)"]
+  L15 --> L3["L3a jsdom (gui)"]
+  L2 --> RS["results-N.json"]
+  L3 --> RS
+  RS --> M{"mergeResults<br/>version 路由"}
+  M -->|"== pendingUpdate.version"| PUS["pendingUpdate.verification"]
+  M -->|"== latestVersion / 空"| DVS["entry.verification"]
+  M -->|"两槽都不匹配"| DR["过期丢弃"]
+```
+
+逐步细节：
+
 ```
 plan job（contents:read）：
       catalog 分支取 index → targets 输入非空则按包名收窄 index
@@ -255,6 +331,17 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 
 四条通道，全部写 `source:human` verdict：
 
+```mermaid
+flowchart LR
+  C1["① [review] 标签<br/>verdict:pass/concern"]
+  C2["② [review] 评论<br/>/approve  /concern"]
+  C3["③ 任意 issue<br/>/concern pkg@ver"]
+  C4["④ [concern] 表单"]
+  C1 & C2 & C3 & C4 --> G{"守卫链<br/>collaborator 身份<br/>∧ 目标在 index<br/>∧ 版本解析+sha"}
+  G --> APP["append ai-verdicts.jsonl<br/>source:human"]
+  APP --> CLOSE["关单 + review:decided"]
+```
+
 | 通道 | 触发 | 目标解析 |
 |---|---|---|
 | ① 标签点选 | `[review]` issue 打 `verdict:pass`/`verdict:concern` | 标题 `[review] name[@ver]` |
@@ -284,6 +371,25 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 
 **实现**：`pipeline/ai/digest.ts::renderDigest`（三板块渲染）· `verdicts.ts::loadVerdicts`（容错加载）· `bin/publish-digest.sh`（clone/commit/push 重试壳）
 
+pass 从写入到放行的时序——digest 是公示环节，锚点推进才解锁成熟：
+
+```mermaid
+sequenceDiagram
+  participant AI as ai-diagnose
+  participant VJ as ai-verdicts.jsonl
+  participant DG as publish-digest
+  participant ST as digest-state.json
+  participant CAT as catalog.yml
+  AI->>VJ: append pass verdict (at=T0)
+  Note over VJ: 此刻 pass 未成熟<br/>不放行
+  DG->>VJ: 读窗口内 verdict → 日报公示
+  DG->>ST: lastDigestAt = T1 (T1>T0)
+  Note over ST: 锚点推进<br/>异议窗口开
+  CAT->>VJ: applyMatureVerdicts
+  CAT->>ST: 读 lastDigestAt
+  Note over CAT: at ≤ lastDigestAt → mature<br/>+验证releasable → 放行
+```
+
 ```
 catalog clone → digest.ts --index --verdicts --state --out-dir [--date YYYY-MM-DD 回填]
   verdicts 走 loadVerdicts（坏行跳过——一行坏 JSON 不能崩掉整份日报：它是成熟度锚点）
@@ -302,6 +408,35 @@ catalog clone → digest.ts --index --verdicts --state --out-dir [--date YYYY-MM
 ## 7. 放行流 — catalog run 前置 `applyMatureVerdicts`
 
 **实现**：`pipeline/verdicts.ts::applyMatureVerdicts`（放行判定+hold 手术在 `run.ts` worker 内联）
+
+一个版本从出生到可装的完整旅程：
+
+```mermaid
+stateDiagram-v2
+  [*] --> Held: npm 新版到达
+  note right of Held
+    已上架包 → pendingUpdate 槽
+    新包 → approval:pending
+    两种形态都不可见不可装
+  end note
+  Held --> Scanned: 机械扫描 (ruleset r2)
+  Scanned --> Skipped: redFlags>0 不上 runner
+  Scanned --> Unverified: 干净
+  Unverified --> Verified: verify.yml 实测通过
+  Unverified --> Failed: 装不上/加载失败
+  Verified --> Released: pass 且已上日报(mature)
+  Skipped --> Released: 仅人工 pass
+  Held --> Rejected: concern 立即生效
+  Rejected --> [*]
+  Released --> [*]: 成为新展示版
+  note right of Skipped
+    AI pass 落红旗=忽略 → 事实只人工能放
+    github-kind 恒在此列(无可装物)
+  end note
+  note right of Failed
+    终态——仅手动 targets+retest 可重验
+  end note
+```
 
 **hold 手术**（run.ts worker 内，新版本到达时）：
 ```
@@ -387,6 +522,24 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5）
 ## 10. 客户端消费流 — `plugins/market`
 
 **实现**：`src/catalog.ts`（fetch/sanitize/过滤/排序/搜索/pinSpec/approvedTarballUrl/i18n/localStorage 持久化）· `src/spec.ts`（cleanSpec/dedupeToSpec/removeSpec/buildExtras/featuresMap）· `src/skill-install.ts`（installSkillTar/uninstallSkillDir/globalSkillsRoot）· `src/gui.ts`（webview UI + host IPC api）· `src/tui.tsx`（终端 UI + 直接宿主调用）· `src/server.ts`（插件入口装配）
+
+```mermaid
+flowchart TB
+  IDX[("Pages index.json")] --> FE["fetchIndexCached<br/>1h TTL+快照兜底"]
+  FE --> SA["sanitizeIndex<br/>剥 ANSI/C0"]
+  SA --> VI{"isVisible"}
+  VI -->|"pending"| NO["永不进 UI/安装"]
+  VI -->|"approved/legacy"| UI["列表<br/>verified 优先·红旗沉底"]
+  UI --> AC{"用户操作"}
+  AC -->|"装插件"| PI["plugin add name@ver<br/>pinSpec 钉版"]
+  AC -->|"更新"| UP["add 钉版 + dedupeToSpec"]
+  AC -->|"卸载"| UN["removeSpec 重写 config"]
+  AC -->|"装 skill"| SI["approvedTarballUrl<br/>→ installSkillTar<br/>提升+清单+记账"]
+  PI & UP & UN --> CFG[("opencode.json<br/>plugins[]")]
+  SI --> SKD[("~/.config/opencode/skills/")]
+```
+
+逐步细节：
 
 ```
 fetchIndex(Pages index.json, 10s AbortController)
