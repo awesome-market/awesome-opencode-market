@@ -107,6 +107,9 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     if (url.includes('/-/v1/search'))
       return mkRes({ objects: alive.map(e => ({ package: { name: e.name, version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } })) })
     if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+    if (url.includes('/git/trees/')) return mkRes({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+    ] })
     if (url.includes('api.npmjs.org/downloads')) return mkRes({ downloads: 1 })
     return mkRes('{}', 404)
   }) as typeof fetch

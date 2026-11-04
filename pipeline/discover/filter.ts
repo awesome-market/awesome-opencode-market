@@ -31,6 +31,35 @@ export function looksLikeTemplateSpam(names: string[]): boolean {
   return Math.max(...dominant.values()) >= 6
 }
 
+/** GitHub-side evidence gate: a topic tag alone never admits. The repo tree
+ *  must show an opencode-specific signal AND an installable artifact.
+ *  Path-only (no content fetches) — runs after fetchRepoTree. */
+export function hasRepoEvidence(
+  paths: ReadonlySet<string>,
+  topics: readonly string[] = [],
+): { ok: boolean; via: string[] } {
+  const has = (re: RegExp) => [...paths].some(p => re.test(p))
+  const via: string[] = []
+  if (has(/^\.opencode\//)) via.push('opencode-dir')
+  if (has(/(^|\/)opencode\.jsonc?$/)) via.push('opencode-config')
+  const skillFile = has(/(^|\/)SKILL\.md$/)
+  if (skillFile) via.push('skill-file')
+  const pkg = has(/(^|\/)package\.json$/)
+  if (pkg) via.push('package')
+  const pluginArtifact = has(/^\.opencode\/(plugin|plugins|skills)\//)
+  if (pluginArtifact) via.push('opencode-artifact')
+  // generic 'opencode' topic is affiliation, not an artifact claim — only the
+  // extension-specific topics count
+  const opencodeTopic = topics.some(t => /^(opencode-plugin|opencode-skill|agent-skill)$/.test(t))
+  if (opencodeTopic) via.push('opencode-topic')
+
+  const specific = via.includes('opencode-dir') || via.includes('opencode-config')
+    || skillFile || opencodeTopic
+  // SKILL.md is itself the installable skill artifact — counts for both sides
+  const artifact = pluginArtifact || skillFile || pkg
+  return { ok: specific && artifact, via }
+}
+
 /** Evidence check post-fetch: does the package actually look like an opencode artifact? */
 export function hasPluginEvidence(pkg: {
   keywords?: string[]

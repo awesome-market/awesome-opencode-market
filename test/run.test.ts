@@ -45,6 +45,10 @@ function mkFetch(tgz: Buffer) {
       }))
     }
     if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+    // repo tree: evidence-bearing paths so github-kind candidates pass the gate
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' }, { path: 'README.md' },
+    ] }))
     if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 3, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } }))
     if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 7 }))
     if (url.includes('/contents/')) return new Response('', { status: 404 })

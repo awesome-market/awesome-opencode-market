@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { searchByKeyword, discoverNpm } from '../pipeline/discover/npm.ts'
 import { searchTopic, discoverGithub, normalizeRepoUrl, ghHeaders } from '../pipeline/discover/github.ts'
-import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence } from '../pipeline/discover/filter.ts'
+import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence } from '../pipeline/discover/filter.ts'
 
 const mkRes = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status })
@@ -88,5 +88,26 @@ describe('discover/filter', () => {
     expect(hasPluginEvidence({ main: 'x.js' }).ok).toBe(false)
     expect(hasPluginEvidence({ keywords: ['opencode'], readme: 'add to opencode.json plugin list' }).ok).toBe(true)
     expect(hasPluginEvidence({}).ok).toBe(false)
+  })
+  it('repo evidence: topic tag alone insufficient', () => {
+    const S = (...p: string[]) => new Set(p)
+    // generic 'opencode' topic + a bare package.json → just an opencode-related
+    // project, not an extension
+    expect(hasRepoEvidence(S('package.json', 'README.md'), ['opencode']).ok).toBe(false)
+    // extension-specific topic + package.json → installable plugin
+    expect(hasRepoEvidence(S('package.json'), ['opencode-plugin']).ok).toBe(true)
+    expect(hasRepoEvidence(S('package.json'), ['agent-skill']).ok).toBe(true)
+    // SKILL.md is both the specific signal and the artifact
+    expect(hasRepoEvidence(S('SKILL.md'), []).ok).toBe(true)
+    expect(hasRepoEvidence(S('skills/x/SKILL.md'), ['opencode']).ok).toBe(true)
+    // .opencode/ content + package.json → real plugin project
+    expect(hasRepoEvidence(S('.opencode/plugin/x.ts', 'package.json'), []).ok).toBe(true)
+    // .opencode/ alone without artifact → config share, not installable
+    expect(hasRepoEvidence(S('.opencode/notes.txt'), []).ok).toBe(false)
+    // opencode.json alone → project config, not an extension
+    expect(hasRepoEvidence(S('opencode.json'), []).ok).toBe(false)
+    expect(hasRepoEvidence(S('opencode.json', 'package.json'), []).ok).toBe(true)
+    // nothing at all → reject
+    expect(hasRepoEvidence(S('README.md'), []).ok).toBe(false)
   })
 })

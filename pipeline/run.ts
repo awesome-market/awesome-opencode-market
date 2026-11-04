@@ -3,9 +3,9 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
-import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence } from './discover/filter.ts'
+import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackageName } from './fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
@@ -399,38 +399,88 @@ export async function run(opts: RunOptions = {}) {
   }
 
   // 3b. github-topic candidates with no npm counterpart (D-1: ghList wiring).
-  //     Search results already carry id/stars/createdAt/license/topics — no extra
-  //     api.github.com calls needed here. fetchMarketMeta hits raw.githubusercontent
-  //     (CDN, uncounted) so it stays free even under API quota exhaustion.
+  //     Search results already carry id/stars/createdAt/license/topics — the tree
+  //     call doubles as the evidence gate, and the codeload tarball gets the same
+  //     static scan npm packages get. fetchMarketMeta/package.json hit
+  //     raw.githubusercontent (CDN, uncounted) so they stay free under API quota
+  //     exhaustion.
   const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
   const ghMissing = ghQueue.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
   for (let i = 0; i < ghMissing.length; i += BATCH) {
     const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
-      const mm = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
       const ghPrev = oldByName.get(c.fullName)
+      // incremental reuse: pushedAt unchanged + same ruleset → carry the prior
+      // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
+      if (ghPrev && c.pushedAt && ghPrev.modifiedAt === c.pushedAt
+          && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
+          && !isBlocked(c.fullName)) {
+        return ghPrev
+      }
+      // evidence gate: a topic tag alone never admits — the tree must show an
+      // opencode-specific signal AND an installable artifact.
+      const treeRes = await fetchRepoTree(c.fullName, c.defaultBranch ?? 'HEAD', { token: opts.ghToken, fetchFn: f })
+      if (treeRes.status === 'rate-limited') rateLimitedCalls++
+      if (treeRes.status === 'error' || treeRes.status === 'rate-limited') {
+        // transient failure ≠ junk — keep the old entry rather than dropping it
+        // into gone-check on a network hiccup
+        return ghPrev ?? null
+      }
+      if (!treeRes.paths) return null   // not-found/empty — gone-check decides
+      const ev = hasRepoEvidence(treeRes.paths, c.topics)
+      if (!ev.ok) return null
+      const marketMeta = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
+      const repoPkg = await fetchRepoPackage(c.fullName, { fetchFn: f })
+      // codeload needs a concrete ref — search results carry defaultBranch;
+      // submission-injected repos ('HEAD') resolve via repo meta
+      let branch = c.defaultBranch && c.defaultBranch !== 'HEAD' ? c.defaultBranch : null
+      if (!branch) {
+        const m = await fetchRepoMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
+        if (m.status === 'rate-limited') rateLimitedCalls++
+        branch = m.meta?.defaultBranch ?? null
+      }
+      let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
+      let scanFiles: string[] = []
+      if (branch) {
+        try {
+          const tgz = await fetchTarball(`https://codeload.github.com/${c.fullName}/tar.gz/${branch}`, { fetchFn: f })
+          const r = await scanTarball(tgz)
+          const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
+          scanFiles = r.files.map(strip)
+          scan = {
+            scannedAt: now,
+            rulesetVersion: RULESET_VERSION,
+            findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+            redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
+          }
+        } catch (e) {
+          console.warn(`scan failed ${c.fullName}:`, (e as Error).message)
+        }
+      }
+      const hasSkill = treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills'))
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
         aliases: [],
         type: 'plugin',
+        ...(hasSkill ? { contains: ['skill' as const] } : {}),
         discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}) },
-        description: { en: mm?.description?.en ?? c.description, ...(mm?.description?.zh ? { zh: mm.description.zh } : {}) },
-        features: [],
-        category: mm?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
+        description: { en: marketMeta?.description?.en ?? c.description, ...(marketMeta?.description?.zh ? { zh: marketMeta.description.zh } : {}) },
+        features: detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles }),
+        category: marketMeta?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
         license: c.license,
         deprecated: false,
         deprecatedMessage: null,
         replacement: null,
         createdAt: c.createdAt,
-        modifiedAt: null,
+        modifiedAt: c.pushedAt,
         maintainers: [],
         distTags: {},
-        firstSeenAt: now,
+        firstSeenAt: ghPrev?.firstSeenAt ?? now,
         latestVersion: null,
         publishedAt: null,
         metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
-        capabilities: { scannedAt: null, findings: [], redFlags: [] },
+        capabilities: scan,
         // 'skipped' is load-bearing: verdicts.ts RELEASABLE admits it as the
         // "deliberately not run" state for no-install kinds — a human pass can
         // release it. 'unverified' would freeze repo-only entries forever.
@@ -442,7 +492,7 @@ export async function run(opts: RunOptions = {}) {
       }
       return entry
     }))
-    entries.push(...batch)
+    entries.push(...batch.filter((e): e is PluginEntry => e !== null))
   }
   if (rateLimitedCalls > 0) {
     console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)

@@ -119,6 +119,34 @@ export async function fetchRepoPackageName(
   }
 }
 
+/** Repo-root package.json subset (main/exports/name) — raw CDN, no API quota. */
+export async function fetchRepoPackage(
+  fullName: string,
+  opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
+): Promise<{ pkg: { name?: string; main?: string; exports?: unknown } | null; status: RepoMetaStatus }> {
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
+  const clean = (opts.dir ?? '').replace(/^\/+|\/+$/g, '')
+  if (clean && clean.split('/').some(s => s === '..' || s === '.')) return { pkg: null, status: 'error' }
+  const dir = clean ? `${clean}/` : ''
+  try {
+    const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
+    if (res.status === 404) return { pkg: null, status: 'not-found' }
+    if (rateLimited(res)) return { pkg: null, status: 'rate-limited' }
+    if (!res.ok) return { pkg: null, status: 'error' }
+    const b = (await res.json()) as { name?: unknown; main?: unknown; exports?: unknown }
+    return {
+      pkg: {
+        ...(typeof b.name === 'string' ? { name: b.name } : {}),
+        ...(typeof b.main === 'string' ? { main: b.main } : {}),
+        ...(b.exports !== undefined ? { exports: b.exports } : {}),
+      },
+      status: 'ok',
+    }
+  } catch {
+    return { pkg: null, status: 'error' }
+  }
+}
+
 /** Probe whether a path exists in a repo (default branch). */
 export async function repoFileExists(
   fullName: string,

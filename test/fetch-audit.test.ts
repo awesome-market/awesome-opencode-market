@@ -61,6 +61,9 @@ const baseFetch = (tgz: Buffer, route?: (url: string) => Response | null) =>
       ] })
     }
     if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+    if (url.includes('/git/trees/')) return mkRes({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+    ] })
     if (url.includes('registry.npmjs.org/good-pkg')) return new Response(packument('good-pkg'))
     if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
     if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
@@ -184,6 +187,9 @@ describe('F-4 github candidates share the entry cap', () => {
     const seed = join(d, 'seed.txt')
     writeFileSync(seed, 'github:zz-seed/repo\n')
     const f = baseFetch(tgz, url => {
+      if (url.includes('/git/trees/')) return mkRes({ tree: [
+        { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+      ] })
       if (url.includes('api.github.com/search')) {
         return mkRes({ items: [
           ...Array.from({ length: 6 }, (_, i) => ({

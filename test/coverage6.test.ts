@@ -846,6 +846,9 @@ describe('run.ts remaining arms', () => {
     if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
     if (url.includes('registry.npmjs.org/')) return new Response(pack({ repository: 'https://github.com/o/good' }))
     if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+    ] }))
     if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't' }))
     if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
     return new Response('', { status: 404 })

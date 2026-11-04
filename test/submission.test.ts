@@ -165,6 +165,9 @@ describe('run: JSONL seed declared metadata', () => {
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('/git/trees/')) return mkRes({ tree: [
+        { path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' },
+      ] })
       return mkRes({}, 404)
     }) as typeof fetch
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
