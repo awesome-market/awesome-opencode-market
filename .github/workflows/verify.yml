@@ -28,7 +28,8 @@ jobs:
             require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i));
             console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)")'
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
       - id: shards
         run: |
           npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp > /tmp/plan.out
