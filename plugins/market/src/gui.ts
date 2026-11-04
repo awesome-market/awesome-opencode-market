@@ -134,22 +134,25 @@ export default Plugin.define({
     safe.index().then(i => setData(i), e => setErr(String(e)))
     safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
 
-    const filtered = () => {
+    // tab scope — shared by filtered() and the 全部(N) category chips so the
+    // count always matches what the list actually shows on every tab
+    const tabPool = (): MarketEntry[] => {
       const all = data()?.plugins ?? []
-      const c = cat(); const s = state()
-      let list = c ? all.filter(p => categoriesOf(p).includes(c)) : all
       switch (tab()) {
-        case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
-        case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
+        case 'plugins': return all.filter(p => !p.contains?.includes('skill'))
+        case 'skills': return all.filter(p => p.contains?.includes('skill'))
         case 'installed':
-          list = [...list.filter(p => installed()[p.name]),
+          return [...all.filter(p => installed()[p.name]),
             ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [], uncataloged: true } as unknown as MarketEntry))]
-          break
-        case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
-        case 'advanced': list = list.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed'); break
-        case 'discover': default: break
+        case 'mySkills': return all.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name))
+        case 'favorites': return all.filter(p => state().favorites[p.name])
+        case 'advanced': return all.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed')
+        case 'discover': default: return all
       }
-      if (favOnly()) list = list.filter(p => s.favorites[p.name])
+    }
+    const filtered = () => {
+      const c = cat(); const s = state()
+      let list = c ? tabPool().filter(p => categoriesOf(p).includes(c)) : tabPool()
       const g = groupFilter()
       if (g) list = list.filter(p => s.groups[p.name] === g)
       if (rangeDays()) list = list.filter(p => inDays(p, rangeDays()))
@@ -395,11 +398,33 @@ export default Plugin.define({
       const root = el('div', '')
       const list = el('div')
       list.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start'
+      // paged render — a filtered() change used to rebuild ~3000 cards at once;
+      // first page + auto-load on scroll (sentinel) keeps tab switches instant
+      const PAGE = 60
+      const [visible, setVisible] = createSignal(PAGE)
+      createEffect(() => { tab(); cat(); query(); sort(); sortDir(); favOnly(); groupFilter(); rangeDays(); featFilter(); setVisible(PAGE) })
       insert(list, () => {
         const items = filtered()
-        return items.length ? items.map(row) : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
+        const rows = items.slice(0, visible()).map(row)
+        if (items.length > visible()) {
+          const more = el('button', `grid-column:1/-1;padding:10px;font-size:13px;cursor:pointer;opacity:.8;background:transparent;border:1px solid rgba(128,128,128,.3);border-radius:8px;color:inherit`,
+            `${t('loadMore')} (${items.length - visible()})`) as HTMLButtonElement
+          more.onclick = () => setVisible(visible() + PAGE)
+          rows.push(more)
+        }
+        return rows.length ? rows : [el('div', 'padding:12px;opacity:.6', t('noMatch'))]
       })
+      // persistent sentinel — scrolling near the bottom appends the next page;
+      // 240px rootMargin prefetches before the edge is actually reached
+      const sentinel = el('div', 'height:1px')
+      // absent in jsdom/server-envs — the load-more button still pages manually
+      if (typeof IntersectionObserver !== 'undefined') {
+        new IntersectionObserver(
+          es => { if (es[0]?.isIntersecting && filtered().length > visible()) setVisible(visible() + PAGE) },
+          { rootMargin: '240px' }).observe(sentinel)
+      }
       root.appendChild(list)
+      root.appendChild(sentinel)
       return root
     }
 
@@ -520,12 +545,11 @@ export default Plugin.define({
       const chips = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px')
       insert(chips, () => {
         if (tab() === 'advanced') return []
-        const pool = (data()?.plugins ?? []).filter(p =>
-          tab() === 'skills' ? p.contains?.includes('skill') : !p.contains?.includes('skill'))
+        const pool = tabPool()
         const mk = (id: string, label: string) => {
           const c = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:12px;background:transparent;color:inherit', label) as HTMLButtonElement
           if (id && cat() === id) { c.style.background = '#556'; c.style.color = '#fff' }
-          c.onclick = () => setCat(id)
+          c.onclick = () => setCat(cat() === id ? '' : id)  // re-click deselects → 全部
           return c
         }
         const cats = [mk('', `全部(${pool.length})`), partChips() as unknown as HTMLButtonElement,

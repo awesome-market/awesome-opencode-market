@@ -101,7 +101,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `aliases[]` | string[] | 同名不同源去重时挂的别名 |
 | `type` | enum | `plugin|skill|agent|command|mcp|theme|bundle|rule`——分类器产出，默认 plugin |
 | `contains[]` | enum? | `plugin|skill|mcp|command|agent|hook`——repo 内容探测（SKILL.md→'skill'） |
-| `features[]` | enum? | `server|tui|gui|rpc`——exports 探测+findings；server 恒有 |
+| `features[]` | enum? | `server|tui|gui|rpc`——镜像官方 Host.resolve：`./server`或根入口(`./`.`main`/`index.*`)→server；`./tui`→tui；`./rpc`+有 server→rpc；`./gui-experimental`（无 exports 时根下 `gui-experimental.cjs/.js`）且目标 `.cjs/.js`→gui。**无保底 server**——GUI/TUI-only 包合法为空 |
 | `discoveredVia[]` | enum[] | `npm-keyword|github-topic|code-search|topic-list|submission` |
 | `source` | obj | `{kind:npm|github, id, repo?, repoId?, version?}`；repoId=GitHub 数字 id，repojacking 检测 |
 | `description` | obj | `{en, zh?}`——优先级：`.opencode-market.json` > 投稿声明 > 自动 |
@@ -176,7 +176,8 @@ discoverNpm + discoverGithub（并行）
       + fetchMarketMeta（repo 根 .opencode-market.json 作者声明）
       repo package.json ≠ 包名 → finding 'sec:repo-mismatch:<actual>'
       字段优先级：marketMeta > 投稿声明 > 自动派生（description/category）
-      detectFeatures(exports+findings)
+      detectFeatures({exports, main, files:tarball 路径})——镜像官方 Host.resolve
+      （server=./server|根入口；gui=./gui-experimental 仅 .cjs/.js；rpc 需 server 同在）
       组装 entry：approval='pending', approvalReason='awaiting-review'
       hold 手术（见 §7）
   → github-kind 补集（无 npm 对应物的 repo 候选）：

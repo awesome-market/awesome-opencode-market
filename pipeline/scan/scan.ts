@@ -14,6 +14,8 @@ export interface ScanResult {
   findings: ScanFinding[]
   redFlags: ScanFinding[]          // severity === 'high'
   fileCount: number
+  files: string[]                  // all tarball paths — conventional-name
+                                   // entrypoint resolution (Host.resolve parity)
 }
 
 const TEXT_EXT = /\.(js|mjs|cjs|ts|mts|cts|json|md|txt|yml|yaml|sh|toml)$/i
@@ -22,6 +24,7 @@ const MEDIA_EXT = /\.(png|jpe?g|gif|ico|svg|webp|avif|woff2?|ttf|otf|eot|pdf|mp4
 
 export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
   const findings: ScanFinding[] = []
+  const files: string[] = []
   let fileCount = 0
   await new Promise<void>((resolve, reject) => {
     const parser = extract({
@@ -30,6 +33,7 @@ export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
         // skip macOS AppleDouble metadata (._*) — tar artifact, not package content
         if (/(^|\/)\._/.test(entry.path)) { entry.resume(); return }
         fileCount++
+        files.push(entry.path)
         const chunks: Buffer[] = []
         entry.on('data', (c: Buffer) => chunks.push(c))
         entry.on('end', () => {
@@ -53,7 +57,7 @@ export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
     parser.on('error', reject)
     Readable.from(tgz).pipe(parser)
   })
-  return { findings, redFlags: findings.filter(f => f.severity === 'high'), fileCount }
+  return { findings, redFlags: findings.filter(f => f.severity === 'high'), fileCount, files }
 }
 
 const isPkgJson = (p: string) => /(^|\/)package\.json$/.test(p)

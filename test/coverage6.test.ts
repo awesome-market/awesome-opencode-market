@@ -1094,9 +1094,9 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(out.skills).toEqual([])
   })
   it('detectFeatures: ./tui + rpc export paths', () => {
-    expect(detectFeatures({ './tui': 'x.js' }, [])).toContain('tui')
-    expect(detectFeatures({ './gui': 'g.js' }, [])).toContain('gui')
-    expect(detectFeatures({ './rpc': 'r.js' }, [])).toContain('rpc')
+    expect(detectFeatures({ exports: { '.': './s.js', './tui': 'x.js' } })).toContain('tui')
+    expect(detectFeatures({ exports: { './gui-experimental': 'g.cjs' } })).toContain('gui')
+    expect(detectFeatures({ exports: { '.': './s.js', './rpc': 'r.js' } })).toContain('rpc')
   })
   it('backfill: fills identity fields; per-entry errors swallowed', async () => {
     const en = e({ createdAt: null, maintainers: [], source: { kind: 'npm', id: 'pkg', repo: 'o/r' } })

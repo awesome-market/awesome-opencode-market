@@ -228,10 +228,12 @@ export async function run(opts: RunOptions = {}) {
       if (isBlocked(cand.name, slug)) return
 
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
+      let scanFiles: string[] = []
       if (pk.tarballUrl) {
         try {
           const tgz = await fetchTarball(pk.tarballUrl, { fetchFn: f })
           const r = await scanTarball(tgz)
+          scanFiles = r.files
           scan = {
             scannedAt: now,
             rulesetVersion: RULESET_VERSION,
@@ -279,7 +281,7 @@ export async function run(opts: RunOptions = {}) {
           en: marketMeta?.description?.en ?? sub?.desc?.en ?? cand.description,
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
-        features: detectFeatures(pk.exports, scan.findings),
+        features: detectFeatures({ exports: pk.exports, main: pk.main, files: scanFiles }),
         category: marketMeta?.category ?? sub?.category ?? classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
@@ -377,7 +379,7 @@ export async function run(opts: RunOptions = {}) {
         discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}) },
         description: { en: mm?.description?.en ?? c.description, ...(mm?.description?.zh ? { zh: mm.description.zh } : {}) },
-        features: ['server'],
+        features: [],
         category: mm?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
         license: c.license,
         deprecated: false,

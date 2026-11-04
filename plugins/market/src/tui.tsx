@@ -58,6 +58,7 @@ export default Plugin.define({
       const [tab, setTab] = createSignal<Tab>('discover')
       const [query, setQuery] = createSignal(pendingQuery)
       const [cat, setCat] = createSignal('')
+      const toggleCat = (c: string) => setCat(cat() === c ? '' : c)  // re-select deselects → 全部
       const [sortKey, setSortKey] = createSignal<string>('verified')
       const [asc, setAsc] = createSignal(false)
       const [days, setDays] = createSignal(0)
@@ -271,7 +272,7 @@ export default Plugin.define({
       }
       const pickCategory = () =>
         openMenu('分类', [{ label: '全部', run: () => setCat('') },
-          ...cats().map(c => ({ label: c, run: () => setCat(c) }))])
+          ...cats().map(c => ({ label: c, run: () => toggleCat(c) }))])
       const pickFilter = () =>
         openMenu('筛选', [
           ...SORTS.map(([k, label]) => ({ label: `${sortKey() === k ? '✓ ' : ''}${label}`, run: () => setSortKey(k) })),
@@ -374,7 +375,7 @@ export default Plugin.define({
         if (item === 'search') { setSearchOn(true); searchInput?.focus(); return }
         if (item === 'filter') { pickFilter(); return }
         if (item === 'cat') { pickCategory(); return }
-        if (item.startsWith('chip:')) setCat(item.slice(5))
+        if (item.startsWith('chip:')) toggleCat(item.slice(5))
       }
       const toTab = (i: number) => { setTab(TABS[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
       const act = (k: string): void => {
@@ -589,7 +590,7 @@ export default Plugin.define({
                   <box backgroundColor={chromeFocused(3, 1 + i()) ? theme.background.action.primary.focused : undefined}>
                     <text fg={chromeFocused(3, 1 + i()) ? theme.text.action.primary.focused : cat() === c ? theme.text.base : theme.text.muted}
                           onMouseOver={() => { setZone('chrome'); setChromeRow(3); setChromeSel(1 + i()) }}
-                          onMouseDown={() => setCat(c)}>{c} </text>
+                          onMouseDown={() => toggleCat(c)}>{c} </text>
                   </box>
                 )}</For>
               </box>
