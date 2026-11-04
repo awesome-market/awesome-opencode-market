@@ -176,6 +176,7 @@ export interface LocalState {
   groups: Record<string, string>      // plugin name → group name
   notes: Record<string, string>       // plugin name → note
   devlog?: boolean                    // write detailed debug logs (default off)
+  lang?: LangMode                     // UI language override (default 'auto' → navigator.language)
   skillVers?: Record<string, string>  // pkg name → version installed via market (enables real update checks)
 }
 export const EMPTY_STATE: LocalState = { favorites: {}, groups: {}, notes: {} }
@@ -205,6 +206,7 @@ export function sanitizeState(x: unknown): LocalState {
   s.notes = strMap(o.notes)
   s.skillVers = strMap(o.skillVers)
   if (typeof o.devlog === 'boolean') s.devlog = o.devlog
+  if (o.lang === 'auto' || o.lang === 'zh' || o.lang === 'en') s.lang = o.lang
   return s
 }
 export function saveState(s: LocalState): void {
@@ -239,14 +241,20 @@ export function indexAge(idx: MarketIndex | null): string {
   return idx?.generatedAt ? idx.generatedAt.slice(0, 16).replace('T', ' ') : ''
 }
 
-const zh = /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
 /** Minimal i18n — zh/en user-facing strings. */
-export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'
-const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more' }
+import { createSignal } from 'solid-js'
+
+export type LangMode = 'auto' | 'zh' | 'en'
+export const [langMode, setLangMode] = createSignal<LangMode>('auto')
+const browserZh = () => /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
+const zhNow = () => langMode() === 'auto' ? browserZh() : langMode() === 'zh'
+
+export type I18nKey = 'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'allGroups'|'group'|'note'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'|'lang'|'langAuto'|'langZh'|'langEn'
+const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', allGroups: 'all groups', group: 'group', note: 'note', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English' }
 // AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
-const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多' }
+const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', allGroups: '全部分组', group: '分组', note: '备注', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English' }
 export function t(key: I18nKey): string {
-  return (zh ? ZH : EN)[key]
+  return (zhNow() ? ZH : EN)[key]
 }
 
 /** Latest-version compare for the update button. */

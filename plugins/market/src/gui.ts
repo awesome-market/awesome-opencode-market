@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, allGroups, hasUpdate, indexAge, t, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir } from './skill-install.js'
 import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
 
@@ -106,7 +106,7 @@ export default Plugin.define({
     const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
     const [rangeDays, setRangeDays] = createSignal(0)
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
-    try { setState(loadState()) } catch { /* storage unavailable */ }
+    try { const ls = loadState(); setState(ls); setLangMode(ls.lang ?? 'auto') } catch { /* storage unavailable */ }
     const devlog = () => !!state().devlog
     const log = (msg: string) => { if (devlog()) { appendLog(msg); void safe.devlog?.(msg).catch(() => {}) } }
     // keep the host-side file logger in sync with the toggle — host writes
@@ -613,6 +613,11 @@ export default Plugin.define({
       return root
     }
 
+    // remounting rebuilds the once-built chrome() too — needed when a change
+    // affects static labels (e.g. language switch); insert regions re-render
+    // on their own via signals
+    const remounts = new Map<HTMLElement, () => void>()
+
     const settingsPanel = () => {
       const root = el('div', 'padding:8px 12px;max-width:520px')
       // button-level handlers don't fire in this webview (clicks bubble to
@@ -622,7 +627,22 @@ export default Plugin.define({
         const hit = t?.tagName === 'BUTTON' && !!t.textContent?.includes('更新数据')
         void safe.devlog?.(`md root <${t?.tagName}> ${(t?.textContent ?? '').slice(0, 16)} hit=${hit}`).catch(() => {})
         if (hit) void doRefresh()
+        const lm = t?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
+        if (lm) { put({ lang: lm }); setLangMode(lm); remounts.forEach(r => r()) }
       }
+      // language picker — persisted in localStorage; remount so once-built
+      // chrome labels pick up the new mode too (body regions re-render anyway)
+      root.appendChild(el('h4', 'margin:0 0 6px;font-weight:600', t('lang')))
+      const langRow = el('div', 'display:flex;gap:6px;margin-bottom:14px')
+      const langs = [['auto', 'langAuto'], ['zh', 'langZh'], ['en', 'langEn']] as const
+      for (const [mode, key] of langs) {
+        const b = el('button', 'font-size:12px;cursor:pointer;padding:3px 12px;border-radius:6px;color:inherit;' +
+          (langMode() === mode ? 'border:1px solid rgba(128,128,128,.7);background:rgba(128,128,128,.15)' : 'border:1px solid rgba(128,128,128,.3);background:transparent'),
+          t(key)) as HTMLButtonElement
+        b.dataset.lang = mode
+        langRow.appendChild(b)
+      }
+      root.appendChild(langRow)
       const refStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:8px')
       refStatus.textContent = refText()
       const refBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-bottom:4px', '更新数据（强制刷新索引）') as HTMLButtonElement
@@ -705,6 +725,7 @@ export default Plugin.define({
         return n
       })
       parent.appendChild(shell)
+      remounts.set(parent, () => { parent.replaceChildren(); mount(parent) })
     }
 
     ctx.add(SettingsPage, {
