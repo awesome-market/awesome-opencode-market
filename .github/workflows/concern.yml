@@ -85,6 +85,11 @@ jobs:
               return at > 0 ? { name: spec.slice(0, at), ver: spec.slice(at + 1) } : { name: spec, ver: "" }
             }
             let name = "", ver = "", verdict = "", reason = ""
+            if (process.env.ISSUE_TITLE.startsWith("[submit]")) {
+              // submission issues are submit.yml's territory — /approve /concern
+              // there resolve the package from the issue body, not the command args
+              out("skip", "1"); return
+            }
             if (process.env.EVENT === "issues" && process.env.ACTION === "labeled") {
               const t = titleTarget(process.env.ISSUE_TITLE)
               if (!t) { out("skip", "1"); return }
@@ -119,8 +124,24 @@ jobs:
             out("name", name); out("ver", ver); out("verdict", verdict); out("reason", reason)
             console.log(JSON.stringify({ name, ver, verdict, reason }))
           '
-      - name: resolve version + tarball sha (npm names; blank ver → latest)
+      - name: target must exist in catalog index
         if: steps.v.outputs.skip != '1'
+        id: exists
+        env:
+          NAME: ${{ steps.v.outputs.name }}
+          ISSUE: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin catalog -q
+          git show origin/catalog:index.json > /tmp/index.json
+          if ! node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$NAME"; then
+            echo "exists=0" >> "$GITHUB_OUTPUT"
+            gh issue comment "$ISSUE" --body "⚠️ \`$NAME\` 不在 catalog 索引中——未写入 verdict。检查包名或先提交收录。" || true
+            exit 0
+          fi
+          echo "exists=1" >> "$GITHUB_OUTPUT"
+      - name: resolve version + tarball sha (npm names; blank ver → latest)
+        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         id: n
         env:
           NAME: ${{ steps.v.outputs.name }}
@@ -150,7 +171,7 @@ jobs:
           echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "target=$NAME${V:+@$V}" >> "$GITHUB_OUTPUT"
       - name: append to ai-verdicts.jsonl on catalog branch
-        if: steps.v.outputs.skip != '1'
+        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINE: ${{ steps.n.outputs.line }}
@@ -171,7 +192,7 @@ jobs:
           done
           [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
       - name: acknowledge + mark decided
-        if: steps.v.outputs.skip != '1'
+        if: steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
         uses: actions/github-script@v7
         env:
           V: ${{ steps.v.outputs.verdict }}
