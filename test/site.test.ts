@@ -30,6 +30,17 @@ describe('site honest labels', () => {
     expect(verifyLabel(mk({ verification: { status: 'failed' } })).cls).toBe('bad')
     expect(verifyLabel(mk({ verification: { status: 'skipped' } })).text).toContain('skipped')
   })
+  it('verifyLabel: github-kind skipped is not "high risk" — nothing to install', () => {
+    // github-kind entries are constructed as skipped with zero flags: there is
+    // no npm artifact to run. "skipped (high risk)" would be a lie (AGENTS.md).
+    const gh = mk({ latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'o/r' },
+      verification: { status: 'skipped', level: 'install' } })
+    expect(verifyLabel(gh).text).toBe('nothing to install')
+    expect(verifyLabel(gh).text).not.toContain('high risk')
+    // an npm entry skipped WITH red flags still reports high risk honestly
+    const flagged = mk({ verification: { status: 'skipped' }, capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] } })
+    expect(verifyLabel(flagged).text).toContain('skipped')
+  })
   it('detailPage renders honest semantics + escaped content', () => {
     const html = detailPage(mk({ description: { en: '<script>x</script>' }, source: { kind: 'npm', id: 'p', repo: 'o/p' } }))
     expect(html).toContain('&lt;script&gt;')
@@ -77,6 +88,22 @@ describe('site honest labels', () => {
     expect(existsSync(join(out, 'skills', 'sk-real', 'SKILL.md'))).toBe(true)
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
+  it('buildSkillCatalog pins the approved version — never dist-tags.latest', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { execSync } = await import('node:child_process')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# pinned')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    // approved 1.2.3 while npm latest would be a held pendingUpdate
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-pin', contains: ['skill'], latestVersion: '1.2.3' })], removed: [] }
+    const seen: string[] = []
+    buildSkillCatalog(idx, out, (spec) => { seen.push(spec); return `file://${join(src, 's.tgz')}` })
+    expect(seen).toEqual(['sk-pin@1.2.3'])
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
   it('buildSkillCatalog edge: slug fallback, version default, empty md skip', async () => {
     const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
     const { execSync } = await import('node:child_process')
@@ -87,12 +114,15 @@ describe('site honest labels', () => {
     execSync(`cd "${src}" && tar czf ok.tgz package`)
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
-      mk({ name: '', slug: 'fb-slug', contains: ['skill'], latestVersion: null }),   // id falls back to slug, version → '1'
+      mk({ name: '', slug: 'fb-slug', contains: ['skill'], latestVersion: '3' }),     // id falls back to slug
       mk({ name: 'sk-empty', contains: ['skill'] }),                                  // empty md → skipped
+      mk({ name: 'sk-nover', contains: ['skill'], latestVersion: null }),             // no approved version → skipped, never latest
     ], removed: [] }
-    buildSkillCatalog(idx, out, (n) => n === 'sk-empty' ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}`)
+    const specs: string[] = []
+    buildSkillCatalog(idx, out, (n) => { specs.push(n); return n.startsWith('sk-empty') ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}` })
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)
-    expect(cat.skills[0].version).toBe('1')
+    expect(cat.skills[0].version).toBe('3')
+    expect(specs).toEqual(['@3', 'sk-empty@1.0.0'])   // sk-nover never reached tarballOf
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })

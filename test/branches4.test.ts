@@ -40,11 +40,11 @@ describe('branch coverage round 4', () => {
       firstSeenAt: '2026-01-01', latestVersion: null, publishedAt: null,
       metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
-      verification: { status: 'verified' }, compat: {},
+      verification: { status: 'skipped' }, compat: {},
       approval: 'approved',
     }
     const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [e], removed: [] })
-    expect(html).toContain('verified (install)')
+    expect(html).toContain('nothing to install')
     expect(html).not.toContain('undefined')
   })
   it('github normalizeRepoUrl variants', () => {

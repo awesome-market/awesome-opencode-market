@@ -22,11 +22,14 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
   }
 }
 
-export function planTargets(index: CatalogIndex, cap = 48): VerifyTarget[] {
+export function planTargets(index: CatalogIndex, cap = 48, retest = false): VerifyTarget[] {
   const todo: VerifyTarget[] = []
   for (const p of index.plugins) {
     const t = verifyTargetOf(p)
-    if (!t.version || !t.unverified || t.flagged) continue
+    // retest (manual `targets` dispatch) may re-run failed/verified versions —
+    // a failed slot is otherwise terminal with no retry path. Flagged stays
+    // excluded in every mode: red-flagged code never executes here.
+    if (!t.version || t.flagged || (!t.unverified && !retest)) continue
     todo.push({ name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) })
     if (todo.length >= cap) break
   }
@@ -43,7 +46,7 @@ export function shard<T>(items: T[], size: number): T[][] {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, outDir] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
-  const targets = planTargets(index)
+  const targets = planTargets(index, 48, process.argv.includes('--retest'))
   const shards = shard(targets, 12)
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))

@@ -132,6 +132,16 @@ describe('verify/plan', () => {
     const noVer = entry({ name: 'c', latestVersion: null, verification: verf('unverified') })
     expect(planTargets(idx([verified, flagged, noVer]))).toEqual([])
   })
+  it('retest mode re-runs failed/verified but NEVER flagged targets', () => {
+    const failed = entry({ name: 'a', verification: verf('failed') })
+    const verified = entry({ name: 'b', verification: verf('verified') })
+    const flagged = entry({ name: 'c', verification: verf('failed'), capabilities: caps(['r:f']) })
+    const skipped = entry({ name: 'd', verification: verf('skipped'), capabilities: caps(['r:f']) })
+    expect(planTargets(idx([failed, verified, flagged, skipped]))).toEqual([])
+    const got = planTargets(idx([failed, verified, flagged, skipped]), 48, true)
+    expect(got.map(t => t.name)).toEqual(['a', 'b'])   // flagged targets stay out — pinned version included
+    expect(got[0]!.version).toBe('1.0.0')
+  })
   it('held flagged version is skipped (flag lives on pendingUpdate.capabilities)', () => {
     const e = entry({
       verification: verf('verified'),

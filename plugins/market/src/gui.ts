@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, allGroups, hasUpdate, indexAge, t, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir } from './skill-install.js'
 
 const Market = Ipc.define({
@@ -46,7 +46,7 @@ type Api = {
   uninstall(name: string): Promise<string>
   writeSkill(p: { name: string; b64: string }): Promise<string>
   uninstallSkill(name: string): Promise<string>
-  installSkillDir(p: { name: string; scope: 'global' | 'project' }): Promise<string>
+  installSkillDir(p: { name: string; scope: 'global' | 'project'; ver?: string }): Promise<string>
   skillSource(): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   devlog(line: string): Promise<string>
@@ -155,6 +155,9 @@ export default Plugin.define({
     }
     const statusOf = (e: MarketEntry) =>
       installed()[e.name] ? `${t('installed')} v${installed()[e.name]}`
+      // github-kind entries have no npm version — 'skipped' here means there is
+      // nothing to run, not "有高危信号没跑" (honest-label rule, AGENTS.md)
+      : e.latestVersion == null ? t('noInstallTarget')
       : t((e.verification?.status ?? 'unverified') as 'verified')
 
     // ---- dom helpers -------------------------------------------------------
@@ -250,9 +253,12 @@ export default Plugin.define({
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
         log(`install start ${e.name} skill=${isSkill}`)
         const installSkillNet = async (): Promise<string> => {
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { 'dist-tags': { latest: string }; versions: Record<string, { dist: { tarball: string } }> }
-          const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
-          if (!url) throw new Error('no tarball')
+          // pin to the catalog-approved version — dist-tags.latest is the
+          // pendingUpdate users are NOT allowed to get yet (hold semantics)
+          if (!e.latestVersion) throw new Error('no approved version to install')
+          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { versions: Record<string, { dist: { tarball: string } }> }
+          const url = approvedTarballUrl(pk, e)
+          if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
           const buf = await (await fetch(url)).arrayBuffer()
           const u8 = new Uint8Array(buf)
           let bin = ''
@@ -822,7 +828,7 @@ export default Plugin.define({
           return installSkillTar({ name: p.name, gzipped: Buffer.from(p.b64, 'base64'),
             root: join(homedir(), '.config', 'opencode', 'skills') })
         },
-        installSkillDir: (p: { name: string; scope: 'global' | 'project' }) =>
+        installSkillDir: (p: { name: string; scope: 'global' | 'project'; ver?: string }) =>
           new Promise<string>((resolve, reject) => {
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
             const { homedir } = require('node:os') as typeof import('node:os')
@@ -830,7 +836,11 @@ export default Plugin.define({
             const base = p.scope === 'project' ? join(process.cwd(), '.opencode', 'skills')
                                                  : join(homedir(), '.config', 'opencode', 'skills')
             const id = p.name.split('/').pop()!
-            const script = `mkdir -p "${base}/_dl" && cd "${base}/_dl" && T=$(npm view "${p.name}" dist.tarball 2>/dev/null) && curl -fsSL "$T" -o p.tgz && mkdir -p "${base}/${id}" && tar xzf p.tgz -C "${base}/${id}" --strip-components=1`
+            // caller pins via `ver`; unversioned still resolves npm latest —
+            // this is a manual side-channel API, catalog installs go through
+            // writeSkill which receives the approved-version tarball
+            const spec = p.ver ? `${p.name}@${p.ver}` : p.name
+            const script = `mkdir -p "${base}/_dl" && cd "${base}/_dl" && T=$(npm view "${spec}" dist.tarball 2>/dev/null) && curl -fsSL "$T" -o p.tgz && mkdir -p "${base}/${id}" && tar xzf p.tgz -C "${base}/${id}" --strip-components=1`
             execFile('sh', ['-c', script], { timeout: 45_000 }, e => e ? reject(new Error(String(e))) : resolve(`installed → ${base}/${id}`))
           }),
         skillSource: async () => {
@@ -886,8 +896,12 @@ export default Plugin.define({
             mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
             writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [name] }))
             const env = { ...process.env, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') }
-            const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null "http://127.0.0.1:$PORT/api/plugin"; sleep 1; kill $SPID 2>/dev/null; true`
-            execFile('sh', ['-c', boot], { env, cwd: home, timeout: 25_000 }, () => {
+            // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
+            // triggers the load (same fix as pipeline/verify/verify.ts), then
+            // poll the log for the canary instead of a fixed sleep (races writer)
+            const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'; for i in $(seq 1 16); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done; kill $SPID 2>/dev/null; true`
+            const logEnv = { ...env, LOG: join(home, 'data', 'opencode', 'log', 'opencode.log') }
+            execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, () => {
               const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
               const ok = existsSync(log) && new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
               resolve(ok ? 'activated' : 'not-loaded')

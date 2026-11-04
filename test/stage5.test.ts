@@ -1,8 +1,8 @@
 /** Stage-5 tests: digest rendering + maturity window + diagnose candidate pick. */
 import { describe, it, expect } from 'vitest'
 import { renderDigest } from '../pipeline/ai/digest.ts'
-import { verdictRecord, reviewMaterial } from '../pipeline/ai/diagnose.ts'
-import { applyMatureVerdicts } from '../pipeline/verdicts.ts'
+import { verdictRecord, reviewMaterial, unreviewedTargets } from '../pipeline/ai/diagnose.ts'
+import { applyMatureVerdicts, latestVerdicts } from '../pipeline/verdicts.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -70,6 +70,32 @@ describe('verdictRecord + digest maturity interplay', () => {
     const hv = v({ source: 'human' })
     const held = applyMatureVerdicts(idx([e]), [hv], '2026-01-01T00:00:00Z')
     expect(held.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
+  })
+})
+
+describe('unreviewedTargets (diagnose candidate pick)', () => {
+  const seen = (vs: AiVerdict[]) => latestVerdicts(vs)
+  it('picks never-verdicted pending entries and pendingUpdates', () => {
+    const pend = entry({ name: 'a', approval: 'pending' })
+    const bump = entry({ name: 'b', approval: 'approved', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
+    const done = entry({ name: 'c', approval: 'approved' })                    // approved, no hold → not a target
+    const targets = unreviewedTargets(idx([pend, bump, done]), seen([]))
+    expect(targets.map(e => e.name)).toEqual(['a', 'b'])
+  })
+  it('a HUMAN verdict excludes the target — AI must never overturn it', () => {
+    const bump = entry({ approval: 'approved', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
+    const hv: AiVerdict = { name: 'pkg', version: '2.0', verdict: 'concern', at: 't2', source: 'human', reason: 'no' }
+    expect(unreviewedTargets(idx([bump]), seen([hv]))).toEqual([])
+  })
+  it('an existing AI verdict also excludes (no re-review churn)', () => {
+    const pend = entry({ approval: 'pending' })
+    const av: AiVerdict = { name: 'pkg', version: '1.0.0', verdict: 'pass', at: 't1', source: 'ai' }
+    expect(unreviewedTargets(idx([pend]), seen([av]))).toEqual([])
+  })
+  it('verdict on a DIFFERENT version does not exclude the held candidate', () => {
+    const bump = entry({ approval: 'approved', latestVersion: '1.0.0', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
+    const old = v({ name: 'pkg', version: '1.0.0' })
+    expect(unreviewedTargets(idx([bump]), seen([old])).map(e => e.name)).toEqual(['pkg'])
   })
 })
 

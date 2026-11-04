@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { argv, exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
+import { loadVerdicts } from '../verdicts.ts'
 
 export interface DigestInput {
   index: CatalogIndex
@@ -72,8 +73,9 @@ async function main(): Promise<void> {
     exit('usage: --index <p> --verdicts <p> --state <p> --out-dir <d> [--date YYYY-MM-DD] [--dry]')
 
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
-  const verdicts = readFileSync(verdictsPath, 'utf8').split('\n').filter(Boolean)
-    .map(l => AiVerdict.parse(JSON.parse(l)))
+  // tolerant parse — one malformed line must not kill the whole daily digest
+  // (the digest is the maturity anchor; a crash freezes every pass verdict)
+  const verdicts = loadVerdicts(verdictsPath)
   const lastDigestAt = existsSync(statePath)
     ? (JSON.parse(readFileSync(statePath, 'utf8')) as { lastDigestAt?: string }).lastDigestAt ?? null
     : null

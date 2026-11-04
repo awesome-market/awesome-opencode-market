@@ -24,7 +24,7 @@ import { argv, exit, env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { latestVerdicts, vkey } from '../verdicts.ts'
+import { latestVerdicts, loadVerdicts, vkey } from '../verdicts.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
@@ -97,6 +97,25 @@ export function verdictRecord(
   }
 }
 
+/** Held versions that have NEVER received any verdict. Both held shapes:
+ *  pendingUpdate (newer version behind a displayed one) and approval:pending
+ *  on the entry itself (first version never released). ANY existing verdict —
+ *  ai or human — excludes the target: a human verdict IS the decision, and an
+ *  AI re-review would land a newer `at` and silently overturn it (latest
+ *  verdict wins). */
+export function unreviewedTargets(
+  index: CatalogIndex,
+  seen: Map<string, AiVerdict>,
+  names?: Set<string> | null,
+): CatalogIndex['plugins'] {
+  return index.plugins.filter(e => {
+    if (names && !names.has(e.name)) return false
+    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
+    if (!ver) return false
+    return seen.get(vkey(e.name, ver)) === undefined
+  })
+}
+
 async function main(): Promise<void> {
   const arg = (k: string) => argv[argv.indexOf(k) + 1]
   const [idxPath, verdictsPath, outPath] = ['--index', '--verdicts', '--out'].map(arg)
@@ -106,18 +125,9 @@ async function main(): Promise<void> {
   if (!idxPath || !verdictsPath || !outPath) exit('usage: --index <p> --verdicts <p> --out <p> [--limit N] [--name a,b] [--dry]')
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
-  const seen = latestVerdicts(
-    readFileSync(verdictsPath, 'utf8').split('\n').filter(Boolean)
-      .map(l => AiVerdict.parse(JSON.parse(l))))
+  const seen = latestVerdicts(loadVerdicts(verdictsPath))
 
-  const candidates = idx.plugins.filter(e => {
-    if (names && !names.has(e.name)) return false
-    // two held shapes: pendingUpdate (newer version behind a displayed one)
-    // and approval:pending on the entry itself (first version never released)
-    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
-    if (!ver) return false
-    return seen.get(vkey(e.name, ver))?.source !== 'ai' // unreviewed by AI
-  }).slice(0, limit)
+  const candidates = unreviewedTargets(idx, seen, names).slice(0, limit)
 
   console.log(`[diagnose] ${candidates.length} pending candidates`)
   const out: AiVerdict[] = []

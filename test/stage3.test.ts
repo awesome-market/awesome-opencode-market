@@ -2,7 +2,7 @@
  *  the approved version, updates rewrite the spec (never implicit latest). */
 import { describe, it, expect, vi } from 'vitest'
 import { listPage, detailPage, buildSite, approvalBadge, isVisible as siteVisible } from '../pipeline/site/build.ts'
-import { isVisible, pinSpec } from '../plugins/market/src/catalog.ts'
+import { isVisible, pinSpec, approvedTarballUrl } from '../plugins/market/src/catalog.ts'
 import { dedupeToSpec, cleanSpec } from '../plugins/market/src/spec.ts'
 import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -46,6 +46,21 @@ describe('pinSpec', () => {
   it('pinned spec survives cleanSpec round-trip', () => {
     expect(cleanSpec(pinSpec({ name: 'pkg', latestVersion: '2.0.0' }))).toBe('pkg')
     expect(cleanSpec(pinSpec({ name: '@s/p', latestVersion: '2.0.0' }))).toBe('@s/p')
+  })
+})
+
+describe('approvedTarballUrl (skill installs must not leak pendingUpdate)', () => {
+  const pk = { versions: { '1.0.0': { dist: { tarball: 'https://r/approved.tgz' } }, '9.9.9': { dist: { tarball: 'https://r/latest.tgz' } } } }
+  it('resolves the catalog-approved version, never dist-tags.latest', () => {
+    // approved 1.0.0 while npm latest is 9.9.9 (a held pendingUpdate)
+    expect(approvedTarballUrl(pk, { latestVersion: '1.0.0' })).toBe('https://r/approved.tgz')
+  })
+  it('no approved version → null (caller must not fall back to latest)', () => {
+    expect(approvedTarballUrl(pk, { latestVersion: null })).toBeNull()
+    expect(approvedTarballUrl(pk, {})).toBeNull()
+  })
+  it('approved version missing from packument → null, not latest', () => {
+    expect(approvedTarballUrl(pk, { latestVersion: '7.7.7' })).toBeNull()
   })
 })
 

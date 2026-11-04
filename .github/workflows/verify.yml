@@ -32,7 +32,9 @@ jobs:
       - run: npm ci
       - id: shards
         run: |
-          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp > /tmp/plan.out
+          # targeted dispatch → retest mode: failed/verified slots become eligible
+          # again (otherwise a failed version is terminal — no retry path exists)
+          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ inputs.targets && '--retest' || '' }} > /tmp/plan.out
           tail -1 /tmp/plan.out > /tmp/shard-list.json
           echo "list=$(cat /tmp/shard-list.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4

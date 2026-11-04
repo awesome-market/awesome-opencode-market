@@ -9,8 +9,8 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, pinSpec, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
-import { dedupeToSpec } from './spec.js'
+import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, EMPTY_STATE, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { dedupeToSpec, removeSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot } from './skill-install.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
@@ -192,9 +192,12 @@ export default Plugin.define({
       const installSkill = async (e: MarketEntry) => {
         try {
           setStatus(`installing ${e.name}…`)
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { 'dist-tags': { latest: string }; versions: Record<string, { dist: { tarball: string } }> }
-          const url = pk.versions?.[pk['dist-tags']?.latest]?.dist?.tarball
-          if (!url) throw new Error('no tarball')
+          // pin to the catalog-approved version — dist-tags.latest is the
+          // pendingUpdate users are NOT allowed to get yet (hold semantics)
+          if (!e.latestVersion) throw new Error('no approved version to install')
+          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { versions: Record<string, { dist: { tarball: string } }> }
+          const url = approvedTarballUrl(pk, e)
+          if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
           const buf = new Uint8Array(await (await fetch(url)).arrayBuffer())
           const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
           const v = e.latestVersion ?? 'local'
@@ -219,12 +222,20 @@ export default Plugin.define({
           await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
           setInstalled(next); setStatus(`${e.name} removed`)
         } else {
-          const { execFile } = await import('node:child_process')
-          execFile('opencode', ['plugin', 'remove', e.name], { timeout: 30_000 }, (err) => {
-            if (err) { setStatus(`uninstall fail: ${err.message}`); return }
-            const next = { ...installed() }; delete next[e.name]
-            setInstalled(next); setStatus(`${e.name} removed`)
-          })
+          // rewrite config plugins[] directly — CLI `plugin remove` takes a
+          // spec, not the catalog name, and silently misses pinned specs
+          // (same fix as the GUI host uninstall)
+          try {
+            const fs = await import('node:fs')
+            const { join } = await import('node:path')
+            const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+            const d = fs.existsSync(cfg) ? JSON.parse(fs.readFileSync(cfg, 'utf8') || '{}') as { plugins?: string[] } : {}
+            const list = Array.isArray(d.plugins) ? d.plugins : []
+            d.plugins = removeSpec(list, e.name)
+            fs.writeFileSync(cfg, JSON.stringify(d, null, 2))
+          } catch (x) { setStatus(`uninstall fail: ${String(x)}`); return }
+          const next = { ...installed() }; delete next[e.name]
+          setInstalled(next); setStatus(`${e.name} removed`)
         }
       }
       const toggleFav = (e: MarketEntry) =>
@@ -315,6 +326,9 @@ export default Plugin.define({
       }
       const badge = (e: MarketEntry) => {
         if (installed()[e.name] || skillInstalledVer(installed(), e.name)) return `[${t('installed')}]`
+        // github-kind entries have no npm version — 'skipped' means nothing to
+        // run, not "有高危信号没跑" (honest-label rule, AGENTS.md)
+        if (e.latestVersion == null) return `[${t('noInstallTarget')}]`
         const s = e.verification?.status
         return s ? `[${s === 'verified' ? t('verified') : s === 'failed' ? t('failed') : s === 'skipped' ? t('skipped') : t('unverified')}]` : ''
       }

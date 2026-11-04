@@ -14,6 +14,10 @@ export function scanLabel(e: PluginEntry): { text: string; cls: string } {
   return { text: 'scanned, no findings', cls: 'ok' }
 }
 export function verifyLabel(e: PluginEntry): { text: string; cls: string } {
+  // version-less entries (github-kind) are constructed as 'skipped' — there is
+  // no npm artifact to run, not a high-risk short-circuit. Rendering them
+  // "skipped (high risk)" would be a lie (AGENTS.md honest-label rule).
+  if (e.latestVersion === null) return { text: 'nothing to install', cls: 'muted' }
   switch (e.verification.status) {
     case 'verified': return { text: `verified (${e.verification.level ?? 'install'})`, cls: 'ok' }
     case 'failed': return { text: 'verification failed', cls: 'bad' }
@@ -109,8 +113,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  *  pulled from npm tarballs, so `skills: ["<site>/skills/"]` makes the whole
  *  catalog's skills loadable — files update whenever version bumps. */
 export function buildSkillCatalog(index: CatalogIndex, outDir: string,
-  tarballOf: (name: string) => string | null =
-    (name) => { try { return execSync(`npm view "${name}" dist.tarball`, { encoding: 'utf8', timeout: 20_000 }).trim() || null } catch { return null } }): void {
+  tarballOf: (spec: string) => string | null =
+    (spec) => { try { return execSync(`npm view "${spec}" dist.tarball`, { encoding: 'utf8', timeout: 20_000 }).trim() || null } catch { return null } }): void {
   const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
@@ -119,7 +123,9 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
     const id = s.name.split('/').pop()!.replace(/^@/, '') || s.slug
     const dest = join(dir, id)
     try {
-      const tb = tarballOf(s.name)
+      // pin to the approved version — `npm view <name>` resolves dist-tags.latest
+      // which is the pendingUpdate users must not receive (hold semantics)
+      const tb = s.latestVersion ? tarballOf(`${s.name}@${s.latestVersion}`) : null
       if (!tb) continue
       const res = execSync(
         `rm -rf "${dest}.tmp" && mkdir -p "${dest}.tmp" && curl -fsSL "${tb.replace(/'/g, "'\''")}" | tar xz -C "${dest}.tmp" --strip-components=1 2>/dev/null; ` +
