@@ -21,13 +21,17 @@ cd "$CAT" && git fetch origin catalog && git reset --hard origin/catalog -q
 touch ai-verdicts.jsonl
 
 cd "$REPO"
+# bounded per run — the queue drains over many hours, one launchd tick must not
+# monopolise the LLM (3300 pending × ~1-2min each would run for days)
+DIAGNOSE_LIMIT=${DIAGNOSE_LIMIT:-50}
 npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$CAT/ai-verdicts.jsonl" --out "$CAT/ai-verdicts.jsonl" \
+  --limit "$DIAGNOSE_LIMIT" ${DIAGNOSE_NAME:+--name "$DIAGNOSE_NAME"} \
   || exit $?
 
 cd "$CAT"
 git add ai-verdicts.jsonl
-git commit -qm "ai-diagnose: $(date +%F %H:%M)" 2>/dev/null || { echo "[diagnose] no new verdicts"; exit 0; }
+git commit -qm "ai-diagnose: $(date '+%F %H:%M')" 2>/dev/null || { echo "[diagnose] no new verdicts"; exit 0; }
 for i in 1 2 3; do
   git pull --rebase -q origin catalog 2>/dev/null
   git push -q origin catalog && exit 0

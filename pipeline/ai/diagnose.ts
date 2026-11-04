@@ -24,7 +24,7 @@ import { argv, exit, env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { latestVerdicts } from '../verdicts.ts'
+import { latestVerdicts, vkey } from '../verdicts.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
@@ -106,7 +106,7 @@ async function main(): Promise<void> {
     // and approval:pending on the entry itself (first version never released)
     const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
     if (!ver) return false
-    return seen.get(`${e.name}@${ver}`)?.source !== 'ai' // unreviewed by AI
+    return seen.get(vkey(e.name, ver))?.source !== 'ai' // unreviewed by AI
   }).slice(0, limit)
 
   console.log(`[diagnose] ${candidates.length} pending candidates`)

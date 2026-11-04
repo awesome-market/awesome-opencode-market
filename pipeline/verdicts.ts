@@ -25,7 +25,10 @@ export function loadLastDigestAt(path?: string): string | null {
   } catch { return null }
 }
 
-const vkey = (name: string, version: string | null) => `${name}\0${version ?? ''}`
+/** verdict lookup key — NUL separator (a '@' join collides with scoped names
+ *  like @kyan-plugins/x@1.0 and silently broke diagnose's seen-check: every
+ *  entry always looked unreviewed → re-reviewed every tick) */
+export const vkey = (name: string, version: string | null | undefined) => `${name}\0${version ?? ''}`
 
 /** Newest verdict per name@version — the file is append-only, `at` wins. */
 export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
