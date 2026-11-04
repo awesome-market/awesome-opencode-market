@@ -125,14 +125,14 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 
 **判定语义速记**：
 - `scannedAt:null` ≠ `findings:[]`——前者"没扫过"渲染 not scanned，后者"扫过无发现"渲染 scanned,no findings（都必须带"不等于安全"）
-- `latestVersion:null`（github-kind）→ 不扫(scannedAt:null)、不验(skipped)、AI 不审（verdict 键都建不出来）
+- `latestVersion:null`（github-kind）→ 无 npm 可装对象，但 tree 证据门+codeload tarball 静态扫描照常（扫描失败才 `scannedAt:null`）；不验(skipped)、AI 不审（verdict 键都建不出来）
 - `pendingUpdate` 存在 ⇒ `latestVersion` 是**旧版**，`plugin add` 拿到的永远是它
 
 ---
 
 ## 1. 收录发现流 — `catalog.yml`（每天 2 班 UTC 03:17/11:00 + 手动）
 
-**实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r2'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
+**实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r3'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
 `generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额）→ `publish`（唯一 index writer：contents+issues 写权限）→ `site`（pages+id-token）→ `alert`（失败开 `pipeline-alert` issue）。整流 `concurrency: catalog-branch`——与 verify.yml、submit ingest 共享同一把分支写锁，写者串行。
 
@@ -172,7 +172,7 @@ discoverNpm + discoverGithub（并行）
       fetchPackument → hasPluginEvidence（via ≥2 或含 'entry'——仅 keyword 不算数）
       → fetchTarball+scanTarball → capabilities{findings,redFlags,rulesetVersion}
         redFlags>0 → verification={status:'skipped'}（高危信号没跑）
-      fetchRepoMeta(repoId/stars) + fetchRepoTree(SKILL.md/.opencode/skills 探测→contains)
+      fetchRepoMeta(repoId/stars) + fetchRepoTree(hasSkillPath：任意 SKILL.md/.opencode/skills→contains)
       + fetchMarketMeta（repo 根 .opencode-market.json 作者声明）
       repo package.json ≠ 包名 → finding 'sec:repo-mismatch:<actual>'
       字段优先级：marketMeta > 投稿声明 > 自动派生（description/category）
@@ -180,10 +180,25 @@ discoverNpm + discoverGithub（并行）
       （server=./server|根入口；gui=./gui-experimental 仅 .cjs/.js；rpc 需 server 同在）
       组装 entry：approval='pending', approvalReason='awaiting-review'
       hold 手术（见 §7）
-  → github-kind 补集（无 npm 对应物的 repo 候选）：
-      latestVersion:null、capabilities{scannedAt:null,空表}、
-      verification:{status:'skipped'}——"无可装对象没跑"，不是"高危没跑"
+  → github-kind 补集（无 npm 对应物的 repo 候选；coveredRepos 去重——
+      npm 包已认领的 repo 不再重复收 github-kind）：
+      证据门 hasRepoEvidence(tree 路径+topics)：OpenCode 专属信号
+        （.opencode/、opencode.json[c]、SKILL.md、扩展类 topic）
+        + 可装产物（.opencode plugin/skill 路径、SKILL.md、package.json）
+        双缺即拒；通用 'opencode' topic 只是关联不是产物声明
+      tree/tarball 固定走 HEAD ref——search 索引的 defaultBranch 可能过期
+        （分支改名后具名 ref 404 会误杀）；codeload tarball 过同一套
+        scanTarball，归档根前缀 strip
+      暂态 tree error/rate-limited → 保留旧条目；not-found/空 → gone-check
+      增量复用：pushedAt+ruleset 不变 → 整体沿用（modifiedAt 存 pushedAt）；
+        扫描失败留 scannedAt:null，'too large' 盖 rulesetVersion 记忆化
+        （pushedAt 变了才重试），timeout 每轮重试
+      type：投稿声明优先；纯 skill 证据（有 SKILL.md、无根 package.json、
+        无 .opencode plugin 路径）→ 'skill'，否则 'plugin'
+      latestVersion:null、verification:{status:'skipped'}、
       approval 继承 ghPrev（人工裁决过的状态跨轮保留）
+      ghStats 审计行：admitted/reused/npm-covered/evidence-rejected/
+        transient-kept/empty/scan-failed(oversize)
   → gone-check：旧条目消失 → 探活：
       fetch 错误(429/5xx/网络) → 保留旧条目不打墓碑（瞬时失败≠消失）
       not-found → npm-404；cappedOut → capped；blocklist → manual；
@@ -478,7 +493,7 @@ stateDiagram-v2
   Released --> [*]: 成为新展示版
   note right of Skipped
     AI pass 落红旗=忽略 → 事实只人工能放
-    github-kind 恒在此列(无可装物)
+    github-kind 恒在此列(无可装物；带红旗时同红旗类)
   end note
   note right of Failed
     终态——仅手动 targets+retest 可重验
@@ -591,7 +606,7 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5）
   → deploy-pages
 ```
 
-诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。version-less（github-kind）条目渲染为 `nothing to install`（muted）——它的 skipped 是"没有可装的东西"不是"高危没跑"。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
+诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。version-less（github-kind）条目渲染为 `nothing to install`（muted）——skipped 主要是"没有可装的东西"；经 codeload 静态扫描后带 redFlags 时兼有"高危没跑"含义。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
 
 ---
 
@@ -625,7 +640,7 @@ fetchIndex(Pages index.json, 10s AbortController)
 UI（gui.ts webview / tui.tsx 终端）：
   列表 rows()（verified 优先，redFlag 沉底）/ search(name+description.en) / 分类
   状态标签：installed 优先；latestVersion==null → noInstallTarget
-    （github-kind"无可安装对象"≠"有高危信号没跑"）；否则四态同站点
+    （github-kind"无可安装对象"为主因；带红旗时同"高危没跑"）；否则四态同站点
   安装：pinSpec(e) = name@latestVersion（钉到批准版，隐式 latest=绕过通道）
        gui: api.install({name,spec}) → host `plugin add <spec>`
        tui: 直接 spawn `plugin add <pin>`
@@ -661,7 +676,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | AI 不复审 | unreviewedTargets 要求**无任何 verdict**——人工裁决是终局，AI 新 `at` 不能翻盘 |
 | pass 要预告 | mature = at ≤ lastDigestAt；缺 digest-state = 全冻结 |
 | concern 即时 | 不等窗口；打展示版本=撤回上架（人工刹车） |
-| 验证是硬门 | unverified/failed 永不放；skipped 两类：红旗 skipped 事实只人工 pass 可放，github-kind skipped 只能人工 verdict(null) 放 |
+| 验证是硬门 | unverified/failed 永不放；skipped 两类：红旗 skipped 事实只人工 pass 可放，github-kind skipped 只能人工 verdict(null) 放（其红旗扫描结果同样约束人工判断） |
 | failed 终态可救 | 常规计划只跑 unverified；手动 `targets` 触发 --retest 可重验 failed/verified |
 | 版本钉死 | 验证验候选版（pendingUpdate 优先）；客户端 pinSpec/approvedTarballUrl 钉批准版；`plugin add`/`npm view` 不隐式 latest |
 | 审计可回放 | verdicts append-only，NUL 键最新 at 胜出，sha 溯源（人工通道） |
@@ -669,7 +684,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | 裁决事件不丢 | verdict 类 job 用 per-issue 并发组（共享锁会丢 pending） |
 | 发布不破目录 | corruptionGate：空 index/掉幅>20% 拒发 |
 | 不可信代码零权限 | generate/verify jobs permissions:{} + egress 白名单 |
-| github-kind 特殊 | 永不扫描(scannedAt:null)/永不验证(无版本)/永不 AI 审(无候选键)；只人工 verdict(version:null) 放行 |
+| github-kind 特殊 | tree 证据门准入 + codeload 静态扫描（失败才 scannedAt:null）；不验证（无版本）/不 AI 审（无候选键）；只人工 verdict(version:null) 放行 |
 
 ---
 
@@ -706,12 +721,12 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `run.ts` | `run` `loadOldIndex` `replacementOf` | 收录主流水线：种子→过滤→cap→worker→merge→index（§1） |
 | `discover/npm.ts` | `discoverNpm` `searchByKeyword` `KEYWORDS` | npm keyword 搜索候选 |
 | `discover/github.ts` | `discoverGithub` `searchTopic` `normalizeRepoUrl` `TOPICS` | GitHub topic 搜索候选 |
-| `discover/filter.ts` | `preAdmit` `looksLikeTemplateSpam` `hasPluginEvidence` | 入场过滤（archived/模板农场/插件证据） |
+| `discover/filter.ts` | `preAdmit` `looksLikeTemplateSpam` `hasPluginEvidence` `hasRepoEvidence` `hasSkillPath` | 入场过滤（archived/模板农场/插件证据/repo 证据门/skill 路径） |
 | `discover/seed.ts` | `buildSeedList` `extractRepos` `filterByStars` `repoToNpm` | awesome-list 冷启动种子（一次性工具） |
 | `fetch/npm.ts` | `fetchPackument` `fetchTarball` `fetchDownloads30d` | npm 拉取（status: ok/not-found/error） |
-| `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `repoFileExists` | repo 元数据/文件树探测（rate-limited 状态透传） |
+| `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `repoFileExists` | repo 元数据/文件树探测（rate-limited 状态透传） |
 | `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags |
-| `scan/rules.ts` | `RULES` `RULESET_VERSION='r2'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding） |
+| `scan/rules.ts` | `RULES` `RULESET_VERSION='r3'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding） |
 | `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
 | `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并 |
