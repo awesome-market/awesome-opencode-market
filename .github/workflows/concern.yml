@@ -23,7 +23,10 @@ jobs:
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && (startsWith(github.event.comment.body, '/concern') || startsWith(github.event.comment.body, '/approve')))
     runs-on: ubuntu-latest
-    concurrency: catalog-branch   # same writer lock as catalog/verify/submit
+    # NOT catalog-branch: every verdict event must land, so bursts queue
+    # per-issue instead of cancelling each other; the rebase-push retry loop
+    # absorbs cross-issue write races on ai-verdicts.jsonl
+    concurrency: verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write }
     steps:
       - uses: actions/checkout@v4
@@ -86,8 +89,8 @@ jobs:
             }
             let name = "", ver = "", verdict = "", reason = ""
             if (process.env.ISSUE_TITLE.startsWith("[submit]")) {
-              // submission issues are submit.yml's territory — /approve /concern
-              // there resolve the package from the issue body, not the command args
+              // submission issues are handled by submit.yml — /approve /concern
+              // there resolve the package from the issue body, not command args
               out("skip", "1"); return
             }
             if (process.env.EVENT === "issues" && process.env.ACTION === "labeled") {
