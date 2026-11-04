@@ -49,19 +49,51 @@ npm/GitHub ─┼─→ catalog.yml ──→ index.json ──────┼�
 - 键：`vkey(name,version)` = `name\0version`（NUL 分隔——`@` 会和 scoped 包名撞车）。
 - `latestVerdicts` 逐行容错解析（坏行跳过）——diagnose/digest/docket 都走它。
 
-### index.json 关键字段（PluginEntry）
+### index.json 全字段（`src/schema.ts` PluginEntry）
 
-- `approval` ∈ `pending|approved|legacy`：pending=hold 默认态；approved=已放行；legacy=门禁前老条目。
-- `approvalReason`：pending 的理由（默认 `awaiting-review`；被 concern 后=裁决理由；放行时清空）。
-- `pendingUpdate`：已展示条目上的"新但待审"候选 `{version,capabilities,verification,features,publishedAt,heldAt,reason}`。展示字段钉在批准版，`plugin add` 能拿到的永远是展示版。
-- `capabilities` `{scannedAt,rulesetVersion,findings[],redFlags[]}`：机械扫描结果+信任 flag。`scannedAt:null` = 没扫过（github-kind 或扫描失败）。
-- `verification` `{status,level,opencodeVersion,verifiedAt,runUrl,logExcerpt}`：云验证槽。status ∈ `unverified|verified|failed|skipped`；level ∈ `install|load|interactive|render`。
-- `contains:['skill']`：repo 里有 SKILL.md 或 `.opencode/skills/` → 条目进 HTTP skill catalog、客户端走 skill 安装路径。
-- `source` `{kind:npm|github, id, repo, repoId, version}`；`discoveredVia` 收录渠道；`features` ⊆ `{server,tui,gui,rpc}`（server 恒有）。
+```
+CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: PluginEntry[], removed: RemovedEntry[] }
+```
+
+| 字段 | 类型 | 语义 |
+|---|---|---|
+| `name` | string | npm 包名或 `owner/repo` |
+| `slug` | string | 详情页 URL 键；repo 优先于包名（`slugOf`） |
+| `aliases[]` | string[] | 同名不同源去重时挂的别名 |
+| `type` | enum | `plugin|skill|agent|command|mcp|theme|bundle|rule`——分类器产出，默认 plugin |
+| `contains[]` | enum? | `plugin|skill|mcp|command|agent|hook`——repo 内容探测（SKILL.md→'skill'） |
+| `features[]` | enum? | `server|tui|gui|rpc`——exports 探测+findings；server 恒有 |
+| `discoveredVia[]` | enum[] | `npm-keyword|github-topic|code-search|topic-list|submission` |
+| `source` | obj | `{kind:npm|github, id, repo?, repoId?, version?}`；repoId=GitHub 数字 id，repojacking 检测 |
+| `description` | obj | `{en, zh?}`——优先级：`.opencode-market.json` > 投稿声明 > 自动 |
+| `category[]` | string[] | 分类 id 列表 |
+| `license` / `deprecated` / `deprecatedMessage` / `replacement` | — | npm 元数据；replacement 从 deprecated 文案解析 |
+| `createdAt` / `modifiedAt` | string? | packument `time.created/modified`——`createdAt > firstSeenAt` ⇒ 名字被重新注册（`sec:name-reused`） |
+| `maintainers[]` | string[] | npm 维护者账号——变化 → `sec:maintainer-changed` |
+| `distTags` | obj | npm dist-tag 表——回滚检测（`sec:version-rollback`） |
+| `firstSeenAt` | string | 首次收录时间（merge 跨版本保留） |
+| `latestVersion` | string? | **展示版**——held 语义下钉在批准版；null=github-kind |
+| `publishedAt` | string? | 展示版的发布时间 |
+| `metrics` | obj | `{stars, npmDownloads30d, checkedAt}` |
+| `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[]}`；`scannedAt:null`=没扫过（≠扫过没发现） |
+| `verification` | obj | `{status, level?, opencodeVersion?, verifiedAt?, runUrl?, logExcerpt≤2048}`；status ∈ `verified|failed|unverified|skipped`，level ∈ `install|load|interactive|render|structure` |
+| `compat` | obj | `{engines?, peer?}` |
+| `approval` | enum | `pending`=hold 默认 / `approved`=放行 / `legacy`=门禁前老条目（schema 默认 legacy 兼容旧 index） |
+| `approvalReason` | string? | pending 的理由；放行时清空 |
+| `pendingUpdate` | obj? | **被扣住的新版** `{version, capabilities, verification, features?, publishedAt?, reason?, heldAt}` |
+
+`RemovedEntry`（墓碑）：`{slug, name, lastSource?, disappearedAt, reason∈npm-404|filtered|capped|manual|unknown}`——180 天保留，URL 不 404 + 名字复用检测。
+
+**判定语义速记**：
+- `scannedAt:null` ≠ `findings:[]`——前者"没扫过"渲染 not scanned，后者"扫过无发现"渲染 scanned,no findings（都必须带"不等于安全"）
+- `latestVersion:null`（github-kind）→ 不扫(scannedAt:null)、不验(skipped)、AI 不审（verdict 键都建不出来）
+- `pendingUpdate` 存在 ⇒ `latestVersion` 是**旧版**，`plugin add` 拿到的永远是它
 
 ---
 
 ## 1. 收录发现流 — `catalog.yml`（每天 2 班 UTC 03:17/11:00 + 手动）
+
+**实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r2'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
 `generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额）→ `publish`（唯一 index writer：contents+issues 写权限）→ `site`（pages+id-token）→ `alert`（失败开 `pipeline-alert` issue）。整流 `concurrency: catalog-branch`——与 verify.yml、submit ingest 共享同一把分支写锁，写者串行。
 
@@ -118,6 +150,8 @@ discoverNpm + discoverGithub（并行）
 
 ## 2. 投稿流 — `submit.yml`
 
+**实现**：`pipeline/submission.ts::parseSubmission/seedLine`（issue 解析+种子行）· `pipeline/review.ts::reviewPackage/verdict/renderReview`（机械审+报告）· workflow 内嵌 node 脚本（ingest 去重/verdict 写回/sweep）
+
 ```
 issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
   或 issue_comment(created) 且 issue 有 submission:{needs-work,invalid} 标签
@@ -139,6 +173,8 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
 ---
 
 ## 3. 验证流 — `verify.yml`（每天 2 班 UTC 04:47/16:47 + `targets` 手动指定）
+
+**实现**：`verify/plan.ts::verifyTargetOf/planTargets/shard`（目标+分片）· `verify/verify.ts::verifyPackage/xdgEnv/writeDummyProvider/loadedSignal`（L1/L1.5 沙箱验证）· `verify/tui.ts::checkTui/judgeTuiPane`（L2 tmux）· `verify/gui.ts::findGuiBundle/checkGuiBundle`（L3a jsdom 渲染）· `verify/merge.ts::mergeResults`（版本路由写槽）
 
 ```
 plan job（contents:read）：
@@ -180,6 +216,8 @@ alert job（failure()）：开 pipeline-alert issue
 
 ## 4. AI 诊断流 — `bin/ai-diagnose.sh`（launchd 每小时；手动同命令）
 
+**实现**：`pipeline/ai/diagnose.ts::unreviewedTargets/reviewMaterial/l05Score/ornithReview/verdictRecord` · `ai/l05_score.py`（L0.5 打分器，独立进程）· `verdicts.ts::loadVerdicts/latestVerdicts/vkey`
+
 ```
 catalog clone（~/.local/share/opencode-market-catalog）→ reset --hard
 → diagnose.ts（--limit DIAGNOSE_LIMIT=50；--name/DIAGNOSE_NAME 定向；--dry）
@@ -213,6 +251,8 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 
 ## 5. 人工裁决流 — `concern.yml`（maintainer 专属，手机可用）
 
+**实现**：`.github/workflows/concern.yml`（事件解析+守卫+写盘全在 workflow node 脚本里）· `submit.yml` verdict job 同理 · 目标键 `verdicts.ts::vkey`
+
 四条通道，全部写 `source:human` verdict：
 
 | 通道 | 触发 | 目标解析 |
@@ -242,6 +282,8 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 
 ## 6. 日报流 — `bin/publish-digest.sh`（launchd 每日 21:00 本地）
 
+**实现**：`pipeline/ai/digest.ts::renderDigest`（三板块渲染）· `verdicts.ts::loadVerdicts`（容错加载）· `bin/publish-digest.sh`（clone/commit/push 重试壳）
+
 ```
 catalog clone → digest.ts --index --verdicts --state --out-dir [--date YYYY-MM-DD 回填]
   verdicts 走 loadVerdicts（坏行跳过——一行坏 JSON 不能崩掉整份日报：它是成熟度锚点）
@@ -258,6 +300,8 @@ catalog clone → digest.ts --index --verdicts --state --out-dir [--date YYYY-MM
 ---
 
 ## 7. 放行流 — catalog run 前置 `applyMatureVerdicts`
+
+**实现**：`pipeline/verdicts.ts::applyMatureVerdicts`（放行判定+hold 手术在 `run.ts` worker 内联）
 
 **hold 手术**（run.ts worker 内，新版本到达时）：
 ```
@@ -294,6 +338,8 @@ pass → 需 mature（v.at ≤ lastDigestAt）
 
 ## 8. 审核单流 — `docket.yml`（hourly :40 + catalog/verify 成功完成后 + 手动）
 
+**实现**：`pipeline/docket.ts::docketTargets/issueTitle`（目标+开单/关单，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts`
+
 ```
 docket.ts：index+verdicts → docketTargets
   = ver = pendingUpdate?.version ?? (approval==='pending' ? latestVersion : null)
@@ -314,6 +360,8 @@ workflow_run 触发只认 conclusion==='success'；无并发组（操作 issue �
 ---
 
 ## 9. 站点发布流 — `pipeline/site/build.ts` → GitHub Pages
+
+**实现**：`site/build.ts::isVisible/scanLabel/verifyLabel/approvalBadge/listPage/detailPage/buildSite/buildSkillCatalog`
 
 ```
 index.json（catalog 分支现取，不吃旧 artifact——B-5）
@@ -337,6 +385,8 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5）
 ---
 
 ## 10. 客户端消费流 — `plugins/market`
+
+**实现**：`src/catalog.ts`（fetch/sanitize/过滤/排序/搜索/pinSpec/approvedTarballUrl/i18n/localStorage 持久化）· `src/spec.ts`（cleanSpec/dedupeToSpec/removeSpec/buildExtras/featuresMap）· `src/skill-install.ts`（installSkillTar/uninstallSkillDir/globalSkillsRoot）· `src/gui.ts`（webview UI + host IPC api）· `src/tui.tsx`（终端 UI + 直接宿主调用）· `src/server.ts`（插件入口装配）
 
 ```
 fetchIndex(Pages index.json, 10s AbortController)
@@ -418,12 +468,157 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 ---
 
-## 附：辅助工具（不在主数据流周期里）
+## 13. 实现地图（文件 → 导出 → 角色）
+
+### pipeline/
+
+| 文件 | 关键导出 | 角色 |
+|---|---|---|
+| `run.ts` | `run` `loadOldIndex` `replacementOf` | 收录主流水线：种子→过滤→cap→worker→merge→index（§1） |
+| `discover/npm.ts` | `discoverNpm` `searchByKeyword` `KEYWORDS` | npm keyword 搜索候选 |
+| `discover/github.ts` | `discoverGithub` `searchTopic` `normalizeRepoUrl` `TOPICS` | GitHub topic 搜索候选 |
+| `discover/filter.ts` | `preAdmit` `looksLikeTemplateSpam` `hasPluginEvidence` | 入场过滤（archived/模板农场/插件证据） |
+| `discover/seed.ts` | `buildSeedList` `extractRepos` `filterByStars` `repoToNpm` | awesome-list 冷启动种子（一次性工具） |
+| `fetch/npm.ts` | `fetchPackument` `fetchTarball` `fetchDownloads30d` | npm 拉取（status: ok/not-found/error） |
+| `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `repoFileExists` | repo 元数据/文件树探测（rate-limited 状态透传） |
+| `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags |
+| `scan/rules.ts` | `RULES` `RULESET_VERSION='r2'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding） |
+| `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
+| `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
+| `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并 |
+| `verdicts.ts` | `loadVerdicts` `latestVerdicts` `vkey` `loadLastDigestAt` `applyMatureVerdicts` | 裁决读盘+NUL 键+放行判定 |
+| `submission.ts` | `parseSubmission` `seedLine` | issue-form/freeform 解析+种子行 |
+| `review.ts` | `reviewPackage` `verdict` `renderReview` | 投稿机械审（报告含 LAST verdict 标记） |
+| `notify-published.ts` | `markNotified` | 投稿落地通知标记（approval≠pending 才算） |
+| `docket.ts` | `docketTargets` `issueTitle` | [review] 审核单同步（gh CLI） |
+| `backfill.ts` | `backfill` | 老条目身份字段一次性修补（createdAt/maintainers/repoId） |
+| `verify/plan.ts` | `verifyTargetOf` `planTargets` `shard` | 验证目标（候选槽语义+retest）+12 片分片 |
+| `verify/verify.ts` | `verifyPackage` `xdgEnv` `writeDummyProvider` `loadedSignal` `coerceTarget` | L1 install + L1.5 lazy-load canary 验证 |
+| `verify/tui.ts` | `checkTui` `judgeTuiPane` | L2 tmux 冒烟 |
+| `verify/gui.ts` | `checkGuiBundle` `findGuiBundle` | L3a jsdom+vm 真渲染 |
+| `verify/merge.ts` | `mergeResults` | 结果按 version 路由写槽 |
+| `site/build.ts` | `buildSite` `buildSkillCatalog` `listPage` `detailPage` `isVisible` `scanLabel` `verifyLabel` `approvalBadge` | Pages 站点+HTTP skill catalog |
+| `ai/diagnose.ts` | `unreviewedTargets` `reviewMaterial` `l05Score` `ornithReview` `verdictRecord` | L0.5+Ornith 双通道 AI 审 |
+| `ai/digest.ts` | `renderDigest` | 日报三板块渲染 |
+| `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程） |
+
+### plugins/market/src/
+
+| 文件 | 关键导出 | 角色 |
+|---|---|---|
+| `catalog.ts` | `fetchIndex` `fetchIndexCached` `sanitizeIndex` `isVisible` `rows` `search` `pinSpec` `approvedTarballUrl` `hasUpdate` `scanSkillKeys` `skillInstalledVer` `t`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` | 数据面+纯函数层（webview/tui 共用） |
+| `spec.ts` | `cleanSpec` `dedupeToSpec` `removeSpec` `featuresMap` `buildExtras` | opencode.json plugins[] spec 代数 |
+| `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` | tarball→skills 目录（提升/清单/撞名） |
+| `gui.ts` | default `Plugin.define` | webview UI + 全部 host IPC api |
+| `tui.tsx` | default `Plugin.define` | 终端 UI + 进程内宿主调用 |
+| `server.ts` | — | 插件入口装配 |
+
+### 辅助工具（不在主数据流周期里）
 
 | 工具 | 用途 |
 |---|---|
 | `pipeline/discover/seed.ts` | awesome-list README → 高星 repo → npm 候选——一次性冷启动种子生成 |
-| `pipeline/backfill.ts` | 给老条目补身份字段（createdAt/maintainers/repoId）——一次性修补 |
+| `pipeline/backfill.ts` | 给老条目补身份字段——一次性修补 |
 | `pipeline/remerge.ts` | publish 重试时 ours vs remote 再合并——保护 remote 已写状态 |
 | `pipeline/notify-published.ts` | 投稿落地标记 notified:true 并输出待通知 issue 号 |
 | `pipeline/verify/{tui,gui}.ts` | L2 tmux / L3a jsdom 检查器（verifyPackage 按 features 调用） |
+
+---
+
+## 14. 交接物样例（真实形状）
+
+### index.json 一条 entry（held 语义完整形态）
+
+```json
+{
+ "name": "opencode-hush",
+ "slug": "federicobordon09-dev/opencode-hush",
+ "type": "plugin", "features": ["tui","server"],
+ "discoveredVia": ["npm-keyword"],
+ "source": {"kind":"npm","id":"opencode-hush","repo":"federicobordon09-dev/opencode-Hush","repoId":1426242744,"version":"0.3.0"},
+ "latestVersion": "0.3.0",          ← 展示版：钉在批准版
+ "distTags": {"latest":"0.4.1"},    ← npm 已到 0.4.1
+ "capabilities": {"scannedAt":"2026-11-03T14:29:15Z","rulesetVersion":"r2","findings":[],"redFlags":[]},
+ "verification": {"status":"verified","level":"load","opencodeVersion":"2.2.5","verifiedAt":"2026-11-02T00:02:51Z"},
+ "approval": "legacy",
+ "pendingUpdate": {                  ← 0.4.1 被 hold：已扫描未验证未裁决
+   "version": "0.4.1",
+   "capabilities": {"scannedAt":"2026-11-04T03:53:23Z","rulesetVersion":"r2","findings":[],"redFlags":[]},
+   "verification": {"status":"unverified"},
+   "features": ["tui","server"],
+   "publishedAt": "2026-11-04T01:05:18Z",
+   "reason": "awaiting-review",
+   "heldAt": "2026-11-04T03:53:23Z" }
+}
+```
+
+### ai-verdicts.jsonl（人工带 sha，AI 不带）
+
+```jsonl
+{"name":"opencode-keystone","version":"0.3.15","verdict":"concern","reason":"扫描发现可疑行为，拒绝","at":"2026-11-04T04:41:50Z","source":"human","sha":"sha512-6NRF…"}
+{"name":"@fimars/mem9-oc2","version":"0.2.1","verdict":"concern","reason":"再想想还是不放行，外部服务调用不透明","at":"2026-11-04T04:42:10Z","source":"human","sha":"sha512-aam7…"}
+{"name":"memory-monitor","version":"0.1.0","verdict":"pass","reason":"包只读系统指标","reasonEn":"read-only system metrics","at":"2026-11-04T04:00:00Z","source":"ai"}
+```
+
+### submissions.txt（每行一个种子）
+
+```jsonl
+{"name":"oc-market-quail-zephyr-72a0","repo":"terry2010/quail-zephyr","type":"plugin","category":["开发流程"],"desc":{"en":"…","zh":"…"},"issue":11,"notified":true}
+{"name":"opencode-keystone","repo":"Adamkadaban/opencode-keystone","type":"plugin","category":null,"desc":{"en":"keystone plugin"},"issue":20,"notified":false}
+```
+
+### verify shard-N.json（plan 输出，每片 ≤12 个目标）
+
+```json
+[{"name":"opencode-poke","version":"0.1.5","features":["server","tui"]},
+ {"name":"@fimars/mem9-oc2","version":"0.2.1","features":["server"]}]
+```
+
+### verify results-N.json（verify 输出 → mergeResults 消费）
+
+```json
+[{"name":"opencode-poke","version":"0.1.5","status":"verified","level":"load",
+  "opencodeVersion":"2.2.5","verifiedAt":"2026-11-04T04:46:12Z",
+  "logExcerpt":"…loading plugin id=opencode-poke…"}]
+```
+
+### [review] issue（docket 开出的审核单）
+
+```
+title: [review] opencode-poke@0.1.5
+labels: review:pending, ai:pass
+
+## 审核单 opencode-poke@0.1.5
+- 当前 AI 判定：**pass** — <中文理由>
+  - <english reason>
+- 验证状态：unverified
+- 数据：catalog 分支 `index.json` / `ai-verdicts.jsonl`
+
+### 📱 手机裁决（点选，零打字）
+本 issue → **Labels** → 勾选其一：
+- `verdict:pass` — 人工放行（覆盖 AI concern）
+- `verdict:concern` — 人工拦截
+```
+
+### digest/YYYY-MM-DD.md
+
+```markdown
+# marketplace digest 2026-11-04
+## ① 今日新放行（pass verdicts — 5）
+| 包 | 版本 | 来源 | 理由 | 审核 |
+| opencode-poke | 0.1.5 | human | 人工复核通过（重发） | [审核单](issues?q=…) |
+## ② 审核队列积压（held — 331）
+- `@fimars/mem9-oc2` (未发布过) …
+## ③ concerns
+```
+
+### 站点产物（/tmp/site → Pages）
+
+```
+index.json        全量 catalog（含 pending，审计面）
+index.html        列表页（isVisible 过滤后）
+p/<slug>.html     每条详情
+skills/index.json + skills/<id>/   HTTP skill 源（latestVersion 钉版 tarball 解出）
+health.json       {ok, entries, generatedAt}
+privacy.html
+```
