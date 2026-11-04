@@ -32,7 +32,7 @@ export function renderDigest({ index, verdicts, lastDigestAt, now }: DigestInput
 
   const escCell = (s: string) => s.replaceAll('|', '\\|')
   const reasonOf = (v: AiVerdict) => escCell(v.reason ?? '') + (v.reasonEn ? ` / ${escCell(v.reasonEn)}` : '')
-  const repo = (process.env.MARKET_REPO_URL ?? 'https://github.com/terry2010/opencode-market-spike').replace(/\/$/, '')
+  const repo = (process.env.MARKET_REPO_URL ?? 'https://github.com/terry2010/awesome-opencode-market').replace(/\/$/, '')
   const reviewLink = (v: AiVerdict) => {
     const q = encodeURIComponent(`is:issue in:title "[review] ${v.name}"`)
     return `[审核单](${repo}/issues?q=${q})`

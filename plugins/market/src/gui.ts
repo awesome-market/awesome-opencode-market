@@ -962,7 +962,7 @@ export default Plugin.define({
             root: join(homedir(), '.config', 'opencode', 'skills') })
         },
         skillSource: async () => {
-          const url = 'https://terry2010.github.io/opencode-market-spike/skills/'
+          const url = 'https://terry2010.github.io/awesome-opencode-market/skills/'
           const cfg = await cfgPath()
           const d = await readJson(cfg)
           const list = strArrayField(d, 'skills')

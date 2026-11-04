@@ -431,9 +431,11 @@ export async function run(opts: RunOptions = {}) {
         publishedAt: null,
         metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
         capabilities: { scannedAt: null, findings: [], redFlags: [] },
-        // 'unverified', not 'skipped' — skipped means red flags blocked a run;
-        // repo-only entries simply have no installable artifact yet (AGENTS §检验规则)
-        verification: { status: 'unverified' },
+        // 'skipped' is load-bearing: verdicts.ts RELEASABLE admits it as the
+        // "deliberately not run" state for no-install kinds — a human pass can
+        // release it. 'unverified' would freeze repo-only entries forever.
+        // Display layers render latestVersion===null as "nothing to install".
+        verification: { status: 'skipped', level: 'install' },
         compat: {},
         approval: ghPrev?.approval ?? 'pending',
         ...(ghPrev?.approvalReason ? { approvalReason: ghPrev.approvalReason } : {}),

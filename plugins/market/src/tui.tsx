@@ -23,7 +23,7 @@ const TABS = (): readonly (readonly [Tab, string])[] => [
 ]
 const SORTS = () => [['downloads', t('sortDownloads')], ['stars', t('sortStars')], ['name', t('sortName')], ['verified', t('sortVerified')]] as const
 const RANGES = () => [[0, t('rangeAll')], [1, t('range1d')], [7, t('range7d')], [30, t('range30d')], [90, t('range90d')], [365, t('range1y')]] as const
-const CATALOG_URL = 'https://terry2010.github.io/opencode-market-spike/skills/'
+const CATALOG_URL = 'https://terry2010.github.io/awesome-opencode-market/skills/'
 // per-user debug log (not a predictable world-writable /tmp path) — resolved
 // lazily; the label falls back to the display form until the real path is in
 let LOG_FILE = '~/.config/opencode/market.log'

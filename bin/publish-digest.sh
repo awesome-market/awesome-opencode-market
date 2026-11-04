@@ -9,7 +9,7 @@ REPO=/Volumes/2t/code/opencode-market
 CAT=$HOME/.local/share/opencode-market-catalog
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 # digest rows link to per-item [review] issues — phone: tap link → tap a label
-export MARKET_REPO_URL="${MARKET_REPO_URL:-https://github.com/terry2010/opencode-market-spike}"
+export MARKET_REPO_URL="${MARKET_REPO_URL:-https://github.com/terry2010/awesome-opencode-market}"
 
 mkdir -p "$(dirname "$CAT")"
 if [ ! -d "$CAT/.git" ]; then

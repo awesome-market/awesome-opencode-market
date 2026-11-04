@@ -402,9 +402,25 @@ Pipeline/CI 安全：
 | F-9 `.opencode-market.json` 无体积上限 | ✅ | `fetchMarketMeta`：category ≤8 项每项 ≤80 字符，description ≤4000 字符 |
 | F-10 `a/b.git/` 尾斜杠残留 | ✅ | `normalizeRepoUrl`：match 后再 strip `.git`（同时覆盖 bare `.git` 尾） |
 | F-11 repoToNpm 只探 main/master | ✅ | `seed.ts`：filterByStars 带出 `default_branch`，repoToNpm 优先探之再回退 main/master |
-| F-12 github-kind `verification:'skipped'` 语义失真 | ✅ | `run.ts` ghMissing → `'unverified'`（skipped 语义是"有高危信号没跑"，repo-only 是无 install 路径，AGENTS §检验规则） |
+| F-12 github-kind `verification:'skipped'` 语义失真 | ⏪ 回滚 | 初判改 `'unverified'` 是回归：verdicts.ts `RELEASABLE` 只收 verified+skipped，'unverified' 让 repo-only 条目永远无法被人工 pass 释放；且 site/GUI/TUI 已对 `latestVersion===null` 特判渲染 "nothing to install/没有可安装的包"，诚实标签在展示层已解决 |
 | F-13 `fetchTarball` 不校验 scheme | ✅ | `fetch/npm.ts`：tarballUrl 限 `https:`，malformed 拒绝 |
 | F-14 `!pk` 合并 not-found/error | ✅ | `run.ts`：`status==='error'` 且有 prev → 保留旧条目（不再落 goneCheck 二次拉取）；seed 投稿瞬时失败打 warn |
 | 附：packument/repoMeta `res.json()` 在 try 外 | ✅ | malformed JSON body → `status:'error'` 而非 unhandled throw 杀 run |
 
 新增 `test/fetch-audit.test.ts`（17 用例）覆盖全部新分支。
+
+---
+
+## 附五：投稿→发表全链路审计（P 系列，2026-11-04）
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| P-1 diagnose/digest 依赖维护者本机 launchd 无监控 | ✅(digest 半) | 新增 `.github/workflows/digest.yml`：digest 搬回 Actions（cron 21:15 UTC + dispatch，`contents:write` 单 job，worktree 渲染 + race 重渲染重试）；`watchdog` job：ai-verdicts.jsonl >48h 未更新且仍有 unreviewed 目标 → pipeline-alert issue（去重）；`alert` job 兜底。本机 `bin/publish-digest.sh` 留作手动兜底 |
+| P-3 AI 评审物料只含扫描结果不含代码 | 📝 已知限制 | `reviewMaterial` = manifest + findings + redFlags + 版本行——"AI 评审"实为扫描器输出的二次分类器；真实安全来自 verify 沙箱实装 |
+| P-4 `MARKET_REPO_URL` 旧仓库名 | ✅ | `digest.ts` 工作流经 `MARKET_REPO_URL=${{ github.server_url }}/${{ github.repository }}` 自适应改名；`bin/publish-digest.sh` 默认更新 |
+| P-4b 全部 `opencode-market-spike` 引用 | ✅ | `catalog.ts`/`gui.ts`/`tui.tsx` 默认 Pages URL、`site/build.ts` footer、`publish-digest.sh` 全部改 `awesome-opencode-market`（旧 Pages URL 改名后仍 200 服务，无断链） |
+| P-5 notified 推送 `|| true` 可双评论 | 仍开 | catalog.yml:111——下次再议 |
+| P-6 repo-only 投稿无人工闸前自动 ingest | 仍开 | 设计权衡：人工闸在 docket 端，spam 只制造 review issue 噪音 |
+| P-2 F-12 回归 | ⏪ 已回滚 | 见附四——本轮审计自抓 |
+
+**验证**：`npm run check` 449 tests 全过，branches 90.69%。

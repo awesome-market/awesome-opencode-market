@@ -40,7 +40,7 @@ a{color:#06c;text-decoration:none}code{background:#f4f4f4;padding:1px 4px;border
 @media(prefers-color-scheme:dark){body{background:#141414;color:#ddd}.card{border-color:#333}code{background:#2a2a2a}a{color:#6af}}`
 
 export function page(title: string, body: string): string {
-  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)} · opencode market</title><style>${CSS}</style>${body}<footer class=meta><p>Not affiliated with opencode. "Scanned, no findings" does not mean safe. <a href="https://github.com/terry2010/opencode-market-spike">source</a></p></footer>`
+  return `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${esc(title)} · opencode market</title><style>${CSS}</style>${body}<footer class=meta><p>Not affiliated with opencode. "Scanned, no findings" does not mean safe. <a href="https://github.com/terry2010/awesome-opencode-market">source</a></p></footer>`
 }
 
 export function listPage(index: CatalogIndex): string {

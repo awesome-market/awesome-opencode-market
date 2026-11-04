@@ -29,7 +29,7 @@ export interface MarketIndex {
 
 /** Default source: GitHub Pages. Overridable via plugin options later. */
 export const DEFAULT_INDEX_URL =
-  'https://terry2010.github.io/opencode-market-spike/index.json'
+  'https://terry2010.github.io/awesome-opencode-market/index.json'
 
 /** Strip C0/C1 control chars + ANSI/OSC escape sequences from untrusted index
  *  strings before they reach a terminal (B-2: index.json is raw untrusted input). */

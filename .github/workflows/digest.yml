@@ -1,0 +1,110 @@
+name: digest
+on:
+  # daily digest is the verdict-maturity anchor (AI-DIAGNOSIS §4): pass verdicts
+  # release only after appearing in a digest. Runs ahead of the 03:17 catalog
+  # run so freshly matured verdicts release the same night. Moving this off the
+  # maintainer's local launchd: the job is pure data aggregation (no LLM), so a
+  # personal laptop being off must not freeze the whole release chain.
+  schedule: [{ cron: '15 21 * * *' }]
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    concurrency: catalog-branch        # same writer lock as catalog/verify/ingest (I-4)
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: render + push digest on catalog branch (re-render + retry on race)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # self-adapting to repo renames — digest review links must never go stale
+          MARKET_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          git config user.email "market-bot@users.noreply.github.com"
+          git config user.name "market-bot"
+          # catalog branch is data-only — dedicated worktree, never the main checkout
+          git fetch origin catalog
+          git worktree add /tmp/cat origin/catalog
+          ok=0
+          for i in 1 2 3 4; do
+            git -C /tmp/cat fetch origin catalog 2>/dev/null || true
+            git -C /tmp/cat reset --hard origin/catalog
+            # re-render inside the retry loop so a raced push still publishes
+            # a digest computed against the newest remote state
+            npx tsx pipeline/ai/digest.ts \
+              --index /tmp/cat/index.json --verdicts /tmp/cat/ai-verdicts.jsonl \
+              --state /tmp/cat/digest-state.json --out-dir /tmp/cat
+            git -C /tmp/cat add digest/ digest-state.json
+            git -C /tmp/cat commit -m "digest: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "nothing changed"; ok=1; break; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            echo "push rejected (attempt $i) — re-rendering against fresh remote"
+          done
+          [ "$ok" = 1 ] || { echo "digest publish failed after retries"; exit 1; }
+
+  # The AI-diagnose leg still runs on the maintainer's local launchd — it needs
+  # the local LLM. This watchdog is the monitoring it lacks: pending review
+  # targets plus a stale ai-verdicts.jsonl means the local job died silently
+  # and submissions are rotting. Fires a pipeline-alert issue (deduped).
+  watchdog:
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: alert when diagnose is stale and review queue non-empty
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git fetch origin catalog
+          git worktree add /tmp/cat origin/catalog
+          LAST=$(git -C /tmp/cat log -1 --format=%ct -- ai-verdicts.jsonl 2>/dev/null || echo 0)
+          AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
+          PENDING=$(npx tsx -e "
+            import { CatalogIndex } from './src/schema.ts'
+            import { loadVerdicts, latestVerdicts } from './pipeline/verdicts.ts'
+            import { unreviewedTargets } from './pipeline/ai/diagnose.ts'
+            import { readFileSync } from 'node:fs'
+            const idx = CatalogIndex.parse(JSON.parse(readFileSync('/tmp/cat/index.json','utf8')))
+            const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
+            console.log(unreviewedTargets(idx, seen).length)
+          ")
+          echo "ai-verdicts.jsonl age: ${AGE_H}h; unreviewed targets: ${PENDING}"
+          if [ "${PENDING:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+            EXISTING=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open \
+              --search "ai-diagnose stale" --json number --jq '.[0].number' 2>/dev/null || true)
+            MSG="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" -R "$GH_REPO" --body "$MSG"
+            else
+              gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+              gh issue create -R "$GH_REPO" --title "ai-diagnose stale: ${PENDING} unreviewed targets" \
+                --body "$MSG" --label pipeline-alert
+            fi
+            echo "watchdog: alert raised (existing=${EXISTING:-none})"
+          else
+            echo "watchdog: healthy"
+          fi
+
+  alert:
+    needs: [digest, watchdog]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          gh issue create \
+            --title "digest workflow failed (run ${GITHUB_RUN_ID})" \
+            --body "Automated alert: the digest workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label "pipeline-alert"
