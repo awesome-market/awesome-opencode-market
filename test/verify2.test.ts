@@ -142,6 +142,26 @@ describe('verify/plan', () => {
     expect(got.map(t => t.name)).toEqual(['a', 'b'])   // flagged targets stay out — pinned version included
     expect(got[0]!.version).toBe('1.0.0')
   })
+  it('recent failed slots re-enter the queue automatically (V-3 bounded retry)', () => {
+    const now = new Date('2026-01-08T00:00:00Z')
+    const fresh = entry({ name: 'fresh', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 1 } })
+    const legacy = entry({ name: 'legacy', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z' } })
+    const stale = entry({ name: 'stale', verification: { status: 'failed', verifiedAt: '2025-12-01T00:00:00Z' } })
+    const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3 } })
+    const noDate = entry({ name: 'nodate', verification: { status: 'failed' } })
+    const got = planTargets(idx([fresh, legacy, stale, exhausted, noDate]), 48, false, now)
+    // fresh(1)+legacy(undefined→first retry) re-enter; stale/exhausted/nodate stay dead
+    expect(got.map(t => t.name)).toEqual(['fresh', 'legacy'])
+  })
+  it('pendingUpdate failed slot retries on the held version', () => {
+    const now = new Date('2026-01-08T00:00:00Z')
+    const e = entry({
+      verification: verf('verified'),
+      pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 2 }, heldAt: 't' },
+    })
+    // display slot verified, held slot failed-once-more-eligible → targets the held version
+    expect(planTargets(idx([e]), 48, false, now)).toEqual([{ name: 'p', version: '2.0.0' }])
+  })
   it('held flagged version is skipped (flag lives on pendingUpdate.capabilities)', () => {
     const e = entry({
       verification: verf('verified'),

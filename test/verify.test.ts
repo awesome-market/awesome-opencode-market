@@ -68,6 +68,17 @@ describe('verify/merge', () => {
     expect(merged.plugins[0]!.verification.logExcerpt).toBe('boom')
     expect(merged.plugins[0]!.verification.runUrl).toBeUndefined()
   })
+  it('failure streak counts retries; any non-failed result clears it (V-3)', () => {
+    const fail = { name: 'p' as const, version: '1', status: 'failed' as const, level: 'load' as const, opencodeVersion: '2.2.5', verifiedAt: 'v' }
+    const once = mergeResults(idx, [fail])
+    expect(once.plugins[0]!.verification.retries).toBe(1)                       // first failure
+    const twice = mergeResults(once, [fail])
+    expect(twice.plugins[0]!.verification.retries).toBe(2)                      // streak grows
+    const cleared = mergeResults(twice, [
+      { name: 'p', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+    ])
+    expect(cleared.plugins[0]!.verification.retries).toBeUndefined()            // verified clears
+  })
 })
 
 describe('verifyPackage (injected exec)', () => {

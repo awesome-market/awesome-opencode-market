@@ -22,15 +22,28 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
   }
 }
 
-export function planTargets(index: CatalogIndex, cap = 48, retest = false): VerifyTarget[] {
+/** A failed slot gets bounded automatic retries (V-3): recent failure (within
+ *  7d) + fewer than 3 recorded attempts re-enters the queue. Beyond that the
+ *  version is genuinely dead — the only remaining path is manual --retest. */
+export const FAILED_RETRY_WINDOW_MS = 7 * 86_400_000
+export const MAX_FAILED_ATTEMPTS = 3
+
+export function retryable(v: PluginEntry['verification'] | undefined, now: Date): boolean {
+  if (v?.status !== 'failed' || (v.retries ?? 0) >= MAX_FAILED_ATTEMPTS) return false
+  const at = Date.parse(v.verifiedAt ?? '')
+  return Number.isFinite(at) && now.getTime() - at < FAILED_RETRY_WINDOW_MS
+}
+
+export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date()): VerifyTarget[] {
   const subs: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
   for (const p of index.plugins) {
     const t = verifyTargetOf(p)
-    // retest (manual `targets` dispatch) may re-run failed/verified versions —
-    // a failed slot is otherwise terminal with no retry path. Flagged stays
-    // excluded in every mode: red-flagged code never executes here.
-    if (!t.version || t.flagged || (!t.unverified && !retest)) continue
+    const ver = p.pendingUpdate ? p.pendingUpdate.verification : p.verification
+    // retest (manual `targets` dispatch) may re-run failed/verified versions;
+    // recent failed slots also re-enter automatically while retries < 3 (V-3).
+    // Flagged stays excluded in every mode: red-flagged code never executes here.
+    if (!t.version || t.flagged || (!t.unverified && !retest && !retryable(ver, now))) continue
     const target: VerifyTarget = { name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) }
     // submission-originated entries verify first — a human asked for them.
     // index.plugins is name-asc, so each tier stays alphabetical; backlog
@@ -50,7 +63,8 @@ export function shard<T>(items: T[], size: number): T[][] {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, outDir] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
-  const targets = planTargets(index, 48, process.argv.includes('--retest'))
+  const cap = Number(process.env.VERIFY_CAP) || 48
+  const targets = planTargets(index, cap, process.argv.includes('--retest'))
   const shards = shard(targets, 12)
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))

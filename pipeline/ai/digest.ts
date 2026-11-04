@@ -12,8 +12,9 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { exit } from 'node:process'
 import { join } from 'node:path'
-import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
+import { CatalogIndex, AiVerdict, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts } from '../verdicts.ts'
+import { verifyTargetOf } from '../verify/plan.ts'
 
 export interface DigestInput {
   index: CatalogIndex
@@ -29,6 +30,22 @@ export function renderDigest({ index, verdicts, lastDigestAt, now }: DigestInput
   const passes = fresh.filter(v => v.verdict === 'pass')
   const concerns = fresh.filter(v => v.verdict === 'concern')
   const held = index.plugins.filter(e => e.approval === 'pending' || e.pendingUpdate)
+
+  // verify backlog (V-2): same queue predicate as planTargets — makes the
+  // 96/day drain visible instead of silently growing. Oldest wait uses
+  // pendingUpdate.heldAt for held bumps, firstSeenAt otherwise.
+  const verOf = (e: PluginEntry) => (e.pendingUpdate ? e.pendingUpdate.verification : e.verification)
+  const queue = index.plugins.filter(e => { const t = verifyTargetOf(e); return !!t.version && t.unverified && !t.flagged })
+  const qSubs = queue.filter(e => e.discoveredVia?.includes('submission')).length
+  const weekAgo = now.getTime() - 7 * 86_400_000
+  const recentFailed = index.plugins.filter(e => {
+    const v = verOf(e)
+    return v.status === 'failed' && Number.isFinite(Date.parse(v.verifiedAt ?? '')) && Date.parse(v.verifiedAt!) >= weekAgo
+  }).length
+  const oldestWait = queue
+    .map(e => e.pendingUpdate?.heldAt ?? e.firstSeenAt)
+    .filter((d): d is string => Number.isFinite(Date.parse(d ?? '')))
+    .sort()[0]
 
   const escCell = (s: string) => s.replaceAll('|', '\\|')
   const reasonOf = (v: AiVerdict) => escCell(v.reason ?? '') + (v.reasonEn ? ` / ${escCell(v.reasonEn)}` : '')
@@ -58,6 +75,10 @@ ${held.length ? held.map(e => `- \`${e.name}\` ${e.pendingUpdate ? `v${e.pending
 ## ③ Concerns（${concerns.length}）
 
 ${concerns.length ? table(concerns) : '_无_'}
+
+## ④ 验证积压（queue — ${queue.length}）
+
+- 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}
 
 ---
 generated ${now.toISOString()}

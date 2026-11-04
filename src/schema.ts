@@ -39,6 +39,9 @@ export const Verification = z.object({
   verifiedAt: z.string().optional(),
   runUrl: z.string().optional(),
   logExcerpt: z.string().max(2048).optional(),
+  /** consecutive failed verify attempts recorded by verify merge — cleared on
+   *  any non-failed result. plan re-queues recent failures while retries < 3 (V-3). */
+  retries: z.number().int().optional(),
 })
 
 /** AI/human review state (AI-DIAGNOSIS §4).

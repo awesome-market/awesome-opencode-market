@@ -38,6 +38,21 @@ describe('renderDigest', () => {
     expect(md).toContain('inject\\|ed')            // pipe escaped for table
     expect(md).toContain('# marketplace digest 2026-01-03')
   })
+  it('verify backlog section reports queue/submissions/recent-failures/oldest', () => {
+    const md = renderDigest({
+      index: idx([
+        entry({ name: 'wait-a', verification: { status: 'unverified' } }),
+        entry({ name: 'wait-sub', discoveredVia: ['submission'], verification: { status: 'unverified' }, firstSeenAt: '2025-12-20T00:00:00Z' }),
+        entry({ name: 'f7d', verification: { status: 'failed', verifiedAt: '2026-01-02T00:00:00Z' } }),
+        entry({ name: 'flagged', verification: { status: 'unverified' }, capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] } }),
+      ]),
+      verdicts: [], lastDigestAt: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('验证积压（queue — 2）')
+    expect(md).toContain('投稿优先 1')
+    expect(md).toContain('近 7 天验证失败 1')
+    expect(md).toContain('最老等待 2025-12-20')
+  })
   it('missing digest-state = -∞ window catches everything', () => {
     const md = renderDigest({ index: idx([]), verdicts: [v({ at: '2001-01-01T00:00:00Z' })], lastDigestAt: null, now: new Date('2026-01-03') })
     expect(md).toContain('| pkg |')

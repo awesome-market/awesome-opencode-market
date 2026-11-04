@@ -7,6 +7,10 @@ on:
         description: 'comma-separated npm names to verify (empty = plan from index cap 48)'
         required: false
         default: ''
+      cap:
+        description: 'max targets to plan this run (empty = 48; raise to drain backlog)'
+        required: false
+        default: ''
 concurrency: catalog-branch   # shared with catalog.yml — serializes all writers of the catalog branch (I-4)
 permissions: {}
 jobs:
@@ -31,9 +35,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - id: shards
+        env: { VERIFY_CAP: "${{ inputs.cap }}" }
         run: |
           # targeted dispatch → retest mode: failed/verified slots become eligible
-          # again (otherwise a failed version is terminal — no retry path exists)
+          # again (recent failed slots also auto-retry up to 3 attempts — V-3)
           npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ inputs.targets && '--retest' || '' }} > /tmp/plan.out
           tail -1 /tmp/plan.out > /tmp/shard-list.json
           echo "list=$(cat /tmp/shard-list.json)" >> "$GITHUB_OUTPUT"

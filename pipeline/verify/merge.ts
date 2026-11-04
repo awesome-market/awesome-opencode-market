@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
 import type { VerifyResult } from './verify.ts'
 
-function toVerification(r: VerifyResult, runUrl?: string): PluginEntry['verification'] {
+function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['verification']): PluginEntry['verification'] {
   return {
     status: r.status,
     level: r.level,
@@ -16,6 +16,11 @@ function toVerification(r: VerifyResult, runUrl?: string): PluginEntry['verifica
     verifiedAt: r.verifiedAt,
     ...(runUrl ? { runUrl } : {}),
     ...(r.logExcerpt ? { logExcerpt: r.logExcerpt } : {}),
+    // consecutive-failure counter — plan lets a recent failure back into the
+    // queue while retries < 3 (V-3). Cleared whenever the status isn't failed.
+    ...(r.status === 'failed'
+      ? { retries: prev?.status === 'failed' ? (prev.retries ?? 1) + 1 : 1 }
+      : {}),
   }
 }
 
@@ -29,12 +34,11 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
       if (!rs?.length) return p
       let out = p
       for (const r of rs) {
-        const v = toVerification(r, runUrl)
         if (r.version && p.pendingUpdate?.version === r.version) {
-          out = { ...out, pendingUpdate: { ...out.pendingUpdate!, verification: v } }
+          out = { ...out, pendingUpdate: { ...out.pendingUpdate!, verification: toVerification(r, runUrl, out.pendingUpdate!.verification) } }
         } else if (!r.version || r.version === out.latestVersion) {
           // legacy version-less results and exact display-version matches
-          out = { ...out, verification: v }
+          out = { ...out, verification: toVerification(r, runUrl, out.verification) }
         }
         // version matches neither slot → stale result (npm moved on mid-flight), drop
       }
