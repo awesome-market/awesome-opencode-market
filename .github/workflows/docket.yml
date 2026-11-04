@@ -1,0 +1,47 @@
+name: review-docket
+on:
+  workflow_dispatch: {}
+  workflow_run:
+    workflows: [catalog, verify]
+    types: [completed]
+  schedule:
+    - cron: '40 * * * *'   # hourly catch-up (after verify/catalog land)
+permissions: {}
+jobs:
+  # Keeps one open [review] issue per AI-decided pending target so the
+  # maintainer can rule by tapping a label from a phone. Labels bootstrapped
+  # here so the flow works on a fresh repo.
+  docket:
+    if: >-
+      github.event_name != 'workflow_run'
+      || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions: { issues: write, contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: bootstrap labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for spec in \
+            "review:pending|FBCA04|等待人工点选裁决" \
+            "review:decided|EDEDED|已裁决（自动）" \
+            "verdict:pass|0E8A16|人工放行——手机点选" \
+            "verdict:concern|D93F0B|人工拦截——手机点选" \
+            "ai:pass|C5DEF5|AI 判 pass（信息标签）" \
+            "ai:concern|F9D0C4|AI 判 concern（信息标签）"; do
+            IFS='|' read -r name color desc <<< "$spec"
+            gh label create "$name" --color "$color" --description "$desc" --force
+          done
+      - name: sync review issues from catalog branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git fetch origin catalog
+          git show origin/catalog:index.json > /tmp/index.json
+          git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || touch /tmp/ai-verdicts.jsonl
+          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl

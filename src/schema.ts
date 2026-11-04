@@ -137,7 +137,10 @@ export const AiVerdict = z.object({
   /** null = github-kind entries (no versions); matches latestVersion: null */
   version: z.string().nullable().default(null),
   verdict: z.enum(['pass', 'concern']),
+  /** primary reason — Chinese for ai-sourced records, whatever the human typed otherwise */
   reason: z.string().optional(),
+  /** English rendering for ai-sourced records (bilingual audit trail) */
+  reasonEn: z.string().optional(),
   at: z.string(),
   /** stamped by our writers, never by the model — AI can't forge 'human' */
   source: z.enum(['ai', 'human']),

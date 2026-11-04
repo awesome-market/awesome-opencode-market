@@ -45,6 +45,13 @@ describe('renderDigest', () => {
 })
 
 describe('verdictRecord + digest maturity interplay', () => {
+  it('bilingual reasons: reasonEn lands on the record and in the digest', () => {
+    const rec = { ...verdictRecord(entry(), 'pass', '中文理由', { reasonEn: 'english reason' }), at: '2026-01-02T00:00:00Z' }
+    expect(rec.reason).toBe('中文理由')
+    expect(rec.reasonEn).toBe('english reason')
+    const md = renderDigest({ index: idx([]), verdicts: [rec], lastDigestAt: null, now: new Date('2026-01-03') })
+    expect(md).toContain('中文理由 / english reason')
+  })
   it('pass verdict before digest → held; after digest-state → released', () => {
     const pu = { version: '1.1.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' as const }, heldAt: 't' }
     const e = entry({ pendingUpdate: pu })

@@ -1,0 +1,42 @@
+name: 对目录条目提 concern / Report a concern
+description: 手机可操作——拦截或放行某个 catalog 条目版本（仅 maintainer 有效）
+title: "[concern] "
+labels: [concern]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        对目录中已有条目提出人工 verdict。**只有仓库 maintainer 提交的 issue 会生效**——其他人提交会被关闭。
+        - **拦截 (concern)**：该版本立即锁死，不会上架/更新；已上架的会被拉回 pending
+        - **放行 (pass)**：覆盖 AI concern，日报公示后进入上架流程
+        所有记录写入 catalog 分支 `ai-verdicts.jsonl`，可审计。
+  - type: input
+    id: package
+    attributes:
+      label: npm 包名或 owner/repo
+      description: 如 `oc-market-quail-zephyr-72a0`、`@scope/pkg` 或 `owner/repo`（无 npm 包的 GitHub 条目）
+      placeholder: package-name
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: 版本（可留空）
+      description: 留空 = 提交时的 npm 最新版；GitHub 条目无版本概念可留空
+      placeholder: "1.2.3"
+    validations: { required: false }
+  - type: dropdown
+    id: action
+    attributes:
+      label: 操作 / Action
+      options:
+        - 拦截 (concern)
+        - 放行 (pass)
+      default: 0
+    validations: { required: true }
+  - type: textarea
+    id: reason
+    attributes:
+      label: 理由 / Reason
+      description: 写进审计记录的一句话（中英文不限）
+      placeholder: 为什么要拦截/放行
+    validations: { required: true }

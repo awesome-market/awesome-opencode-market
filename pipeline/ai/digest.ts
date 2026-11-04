@@ -29,16 +29,26 @@ export function renderDigest({ index, verdicts, lastDigestAt, now }: DigestInput
   const concerns = fresh.filter(v => v.verdict === 'concern')
   const held = index.plugins.filter(e => e.approval === 'pending' || e.pendingUpdate)
 
+  const escCell = (s: string) => s.replaceAll('|', '\\|')
+  const reasonOf = (v: AiVerdict) => escCell(v.reason ?? '') + (v.reasonEn ? ` / ${escCell(v.reasonEn)}` : '')
+  const repo = (process.env.MARKET_REPO_URL ?? 'https://github.com/terry2010/opencode-market-spike').replace(/\/$/, '')
+  const reviewLink = (v: AiVerdict) => {
+    const q = encodeURIComponent(`is:issue in:title "[review] ${v.name}"`)
+    return `[审核单](${repo}/issues?q=${q})`
+  }
   const rows = (vs: AiVerdict[]) => vs.map(v =>
-    `| ${v.name} | ${v.version ?? '—'} | ${v.source} | ${(v.reason ?? '').replaceAll('|', '\\|')} |`).join('\n')
+    `| ${v.name} | ${v.version ?? '—'} | ${v.source} | ${reasonOf(v)} | ${reviewLink(v)} |`).join('\n')
+  const table = (vs: AiVerdict[]) =>
+    `| 包 | 版本 | 来源 | 理由 | 审核 |\n|---|---|---|---|---|\n${rows(vs)}`
   return `# marketplace digest ${day}
 
 > 本日报是**唯一完整的上架预告面**：下列 pass verdict 在本日报发布后进入成熟期（digest-appearance 门）。
 > "no findings" ≠ safe.
+> 📱 手机操作：点行的「审核单」链接开 issue → **Labels** 勾 \`verdict:pass\` 或 \`verdict:concern\` 即可写回裁决，零打字。
 
 ## ① 今日新放行（pass verdicts — ${passes.length}）
 
-${passes.length ? `| 包 | 版本 | 来源 | 理由 |\n|---|---|---|---|\n${rows(passes)}` : '_无_'}
+${passes.length ? table(passes) : '_无_'}
 
 ## ② 审核队列积压（held — ${held.length}）
 
@@ -46,7 +56,7 @@ ${held.length ? held.map(e => `- \`${e.name}\` ${e.pendingUpdate ? `v${e.pending
 
 ## ③ Concerns（${concerns.length}）
 
-${concerns.length ? `| 包 | 版本 | 来源 | 理由 |\n|---|---|---|---|\n${rows(concerns)}` : '_无_'}
+${concerns.length ? table(concerns) : '_无_'}
 
 ---
 generated ${now.toISOString()}
