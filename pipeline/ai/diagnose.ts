@@ -91,8 +91,9 @@ async function main(): Promise<void> {
   const arg = (k: string) => argv[argv.indexOf(k) + 1]
   const [idxPath, verdictsPath, outPath] = ['--index', '--verdicts', '--out'].map(arg)
   const limit = argv.includes('--limit') ? Number(arg('--limit')) : Infinity
+  const names = argv.includes('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim())) : null
   const dry = argv.includes('--dry')
-  if (!idxPath || !verdictsPath || !outPath) exit('usage: --index <p> --verdicts <p> --out <p> [--limit N] [--dry]')
+  if (!idxPath || !verdictsPath || !outPath) exit('usage: --index <p> --verdicts <p> --out <p> [--limit N] [--name a,b] [--dry]')
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const seen = latestVerdicts(
@@ -100,6 +101,7 @@ async function main(): Promise<void> {
       .map(l => AiVerdict.parse(JSON.parse(l))))
 
   const candidates = idx.plugins.filter(e => {
+    if (names && !names.has(e.name)) return false
     // two held shapes: pendingUpdate (newer version behind a displayed one)
     // and approval:pending on the entry itself (first version never released)
     const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
