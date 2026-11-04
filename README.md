@@ -2,38 +2,69 @@
 
 [中文说明](https://github.com/awesome-market/awesome-opencode-market/blob/main/README.zh.md)
 
-Find plugins and skills for OpenCode, see what they do, and install them without
-leaving the app.
+[![npm](https://img.shields.io/npm/v/awesome-opencode-market)](https://www.npmjs.com/package/awesome-opencode-market)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/awesome-market/awesome-opencode-market/blob/main/LICENSE)
+
+Find plugins and skills for OpenCode, see what they do and whether they have
+been tested, and install them without leaving the app.
 
 ![OpenCode Market panel](https://raw.githubusercontent.com/awesome-market/awesome-opencode-market/main/docs/market-panel.png)
 
-## Get started
+## Why this exists
 
-Install the Market plugin:
+OpenCode has a large plugin ecosystem but no built-in marketplace. Community
+lists help, but they are maintained by hand and mostly tell you a plugin exists
+— not whether it installs or what it does to your setup.
+
+Market's catalog is generated, not curated by hand: entries are discovered,
+scanned, and test-installed where possible, so a listing carries actual check
+results instead of a copied description.
+
+## Get started
 
 ```bash
 opencode plugin add awesome-opencode-market
 ```
 
-OpenCode's **Market** panel will then let you browse, search, and filter plugins
-and skills, view their descriptions and available checks, and install or update
-them in place.
+Then open the **Market** panel (GUI) or the Market view in the TUI.
+
+## What you get
+
+- **Browse and search** the catalog — filter by category and by which OpenCode
+  features a plugin uses
+- **Check labels** — `verified`, `failed`, `skipped`, `unverified`, each spelled
+  out in plain words before you install
+- **One-click install and update** — including an Update All for everything
+  that has a newer approved version
+- **Skills** — discover and install skills alongside plugins
+- **Bilingual** — English and 中文, remembered between sessions
 
 ## Choose with more confidence
 
-Each listing shows useful details before you install: what the extension is for,
-which OpenCode areas it uses, and whether it has been tested. If an extension
-hasn't been tested, the listing says so. A check is useful information, not a
-guarantee that software is safe.
+Each listing shows useful details before you install: what the extension is
+for, which OpenCode areas it uses, and whether it has been tested. If an
+extension hasn't been tested, the listing says so. A check is useful
+information, not a guarantee that software is safe.
 
-The catalog is updated regularly, so you can discover new and updated extensions
-without relying on a manually maintained list.
+The catalog is regenerated regularly, so you can discover new and updated
+extensions without relying on a manually maintained list.
 
-## Browse the catalog
+## The catalog is also data
 
-You can also [browse the catalog on the web](https://awesome-market.github.io/awesome-opencode-market/).
+The same catalog feeds the Market panel, the TUI, and the website — one source
+behind every surface:
 
-Have a plugin or skill to suggest? [Send a suggestion](https://github.com/awesome-market/awesome-opencode-market/issues/new?template=submission.yml).
+- Machine-readable index:
+  `https://awesome-market.github.io/awesome-opencode-market/index.json`
+- Skill file catalog:
+  `https://awesome-market.github.io/awesome-opencode-market/skills/`
+- [Browse the catalog on the web](https://awesome-market.github.io/awesome-opencode-market/)
+
+## Suggest a plugin or skill
+
+[Send a suggestion](https://github.com/awesome-market/awesome-opencode-market/issues/new?template=submission.yml)
+— submissions go through the same scan and test-install pipeline as everything
+else before they appear in the catalog.
 
 [Source code and project details](https://github.com/awesome-market/awesome-opencode-market) ·
 [MIT license](https://github.com/awesome-market/awesome-opencode-market/blob/main/LICENSE)
