@@ -66,7 +66,7 @@ jobs:
           LABEL: ${{ github.event.label.name }}
           ACTOR: ${{ github.actor }}
         run: |
-          node -e '
+          node -e '(() => {
             const out = (k, v) => require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`)
             const field = (body, ...labels) => {
               for (const l of labels) {
@@ -126,7 +126,7 @@ jobs:
             if (!name || !verdict) { console.log("nothing to do"); out("skip", "1"); return }
             out("name", name); out("ver", ver); out("verdict", verdict); out("reason", reason)
             console.log(JSON.stringify({ name, ver, verdict, reason }))
-          '
+          })()'
       - name: target must exist in catalog index
         if: steps.v.outputs.skip != '1'
         id: exists
