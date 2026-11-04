@@ -45,7 +45,7 @@ export async function fetchPackument(
   }
   if (res.status === 404) return { pk: null, status: 'not-found' }
   if (!res.ok) return { pk: null, status: 'error' }
-  const doc = (await res.json()) as {
+  let doc: {
     'dist-tags'?: { latest?: string } & Record<string, string>
     maintainers?: Array<{ name?: string } | string>
     versions?: Record<string, {
@@ -59,6 +59,11 @@ export async function fetchPackument(
     }>
     time?: Record<string, string>
     readme?: string
+  }
+  try {
+    doc = (await res.json()) as typeof doc
+  } catch {
+    return { pk: null, status: 'error' }
   }
   const distTags = (doc['dist-tags'] ?? {}) as Record<string, string>
   const latest = distTags.latest ?? null
@@ -95,6 +100,15 @@ export async function fetchTarball(
   url: string,
   opts: { fetchFn?: typeof fetch } = {},
 ): Promise<Buffer> {
+  // tarballUrl comes from packument/registry — restrict to https so a hostile
+  // registry/mirror can't steer the fetch at file:// or an internal address
+  let scheme: string
+  try {
+    scheme = new URL(url).protocol
+  } catch {
+    throw new Error(`tarball url malformed: ${url.slice(0, 80)}`)
+  }
+  if (scheme !== 'https:') throw new Error(`tarball url must be https: ${url.slice(0, 80)}`)
   const f = withTimeout(opts.fetchFn ?? fetch, 30_000)
   const res = await f(url)
   if (!res.ok) throw new Error(`tarball fetch failed: ${res.status}`)

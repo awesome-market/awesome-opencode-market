@@ -27,7 +27,7 @@ describe('seed.ts branches', () => {
       return mkRes({}, 404)
     }) as typeof fetch
     const out = await filterByStars(['a', 'b', 'c', 'd', 'e'], 50, { fetchFn: f })
-    expect(out).toEqual([{ repo: 'a', stars: 100 }])
+    expect(out).toEqual([{ repo: 'a', stars: 100, branch: null }])
   })
   it('repoToNpm: main 404 → master hit; non-json tolerated; both miss → null', async () => {
     const masterHit = (async (input: RequestInfo | URL) =>

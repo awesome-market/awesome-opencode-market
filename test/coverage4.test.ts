@@ -148,6 +148,6 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([]), outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     const gh = idx.plugins.find(e => e.name === 'solo/gh-plug')
     expect(gh?.source.kind).toBe('github')
-    expect(gh?.verification.status).toBe('skipped')
+    expect(gh?.verification.status).toBe('unverified')
   })
 })

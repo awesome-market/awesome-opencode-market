@@ -29,8 +29,14 @@ describe('fetch/npm', () => {
   })
   it('fetchTarball returns buffer, throws on failure', async () => {
     const ok = async () => new Response(new Uint8Array([1, 2, 3]))
-    expect((await fetchTarball('u', { fetchFn: ok as typeof fetch })).length).toBe(3)
-    await expect(fetchTarball('u', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })).rejects.toThrow()
+    expect((await fetchTarball('https://x/t', { fetchFn: ok as typeof fetch })).length).toBe(3)
+    await expect(fetchTarball('https://x/t', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })).rejects.toThrow()
+  })
+  it('fetchTarball rejects non-https and malformed urls', async () => {
+    const ok = async () => new Response(new Uint8Array([1]))
+    await expect(fetchTarball('http://x/t', { fetchFn: ok as typeof fetch })).rejects.toThrow('https')
+    await expect(fetchTarball('file:///etc/passwd', { fetchFn: ok as typeof fetch })).rejects.toThrow('https')
+    await expect(fetchTarball('not a url', { fetchFn: ok as typeof fetch })).rejects.toThrow('malformed')
   })
   it('downloads30d parses + null on error', async () => {
     expect(await fetchDownloads30d('x', { fetchFn: (async () => mkRes({ downloads: 42 })) as typeof fetch })).toBe(42)

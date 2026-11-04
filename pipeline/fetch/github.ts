@@ -20,6 +20,8 @@ export interface RepoMetaResult { meta: RepoMeta | null; status: RepoMetaStatus 
 function rateLimited(res: Response): boolean {
   return res.status === 429
     || (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0')
+    // secondary/abuse limits: 403 + retry-after, remaining may not be 0
+    || (res.status === 403 && res.headers.has('retry-after'))
 }
 
 export async function fetchRepoMeta(
@@ -36,10 +38,15 @@ export async function fetchRepoMeta(
   if (res.status === 404) return { meta: null, status: 'not-found' }
   if (rateLimited(res)) return { meta: null, status: 'rate-limited' }
   if (!res.ok) return { meta: null, status: 'error' }
-  const b = (await res.json()) as {
+  let b: {
     id?: number
     stargazers_count?: number; archived?: boolean; pushed_at?: string; created_at?: string
     license?: { spdx_id?: string }; topics?: string[]; default_branch?: string
+  }
+  try {
+    b = (await res.json()) as typeof b
+  } catch {
+    return { meta: null, status: 'error' }
   }
   return {
     meta: {
@@ -56,7 +63,7 @@ export async function fetchRepoMeta(
   }
 }
 
-export interface RepoTreeResult { paths: Set<string> | null; status: RepoMetaStatus }
+export interface RepoTreeResult { paths: Set<string> | null; status: RepoMetaStatus; truncated: boolean }
 
 /** One git-trees call returns every path — replaces per-file contents probes. */
 export async function fetchRepoTree(
@@ -70,14 +77,20 @@ export async function fetchRepoTree(
     res = await f(`https://api.github.com/repos/${fullName}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
       { headers: ghHeaders(opts.token) })
   } catch {
-    return { paths: null, status: 'error' }
+    return { paths: null, status: 'error', truncated: false }
   }
-  if (res.status === 404 || res.status === 409) return { paths: null, status: 'not-found' }
-  if (rateLimited(res)) return { paths: null, status: 'rate-limited' }
-  if (!res.ok) return { paths: null, status: 'error' }
-  const b = (await res.json()) as { tree?: Array<{ path?: string }>; truncated?: boolean }
-  // truncated responses still contain the front of the tree — usable for root probes
-  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok' }
+  if (res.status === 404 || res.status === 409) return { paths: null, status: 'not-found', truncated: false }
+  if (rateLimited(res)) return { paths: null, status: 'rate-limited', truncated: false }
+  if (!res.ok) return { paths: null, status: 'error', truncated: false }
+  let b: { tree?: Array<{ path?: string }>; truncated?: boolean }
+  try {
+    b = (await res.json()) as typeof b
+  } catch {
+    return { paths: null, status: 'error', truncated: false }
+  }
+  // truncated responses still contain the front of the tree — usable for root
+  // probes, but deep SKILL.md paths may be missed (surfaced via `truncated`)
+  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false }
 }
 
 /** Cross-check npm↔repo correspondence: the repo's own package.json should name
@@ -88,7 +101,12 @@ export async function fetchRepoPackageName(
   opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<{ pkgName: string | null; status: RepoMetaStatus }> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  const dir = opts.dir ? `${opts.dir.replace(/^\/+|\/+$/g, '')}/` : ''
+  // repository.directory is attacker-controlled — '..' segments would let a
+  // packument steer the package.json probe into a different repo (URL path
+  // normalization escapes /owner/repo/HEAD/), defeating the mismatch check
+  const clean = (opts.dir ?? '').replace(/^\/+|\/+$/g, '')
+  if (clean && clean.split('/').some(s => s === '..' || s === '.')) return { pkgName: null, status: 'error' }
+  const dir = clean ? `${clean}/` : ''
   try {
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
     if (res.status === 404) return { pkgName: null, status: 'not-found' }
@@ -134,14 +152,17 @@ export async function fetchMarketMeta(
     if (!res.ok) return null
     const b = (await res.json()) as { category?: unknown; description?: unknown }
     const out: MarketMeta = {}
+    // author-declared, attacker-controlled — cap counts/lengths so a hostile
+    // meta file can't bloat the catalog index
     if (Array.isArray(b.category) && b.category.every(c => typeof c === 'string')) {
-      out.category = b.category as string[]
+      const cats = (b.category as string[]).map(c => c.slice(0, 80)).filter(Boolean).slice(0, 8)
+      if (cats.length) out.category = cats
     }
     if (b.description && typeof b.description === 'object') {
       const d = b.description as Record<string, unknown>
       const desc: { en?: string; zh?: string } = {}
-      if (typeof d.en === 'string') desc.en = d.en
-      if (typeof d.zh === 'string') desc.zh = d.zh
+      if (typeof d.en === 'string' && d.en.trim()) desc.en = d.en.slice(0, 4_000)
+      if (typeof d.zh === 'string' && d.zh.trim()) desc.zh = d.zh.slice(0, 4_000)
       if (desc.en || desc.zh) out.description = desc
     }
     return Object.keys(out).length ? out : null

@@ -127,6 +127,10 @@ export async function run(opts: RunOptions = {}) {
           discoveredVia: ['submission' as const],
         } as never)
         seeded++
+      } else if (name) {
+        // already discovered organically — still record the submission channel
+        const ex = npmCands.get(name)!
+        if (!ex.discoveredVia.includes('submission')) ex.discoveredVia.push('submission')
       } else if (!name && repo && !ghCands.has(repo)) {
         // repo-only submission (e.g. a skill with no npm package) → github-kind
         ghCands.set(repo, {
@@ -167,6 +171,15 @@ export async function run(opts: RunOptions = {}) {
   const queued = new Set(queue.map(c => c.name))
   for (const c of sorted) if (seedNames.has(c.name) && !queued.has(c.name)) queue.push(c)
   const cappedOut = new Set(sorted.slice(limit).map(c => c.name).filter(n => !seedNames.has(n)))
+
+  // github side gets the same deterministic cap — a topic-search burst must not
+  // silently grow the index past maxEntries. Submission-injected repos bypass.
+  const isSeedRepo = (c: (typeof ghList)[number]) => c.discoveredVia.includes('submission')
+  const ghSorted = [...ghList].sort((a, b) => a.fullName.localeCompare(b.fullName))
+  const ghQueue = ghSorted.slice(0, limit)
+  const ghQueued = new Set(ghQueue.map(c => c.fullName))
+  for (const c of ghSorted) if (isSeedRepo(c) && !ghQueued.has(c.fullName)) ghQueue.push(c)
+  for (const c of ghSorted.slice(limit)) if (!isSeedRepo(c)) cappedOut.add(c.fullName)
 
   // 3. fetch + evidence gate + scan — concurrent batches of 10.
   //    Incremental short-circuit (S-2): name@version unchanged in old index → reuse
@@ -218,12 +231,27 @@ export async function run(opts: RunOptions = {}) {
         return
       }
 
-      const { pk } = await fetchPackument(cand.name, { fetchFn: f })
-      if (!pk) return
+      const { pk, status: pkStatus } = await fetchPackument(cand.name, { fetchFn: f })
+      if (!pk) {
+        // transient failure ≠ disappearance — keep the old entry rather than
+        // letting the candidate vanish into gone-check (which would double-fetch)
+        if (pkStatus === 'error' && prev && !isBlocked(prev.name)) {
+          entries.push(prev)
+          reusedNames.add(prev.name)
+        } else if (pkStatus === 'error' && seedNames.has(cand.name)) {
+          console.warn(`submission ${cand.name}: packument fetch failed (transient) — skipped this run`)
+        }
+        return
+      }
       const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
       if (!ev.ok) return
 
-      const repo = normalizeRepoUrl(pk.repository)
+      // packument.repository is authoritative; the submission-declared repo is
+      // the fallback — and a disagreement between them is itself a signal.
+      // (organic search repoUrl is the same packument field — comparing it
+      // would only flag stale search indexes, so only submissions declare)
+      const declaredRepo = cand.discoveredVia.includes('submission') ? normalizeRepoUrl(cand.repoUrl) : null
+      const repo = normalizeRepoUrl(pk.repository) ?? declaredRepo
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
       if (isBlocked(cand.name, slug)) return
 
@@ -256,16 +284,25 @@ export async function run(opts: RunOptions = {}) {
       if (treeRes?.status === 'rate-limited') rateLimitedCalls++
       const hasSkill = !!treeRes?.paths &&
         (treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills')))
+      if (treeRes?.paths && treeRes.truncated)
+        console.warn(`repo tree truncated for ${repo} — deep .opencode/skills probes may miss`)
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
       // npm↔repo correspondence: the repo's own package.json should name this
       // package. A positive mismatch (claiming an unrelated popular repo to
       // borrow its stars/trust) → finding; absence of evidence isn't proof.
       if (repo) {
-        const { pkgName, status: pjStatus } = await fetchRepoPackageName(repo, { dir: pk.repositoryDir ?? undefined, fetchFn: f })
+        const dir = pk.repositoryDir ?? undefined
+        const dirTraversal = !!dir && dir.split('/').some(s => s === '..' || s === '.')
+        if (dirTraversal) scan.findings.push('sec:repo-dir-traversal')
+        const { pkgName, status: pjStatus } = dirTraversal
+          ? { pkgName: null, status: 'error' as const }
+          : await fetchRepoPackageName(repo, { dir, fetchFn: f })
         if (pjStatus === 'ok' && pkgName && pkgName !== cand.name && pkgName !== cand.name.split('/').pop()) {
           scan.findings.push(`sec:repo-mismatch:${pkgName}`)
         }
       }
+      if (declaredRepo && declaredRepo !== repo)
+        scan.findings.push(`sec:repo-declared-mismatch:${declaredRepo}`)
       // author-claimed fields precedence: repo .opencode-market.json > issue submission > auto-derived
       const sub = seedMeta.get(cand.name)
 
@@ -366,7 +403,7 @@ export async function run(opts: RunOptions = {}) {
   //     api.github.com calls needed here. fetchMarketMeta hits raw.githubusercontent
   //     (CDN, uncounted) so it stays free even under API quota exhaustion.
   const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
-  const ghMissing = ghList.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
+  const ghMissing = ghQueue.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
   for (let i = 0; i < ghMissing.length; i += BATCH) {
     const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
       const mm = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
@@ -394,7 +431,9 @@ export async function run(opts: RunOptions = {}) {
         publishedAt: null,
         metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
         capabilities: { scannedAt: null, findings: [], redFlags: [] },
-        verification: { status: 'skipped', level: 'install' },
+        // 'unverified', not 'skipped' — skipped means red flags blocked a run;
+        // repo-only entries simply have no installable artifact yet (AGENTS §检验规则)
+        verification: { status: 'unverified' },
         compat: {},
         approval: ghPrev?.approval ?? 'pending',
         ...(ghPrev?.approvalReason ? { approvalReason: ghPrev.approvalReason } : {}),
@@ -424,9 +463,19 @@ export async function run(opts: RunOptions = {}) {
       }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
-    // github-kind entries never pass through the candidate filters, so a
-    // missing one is by definition filter/evidence loss, not 'unknown'
-    else if (e.source.kind === 'github') reason = 'filtered'
+    // github-kind entries never pass through the candidate filters — but a
+    // discovery-side rate-limit/error silently truncates search results, so a
+    // missing entry needs a live re-probe before the tombstone (same fail-closed
+    // posture as the npm side)
+    else if (e.source.kind === 'github') {
+      const { status } = await fetchRepoMeta(e.source.repo ?? e.name, { token: opts.ghToken, fetchFn: f })
+      if (status === 'rate-limited') rateLimitedCalls++
+      if (status === 'error' || status === 'rate-limited') {
+        entries.push(e)
+        return
+      }
+      reason = status === 'not-found' ? 'repo-404' : 'filtered'
+    }
     removedNow.push({
       slug: e.slug, name: e.name, lastSource: e.source,
       disappearedAt: now, reason,

@@ -27,7 +27,7 @@ export function looksLikeTemplateSpam(names: string[]): boolean {
   if (names.length < 6) return false
   const stems = names.map(n => n.replace(/[-_\d]/g, '').toLowerCase())
   const dominant = new Map<string, number>()
-  for (const s of stems) dominant.set(s.slice(0, 6), (dominant.get(s.slice(0, 6)) ?? 0) + 1)
+  for (const s of stems) dominant.set(s, (dominant.get(s) ?? 0) + 1)
   return Math.max(...dominant.values()) >= 6
 }
 

@@ -382,3 +382,29 @@ Pipeline/CI 安全：
 **仍开（有意保留/后续）**：S-2 pending 队列（未到规模）、D-4 `.opencode-market.json` 已有 fetchMarketMeta 半实现（repo 根约定文件），B-7 index checksum 签名（last-good 缓存已有）、uninstall 两步确认（产品判断：可重装≈可撤销）、verifyShard unhandledRejection 仍存理论残余（进程内 vm 的 fire-and-forget 侧信道——已有进程级兜底）。
 
 **验证**：`npx tsc --noEmit` 0 错；`npx vitest run` 427 全过；`npm run coverage` statements 98.0% / branches 90.1% / functions 96.3% / lines 99.2%（90% 门槛全过）。
+
+---
+
+## 附四：抓取链路审计（F-1…F-14，2026-11-04 实现）
+
+对 discover/fetch/run 消费段的第三轮审计，全部修复：
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| F-1 github-kind 缺失条目不重探直接 tombstone | ✅ | `run.ts` goneCheck：github-kind 也 `fetchRepoMeta` 重探，`error`/`rate-limited` → 保留（与 npm 侧对称）；`schema.ts` RemovedReason 增 `repo-404` |
+| F-2 `repository.directory` 路径穿越绕过 repo-mismatch | ✅ | `fetch/github.ts` `fetchRepoPackageName` 拒绝含 `..`/`.` 段的 dir（不发请求）；`run.ts` 打 `sec:repo-dir-traversal` finding |
+| F-3 `looksLikeTemplateSpam` 误伤 `opencode-*` 前缀 | ✅ | `filter.ts`：stem 判定从 `slice(0,6)` 前缀改全 stem 相同才计票——`opencode-weather/git/…` 不再误伤，`mp-x1…x6` 仍能抓 |
+| F-4 github 侧无 cap | ✅ | `run.ts`：ghList 按 fullName 排序 + `maxEntries` 截断，seed repo 免 cap，被截者进 `cappedOut` → `capped` tombstone |
+| F-5 seed `repo` 字段 dead-wired | ✅ | `normalizeRepoUrl` 接受裸 `owner/repo`；`run.ts` declaredRepo 作 packument repository 的 fallback，二者不一致打 `sec:repo-declared-mismatch:<repo>`（仅对 submission 候选，organic 搜索同源字段不比较） |
+| F-6 已发现 npm 投稿不标 submission | ✅ | `run.ts`：已在 npmCands 的投稿 merge `submission` 进 discoveredVia |
+| F-7 secondary rate limit 归 error | ✅ | `fetch/github.ts` rateLimited() 增 `403 + retry-after` 判定 |
+| F-8 tree `truncated` 忽略 | ✅ | `RepoTreeResult.truncated` 透出；`run.ts` 截断时 warn（深层 .opencode/skills 探针可能漏） |
+| F-9 `.opencode-market.json` 无体积上限 | ✅ | `fetchMarketMeta`：category ≤8 项每项 ≤80 字符，description ≤4000 字符 |
+| F-10 `a/b.git/` 尾斜杠残留 | ✅ | `normalizeRepoUrl`：match 后再 strip `.git`（同时覆盖 bare `.git` 尾） |
+| F-11 repoToNpm 只探 main/master | ✅ | `seed.ts`：filterByStars 带出 `default_branch`，repoToNpm 优先探之再回退 main/master |
+| F-12 github-kind `verification:'skipped'` 语义失真 | ✅ | `run.ts` ghMissing → `'unverified'`（skipped 语义是"有高危信号没跑"，repo-only 是无 install 路径，AGENTS §检验规则） |
+| F-13 `fetchTarball` 不校验 scheme | ✅ | `fetch/npm.ts`：tarballUrl 限 `https:`，malformed 拒绝 |
+| F-14 `!pk` 合并 not-found/error | ✅ | `run.ts`：`status==='error'` 且有 prev → 保留旧条目（不再落 goneCheck 二次拉取）；seed 投稿瞬时失败打 warn |
+| 附：packument/repoMeta `res.json()` 在 try 外 | ✅ | malformed JSON body → `status:'error'` 而非 unhandled throw 杀 run |
+
+新增 `test/fetch-audit.test.ts`（17 用例）覆盖全部新分支。

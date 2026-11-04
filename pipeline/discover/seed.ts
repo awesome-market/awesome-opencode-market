@@ -14,28 +14,30 @@ export function extractRepos(md: string): string[] {
   return [...out]
 }
 
-/** Fetch repo stars, keep ≥ minStars, return sorted list. */
+/** Fetch repo stars, keep ≥ minStars, return sorted list (default branch carried for repoToNpm). */
 export async function filterByStars(
   repos: string[], minStars: number,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
-): Promise<{ repo: string; stars: number }[]> {
+): Promise<{ repo: string; stars: number; branch: string | null }[]> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  const out: { repo: string; stars: number }[] = []
+  const out: { repo: string; stars: number; branch: string | null }[] = []
   for (const repo of repos) {
     const res = await f(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(opts.token) })
     if (!res.ok) continue
-    const b = (await res.json()) as { stargazers_count?: number; archived?: boolean }
-    if (!b.archived && (b.stargazers_count ?? 0) >= minStars) out.push({ repo, stars: b.stargazers_count! })
+    const b = (await res.json()) as { stargazers_count?: number; archived?: boolean; default_branch?: string }
+    if (!b.archived && (b.stargazers_count ?? 0) >= minStars)
+      out.push({ repo, stars: b.stargazers_count!, branch: b.default_branch ?? null })
   }
   return out.sort((a, b) => b.stars - a.stars)
 }
 
 /** Repo → npm name probe: package.json name field from repo root. */
 export async function repoToNpm(
-  repo: string, opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
+  repo: string,
+  opts: { token?: string | undefined; branch?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<string | null> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  for (const br of ['main', 'master']) {
+  for (const br of [...new Set([opts.branch, 'main', 'master'].filter((b): b is string => !!b))]) {
     const res = await f(`https://raw.githubusercontent.com/${repo}/${br}/package.json`)
     if (!res.ok) continue
     try {
@@ -56,8 +58,8 @@ export async function buildSeedList(
   const repos = extractRepos(await res.text())
   const starred = await filterByStars(repos, opts.minStars ?? 50, opts)
   const names: string[] = []
-  for (const { repo } of starred) {
-    const npm = await repoToNpm(repo, opts)
+  for (const { repo, branch } of starred) {
+    const npm = await repoToNpm(repo, { ...opts, ...(branch ? { branch } : {}) })
     names.push(npm ?? `github:${repo}`)
   }
   return names

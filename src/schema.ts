@@ -110,7 +110,7 @@ export type PluginEntry = z.infer<typeof PluginEntry>
 
 /** Tombstone record: entry observed missing from a run — kept so disappearance
  *  has a cause, a URL that doesn't 404, and name-reuse detection data (DEV §F-2). */
-export const RemovedReason = z.enum(['npm-404', 'filtered', 'capped', 'manual', 'unknown'])
+export const RemovedReason = z.enum(['npm-404', 'repo-404', 'filtered', 'capped', 'manual', 'unknown'])
 export type RemovedReason = z.infer<typeof RemovedReason>
 
 export const RemovedEntry = z.object({

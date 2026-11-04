@@ -85,10 +85,12 @@ export async function discoverGithub(
 export function normalizeRepoUrl(raw: string | null | undefined): string | null {
   if (!raw) return null
   let s = raw.trim()
-  s = s.replace(/^git\+/, '').replace(/\.git$/, '')
+  s = s.replace(/^git\+/, '').replace(/\.git\/?$/, '')
   s = s.replace(/^git@github\.com:/, 'https://github.com/')
   s = s.replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/')
   const m = s.match(/github\.com\/([^/]+\/[^/#?]+)/)
-  if (!m) return null
-  return m[1]!.replace(/\/$/, '')
+  if (m) return m[1]!.replace(/\.git$/, '').replace(/\/$/, '')
+  // bare owner/repo — submission seeds and terse repository fields
+  const bare = s.match(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/)
+  return bare ? bare[1]!.replace(/\.git$/, '') : null
 }
