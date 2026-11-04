@@ -93,6 +93,8 @@ export async function run(opts: RunOptions = {}) {
   // seeds: submissions.txt lines — JSONL (issue-form submissions carry declared
   // metadata) or legacy plain names or github:owner/repo
   const seedMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
+  // repo-only submissions (name:null) keep declared metadata too — keyed by repo
+  const seedRepoMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
   const seedNames = new Set<string>()
   if (opts.seedPath) {
     let seeded = 0
@@ -105,15 +107,15 @@ export async function run(opts: RunOptions = {}) {
           const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: string[] | null; desc?: Record<string, string | null> }
           name = s.name ?? null
           repo = s.repo ?? null
-          if (name) {
-            const desc: Record<string, string> = {}
-            for (const [k, v] of Object.entries(s.desc ?? {})) if (v) desc[k] = v
-            seedMeta.set(name, {
-              ...(s.type ? { type: s.type } : {}),
-              ...(s.category?.length ? { category: s.category } : {}),
-              ...(Object.keys(desc).length ? { desc } : {}),
-            })
+          const desc: Record<string, string> = {}
+          for (const [k, v] of Object.entries(s.desc ?? {})) if (v) desc[k] = v
+          const meta = {
+            ...(s.type ? { type: s.type } : {}),
+            ...(s.category?.length ? { category: s.category } : {}),
+            ...(Object.keys(desc).length ? { desc } : {}),
           }
+          if (name) seedMeta.set(name, meta)
+          else if (repo) seedRepoMeta.set(repo, meta)
         } catch { continue }
       } else if (line.startsWith('github:')) {
         repo = line.slice(7)
@@ -460,17 +462,27 @@ export async function run(opts: RunOptions = {}) {
       }
       ghStats.admitted++
       const hasSkill = hasSkillPath(treeRes.paths)
+      const sub = seedRepoMeta.get(c.fullName)
+      // type drives the site badge: declared wins; otherwise a repo whose only
+      // artifact is skills (no root package.json, no .opencode plugin path)
+      // is a skill repo, not a plugin
+      const pluginArtifact = [...treeRes.paths].some(p => /^\.opencode\/(plugin|plugins)\//.test(p))
+      const type: PluginEntry['type'] = sub?.type === 'skill' ? 'skill'
+        : (hasSkill && !treeRes.paths.has('package.json') && !pluginArtifact ? 'skill' : 'plugin')
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
         aliases: [],
-        type: 'plugin',
+        type,
         ...(hasSkill ? { contains: ['skill' as const] } : {}),
         discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}) },
-        description: { en: marketMeta?.description?.en ?? c.description, ...(marketMeta?.description?.zh ? { zh: marketMeta.description.zh } : {}) },
+        description: {
+          en: marketMeta?.description?.en ?? sub?.desc?.en ?? c.description,
+          ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
+        },
         features: detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles }),
-        category: marketMeta?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
+        category: marketMeta?.category ?? sub?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
         license: c.license,
         deprecated: false,
         deprecatedMessage: null,

@@ -174,6 +174,7 @@ describe('run: JSONL seed declared metadata', () => {
     const e = idx.plugins.find(p => p.name === 'o/repo-skill')!
     expect(e.source.kind).toBe('github')
     expect(e.discoveredVia).toContain('submission')
+    expect(e.type).toBe('skill')   // declared type honored for repo-only seeds
   })
 })
 

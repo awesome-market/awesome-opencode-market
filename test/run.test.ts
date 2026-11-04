@@ -172,6 +172,18 @@ describe('github-kind hardening', () => {
     expect(idx.plugins.find(p => p.name === 'o/r')?.contains).toEqual(['skill'])
   })
 
+  it('skill-only evidence derives type:skill; package.json present stays plugin', async () => {
+    const withTree = (tree: { path: string }[]) => ghBase(
+      url => url.includes('/git/trees/') ? new Response(JSON.stringify({ tree })) : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const d = mkdtempSync(join(tmpdir(), 'ty-'))
+    const skillOnly = await run({ outPath: join(d, 'a.json'), fetchFn: withTree([{ path: 'skills/x/SKILL.md' }]), now: 't' })
+    expect(skillOnly.plugins.find(p => p.name === 'o/r')?.type).toBe('skill')
+    const withPkg = await run({ outPath: join(d, 'b.json'), fetchFn: withTree([{ path: 'skills/x/SKILL.md' }, { path: 'package.json' }]), now: 't' })
+    expect(withPkg.plugins.find(p => p.name === 'o/r')?.type).toBe('plugin')
+  })
+
   it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {
     let codeloadHits = 0
     const f = ghBase(
