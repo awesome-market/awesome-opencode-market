@@ -179,7 +179,10 @@ jobs:
           && (startsWith(github.event.comment.body, '/approve') || startsWith(github.event.comment.body, '/concern')))
       )
     runs-on: ubuntu-latest
-    concurrency: catalog-branch        # same writer lock as ingest/catalog/verify
+    # per-issue group, NOT catalog-branch: every verdict event must land —
+    # a shared writer lock drops pending runs in a burst; the rebase-push
+    # retry loop below absorbs cross-issue write races instead
+    concurrency: verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write }
     steps:
       - uses: actions/checkout@v4
