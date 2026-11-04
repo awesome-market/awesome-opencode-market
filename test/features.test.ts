@@ -37,6 +37,9 @@ describe('detectFeatures (Host.resolve parity)', () => {
     expect(detectFeatures({ exports: { './gui-experimental': './g.cjs' } })).toEqual(['gui'])
     expect(detectFeatures({})).toEqual([])
   })
+  it('string exports is the root entry — counts as server', () => {
+    expect(detectFeatures({ exports: './dist/index.js' })).toEqual(['server'])
+  })
   it('loop-recover shape: ./server + ./gui-experimental + unrelated subpaths', () => {
     const out = detectFeatures({
       exports: { '.': './dist/server.js', './server': './dist/server.js', './gui-experimental': './dist/gui-experimental.cjs', './detect/detector': './d.js' },

@@ -16,9 +16,12 @@ export function detectFeatures(pkg: {
   main?: string | null
   files?: readonly string[]   // tarball paths (package/-prefixed ok)
 }): PluginFeature[] {
-  const ex = pkg.exports && typeof pkg.exports === 'object'
-    ? pkg.exports as Record<string, unknown>
-    : undefined
+  // node treats a string exports as { ".": <string> } — it is the root entry
+  const ex = typeof pkg.exports === 'string'
+    ? { '.': pkg.exports }
+    : pkg.exports && typeof pkg.exports === 'object'
+      ? pkg.exports as Record<string, unknown>
+      : undefined
   const roots = new Set((pkg.files ?? []).map(f => f.replace(/^package\//, '')))
   // node resolution for `pkg/<sub>`: <sub>.{js,cjs,mjs} or <sub>/index.{js,cjs,mjs}
   const at = (sub: string) =>

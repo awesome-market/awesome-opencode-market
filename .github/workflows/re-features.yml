@@ -1,0 +1,61 @@
+name: re-features
+# One-off data repair: recompute every entry's `features` under the
+# Host.resolve-aligned rules (classification logic changed; dormant packages
+# never hit the version-bump rescan path). npm packument fetches only —
+# zero api.github.com calls, so the hourly token budget is untouched.
+on:
+  workflow_dispatch:
+concurrency: catalog-branch   # same mutex as catalog.yml/verify.yml — serializes catalog writers
+permissions: {}
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4        # main — pipeline sources
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: recompute features on catalog branch (retry on writer race)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.email "market-bot@users.noreply.github.com"
+          git config user.name "market-bot"
+          git fetch origin catalog
+          git worktree add /tmp/cat origin/catalog
+          ok=0
+          for i in 1 2 3; do
+            git -C /tmp/cat reset --hard origin/catalog
+            # re-run on the fresh base each retry — the script is idempotent
+            npx tsx pipeline/re-features.ts /tmp/cat/index.json
+            git -C /tmp/cat add index.json
+            git -C /tmp/cat commit -m "features: recompute under Host.resolve-aligned rules (run ${GITHUB_RUN_ID})" || { ok=1; break; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            echo "push rejected (attempt $i) — retrying on fresh remote head"
+            git fetch origin catalog
+          done
+          [ "$ok" = 1 ] || { echo "catalog push failed after retries"; exit 1; }
+
+  site:
+    needs: recompute
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # same as catalog.yml — site always builds from the catalog branch head
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: |
+          git fetch origin catalog
+          git show origin/catalog:index.json > index.json
+      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: /tmp/site }
+      - uses: actions/deploy-pages@v4
+        id: deploy
