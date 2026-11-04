@@ -406,6 +406,8 @@ export async function run(opts: RunOptions = {}) {
   //     exhaustion.
   const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
   const ghMissing = ghQueue.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
+  // admission audit counters — gate outcomes must be countable, not just silent nulls
+  const ghStats = { covered: ghQueue.length - ghMissing.length, reused: 0, treeTransient: 0, treeEmpty: 0, evidenceRejected: 0, scanFailed: 0, scanOversize: 0, admitted: 0 }
   for (let i = 0; i < ghMissing.length; i += BATCH) {
     const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
       const ghPrev = oldByName.get(c.fullName)
@@ -414,6 +416,7 @@ export async function run(opts: RunOptions = {}) {
       if (ghPrev && c.pushedAt && ghPrev.modifiedAt === c.pushedAt
           && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
           && !isBlocked(c.fullName)) {
+        ghStats.reused++
         return ghPrev
       }
       // evidence gate: a topic tag alone never admits — the tree must show an
@@ -425,11 +428,12 @@ export async function run(opts: RunOptions = {}) {
       if (treeRes.status === 'error' || treeRes.status === 'rate-limited') {
         // transient failure ≠ junk — keep the old entry rather than dropping it
         // into gone-check on a network hiccup
+        ghStats.treeTransient++
         return ghPrev ?? null
       }
-      if (!treeRes.paths) return null   // not-found/empty — gone-check decides
+      if (!treeRes.paths) { ghStats.treeEmpty++; return null }   // not-found/empty — gone-check decides
       const ev = hasRepoEvidence(treeRes.paths, c.topics)
-      if (!ev.ok) return null
+      if (!ev.ok) { ghStats.evidenceRejected++; return null }
       const marketMeta = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
       const repoPkg = await fetchRepoPackage(c.fullName, { fetchFn: f })
       // codeload resolves HEAD → default branch too, so no meta lookup needed
@@ -449,11 +453,13 @@ export async function run(opts: RunOptions = {}) {
       } catch (e) {
         const msg = (e as Error).message
         console.warn(`scan failed ${c.fullName}:`, msg)
+        ghStats.scanFailed++
         // oversize repos fail deterministically — stamp the ruleset so the
         // incremental-reuse check above skips re-fetching them every run
         // (retries resume naturally when pushedAt changes)
-        if (/too large/.test(msg)) scan.rulesetVersion = RULESET_VERSION
+        if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++ }
       }
+      ghStats.admitted++
       const hasSkill = treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills'))
       const entry: PluginEntry = {
         name: c.fullName,
@@ -492,6 +498,9 @@ export async function run(opts: RunOptions = {}) {
     }))
     entries.push(...batch.filter((e): e is PluginEntry => e !== null))
   }
+  console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +
+    `${ghStats.evidenceRejected} evidence-rejected, ${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ` +
+    `${ghStats.scanFailed} scan-failed of which ${ghStats.scanOversize} oversize)`)
   if (rateLimitedCalls > 0) {
     console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)
   }

@@ -1,4 +1,5 @@
 name: verify
+# scope: prod-only — scheduled verification automation
 on:
   schedule: [{ cron: '47 4 * * *' }, { cron: '47 16 * * *' }]   # 2x/day — aligned behind both catalog runs (WF-4)
   workflow_dispatch:
