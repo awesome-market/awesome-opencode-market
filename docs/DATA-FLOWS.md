@@ -209,6 +209,23 @@ discoverNpm + discoverGithub（并行）
 
 **实现**：`pipeline/submission.ts::parseSubmission/seedLine`（issue 解析+种子行）· `pipeline/review.ts::reviewPackage/verdict/renderReview`（机械审+报告）· workflow 内嵌 node 脚本（ingest 去重/verdict 写回/sweep）
 
+```mermaid
+flowchart LR
+  ISS["[submit] issue<br/>表单或纯文本"] --> PA["parseSubmission"]
+  PA --> K{"KIND"}
+  K -->|"npm"| RV["reviewPackage<br/>npm 存在性+证据+扫描"]
+  K -->|"repo"| CL["合成 clean<br/>(无 npm 可扫)"]
+  K -->|"none"| INV["submission:invalid"]
+  RV -->|"clean"| ING["ingest job<br/>grep 去重→append"]
+  CL --> ING
+  RV -->|"flagged"| NW["submission:needs-work<br/>+评论报告"]
+  ING --> SL[("submissions.txt")]
+  SL --> CAT["下一班 catalog run<br/>--seed 消费"]
+  NW & INV --> SW["sweep: 30d 无更新自动关"]
+```
+
+逐步细节：
+
 ```
 issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
   或 issue_comment(created) 且 issue 有 submission:{needs-work,invalid} 标签
@@ -293,6 +310,25 @@ alert job（failure()）：开 pipeline-alert issue
 ## 4. AI 诊断流 — `bin/ai-diagnose.sh`（launchd 每小时；手动同命令）
 
 **实现**：`pipeline/ai/diagnose.ts::unreviewedTargets/reviewMaterial/l05Score/ornithReview/verdictRecord` · `ai/l05_score.py`（L0.5 打分器，独立进程）· `verdicts.ts::loadVerdicts/latestVerdicts/vkey`
+
+双通道合成——L0.5 机械打分压过 LLM 自判，任一通道挂都 fail-closed：
+
+```mermaid
+flowchart TB
+  IDX[("index.json")] --> UT["unreviewedTargets<br/>无任何裁决的 held 版本"]
+  VJ[("ai-verdicts.jsonl")] --> UT
+  UT --> RM["reviewMaterial<br/>manifest+findings+redFlags<br/>结构化材料块"]
+  RM --> L05["L0.5 Galvanize-2<br/>逐块打分 (l05_score.py)"]
+  RM --> OR["Ornith LLM (omlx)<br/>解析最后含 verdict 的 JSON"]
+  L05 -->|"≥0.662"| FLG["l05flag {zh,en}"]
+  OR --> RESP["{verdict,<br/>reason_zh, reason_en}"]
+  FLG & RESP --> CMP{"合成 verdictRecord"}
+  CMP -->|"l05flag → concern<br/>否则 → r.verdict"| REC["verdict 记录<br/>source:ai · 无 sha"]
+  CMP -.->|"Ornith挂+无flag"| SKIP["本轮不写<br/>fail-closed 下轮重试"]
+  REC --> VJ
+```
+
+逐步细节：
 
 ```
 catalog clone（~/.local/share/opencode-market-catalog）→ reset --hard
@@ -475,6 +511,20 @@ pass → 需 mature（v.at ≤ lastDigestAt）
 
 **实现**：`pipeline/docket.ts::docketTargets/issueTitle`（目标+开单/关单，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts`
 
+```mermaid
+flowchart LR
+  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai"]
+  VJ[("ai-verdicts.jsonl")] --> DT
+  DT --> W["wanted 集合<br/>[review] name@ver"]
+  OPEN["gh issue list<br/>--label review:pending"] --> DF{"diff"}
+  W --> DF
+  DF -->|"缺失"| OPENI["开审核单<br/>labels: review:pending+ai:*"]
+  DF -->|"多余(人工已裁决/已放行)"| CLOSEI["自动关单"]
+  OPENI -.->|"人打标签/评论"| CON["concern.yml<br/>→ human verdict"]
+```
+
+逐步细节：
+
 ```
 docket.ts：index+verdicts → docketTargets
   = ver = pendingUpdate?.version ?? (approval==='pending' ? latestVersion : null)
@@ -497,6 +547,21 @@ workflow_run 触发只认 conclusion==='success'；无并发组（操作 issue �
 ## 9. 站点发布流 — `pipeline/site/build.ts` → GitHub Pages
 
 **实现**：`site/build.ts::isVisible/scanLabel/verifyLabel/approvalBadge/listPage/detailPage/buildSite/buildSkillCatalog`
+
+```mermaid
+flowchart LR
+  IDX[("catalog index.json<br/>现取不吃旧 artifact")] --> BS["buildSite"]
+  IDX --> BSK["buildSkillCatalog"]
+  BS --> P1["index.html 列表页<br/>isVisible 过滤 pending"]
+  BS --> P2["p/slug.html 详情页"]
+  BS --> P3["health.json"]
+  BS --> P4["privacy.html"]
+  BSK -->|"contains:skill<br/>∧ latestVersion"| SK["skills/index.json<br/>+ skills/id/ 文件树<br/>(批准版 tarball 解出)"]
+  IDX --> CP["index.json 原样发布<br/>全量含 pending=审计面"]
+  P1 & P2 & P3 & P4 & SK & CP --> PG["deploy-pages"]
+```
+
+逐步细节：
 
 ```
 index.json（catalog 分支现取，不吃旧 artifact——B-5）
