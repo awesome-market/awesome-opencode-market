@@ -60,6 +60,13 @@ export function hasRepoEvidence(
   return { ok: specific && artifact, via }
 }
 
+/** Any SKILL.md in the repo marks a skill artifact — root, skills/<x>/, or
+ *  .opencode/skills/ layouts all count. Shared by the npm↔repo probe and the
+ *  github-kind admission path so `contains` matches the evidence gate's idea
+ *  of a skill. */
+export const hasSkillPath = (paths: ReadonlySet<string>): boolean =>
+  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || p.startsWith('.opencode/skills'))
+
 /** Evidence check post-fetch: does the package actually look like an opencode artifact? */
 export function hasPluginEvidence(pkg: {
   keywords?: string[]

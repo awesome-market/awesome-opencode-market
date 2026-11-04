@@ -159,6 +159,19 @@ describe('github-kind hardening', () => {
     expect(idx.plugins.find(p => p.name === 'o/r')?.source.kind).toBe('github')
   })
 
+  it('nested skills/<x>/SKILL.md marks contains:[skill]', async () => {
+    // repos keep skills in a skills/ dir as often as at the root or
+    // .opencode/skills — a nested SKILL.md must still tag the entry
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: 'skills/x/SKILL.md' }] }))
+        : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'sk-')), 'i.json'), fetchFn: f, now: 't' })
+    expect(idx.plugins.find(p => p.name === 'o/r')?.contains).toEqual(['skill'])
+  })
+
   it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {
     let codeloadHits = 0
     const f = ghBase(

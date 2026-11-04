@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
-import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence } from './discover/filter.ts'
+import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
@@ -282,8 +282,7 @@ export async function run(opts: RunOptions = {}) {
         ? await fetchRepoTree(repo, repoMeta.defaultBranch, { token: opts.ghToken, fetchFn: f })
         : null
       if (treeRes?.status === 'rate-limited') rateLimitedCalls++
-      const hasSkill = !!treeRes?.paths &&
-        (treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills')))
+      const hasSkill = !!treeRes?.paths && hasSkillPath(treeRes.paths)
       if (treeRes?.paths && treeRes.truncated)
         console.warn(`repo tree truncated for ${repo} — deep .opencode/skills probes may miss`)
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
@@ -460,7 +459,7 @@ export async function run(opts: RunOptions = {}) {
         if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++ }
       }
       ghStats.admitted++
-      const hasSkill = treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills'))
+      const hasSkill = hasSkillPath(treeRes.paths)
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
