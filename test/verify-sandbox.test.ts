@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apiLoaded, verifyPackage, verifyShard, type ExecFn } from '../pipeline/verify/verify.ts'
+import { apiLoaded, apiFailed, apiPluginState, verifyPackage, verifyShard, type ExecFn } from '../pipeline/verify/verify.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
 
 const API = (target: string, status = 'active') =>
@@ -35,6 +35,25 @@ describe('apiLoaded canary', () => {
     expect(apiLoaded(API('/cache/opencode/npm/pkg@1.0.0/9/node_modules/pkg'), 'pkg')).toBe(true)
     expect(apiLoaded(API('/x/node_modules/pkg/deep'), 'pkg')).toBe(true)
     expect(apiLoaded(API('/x/node_modules/notpkg'), 'pkg')).toBe(false)
+  })
+})
+
+describe('apiPluginState / apiFailed (V-4)', () => {
+  it('returns the server-reported status; null when the package is absent', () => {
+    expect(apiPluginState(API('pkg', 'active'), 'pkg')).toBe('active')
+    expect(apiPluginState(API('pkg', 'failed'), 'pkg')).toBe('failed')
+    expect(apiPluginState(API('other'), 'pkg')).toBeNull()
+    expect(apiPluginState('[]', 'pkg')).toBeNull()
+    expect(apiPluginState('not json', 'pkg')).toBeNull()
+  })
+  it('entry present but status missing → "unknown", not null', () => {
+    const noState = JSON.stringify([{ source: { type: 'package', target: 'pkg' } }])
+    expect(apiPluginState(noState, 'pkg')).toBe('unknown')
+  })
+  it('apiFailed only on the terminal failed state', () => {
+    expect(apiFailed(API('pkg', 'failed'), 'pkg')).toBe(true)
+    expect(apiFailed(API('pkg', 'active'), 'pkg')).toBe(false)
+    expect(apiFailed(API('other', 'failed'), 'pkg')).toBe(false)
   })
 })
 

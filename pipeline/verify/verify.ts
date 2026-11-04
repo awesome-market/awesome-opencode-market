@@ -110,29 +110,45 @@ export function loadedSignal(logText: string, name: string): boolean {
 
 /** Forge-resistant load canary: the serve /api/plugin response lists an entry
  *  whose server-side `source` is `type:'package'` with a target matching the
- *  spec we installed, in `state.status:'active'`. Unlike the log file, the
- *  response is built by opencode's own handler — plugin code cannot fabricate
- *  it by writing files. (Residual: in-process runtime patching of the handler
- *  is out of scope; the uid sandbox covers the fs-level attack.) */
-export function apiLoaded(pluginsJson: string, name: string): boolean {
+ *  spec we installed. Unlike the log file, the response is built by opencode's
+ *  own handler — plugin code cannot fabricate it by writing files. (Residual:
+ *  in-process runtime patching of the handler is out of scope; the uid sandbox
+ *  covers the fs-level attack.)
+ *  Returns the entry's server-reported state.status, or null when the package
+ *  is absent from the listing. */
+export function apiPluginState(pluginsJson: string, name: string): string | null {
   let doc: unknown
-  try { doc = JSON.parse(pluginsJson) } catch { return false }
-  let hit = false
+  try { doc = JSON.parse(pluginsJson) } catch { return null }
+  let found = false
+  let status: unknown
   const walk = (v: unknown): void => {
-    if (hit || !v || typeof v !== 'object') return
+    if (found || !v || typeof v !== 'object') return
     if (Array.isArray(v)) { for (const x of v) walk(x); return }
     const o = v as Record<string, unknown>
     const src = o.source as Record<string, unknown> | undefined
     const st = o.state as Record<string, unknown> | undefined
     if (src && typeof src === 'object' && src.type === 'package' && typeof src.target === 'string') {
       const t = src.target
-      if ((t === name || t.startsWith(`${name}@`) || t.endsWith(`/${name}`) || t.includes(`/${name}/`)) &&
-        st?.status === 'active') hit = true
+      if (t === name || t.startsWith(`${name}@`) || t.endsWith(`/${name}`) || t.includes(`/${name}/`)) {
+        found = true
+        status = st?.status
+      }
     }
     for (const x of Object.values(o)) walk(x)
   }
   walk(doc)
-  return hit
+  if (!found) return null
+  return typeof status === 'string' ? status : 'unknown'
+}
+
+export function apiLoaded(pluginsJson: string, name: string): boolean {
+  return apiPluginState(pluginsJson, name) === 'active'
+}
+
+/** Deterministic load failure: the server saw the plugin and moved it to a
+ *  terminal 'failed' state — no point polling the rest of the window (V-4). */
+export function apiFailed(pluginsJson: string, name: string): boolean {
+  return apiPluginState(pluginsJson, name) === 'failed'
 }
 
 interface Sandbox { user: string; wrapper: string; uh: string }
@@ -225,8 +241,12 @@ export async function verifyPackage(
     // the load, so POST one (E2E rehearsal: GET-only left /api/plugin empty)
     `[ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'`,
     // poll the SERVER's plugin inventory — plugin code cannot fake this response
-    // the way it could append a forged line to the log file (V-1)
-    `for i in $(seq 1 24); do`,
+    // the way it could append a forged line to the log file (V-1). 40×0.5s=20s
+    // window (V-4: slow runners were false-failing inside the old 12s); the loop
+    // still exits early once the entry appears — active OR failed both land in
+    // the listing, so a deterministic load failure breaks out in ~1s instead of
+    // burning the whole window.
+    `for i in $(seq 1 40); do`,
     `  [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o plugins.json "http://127.0.0.1:$PORT/api/plugin" 2>/dev/null`,
     `  grep -qF "\\"$NAME" plugins.json 2>/dev/null && break`,
     `  sleep 0.5`,
@@ -234,7 +254,7 @@ export async function verifyPackage(
     `kill $SPID 2>/dev/null; true`,
   ].join('\n')
   try {
-    await urun('sh', ['-c', boot], { env: { ...env, NAME: name }, cwd: uh, timeout: 30_000 })
+    await urun('sh', ['-c', boot], { env: { ...env, NAME: name }, cwd: uh, timeout: 45_000 })
   } catch {
     // boot/curl failure still leaves whatever was written — the canary decides
   }
@@ -243,7 +263,13 @@ export async function verifyPackage(
   const log = readLog(uh)
   const api = existsSync(join(uh, 'plugins.json')) ? readFileSync(join(uh, 'plugins.json'), 'utf8') : ''
   if (!apiLoaded(api, name)) {
-    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${log}\n/api/plugin: ${api}`) }
+    // why: deterministic (server moved the plugin to 'failed') vs timeout (the
+    // entry never showed up) — the distinction surfaces in the published
+    // logExcerpt so a flake is visibly different from a broken plugin (V-4)
+    const why = apiFailed(api, name)
+      ? 'serve reports the plugin failed to load'
+      : 'plugin absent from /api/plugin after the load window'
+    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${log}\n/api/plugin: ${api}`) }
   }
 
   // feature-routed depth checks (L2/L3a) — level records deepest stage passed

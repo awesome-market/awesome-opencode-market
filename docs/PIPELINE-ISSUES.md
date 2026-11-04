@@ -436,9 +436,9 @@ Pipeline/CI 安全：
 | V-1c gui 检查在 shard 进程内跑不可信代码 | ✅ | sandbox 模式下 `checkGuiBundle` 移到 `npx tsx gui.ts <bundle>` nobody 子进程——vm realm 逃逸也只拿到 nobody，写不了 results、读不到 shard env |
 | V-2 吞吐 96/天 硬编码无积压观测 | ✅ | digest 新增「④ 验证积压」段：队列长度（同 planTargets 谓词）/投稿数/近7天失败数/最老等待日期；`verify.yml` dispatch 加 `cap` input → `VERIFY_CAP` 环境变量 → plan.ts 可调上限冲积压 |
 | V-3 `failed` 终态不分暂态/确定性，唯一重试是手动 --retest | ✅ | `Verification.retries` 字段记录连续失败次数（merge 写回递增、非 failed 清零）；plan `retryable()`：`failed && verifiedAt<7d && retries<3` 自动重入队列——真死版本 3 次尝试后仍终态，canary 误杀自愈；red-flagged 依然永不执行 |
-| V-4 canary 时序赌博（12s 窗口）是 V-3 误杀主源 | 部分缓解 | apiLoaded 消除了伪造面，但响应慢仍可能假 failed |
+| V-4 canary 时序赌博（12s 窗口）是 V-3 误杀主源 | ✅ | 窗口 12s→20s；`apiPluginState`/`apiFailed` 区分确定性失败（serve 报 `failed` → 条目一出现就跳出，~1s 判死）vs 超时缺席——`logExcerpt` 写明死因供人工抽查；残余 flake 由 V-3 自动重试吸收 |
 | V-5 单版本测试（cli@2.2.5），`compat:{}` 死字段 | 仍开 | 多版本矩阵才有"兼容"语义 |
 | V-6 rpc/skill/mcp/theme 等类型无验证层级 | 仍开 | 仅 server/tui/gui 有深度路由 |
-| V-8 merge 在 verify.yml 里顺带重建+发布 site，与 catalog.yml site job 双发布者 | 仍开 | continue-on-error 掩盖冲突，职责混合 |
+| V-8 merge 在 verify.yml 里顺带重建+发布 site，与 catalog.yml site job 双发布者 | ✅ | site 发布抽成独立 `site.yml`（唯一 Pages 发布者，bot push 不触发 `on:push` 故走 dispatch）；catalog publish 与 verify merge 推送后 `gh workflow run site.yml`（各加 `actions:write`，merge 去掉 pages/id-token）——验证标签即时上站且不再双写 |
 
-**验证**：typecheck 0 错；476 tests 全过（含 `verify-sandbox.test.ts` 及 V-2/V-3 用例）；branches 90.14%。`RESULTS_HMAC` secret 未使用——uid 隔离后 secret 前提不成立，已可删除。
+**验证**：typecheck 0 错；500 tests 全过；branches 90.62%。`RESULTS_HMAC` secret 未使用——uid 隔离后 secret 前提不成立，已可删除。

@@ -1,0 +1,48 @@
+name: site
+# The single Pages publisher (V-8): both catalog-branch writers (catalog.yml
+# publish, verify.yml merge) dispatch this after their push lands, instead of
+# each building+deploying their own copy. Bot pushes can't trigger `on: push`
+# (GITHUB_TOKEN events never start workflows), so dispatch is the only channel.
+on:
+  workflow_dispatch:
+concurrency: site-deploy
+permissions: {}
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      # B-5: site always builds from the catalog branch's current index —
+      # never from a possibly-stale artifact produced hours earlier.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: |
+          git fetch origin catalog
+          git show origin/catalog:index.json > index.json
+      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: /tmp/site }
+      - uses: actions/deploy-pages@v4
+        id: deploy
+
+  alert:
+    needs: site
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          gh issue create \
+            --title "site workflow failed (run ${GITHUB_RUN_ID})" \
+            --body "Automated alert: the site deploy workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --label "pipeline-alert"

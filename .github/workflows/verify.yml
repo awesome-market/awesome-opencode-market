@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 30                 # 12 targets serial ≈ 15min worst-case; 20 was too thin (N-21)
+    timeout-minutes: 30                 # 12 targets serial ≈ 18min worst-case (V-4 widened the load window); 20 was too thin (N-21)
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
@@ -102,7 +102,7 @@ jobs:
     # shards' results are still valid — merge whatever landed (N-10)
     if: always() && needs.verify.result != 'cancelled' && needs.verify.result != 'skipped'
     runs-on: ubuntu-latest
-    permissions: { contents: write, pages: write, id-token: write }    # only job that writes — never executes untrusted code
+    permissions: { contents: write, actions: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -126,7 +126,6 @@ jobs:
             git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
-            npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
             cp /tmp/index.new.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
             git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
@@ -134,10 +133,13 @@ jobs:
             echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
           done
           [ "$ok" = 1 ] || { echo "verify merge failed after retries"; exit 1; }
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - uses: actions/deploy-pages@v4
-        continue-on-error: true
+      # V-8: site.yml is the single Pages publisher — dispatch it so fresh
+      # verification labels land on the site now instead of at the next
+      # catalog run (~8h later).
+      - name: trigger site rebuild
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run site.yml || echo "site dispatch failed — the next catalog run will refresh"
 
   alert:
     needs: [plan, verify, merge]

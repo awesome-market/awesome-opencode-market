@@ -51,7 +51,7 @@ jobs:
   publish:
     needs: generate
     runs-on: ubuntu-latest
-    permissions: { contents: write, issues: write }   # contents: the only catalog writer; issues: submission notification (WF-3)
+    permissions: { contents: write, issues: write, actions: write }   # contents+issues: catalog writer + submission notify (WF-3); actions: dispatches site.yml (V-8)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -110,34 +110,15 @@ jobs:
             git -C /tmp/cat add submissions.txt
             git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" 2>/dev/null && git -C /tmp/cat push origin HEAD:catalog || true
           fi
-
-  site:
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions: { pages: write, id-token: write }
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      # B-5: site always builds from the catalog branch's current index —
-      # never from a possibly-stale artifact produced hours earlier.
-      # Stay on the main checkout (pipeline sources) and pull just index.json
-      # from the data-only catalog branch.
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: |
-          git fetch origin catalog
-          git show origin/catalog:index.json > index.json
-      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - uses: actions/deploy-pages@v4
-        id: deploy
+      # V-8: site.yml is the single Pages publisher — dispatch it so this push's
+      # index lands on the site now instead of at the next scheduled rebuild.
+      - name: trigger site rebuild
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run site.yml || echo "site dispatch failed — the next catalog/verify run will refresh"
 
   alert:
-    needs: [generate, publish, site]
+    needs: [generate, publish]
     if: failure()
     runs-on: ubuntu-latest
     permissions: { issues: write }

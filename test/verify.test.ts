@@ -115,6 +115,17 @@ describe('verifyPackage (injected exec)', () => {
     const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('absent from /api/plugin')
+  })
+  it('server-reported failed state → excerpt says so (V-4 deterministic vs timeout)', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'badpkg' }, state: { status: 'failed' } }]))
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('badpkg', { home, execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('serve reports the plugin failed to load')
   })
 
   it('a forged log line alone does NOT verify — server api evidence required', async () => {
