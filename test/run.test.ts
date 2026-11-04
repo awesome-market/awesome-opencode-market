@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { run, loadOldIndex } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 
 function mkTgz(): Buffer {
   const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
@@ -123,6 +124,59 @@ describe('pipeline/run seed injection', () => {
     const idx = await run({ outPath: join(dir, 'index.json'), fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'good-pkg')!
     expect(e.capabilities.findings.some(x => x.startsWith('sec:repo-mismatch'))).toBe(false)
+  })
+})
+
+describe('github-kind hardening', () => {
+  const ghItem = (full_name: string) => ({
+    full_name, description: 'd', archived: false, fork: false,
+    pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin'],
+  })
+  const ghBase = (trees: (url: string) => Response | null, codeload: () => Response) =>
+    (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(JSON.stringify({ objects: [] }))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [ghItem('o/r')] }))
+      const t = trees(url); if (t) return t
+      if (url.includes('codeload')) return codeload()
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1 }))
+      return new Response('{}', { status: 404 })
+    }) as typeof fetch
+
+  it('stale search default_branch — tree probes HEAD, repo still admitted', async () => {
+    // the repo renamed its branch after the search index snapshot: trees/main
+    // 404s, but the HEAD ref still resolves — admission must not depend on the
+    // stale name
+    const f = ghBase(
+      url => url.includes('/git/trees/main')
+        ? new Response('{}', { status: 404 })
+        : url.includes('/git/trees/HEAD')
+          ? new Response(JSON.stringify({ tree: [{ path: 'SKILL.md' }] }))
+          : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'rb-')), 'i.json'), fetchFn: f, now: 't' })
+    expect(idx.plugins.find(p => p.name === 'o/r')?.source.kind).toBe('github')
+  })
+
+  it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {
+    let codeloadHits = 0
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }] }))
+        : null,
+      () => { codeloadHits++; return new Response('', { status: 200, headers: { 'content-length': '70000000' } }) },
+    )
+    const d = mkdtempSync(join(tmpdir(), 'big-'))
+    const out1 = join(d, 'i1.json')
+    const idx1 = await run({ outPath: out1, fetchFn: f, now: 't' })
+    const e = idx1.plugins.find(p => p.name === 'o/r')!
+    expect(e.capabilities.scannedAt).toBeNull()
+    expect(e.capabilities.rulesetVersion).toBe(RULESET_VERSION)
+    expect(codeloadHits).toBe(1)
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2' })
+    expect(codeloadHits).toBe(1)   // incremental reuse — oversize repo not re-fetched
+    expect(idx2.plugins.find(p => p.name === 'o/r')?.capabilities.scannedAt).toBeNull()
   })
 })
 

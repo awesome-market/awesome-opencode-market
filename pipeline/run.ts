@@ -417,8 +417,10 @@ export async function run(opts: RunOptions = {}) {
         return ghPrev
       }
       // evidence gate: a topic tag alone never admits — the tree must show an
-      // opencode-specific signal AND an installable artifact.
-      const treeRes = await fetchRepoTree(c.fullName, c.defaultBranch ?? 'HEAD', { token: opts.ghToken, fetchFn: f })
+      // opencode-specific signal AND an installable artifact. 'HEAD' resolves
+      // the default branch server-side — a search-index-stale defaultBranch
+      // (branch rename) would 404 a named-ref fetch and falsely filter the repo.
+      const treeRes = await fetchRepoTree(c.fullName, 'HEAD', { token: opts.ghToken, fetchFn: f })
       if (treeRes.status === 'rate-limited') rateLimitedCalls++
       if (treeRes.status === 'error' || treeRes.status === 'rate-limited') {
         // transient failure ≠ junk — keep the old entry rather than dropping it
@@ -430,31 +432,27 @@ export async function run(opts: RunOptions = {}) {
       if (!ev.ok) return null
       const marketMeta = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
       const repoPkg = await fetchRepoPackage(c.fullName, { fetchFn: f })
-      // codeload needs a concrete ref — search results carry defaultBranch;
-      // submission-injected repos ('HEAD') resolve via repo meta
-      let branch = c.defaultBranch && c.defaultBranch !== 'HEAD' ? c.defaultBranch : null
-      if (!branch) {
-        const m = await fetchRepoMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
-        if (m.status === 'rate-limited') rateLimitedCalls++
-        branch = m.meta?.defaultBranch ?? null
-      }
+      // codeload resolves HEAD → default branch too, so no meta lookup needed
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
-      if (branch) {
-        try {
-          const tgz = await fetchTarball(`https://codeload.github.com/${c.fullName}/tar.gz/${branch}`, { fetchFn: f })
-          const r = await scanTarball(tgz)
-          const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
-          scanFiles = r.files.map(strip)
-          scan = {
-            scannedAt: now,
-            rulesetVersion: RULESET_VERSION,
-            findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
-            redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
-          }
-        } catch (e) {
-          console.warn(`scan failed ${c.fullName}:`, (e as Error).message)
+      try {
+        const tgz = await fetchTarball(`https://codeload.github.com/${c.fullName}/tar.gz/HEAD`, { fetchFn: f })
+        const r = await scanTarball(tgz)
+        const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
+        scanFiles = r.files.map(strip)
+        scan = {
+          scannedAt: now,
+          rulesetVersion: RULESET_VERSION,
+          findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+          redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
         }
+      } catch (e) {
+        const msg = (e as Error).message
+        console.warn(`scan failed ${c.fullName}:`, msg)
+        // oversize repos fail deterministically — stamp the ruleset so the
+        // incremental-reuse check above skips re-fetching them every run
+        // (retries resume naturally when pushedAt changes)
+        if (/too large/.test(msg)) scan.rulesetVersion = RULESET_VERSION
       }
       const hasSkill = treeRes.paths.has('SKILL.md') || [...treeRes.paths].some(p => p.startsWith('.opencode/skills'))
       const entry: PluginEntry = {

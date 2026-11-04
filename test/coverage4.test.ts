@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fetchRepoMeta, fetchMarketMeta, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoPackage, repoFileExists } from '../pipeline/fetch/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
 import { run, replacementOf } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
@@ -60,6 +60,28 @@ describe('fetchMarketMeta (.opencode-market.json)', () => {
     expect(await fetchMarketMeta('o/r', { fetchFn: (async () => mkRes('not-json{')) as typeof fetch })).toBeNull()
     expect(await fetchMarketMeta('o/r', { fetchFn: (async () => mkRes([1, 2])) as typeof fetch })).toBeNull()
     expect(await fetchMarketMeta('o/r', { fetchFn: (async () => { throw new Error('net') }) as typeof fetch })).toBeNull()
+  })
+})
+
+describe('fetchRepoPackage (repo-root package.json)', () => {
+  it('ok → name/main/exports parsed', async () => {
+    const { pkg, status } = await fetchRepoPackage('o/r', {
+      fetchFn: (async () => mkRes({ name: 'p', main: 'i.js', exports: { '.': './d.js' }, extra: 1 })) as typeof fetch,
+    })
+    expect(status).toBe('ok')
+    expect(pkg).toEqual({ name: 'p', main: 'i.js', exports: { '.': './d.js' } })
+  })
+  it('404 → not-found; throw → error; 429 → rate-limited', async () => {
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => { throw new Error('net') }) as typeof fetch })).status).toBe('error')
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => mkRes({}, 429)) as typeof fetch })).status).toBe('rate-limited')
+  })
+  it('dir traversal rejected without a fetch call; clean dir prefixed into URL', async () => {
+    expect((await fetchRepoPackage('o/r', { dir: '../x' })).status).toBe('error')
+    expect((await fetchRepoPackage('o/r', { dir: 'a/../b' })).status).toBe('error')
+    let seen = ''
+    await fetchRepoPackage('o/r', { dir: 'pkgs/core/', fetchFn: (async (i: RequestInfo | URL) => { seen = String(i); return mkRes({ name: 'p' }) }) as typeof fetch })
+    expect(seen).toContain('/HEAD/pkgs/core/package.json')
   })
 })
 
