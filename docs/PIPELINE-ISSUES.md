@@ -674,7 +674,7 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | D-F verdict reason/name 未转义进 committed .md → 模型中介文本的 markdown 链接注入面 | ✅ | `[` `]` `\` 转义 + 表内 `|` 转义（escMd/escCell） |
 | D-G §② 无界平铺（live 已 331 条） | ✅ | cap 50 最老优先 + "还有 N 条"截断计数 |
 | D-H §② 不区分 held 原因相位——"待验证/待评审/已放行待生效"同一符号 | ✅ | `phaseOf` 六档：待验证/验证失败/待评审/已裁决·待日报公告/已公告·待放行闸/已打标 concern |
-| D-I digest/watchdog 两 job 无 `timeout-minutes` | ✅ | digest 20min、watchdog 10min |
+| D-I digest/watchdog 两 job 无 `timeout-minutes` | ✅ | digest 15min、watchdog 10min、alert 5min |
 | D-J `worktree add` 无 fallback + 无预清——stale /tmp/cat 或缺 catalog 分支即红 | ✅ | `git worktree remove --force` 预清（verify merge 同款）；schedule 下缺 catalog 分支=合法 bootstrap no-op |
 | D-K 同 akey 重复 verdict 行 → §① 表格重复行 | ✅ | `seenAkey` 去重 |
 | D-L watchdog 漏 drifted-only 工作面 | 不改 | re-review 有 verdict 不进 PENDING，罕见且可接受 |

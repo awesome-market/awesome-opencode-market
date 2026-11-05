@@ -26,7 +26,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
+import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, pkgBrakeFor } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 
@@ -46,8 +46,10 @@ export interface DocketTarget {
    *  the only word on the table */
   humanVerdict?: AiVerdict
   /** digest-announce phase for ai verdicts — '已裁决·待日报公告' vs
-   *  '已公告·待放行闸' so the maintainer sees WHY a pass isn't live yet */
-  maturity?: 'announced' | 'pending-announce'
+   *  '已公告·待放行闸' vs 'maturing' (in the LATEST digest — the objection
+   *  window is still open; maturity arrives with the next render) so the
+   *  maintainer sees WHY a pass isn't live yet */
+  maturity?: 'announced' | 'maturing' | 'pending-announce'
   /** evidence surface for the phone decision — detail-page link, scan
    *  counters, hold age, publish date */
   slug?: string
@@ -112,21 +114,15 @@ export function docketTargets(
   const latest = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
+  const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
   const out: DocketTarget[] = []
   const repoOnly: NonNullable<DocketTarget['backlog']> = []
-  /** Package-level human brake — applyMatureVerdicts' verdictFor overrides
-   *  EVERY slot of the package with a human concern on name@null until a
-   *  newer human pass lands on that slot key. Mirrored here so a braked
-   *  package doesn't spawn per-version issues whose release the gate will
-   *  never grant — the brake itself is the standing decision. (version=null
-   *  keys are github-kind SLOTS, not package brakes — verdictFor skips them.) */
-  const pkgBrake = (name: string, ver: string): AiVerdict | undefined => {
-    const h = human.get(vkey(name, null))
-    if (h?.verdict !== 'concern') return undefined
-    const slotHuman = human.get(vkey(name, ver))
-    if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, h.at) > 0) return undefined
-    return h
-  }
+  /** Package-level human brake — the SHARED release-gate predicate
+   *  (pkgBrakeFor): a braked package must not spawn per-version issues
+   *  whose release the gate will never grant — the brake itself is the
+   *  standing decision. */
+  const pkgBrake = (name: string, ver: string): AiVerdict | undefined =>
+    pkgBrakeFor(name, ver, human)
   for (const e of index.plugins) {
     // slot = what the issue is about: the pendingUpdate when held, else the
     // entry itself. heldAt/publishedAt follow the candidate, not the entry.
@@ -210,7 +206,8 @@ export function docketTargets(
       ...(rec.sha ? { verdictSha: rec.sha } : {}),
       ...(rec.model ? { model: rec.model } : {}),
       ...(rec.l05 ? { l05Score: rec.l05.score } : {}),
-      maturity: announced.has(akey(rec)) ? 'announced' : 'pending-announce',
+      maturity: !announced.has(akey(rec)) ? 'pending-announce'
+        : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
       ...meta,
     })
   }
@@ -334,7 +331,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       ? '已公示——但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
       : t.maturity === 'announced'
         ? '已公告·待放行闸——无人操作时按班放行（本单为异议窗口）'
-        : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
+        : t.maturity === 'maturing'
+          ? '已进最新日报公示——异议窗开放中，下期日报后按班放行'
+          : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
   }
   if (t.humanVerdict) {
     L.push(`- 最新人工判词：**${t.humanVerdict.verdict}**${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}` +

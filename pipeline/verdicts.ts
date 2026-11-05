@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { AiVerdict, DigestState, type CatalogIndex, type PluginEntry, type PendingUpdate } from '../src/schema.ts'
 
-export function loadVerdicts(path?: string): AiVerdict[] {
+export function loadVerdicts(path?: string, sink?: { bad: number }): AiVerdict[] {
   if (!path) return []
   try {
     let bad = 0
@@ -27,8 +27,11 @@ export function loadVerdicts(path?: string): AiVerdict[] {
         } catch { bad++; return [] }
       })
     // append-only audit log: a corrupt line (truncated write, merge artifact)
-    // must not silently vanish — count it so ops can notice
+    // must not silently vanish — count it so ops can notice. `sink.bad` lets
+    // a caller surface the count in its own output (digest header); without
+    // it the only trace is this warn line in a CI log nobody reads.
     if (bad) console.warn(`[verdicts] dropped ${bad} malformed line(s) from ${path}`)
+    if (sink) sink.bad = bad
     return out
   } catch { return [] }
 }
@@ -65,10 +68,12 @@ export const atCmp = (a: string, b: string) => {
 export const akey = (v: Pick<AiVerdict, 'name' | 'version' | 'at'>) => `${vkey(v.name, v.version)}\0${v.at}`
 
 /** Test/tooling helper: build the DigestState a digest render would write for
- *  `verdicts` at anchor `lastDigestAt` (all of them announced). */
-export function digestStateOf(lastDigestAt: string, verdicts: AiVerdict[]): DigestState {
-  const keys = verdicts.map(akey)
-  return { lastDigestAt, announced: keys, day: lastDigestAt.slice(0, 10), dayAnnounced: keys }
+ *  `verdicts` at anchor `lastDigestAt` — all of them announced on an EARLIER
+ *  day (dayAnnounced empty) so they satisfy the maturity rule, not merely
+ *  the announcement rule. Pass `dayAnnounced` overrides via spread for
+ *  same-day-window tests. */
+export function digestStateOf(lastDigestAt: string, verdicts: AiVerdict[], dayAnnounced: string[] = []): DigestState {
+  return { lastDigestAt, announced: verdicts.map(akey), day: lastDigestAt.slice(0, 10), dayAnnounced }
 }
 
 /** Newest verdict per name@version — the file is append-only, `at` wins. */
@@ -102,6 +107,31 @@ export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdic
 export function effectiveVerdict(v: AiVerdict | undefined, human: Map<string, AiVerdict>): AiVerdict | undefined {
   const h = v ? human.get(vkey(v.name, v.version)) : undefined
   return v?.verdict === 'pass' && v.source === 'ai' && h?.verdict === 'concern' ? h : v
+}
+
+/** Package-level human brake — a 'concern' on name\0null brakes EVERY slot of
+ *  the package ("this package", not "this version"). Returns the brake LINE
+ *  when it applies to (name, version), else undefined. A newer human 'pass'
+ *  on the exact slot key lifts it for that slot only; a newer human verdict
+ *  on name\0null flips the map entry and dissolves it entirely. Human-only
+ *  by construction: AI never writes the null key for npm packages, and
+ *  version===null slots (github-kind) own the null key themselves — it is
+ *  their slot verdict, not a package brake.
+ *
+ *  THE shared predicate: applyMatureVerdicts (release gate), explainEntry,
+ *  docketTargets, unreviewedTargets and the digest phase/brake marks must
+ *  never drift apart — a surface that misses the brake shows a release the
+ *  gate can never grant (and diagnose would burn LLM tokens on a verdict
+ *  the brake overrides forever). */
+export function pkgBrakeFor(
+  name: string, version: string | null, latestHuman: Map<string, AiVerdict>,
+): AiVerdict | undefined {
+  if (version === null) return undefined
+  const h = latestHuman.get(vkey(name, null))
+  if (h?.verdict !== 'concern') return undefined
+  const slotHuman = latestHuman.get(vkey(name, version))
+  if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, h.at) > 0) return undefined
+  return h
 }
 
 /** Release gate (AI-DIAGNOSIS §10): the target version's own verification must
@@ -149,8 +179,16 @@ export function applyMatureVerdicts(
   // Maturity = the verdict LINE was announced in a digest — membership, not a
   // timestamp comparison. A verdict pushed late with an old `at` can never
   // slip under the anchor; it must appear in a future digest first.
+  // Objection window (R-6 upgrade): the line must have appeared in a digest
+  // BEFORE the current one — dayAnnounced holds the latest render's fresh
+  // announcements, so announce→release can never collapse to the ~6h
+  // announce→next-catalog minimum. The window is announce→next digest
+  // (~24h) + catalog lag; a dead digest freezes maturity too (dayAnnounced
+  // only clears on the next successful render — fail-closed, watchdog's
+  // digest-state leg fires at 36h).
   const announced = new Set(digest?.announced ?? [])
-  const mature = (v: AiVerdict) => announced.has(akey(v))
+  const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
+  const mature = (v: AiVerdict) => announced.has(akey(v)) && !dayAnnounced.has(akey(v))
   const concernOf = (v: AiVerdict) => v.reason ?? 'concern'
   // sha pins the REVIEWED bytes: a same-version registry re-tag after the
   // verdict was written means the judgment no longer describes what would
@@ -165,22 +203,10 @@ export function applyMatureVerdicts(
   // version" (previously a dead key for npm entries: it matched no slot and
   // silently did nothing). Lifting needs a newer human verdict on the exact
   // slot key, or a newer human verdict on name@null itself — which flips
-  // latestHuman back to non-concern and dissolves the brake. Human-only by
-  // construction: AI never writes the null key for npm packages.
-  const pkgBrake = (name: string): AiVerdict | undefined => {
-    const h = latestHuman.get(vkey(name, null))
-    return h?.verdict === 'concern' ? h : undefined
-  }
-  const verdictFor = (name: string, version: string | null): AiVerdict | undefined => {
-    const v = effective(latest.get(vkey(name, version)))
-    // version===null (github-kind): the null key IS the slot's own verdict —
-    // brake lookup would return the same verdict anyway
-    const brake = version === null ? undefined : pkgBrake(name)
-    if (!brake) return v
-    const slotHuman = latestHuman.get(vkey(name, version))
-    if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0) return v
-    return brake
-  }
+  // latestHuman back to non-concern and dissolves the brake. Shared
+  // predicate: pkgBrakeFor.
+  const verdictFor = (name: string, version: string | null): AiVerdict | undefined =>
+    pkgBrakeFor(name, version, latestHuman) ?? effective(latest.get(vkey(name, version)))
 
   const plugins = index.plugins.map(entry => {
     let e = entry
@@ -321,19 +347,14 @@ export function explainEntry(
   const latest = latestVerdicts(verdicts)
   const latestHuman = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
-  // mirror applyMatureVerdicts' package brake: a human concern on name@null
-  // overrides every slot unless a newer human pass exists on that slot key
-  const pkgBrakeH = latestHuman.get(vkey(e.name, null))
-  const pkgBrake = pkgBrakeH?.verdict === 'concern' ? pkgBrakeH : undefined
+  const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
   const verdictFor = (version: string | null): { v: AiVerdict | undefined; packageBrake: boolean } => {
-    const v = effectiveVerdict(latest.get(vkey(e.name, version)), latestHuman)
-    // version===null (github-kind): the null key IS this slot's own verdict,
-    // not a package-level override — don't mislabel it as a brake
-    if (!pkgBrake || version === null) return { v, packageBrake: false }
-    const slotHuman = latestHuman.get(vkey(e.name, version))
-    if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, pkgBrake.at) > 0)
-      return { v, packageBrake: false }
-    return { v: pkgBrake, packageBrake: true }
+    // shared predicate: a human concern on name@null overrides every slot
+    // unless a newer human pass exists on that slot key (version===null is
+    // the slot's own key, not a package override — pkgBrakeFor skips it)
+    const brake = pkgBrakeFor(e.name, version, latestHuman)
+    if (brake) return { v: brake, packageBrake: true }
+    return { v: effectiveVerdict(latest.get(vkey(e.name, version)), latestHuman), packageBrake: false }
   }
   const slotOf = (
     slot: SlotExplain['slot'], version: string | null,
@@ -365,10 +386,17 @@ export function explainEntry(
     // long ago (that's why the slot is displayed)
     if (slot === 'displayed' && e.approval !== 'pending' && e.approval !== 'legacy')
       return { ...base, outcome: 'release', why: '展示版已上架（pass 无需再生效）' }
-    // pass: run the release gates in order and report the first blocker
+    // pass: run the release gates in order and report the first blocker.
+    // Structural impossibilities (flags/no-scan — AI can never release this
+    // slot regardless of timing) outrank the temporal gates or the report
+    // would promise a release "soon" that no wait can produce.
     if (!base.announced) return { ...base, outcome: 'wait', why: `${pre}pass 未成熟 — verdict 行未进 digest 公示` }
     if (base.aiBlockedByFlags) return { ...base, outcome: 'wait', why: `${pre}ai pass 落在 redFlag 槽位 — 被忽略` }
     if (base.aiBlockedByNoScan) return { ...base, outcome: 'wait', why: `${pre}ai pass 落在未扫描槽位 — 没扫到 ≠ 安全，被忽略` }
+    // announced in the LATEST digest — the objection window is still open:
+    // maturity needs the line to survive one more render (dayAnnounced
+    // membership), same gate applyMatureVerdicts applies
+    if (dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
     if (v.sha && integrity && v.sha !== integrity)
       return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位 integrity 不符 — 疑似同版本换包，等 drift 复审` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }

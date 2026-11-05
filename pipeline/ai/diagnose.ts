@@ -50,7 +50,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { latestVerdicts, loadVerdicts, vkey, atCmp } from '../verdicts.ts'
+import { latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, pkgBrakeFor } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
@@ -387,20 +387,31 @@ export function isHarnessFailure(vf: { logExcerpt?: string | undefined } | undef
  *  verdict wins). Options: force re-reviews verdicted targets (only meaningful
  *  with names); now overrides the clock for tests.
  *  Ordering: oldest-held first — a name-sorted slice would starve
- *  late-alphabet entries whenever the backlog exceeds the run limit. */
+ *  late-alphabet entries whenever the backlog exceeds the run limit.
+ *  Takes the verdict LOG (not a pre-built map): the package-brake check
+ *  needs latestHumanVerdicts, and a caller passing only the latest-map
+ *  can't supply it — taking the source of truth keeps every consumer
+ *  (digest §⑤, watchdog PENDING, this run) on one predicate. */
 export function unreviewedTargets(
   index: CatalogIndex,
-  seen: Map<string, AiVerdict>,
+  verdicts: AiVerdict[],
   names?: Set<string> | null,
   opts: { now?: string; force?: boolean } = {},
 ): CatalogIndex['plugins'] {
   const now = Date.parse(opts.now ?? new Date().toISOString())
+  const seen = latestVerdicts(verdicts)
+  const human = latestHumanVerdicts(verdicts)
   return index.plugins.filter(e => {
     if (names && !names.has(e.name)) return false
     const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
     if (!ver) return false
     if (opts.force) return true
     if (seen.get(vkey(e.name, ver)) !== undefined) return false
+    // A package-level human concern (name@null) brakes EVERY slot — the
+    // standing decision is already made, so an AI verdict here could never
+    // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
+    // actionable backlog. Same predicate the release gate uses.
+    if (pkgBrakeFor(e.name, ver, human)) return false
     // §10 ordering: an 'unverified' target defers to the verify run for 48h —
     // reviewing without install evidence wastes tokens and the release gate
     // requires verified anyway. Past 48h: degraded review proceeds.
@@ -491,6 +502,7 @@ export async function main(
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const allVerdicts = loadVerdicts(verdictsPath)
   const seen = latestVerdicts(allVerdicts)
+  const human = latestHumanVerdicts(allVerdicts)
   const modelId = env.AI_MODEL ?? DEFAULT_MODEL
   // shared "this run" clock — the LLM budget starts BELOW (the sweep/material
   // build/L0.5 batch are prep, not LLM time); retryable() shares it for
@@ -530,6 +542,10 @@ export async function main(
     if (names && !names.has(e.name)) return
     const ver = verOf(e)
     if (!ver) return
+    // package-braked slots can't apply any AI verdict — drift or not; skip
+    // the sweep's packument fetch too (unreviewedTargets skips them as
+    // well). --force is the explicit human override and bypasses both.
+    if (!force && pkgBrakeFor(e.name, ver, human)) return
     const rec = seen.get(vkey(e.name, ver))
     if (!rec?.sha) return
     const cur = await shaFor(e.name, ver)
@@ -541,7 +557,7 @@ export async function main(
     if (sweepPath) { try { writeFileSync(sweepPath, new Date().toISOString()) } catch { /* advisory stamp */ } }
   }
   const drifted = idx.plugins.filter(e => driftedSet.has(e)) // index order, deterministic
-  const targets = unreviewedTargets(idx, seen, names, { force: force && names !== null })
+  const targets = unreviewedTargets(idx, allVerdicts, names, { force: force && names !== null })
   // re-tags front-run the queue: "same version, different bytes" is the most
   // suspicious signal this run can see — under a >limit backlog it must not
   // starve behind the FIFO tail (D-9). Set dedupes a --force overlap.

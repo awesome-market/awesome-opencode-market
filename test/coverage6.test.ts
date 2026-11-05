@@ -246,19 +246,38 @@ describe('ai/diagnose.main', () => {
 })
 
 describe('ai/digest.main', () => {
-  it('writes digest/<day>.md + digest-state.json; --date pins the day', async () => {
+  it('writes digest/<day>.md + digest-state.json; --date backfills md only', async () => {
     const d = tmp('dig-')
     const ip = join(d, 'index.json'), vp = join(d, 'v.jsonl'), sp = join(d, 'state.json')
     writeFileSync(ip, JSON.stringify(idx([e()])))
     writeFileSync(vp, JSON.stringify(v({ at: '2026-02-01T00:00:00Z' })) + '\n')
-    await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    // --date backfill render: md lands but state stays untouched (see below)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    } finally { log.mockRestore() }
     const md = readFileSync(join(d, 'digest', '2026-02-02.md'), 'utf8')
     expect(md).toContain('marketplace digest 2026-02-02')
     expect(md).toContain('pkg')
-    // anchor = max seen verdict.at (not render-time now) AND the seen verdict
-    // line lands in `announced` — maturity is membership, not the timestamp
+    // the maturity anchor is left alone — a backdated day/dayAnnounced would
+    // wedge same-day accumulation, and the skipped announcements re-enter at
+    // the next real render anyway
+    expect(existsSync(sp)).toBe(false)
+    // consequence of md-only backfill: with NO prior state ever written, the
+    // next real render sees digest/*.md history + missing state → the
+    // state-loss refusal (fail-closed mass-announce guard) fires. A catalog
+    // that already has state doesn't hit this — provide it and the render
+    // announces the verdict normally
+    writeFileSync(sp, JSON.stringify({ lastDigestAt: '2026-02-01T21:00:00Z', announced: [], day: '2026-02-01', dayAnnounced: [] }))
+    const log2 = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d])
+    } finally { log2.mockRestore() }
     const st = JSON.parse(readFileSync(sp, 'utf8'))
-    expect(st.lastDigestAt).toBe('2026-02-01T00:00:00Z')
+    // real render: anchor is monotonic from prev (never regresses) AND the
+    // seen verdict line lands in `announced` — maturity is membership, not
+    // the timestamp
+    expect(st.lastDigestAt).toBe('2026-02-01T21:00:00Z')
     expect(st.announced).toEqual([akey(v({ at: '2026-02-01T00:00:00Z' }))])
   })
   it('existing state anchors the window; --dry prints without writing', async () => {

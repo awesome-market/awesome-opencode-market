@@ -71,7 +71,7 @@ flowchart TB
 | `index.json` | catalog.yml publish / verify.yml merge | 站点构建、客户端、diagnose、docket、verify plan、applyMatureVerdicts | 完整目录（含 pending——数据面全量，展示面各自过滤） |
 | `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml；digest.yml 班内 `verdicts-compact.ts` 压实 | run.ts、diagnose（判重）、docket、digest、site 详情页（裁决记录区块） | **append-only** 裁决流水；同 name@version 最新 `at` 胜出；详情页折叠透出最近 10 条 + 全量链接。压实只丢「被同键更新行取代且超保留窗（默认 180d）的 AI 行」——畸形行、human 行、每键最新行、窗口内行全保留，最新行集合不变 → 全消费端语义不变 |
 | `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?,rejected?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入但**仍可在迟到上架时补发落地通知**（关单≠聋）；`rejected`=本轮目录收录门给出的拒绝原因代码（seed-outcome 回写，条目落地即清除），status 评论渲染成人类可读原因；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
-| `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟看 `announced` 集合成员（上过日报的那行才算）；`announced` 按「每键最新裁决行 ∩ 公告候选（held 槽位/不在 index 的幽灵键/concern）」截断——已放行/永不需成熟的 pass 键也裁掉，不无限膨胀；**缺失/损坏**：消费端 announced=∅ 全冻结，生产端若已有日报历史则拒绝重渲（fail-closed，不全量公告） |
+| `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟 = `announced` 集合成员 **且不在当次渲染的 `dayAnnounced`**（本期新公示的行要再活过一期日报才放行——真异议窗 ≳24h，不是"上过即熟"）；`announced` 按「每键最新裁决行 ∩ 公告候选（held 槽位/不在 index 的幽灵键/concern）」截断——已放行/永不需成熟的 pass 键也裁掉，不无限膨胀；**缺失/损坏**：消费端 announced=∅ 全冻结，生产端若已有日报历史则拒绝重渲（fail-closed，不全量公告） |
 | `digest/YYYY-MM-DD.md` | digest.yml（publish-digest.sh 兜底） | 人（手机/网页） | 日报：新放行表 + held 积压 + concerns + 审核单链接。入口：[review] 审核单正文"预告面"链接、站点列表页 `digest` 链接、README——异议窗口必须找得到日报才有意义 |
 | `blocklist.json` | 手工 | run.ts | `{names[],slugs[]}` 硬封禁 |
 | `removed`（index 内字段） | run.ts tombstone / remerge 保留 | 站点/客户端（不渲染）、run.ts 重进对照 | 消失条目墓碑 `{slug,name,lastSource,createdAt?,disappearedAt,reason}`——`lastSource.repoId`/`createdAt` 存旧对象身份，同名再进时对照检出 repo 重建/名字复用；reason ∈ `npm-404|repo-404|filtered|capped|manual|unknown`，180 天保留期 |
@@ -890,8 +890,8 @@ sequenceDiagram
   DG->>ST: announced ∪= akey(本次公示的候选行)<br/>lastDigestAt = T1
   Note over ST: 锚点推进<br/>异议窗口开
   CAT->>VJ: applyMatureVerdicts
-  CAT->>ST: 读 announced 集合
-  Note over CAT: akey(v) ∈ announced → mature<br/>+验证releasable → 放行
+  CAT->>ST: 读 announced / dayAnnounced 集合
+  Note over CAT: akey(v) ∈ announced ∧ ∉ 当期 dayAnnounced<br/>→ mature +验证releasable → 放行<br/>(当期新公示行下期才熟——真异议窗)
 ```
 
 ```
@@ -904,14 +904,29 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
   fresh = 今日公示集：prev.dayAnnounced(同日复渲累计——当日被取代的行保留为当日史实)
           ∪ 未公告且 at≤now 的候选行，按 akey 去重——重复 append 的同一行只渲一次
   ① 新放行表：fresh pass（理由双语 + 审核单链接；不在 index 的名 → ⚠️不在目录；
-     已被更新 concern 刹车的 pass → ⛔——行照公告但不误导"要上架"）
+     已被更新 concern 刹车的 pass → ⛔已被更新的 concern 刹车，
+     被 name@null 包级 human concern 覆盖的 → ⛔已被包级 concern 刹车
+     ——行照公告但不误导"要上架"；包级/槽级刹车与放行闸共享 pkgBrakeFor
+     谓词，展示永不承诺闸门给不了的放行）
+     行尾「上期公告·已生效 N」：上期 dayAnnounced 中今已成展示版的 pass
+     ——异议窗读者看得到自己的决定落地
   ② held 积压清单（最老优先，前 50 内联 + 其余 <details> 折叠全量——
-     50 条以外的积压对手机读者也必须可读；每行带相位标——
+     50 条以外的积压对手机读者也必须可读；npm pending 行显示在审版本
+     `vX.Y.Z（未上架）`（与 ①/③ 裁决行可对上），repo-only 显示
+     `(repo-only — AI 不审，需人工)`；每行带相位标——
      待验证/验证失败/待评审/已裁决·待日报公告/已公告·待放行闸/
-     AI pass 被旗标·未扫描拦截·需人工/已打标 concern，
-     读者一眼区分哪个闸门在拦；**验证失败/AI 闸相位优先于放行相位**——
-     已公告 pass + 槽位 failed/未扫描/红旗永不自动放行，不显示"待放行闸"谎报）
-  ③ concerns 表（同 ① 的标注规则）
+     AI pass 被旗标·未扫描拦截·需人工/已打标 concern/已打标 concern（包级）/
+     需人工评审（AI 不审 repo-only），+ `在押自 YYYY-MM-DD` 在押日期；
+     `awaiting-review` 默认理由不渲染（零信息量噪音）；
+     读者一眼区分哪个闸门在拦；**验证失败/AI 闸/包级刹车相位优先于放行相位**——
+     已公告 pass + 槽位 failed/未扫描/红旗/整包刹车永不自动放行，
+     不显示"待放行闸"谎报；github-kind 槽位的 null 键同样查 verdict——
+     已公告 human pass 的 repo-only 行如实显示"待放行闸"而非永远"待评审"）
+  ③ concerns 表（同 ① 的标注规则；version===null 且名下有版本槽的行版本列
+     渲染 `—（包级）` 与 repo-only 的裸 `—` 区分开；
+     附加「已解除」行——**此前公告过**、该键有效裁决已翻成更新 pass 的
+     concern 带 ✅已被更新的 pass 解除，读者分得清"修好"与"漏报"；
+     从未公告就被解除的行不进表——读者没见过它，无需交代）
   ④ 验证积压（verifyQueued 共享谓词——planTargets 同口径的队列长度，
      96/天吞吐 vs 排队数一眼可见；行尾附 `宿主版本漂移待重验 N`——
      hostStale 不在共享谓词里，单列以免误读成欠账）
@@ -923,6 +938,11 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
   ⑥ 已上架条目信任信号：可见条目展示槽的身份级 sec:* redFlag
      （repojack/name-reuse/version-rollback——held 过滤看不见它们，
      AI 也不复审展示版；standing list，人工裁决落在展示版键即消除）
+  ⑦ 近 24h 下架：index.removed[] 中 disappearedAt 距今 ≤24h 的墓碑——
+     npm-404/作者撤回/手动下架是安全事件信号（恶意包被撤），不止库存变动；
+     无下架时整段不渲染（常态安静），不暗示任何安全结论
+  头部 ⚠️ 行：坏行计数（loadVerdicts sink 透传——一行被截断的 verdict
+     静默消失是数据事故，不是噪音）、future-dated 裁决数、bootstrap 暂扣数
   理由/name 渲染前转义 [ ] | 和 <>&（HTML 实体）——模型/人工文本进 committed
      .md 不能注入链接，也不能注入 raw HTML（GitHub 白名单标签仍可点击）
   → digest/YYYY-MM-DD.md + digest-state.json
@@ -930,7 +950,8 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      ← 成熟锚点是**集合成员制**：晚推的 verdict 带旧 at 也偷渡不了——
        at≤锚点时间戳不够，必须真上过一份日报（akey=name\0version\0at）；
        announced 按公告候选截断——被取代的旧行永不复胜，已放行/永不需成熟的
-       pass 键同样裁掉，槽位无死重
+       pass 键同样裁掉，槽位无死重；`--date` 只回填 md 文档不写 state——
+       回写 day/dayAnnounced 会楔死同日累计语义，跳过的公告下期照常进入
   → 重试循环内每轮重新 fetch+reset+渲染（不是 push 失败后拿本地 commit 充数）；
      staged-diff 为空 → 显式 no-change 退出，不产生误导性空 commit；
      真 commit 失败 → continue 重试（绝不误报"nothing changed"绿过）
@@ -941,18 +962,26 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      真引导也开窗口闸：只有 `at` 距今 ≤14 天（BOOTSTRAP_WINDOW_MS）的
      裁决进首期公告，更早的历史积压本期暂扣（渲染里明示 N 条被窗口拦下，
      下日再逐批进入）——state 从零重建时整个远古积压一夜成熟是事故
-     不是引导
+     不是引导；手恢复的 `announced:[]` 空锚态（lastDigestAt 为空）同样走
+     窗口闸——绕过它等于把整包历史积压一夜公告，但真渲染过的锚
+     （lastDigestAt 非空）不重复进 bootstrap，不会死锁
   → verdicts-compact.ts 班内压实（reset 之后、渲染之前，重试循环内幂等）：
-     只丢「被同键更新行取代且 at 早于保留窗（默认 180d，COMPACT_MAX_AGE_MS
-     env 可调）的 AI 行」；畸形行/human 行/每键最新行/窗口内行全保留——
+     只丢「被同键更新行取代且 at 早于保留窗（默认 180d，`--days N`
+     flag 可调）的 AI 行」；畸形行/human 行/每键最新行/窗口内行全保留——
      append-only 审计语义下 bounded 增长（git 历史仍是全量审计底）；
+     tmp+rename 原子写——半途崩溃不留截断文件让 digest 把数据丢失提交上去；
      压实失败非致命，当班按未压实日志照常渲染
   → watchdog job（独立并行）：多腿——**最近 '^ai-diagnose:' commit >48h**
      +队列非空（按提交前缀探本机落地，不再用文件新鲜度——人工裁决/
      compact/submit-verdict 都写同一文件，会把死掉的本地 worker 抹绿）、
      index.json >36h、digest-state.json >36h（"绿过但 state 没落盘"的兜底）、
      线上 health.json >36h；无匹配 commit（从未跑过）= 引导态不算停摆，
-     跳过该腿；dedupe 按 in:title 搜索；alert job 同款 pipeline-alert 去重
+     跳过该腿；dedupe 按 in:title 搜索（正文中撞词的无关 open issue 不能
+     压住真告警）；持续故障**不每天刷评论**——告警体里藏
+     `watchdog-legs:<掩码>` 指纹，腿集合不变=open issue 本身就是活告警，
+     腿变了才追加评论；leg-1 可用 repo variable `DIAGNOSE_PAUSED=1` 显式
+     静默（上线前本地 worker 有意停跑的窗口期——向未来读者说明为何
+     该腿安静）；watchdog/alert 两 job 同样挂 harden-runner egress 白名单
   → docket.yml 读 digest-state：ai:pass 审核单体里显示成熟相位
      （已公告·待放行闸 / 已裁决·待日报公告）——维护者不再疑惑"为何不放行"
 ```
@@ -1046,7 +1075,7 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
 标注幂等：reason 相同不重复写（held/releases 计数只记真变化）
 ```
 
-**时延预期**：一条 pass 从写入到生效 ≈ 6h–30h——21:15 UTC 日报公告后，最早下一班 catalog（03:17 UTC，约 6h 后）即放行，最晚等次日 11:00 UTC 班（约 30h）；若在 21:15 之后才写入则顺延一天。这是预告期设计的代价不是故障（R-6）；concern 不等公示即刻生效。排障工具：`release.ts --explain` 按槽位打印判定链（哪条裁决胜出/是否已公告/哪道闸在拦）。
+**时延预期**：一条 pass 从写入到生效 ≈ 24h–54h——21:15 UTC 日报公告当期进入 `dayAnnounced`（异议窗开），**下一期**日报把它移出当窗集合才熟，再下一班 catalog（03:17/11:00 UTC）放行；公告到放行固定 ≈24h–30h，若在 21:15 之后才写入则整体顺延一天。真异议窗（≥24h）兑现了 v3.1 原始要求，代价是每个自动放行多等一天（R-6 权衡更新：6–30h 窗口实测太短——读者从看到预告到能反对只剩 6h）；concern 不等公示即刻生效。排障工具：`release.ts --explain` 按槽位打印判定链（哪条裁决胜出/是否已公告/是否仍在当窗/哪道闸在拦）。
 
 **即时通道（R-2）**：`release.ts` 是 `applyMatureVerdicts` 的 CLI 壳——concern/submit 裁决写盘时 `catalog-append.sh APPLY_INDEX=1` 在同一 commit 把裁决应用到 index.json（人工 concern 立刻刹车、人工 pass 即时生效受同一套成熟+验证闸约束），不必等下一班 catalog。
 

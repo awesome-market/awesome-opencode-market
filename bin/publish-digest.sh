@@ -59,7 +59,17 @@ alert() {
   slug=$(printf '%s' "$URL" | sed -nE 's#.*github\.com[:/]([^/]+/[^/]+?)(\.git)?$#\1#p')
   [ -n "$slug" ] || return 0
   gh label create pipeline-alert -R "$slug" --force >/dev/null 2>&1
-  gh issue list -R "$slug" --label pipeline-alert --state open --search "publish-digest" --json number --jq '.[0].number' 2>/dev/null | grep -q . && return 0
+  # in:title — 无此限定的 body 匹配会让无关 open issue 压住真告警(fail-quiet)
+  local existing
+  # `// empty` — '.[0].number' on an EMPTY list prints "null", and any grep/
+  # non-empty check would mistake that for an existing issue → alert never
+  # created (silent suppression)
+  existing=$(gh issue list -R "$slug" --label pipeline-alert --state open --search "publish-digest in:title" --json number --jq '.[0].number // empty' 2>/dev/null | head -1)
+  if [ -n "$existing" ]; then
+    # 复发也留痕——连败 vs 一次失败,严重度不同
+    gh issue comment "$existing" -R "$slug" --body "$(date '+%F %T') 再次失败——查 launchd 日志 ~/Library/Logs/opencode-market/" >/dev/null 2>&1
+    return 0
+  fi
   gh issue create -R "$slug" --label pipeline-alert \
     --title "publish-digest failed on $(hostname -s 2>/dev/null || echo local)" \
     --body "本机兜底 publish-digest 连续失败。查 launchd 日志 ~/Library/Logs/opencode-market/,以及 worktree remote 是否与 $URL 一致: git -C $CATDG remote -v" >/dev/null 2>&1

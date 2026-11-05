@@ -55,7 +55,7 @@ describe('renderDigest', () => {
       ]),
       verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md.indexOf('`older` v1.0 · 待验证 — ai:concern')).toBeLessThan(md.indexOf('`newer` v2.0 · 待验证 — ai:needs-human'))
+    expect(md.indexOf('`older` v1.0 · 待验证 · 在押自 2026-01-01 — ai:concern')).toBeLessThan(md.indexOf('`newer` v2.0 · 待验证 · 在押自 2026-01-02 — ai:needs-human'))
   })
   it('late-pushed verdict with old `at` still surfaces — seen-set, not timestamp window', () => {
     // the audit hole: a verdict dated BEFORE lastDigestAt but absent from the
@@ -188,7 +188,7 @@ describe('renderDigest', () => {
       now: new Date('2026-01-03T21:00:00Z'),
     })
     expect(md).toContain('`waiting-verify` v2.0 · 待验证')
-    expect(md).toContain('`needs-review` (未发布过) · 待评审')
+    expect(md).toContain('`needs-review` v1.0.0（未上架） · 待评审')
     expect(md).toContain('`passed` v2.0 · 已公告·待放行闸')
   })
   it('verify-failed after a mature pass shows 验证失败, not 待放行闸 (release is structurally impossible)', () => {
@@ -276,50 +276,49 @@ describe('verdictRecord + digest maturity interplay', () => {
 })
 
 describe('unreviewedTargets (diagnose candidate pick)', () => {
-  const seen = (vs: AiVerdict[]) => latestVerdicts(vs)
   it('picks never-verdicted pending entries and pendingUpdates', () => {
     const pend = entry({ name: 'a', approval: 'pending' })
     const bump = entry({ name: 'b', approval: 'approved', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
     const done = entry({ name: 'c', approval: 'approved' })                    // approved, no hold → not a target
-    const targets = unreviewedTargets(idx([pend, bump, done]), seen([]))
+    const targets = unreviewedTargets(idx([pend, bump, done]), [])
     expect(targets.map(e => e.name)).toEqual(['a', 'b'])
   })
   it('a HUMAN verdict excludes the target — AI must never overturn it', () => {
     const bump = entry({ approval: 'approved', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
     const hv: AiVerdict = { name: 'pkg', version: '2.0', verdict: 'concern', at: 't2', source: 'human', reason: 'no' }
-    expect(unreviewedTargets(idx([bump]), seen([hv]))).toEqual([])
+    expect(unreviewedTargets(idx([bump]), [hv])).toEqual([])
   })
   it('an existing AI verdict also excludes (no re-review churn)', () => {
     const pend = entry({ approval: 'pending' })
     const av: AiVerdict = { name: 'pkg', version: '1.0.0', verdict: 'pass', at: 't1', source: 'ai' }
-    expect(unreviewedTargets(idx([pend]), seen([av]))).toEqual([])
+    expect(unreviewedTargets(idx([pend]), [av])).toEqual([])
   })
   it('verdict on a DIFFERENT version does not exclude the held candidate', () => {
     const bump = entry({ approval: 'approved', latestVersion: '1.0.0', pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })
     const old = v({ name: 'pkg', version: '1.0.0' })
-    expect(unreviewedTargets(idx([bump]), seen([old])).map(e => e.name)).toEqual(['pkg'])
+    expect(unreviewedTargets(idx([bump]), [old]).map(e => e.name)).toEqual(['pkg'])
   })
   it('unverified <48h defers to the verify run; past 48h reviews anyway', () => {
     const young = entry({ name: 'young', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
     const old = entry({ name: 'old', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-01T00:00:00Z' })
     const verified = entry({ name: 'done', approval: 'pending', verification: { status: 'verified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
     const now = '2026-01-10T00:00:00Z'
-    expect(unreviewedTargets(idx([young, old, verified]), seen([]), null, { now }).map(e => e.name))
+    expect(unreviewedTargets(idx([young, old, verified]), [], null, { now }).map(e => e.name))
       .toEqual(['old', 'done'])  // young unverified waits; verified never waits
   })
   it('NaN heldAt/firstSeenAt is treated as old (reviewable, not stuck)', () => {
     const nan = entry({ name: 'nan', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: 'not-a-date' })
-    expect(unreviewedTargets(idx([nan]), seen([]), null, { now: '2026-01-10T00:00:00Z' })).toHaveLength(1)
+    expect(unreviewedTargets(idx([nan]), [], null, { now: '2026-01-10T00:00:00Z' })).toHaveLength(1)
   })
   it('targets sort oldest-held first (FIFO, not name order)', () => {
     const z = entry({ name: 'zzz', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
     const a = entry({ name: 'aaa', approval: 'pending', firstSeenAt: '2026-01-05T00:00:00Z' })
-    expect(unreviewedTargets(idx([a, z]), seen([])).map(e => e.name)).toEqual(['zzz', 'aaa'])
+    expect(unreviewedTargets(idx([a, z]), []).map(e => e.name)).toEqual(['zzz', 'aaa'])
   })
   it('force re-reviews a verdicted target', () => {
     const pend = entry({ approval: 'pending' })
     const av = v({ version: '1.0.0' })
-    const s = seen([av])
+    const s = [av]
     expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']))).toEqual([])
     expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']), { force: true })).toHaveLength(1)
   })
@@ -499,5 +498,153 @@ describe('digest audit fixes', () => {
     const disp = explainEntry(e, [pv], null).find(s => s.slot === 'displayed')
     expect(disp?.outcome).toBe('release')
     expect(disp?.why).toContain('已上架')
+  })
+})
+
+describe('package brake + 24h window + display surfaces (post-audit batch)', () => {
+  const brake = (at = '2026-01-02T00:00:00Z'): AiVerdict =>
+    ({ name: 'pkg', version: null, verdict: 'concern', at, source: 'human', reason: 'malware-suspect' })
+  const heldEntry = () => entry({ approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
+
+  it('unreviewedTargets skips a package-braked slot — no LLM burn on a decided package', () => {
+    expect(unreviewedTargets(idx([heldEntry()]), [brake()])).toEqual([])
+    // a newer human PASS on the slot key lifts the brake for that slot
+    const lift = v({ version: '1.0.0', at: '2026-01-03T00:00:00Z', source: 'human' })
+    expect(unreviewedTargets(idx([heldEntry()]), [brake(), lift])).toEqual([])
+    // ↑ lift verdicted the slot anyway — the exclusion here is the seen-check;
+    // the pure lift case: brake on pkg A must not brake pkg B
+    const other = entry({ name: 'other', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
+    expect(unreviewedTargets(idx([heldEntry(), other]), [brake()]).map(e => e.name)).toEqual(['other'])
+  })
+
+  it('§② shows 已打标 concern（包级） for a braked hold and §⑤ excludes it', () => {
+    const md = renderDigest({
+      index: idx([heldEntry()]), verdicts: [brake()],
+      prev: digestStateOf('2026-01-01T00:00:00Z', []), now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('`pkg` v1.0.0（未上架） · 已打标 concern（包级）')
+    expect(md).toContain('## ⑤ 评审积压（pending review — 0）')
+  })
+
+  it('§① marks an AI pass under a package brake — announced but never releasing', () => {
+    const p = v({ version: '1.0.0' })
+    const md = renderDigest({
+      index: idx([heldEntry()]), verdicts: [brake('2026-01-01T00:00:00Z'), p],
+      prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('pkg ⛔已被包级 concern 刹车')
+  })
+
+  it('§③ marks a superseded concern resolved; package-level row shows —（包级）', () => {
+    const c = v({ version: '1.0.0', verdict: 'concern', at: '2026-01-01T00:00:00Z' })
+    const lift = v({ version: '1.0.0', at: '2026-01-02T00:00:00Z' })
+    const md = renderDigest({
+      index: idx([heldEntry()]), verdicts: [c, lift, brake('2026-01-01T12:00:00Z')],
+      // c was announced by a PREVIOUS digest — its resolution now shows as a
+      // marked row instead of silently disappearing from §③
+      prev: digestStateOf('2026-01-01T21:00:00Z', [c]),
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    // brake itself is a fresh concern this render → 1 standing + 1 resolved
+    expect(md).toContain('Concerns（1 ·已解除 1）')
+    expect(md).toContain('pkg ✅已被更新的 pass 解除')
+    expect(md).toContain('| pkg | —（包级） | human |')
+    // never-announced concern resolved between renders stays out — the
+    // reader never saw it, so there's nothing to close
+    const silent = v({ name: 's', version: '1.0', verdict: 'concern', at: '2026-01-02T01:00:00Z' })
+    const md2 = renderDigest({
+      index: idx([heldEntry()]), verdicts: [c, lift, silent, v({ name: 's', version: '1.0', at: '2026-01-02T02:00:00Z' })],
+      prev: digestStateOf('2026-01-01T21:00:00Z', [c]),
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    // no brake row in this render → only the resolved c shows
+    expect(md2).toContain('Concerns（0 ·已解除 1）')
+    expect(md2).toContain('pkg ✅已被更新的 pass 解除')
+    expect(md2).not.toContain('`s` ✅') // silent concern: never announced, never shown
+  })
+
+  it('phaseOf on a repo-only slot reads the null-key verdict — announced human pass is 待放行闸', () => {
+    const gh = entry({ approval: 'pending', latestVersion: null, source: { kind: 'github', id: 'o/r' }, verification: { status: 'skipped' } })
+    const hv = v({ version: null, source: 'human' })
+    const md = renderDigest({
+      index: idx([gh]), verdicts: [hv],
+      prev: digestStateOf('2026-01-01T00:00:00Z', [hv]), now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('· 已公告·待放行闸')
+    const md2 = renderDigest({
+      index: idx([gh]), verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md2).toContain('需人工评审（AI 不审 repo-only）')
+  })
+
+  it('上期公告·已生效 lists last-render announcements whose slot is now displayed', () => {
+    const p = v({ name: 'landed', version: '2.0' })
+    const prev = { lastDigestAt: 't', day: '2026-01-02', dayAnnounced: [akey(p)], announced: [akey(p)] }
+    const md = renderDigest({
+      index: idx([entry({ name: 'landed', latestVersion: '2.0', approval: 'approved' })]),
+      verdicts: [p], prev, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('上期公告·已生效 1：`landed`@2.0')
+    // still pending → not claimed as landed
+    const md2 = renderDigest({
+      index: idx([entry({ name: 'landed', latestVersion: '2.0', approval: 'pending' })]),
+      verdicts: [p], prev, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md2).not.toContain('上期公告·已生效')
+  })
+
+  it('§⑦ renders 24h removals; older tombstones stay out', () => {
+    const i = idx([])
+    i.removed = [
+      { slug: 'gone', name: 'gone', disappearedAt: '2026-01-03T10:00:00Z', reason: 'npm-404' },
+      { slug: 'old', name: 'old', disappearedAt: '2025-12-01T00:00:00Z', reason: 'manual' },
+    ]
+    const md = renderDigest({ index: i, verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).toContain('## ⑦ 近 24h 下架（1）')
+    expect(md).toContain('`gone` — npm-404')
+    expect(md).not.toContain('`old` — manual')
+  })
+
+  it('badLines surfaces malformed verdict rows in the header', () => {
+    const md = renderDigest({ index: idx([]), verdicts: [], prev: null, badLines: 2, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).toContain('⚠️ 2 行 verdict 无法解析已跳过')
+  })
+
+  it('loadVerdicts reports the malformed-line count via sink', () => {
+    const d = mkdtempSync(join(tmpdir(), 'vl-'))
+    const f = join(d, 'v.jsonl')
+    writeFileSync(f, JSON.stringify(v()) + '\n{bad json\n' + JSON.stringify(v({ name: 'b' })) + '\n')
+    try {
+      const sink = { bad: 0 }
+      const vs = loadVerdicts(f, sink)
+      expect(vs).toHaveLength(2)
+      expect(sink.bad).toBe(1)
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('announced today is NOT yet mature — the objection window needs one more render', () => {
+    const e = heldEntry()
+    const p = v({ version: '1.0.0' })
+    // announced in an EARLIER digest → releases
+    const r = applyMatureVerdicts(idx([e]), [p], digestStateOf('2026-01-01T00:00:00Z', [p]))
+    expect(r.releases).toEqual(['pkg@1.0.0'])
+    // same announcement but stamped into TODAY's dayAnnounced → still window
+    const sameDay = { ...digestStateOf('2026-01-03T21:00:00Z', [p]), dayAnnounced: [akey(p)] }
+    const r2 = applyMatureVerdicts(idx([e]), [p], sameDay)
+    expect(r2.releases).toEqual([])
+    expect(r2.index.plugins[0]!.approval).toBe('pending')
+    // explainEntry agrees — 'wait' with the objection-window reason
+    const [sx] = explainEntry(e, [p], sameDay)
+    expect(sx!.outcome).toBe('wait')
+    expect(sx!.why).toContain('异议窗')
+  })
+
+  it('hand-restored announced:[] state stays inside the bootstrap window; a real empty render exits it', () => {
+    const old = v({ name: 'ancient', at: '2025-01-01T00:00:00Z' })
+    const restored = { lastDigestAt: '', announced: [], day: '2026-01-03', dayAnnounced: [] }
+    const s = nextDigestState([old], restored, new Date('2026-01-03T21:00:00Z'))
+    expect(s.announced).toEqual([])                       // windowed, not mass-announced
+    const s2 = nextDigestState([old], s, new Date('2026-01-04T21:00:00Z'))
+    expect(s2.announced).toEqual([akey(old)])             // next render announces normally — no deadlock
   })
 })
