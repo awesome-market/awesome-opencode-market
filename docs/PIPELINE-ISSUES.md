@@ -383,6 +383,7 @@ Pipeline/CI 安全：
 
 **验证**：`npx tsc --noEmit` 0 错；`npx vitest run` 427 全过；`npm run coverage` statements 98.0% / branches 90.1% / functions 96.3% / lines 99.2%（90% 门槛全过）。
 
+
 ---
 
 ## 附四：抓取链路审计（F-1…F-14，2026-11-04 实现）
@@ -435,7 +436,7 @@ Pipeline/CI 安全：
 | V-1b 日志 canary 可伪造 | ✅ | 插件代码可往 opencode.log 追加 `loading plugin id=…` 行→旧 canary 必假阳性。改 `/api/plugin` 服务端应答：`source.type==='package' && target` 匹配安装 spec && `state.status==='active'`（`apiLoaded`，深遍历容忍响应包裹层）。`loadedSignal` 降级为 excerpt 诊断 |
 | V-1c gui 检查在 shard 进程内跑不可信代码 | ✅ | sandbox 模式下 `checkGuiBundle` 移到 `npx tsx gui.ts <bundle>` nobody 子进程——vm realm 逃逸也只拿到 nobody，写不了 results、读不到 shard env |
 | V-2 吞吐 96/天 硬编码无积压观测 | ✅ | digest 新增「④ 验证积压」段：队列长度（同 planTargets 谓词）/投稿数/近7天失败数/最老等待日期；`verify.yml` dispatch 加 `cap` input → `VERIFY_CAP` 环境变量 → plan.ts 可调上限冲积压 |
-| V-3 `failed` 终态不分暂态/确定性，唯一重试是手动 --retest | ✅ | `Verification.retries` 字段记录连续失败次数（merge 写回递增、非 failed 清零）；plan `retryable()`：`failed && verifiedAt<7d && retries<3` 自动重入队列——真死版本 3 次尝试后仍终态，canary 误杀自愈；red-flagged 依然永不执行 |
+| V-3 `failed` 终态不分暂态/确定性，唯一重试是手动 --retest | ✅ | `Verification.retries` 字段记录连续失败次数（merge 写回递增、非 failed 清零）；plan `retryable()`：`failed && retries<3` 自动重入队列——真死版本 3 次尝试后仍终态，canary 误杀自愈；red-flagged 依然永不执行。**窗口改按次不按墙钟**：旧 `verifiedAt<7d` 条件在深积压下让"排队时长"烧掉从没花过的重试预算（排不上队≠不该重试）——现预算只由实测次数消耗 |
 | V-4 canary 时序赌博（12s 窗口）是 V-3 误杀主源 | ✅ | 窗口 12s→20s；`apiPluginState`/`apiFailed` 区分确定性失败（serve 报 `failed` → 条目一出现就跳出，~1s 判死）vs 超时缺席——`logExcerpt` 写明死因供人工抽查；残余 flake 由 V-3 自动重试吸收 |
 | V-5 单版本测试（cli@2.2.5），`compat:{}` 死字段 | 仍开 | 多版本矩阵才有"兼容"语义 |
 | V-6 rpc/skill/mcp/theme 等类型无验证层级 | 仍开 | 仅 server/tui/gui 有深度路由 |
@@ -465,6 +466,7 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 
 **验证**：typecheck 0 错；619 tests 全过；新回归：serveSpawn 路由（serve 过 wrapper、curl/version 不过）、api canary 缺席→failed/load、ocVersion 每片一次（3 目标仅 1 次 --version）、畸形 artifact 行 safeParse 拒、workflow↔OPENCODE_VERSION 钉步、deadSpawn 注入全部 verify 用例（本机真二进制不起真 serve）。
 
+
 ### 附六·三轮：部件路由与工作流壳（V-P…V-T，2026-11）
 
 双栖（plugin+skill）改造暴露了 verify 比 `contains` 老一代的问题：纯技能 npm 条目会被塞进插件安装链误判；顺带把 merge job 里残留的提交遮羞布、fork cron 白烧等壳层问题一起收掉。
@@ -479,6 +481,32 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 | V-U e2e 连抓两雷：①空计划下游级联——`fromJSON(shards) != '[]'` 拿数组比字符串恒真 → 0 片也展开空矩阵（verify 失败）→ merge 跑且 `readdirSync /tmp/results` ENOENT → alert 误报；②nobody 沙箱建目录——`sudo -n -u nobody mkdir <home>/u` 在 0711 runner-owned home 里 EACCES（0711 不可写正是防 nobody 种证据的设计），mock 测的 fake 把 sudo mkdir 当真跑所以没暴露 | ✅ | ①三个下游 job `if` 改直接字符串比较（`!= '[]' && != '' && != 'null'`）+ merge `existsSync` 兜底空目录=空结果集；②uh 改 runner `mkdirSync` + `sudo -n chown nobody` 移交——父目录保持 0711，测试 fake 重挂到 chown 钩 |
 
 **验证**：typecheck 0 错；636 tests 全过；新回归：verifyPartsOf 归一化、skill-only 路由（plugin add/serve 不启动）、structure 判定三分支（无 SKILL.md/无 frontmatter name/pack 失败）、嵌套 skills/<x>/ 布局、双栖补验成败两向、加权分片均衡、VerifyResultFile 收 structure、chown 移交断言（nobody 不在 home 里 mkdir）。**真机 e2e**（fork dispatch 42003883520）：纯技能 `structure` verified；双栖 plugin-load 过后技能半边缺 SKILL.md → failed/load+excerpt；普通插件真败因如实带出（"Plugin must export a default definition"→ failed/load）；空计划全链路 skipped 绿过。
+
+### 附六·四轮：DATA-FLOWS §3 全文审计（G 系列 + 优化批，verify.yml ↔ 实现逐行复核后全量落地）
+
+对 DATA-FLOWS §3 声称的每个机制对照实现核实（均属实，多处比文档更细），同时收掉审计发现的缺口与优化项。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| G-1 merge job 排队被 catalog-branch 并发组置换（1 running + 1 pending），被顶掉的班 ~30min 分片白烧且 `failure()` 不覆盖 cancelled → 静默丢整轮结果 | ✅ | `alert` 条件加 `\|\| cancelled()` 先保可见；merge 开头扫前序 run 的 `results-*` artifact 下载平铺合并（遗留结果不再白烧；命名带片序号跨 run 覆盖无碍）；写槽前加 freshness 守卫（槽位 verifiedAt 更新于结果之后则旧结果不落——重放的遗留 artifact 防陈旧覆盖新证据） |
+| G-2 serve boot 窗口内无 listening 行被记包级 `failed/load`（"plugin absent"）——2.2.5 懒加载下 serve 起不来时插件代码根本没跑，责任只在 harness/资源/上游输出漂移；该 failed 会经 diagnose verify-failed 短路批量假 concern | ✅ | `!port` → harness throw（走 `harness:true` 整条丢弃路径，不烧 retries、不进 concern 短路）；存量 deadSpawn 假 serve 的测试统一改 liveSpawn（emit listening 行）区分"harness 故障"与"包故障"两类语义 |
+| G-3 `checkSkillStructure` 只验 tar 列表**第一个** SKILL.md 的 frontmatter——多 SKILL.md 包（docs/ 文档 + skills/x/ 真身）由 tar 排序决定验谁，排前无 `name:` 即假 failed | ✅ | `checkSkillTgz` 收集全部 SKILL.md 成员，**任一** frontmatter 含 `name:` 即 pass——与 opencode"扫到能解析的就算"实际语义、收录门 hasSkillPath 同一口径 |
+| G-4 `skipped` 单向阀：旗标清空后槽位永久停 skipped（"有高危信号没跑"两边都不成立） | ✅ | verifyQueued 收 `ver?.status==='skipped'`——`flagged` 检查先行保证只在旗标真清后回队重验；skipIfFlagged 降级保留 verifiedAt/runUrl/integrity/opencodeVersion 证据字段（详情页留审计链，publish/merge.ts 与 verify/merge.ts 两处同修） |
+| G-5 verify 不钉字节：`name@ver` 验的是 registry 当前字节，re-tag 窗口内 verified 描述的可能是未扫字节 | ✅ | `Verification.integrity` 字段（npm=measuredIntegrity 经沙箱 urun 跑 `npm view dist.integrity`；github=钉死 sha）；merge `driftCheck` 对槽位锚点（pu.integrity/entry.integrity/source.version）——实测≠钉值改记 failed/install+drift 摘录进 diagnose 人工面；`reuseVerified` 后处理让内容锚逐字节相同的槽领养同宿主 verified 结果（re-tag 回滚/hold↔展示双胞胎不烧第二趟） |
+| G-6 `retryable` 7 天墙钟窗口在深积压下烧掉从没花过的预算（排不上队≠不该重试） | ✅ | 改纯次数预算 `retries<3`（`verify/retryable.ts` 独立模块——diagnose 同源导入避免 plan→diagnose 环）；diagnose/run 调用点去 Date 参数；上游 7d 窗口测试夹具改 attempts 语义 |
+| G-7 plan 不读裁决：已 concern 槽位仍排队白烧分片 | ✅ | plan job 拉 ai-verdicts.jsonl 传 planTargets（缺文件容错）；verifyQueued 经共享 `slotVerdict`（槽键 concern ∨ 包级刹车，与放行闸同一透镜）拒队——`latestHuman ?? new Map()` 空 map 兜底 |
+| G-8 serveOut 伪造面前瞻 + G-9 `writeDummyProvider` 非沙箱路径 JSON.parse 不容错 + G-11 `urun` extra-env `!(k in env)` 覆盖被丢 | ✅ | G-8 注释标记懒加载前提；G-9 非沙箱路径同 try/catch 容错；G-11 `in` 检查改显式 undefined 判断（可覆盖已存 key） |
+| G-10 merge CLI 文件级无容错：results-* 混入非 JSON 文件裸 parse 崩整批 | ✅ | 逐文件 try/parse + 非数组 warn——坏文件只丢自己不塌整批 |
+| G-12 skipped 降级丢证据链（见 G-4） | ✅ | 同 G-4 |
+| G-14 github-kind/mcp/command/agent 不验证（文档自承的已知债） | ✅(github-kind) | `VerifyTarget.git` 携带 repo+sha——`plugin add owner/repo#sha` 实测安装，skill 部件走 `checkSkillStructureGit`（codeload tarball 同口径）；verify.yml egress 加 codeload.github.com；run.ts ghWorker 的 verification 按 ghParts 发牌（有部件→unverified 进队列，无部件/旗标→skipped）；apiNames 收 repo/basename/小写变体候选匹配 /api/plugin 形状。mcp/command/agent 仍无结构检查（V-6 同款债） |
+| G-15 `ocVersion` probe 失败 → 'unknown' → hostStale 永真 | ✅ | 几乎不可达（probe 挂时 install 也挂），记录不改 |
+| O-1 分片内小并行 | ✅ | `verifyShard` LANES=2——各自 home+sandbox uid 子树+ephemeral port；scoped 进程清扫（/proc/*/environ 匹配本目标 XDG_DATA_HOME）替代裸 pkill 防误杀邻道；断路器共享计数容许 lane 过冲；片宽 8→12 保持墙钟 ~30min |
+| O-2 content-addressed verify | ✅ | 同 G-5 reuseVerified |
+| O-3 @opencode/cli global + node_modules 缓存 | ✅ | node_modules 缓存键含 package-lock hash（plan/verify/merge 三 job——npm ci relink ~20s/次） |
+| O-4 digest §④ 排空预估 | ✅ | `drainDays = queue/(VERIFY_CAP‖48)/2`——按 2×daily 班节奏估"约 N 天排空" |
+| 顺带：`vitest.config.ts` `.pathname` 非 ASCII 检出路径 percent-encode 断解析（副本1 等中文目录下 solid-js 无法 resolve） | ✅ | 改 `fileURLToPath(new URL(...))`——仓库对所有检出路径名合法 |
+
+**验证**：typecheck 0 错；1085 tests 全过；{pipeline,src} 90% 分支门槛过（合并上游 b11d036 批次后重测）；新回归：liveSpawn/deadSpawn 分语义、concern/包刹车拒队、skipped 回队、git spec 双栖+codeload 结构、drift 改写、同字节领养、遗留 artifact 清扫、attempts-only retryable、scoped 清扫、熔断 lane 过冲、writeDummyProvider 容错、verifyQueued 空 human map 兜底、version-less 结果落展示槽、legacy approvalReason 重置。
 
 ## 附七：AI 诊断链审计（D-1…D-8）
 

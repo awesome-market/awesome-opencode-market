@@ -146,7 +146,7 @@ describe('ai/diagnose.main', () => {
     expect(readFileSync(op, 'utf8')).toBe('')
   })
   it('verify-failed → direct concern with excerpt, LLM never called', async () => {
-    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load' }, heldAt: 't' } })
+    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
     const { ip, vp, op } = files([failed])
     let called = false
     await diagnoseMain(argv(ip, vp, op), {

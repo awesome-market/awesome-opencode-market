@@ -248,14 +248,14 @@ export function renderDigest({ index, verdicts, prev, now, paused }: DigestInput
   // wait for verify, wait for review, or it's already decided and just
   // waiting out the maturity/release gates
   const phaseOf = (e: PluginEntry): string => {
-    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
+    const ver = e.pendingUpdate?.version ?? e.latestVersion
     const vf = e.pendingUpdate?.verification ?? e.verification
     // mirror the release gate's shared slot semantics (slotVerdict): a
     // package-level human brake governs every VERSIONED slot — the slot's
     // own verify/verdict state is moot while the brake stands. (version=null
     // = github-kind slot whose null key is the slot's own verdict, never a
     // package brake.)
-    const governing = ver === undefined ? undefined : slotVerdict(latest, latestHuman, e.name, ver)
+    const governing = slotVerdict(latest, latestHuman, e.name, ver)
     if (ver !== null && governing && governing === packageBrake(latestHuman, e.name))
       return '包级刹车·需人工解除'
     const rec = ver ? latest.get(vkey(e.name, ver)) : undefined

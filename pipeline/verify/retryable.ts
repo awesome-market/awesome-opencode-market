@@ -5,15 +5,16 @@
  *  avoid the diagnose ↔ plan import cycle. */
 import type { PluginEntry } from '../../src/schema.ts'
 
-export const FAILED_RETRY_WINDOW_MS = 7 * 86_400_000
 export const MAX_FAILED_ATTEMPTS = 3
 
-/** A failed slot gets bounded automatic retries: recent failure (within
- *  7d) + fewer than 3 recorded attempts re-enters the verify queue. Beyond
- *  that the version is genuinely dead — the only remaining path is manual
- *  --retest. */
-export function retryable(v: PluginEntry['verification'] | undefined, now: Date): boolean {
-  if (v?.status !== 'failed' || (v.retries ?? 0) >= MAX_FAILED_ATTEMPTS) return false
-  const at = Date.parse(v.verifiedAt ?? '')
-  return Number.isFinite(at) && now.getTime() - at < FAILED_RETRY_WINDOW_MS
+/** A failed slot gets bounded automatic retries: fewer than 3 recorded
+ *  attempts re-enters the verify queue. Beyond that the version is
+ *  genuinely dead — the only remaining path is manual --retest.
+ *  Deliberately NOT wall-clock bounded: the old 7d window expired while a
+ *  target waited in a deep queue — 'queue delay' and 'retry budget spent'
+ *  were conflated, so a slot could hit terminal-failed having used zero of
+ *  its 3 attempts. The attempts counter alone is the budget; each retry
+ *  only lands when a shard actually measures the slot. */
+export function retryable(v: PluginEntry['verification'] | undefined): boolean {
+  return v?.status === 'failed' && (v.retries ?? 0) < MAX_FAILED_ATTEMPTS
 }

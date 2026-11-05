@@ -86,18 +86,18 @@ describe('retryable vs terminal verify-failed (shared V-3 predicate)', () => {
     held({ verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', verifiedAt, retries } }, name)
 
   it('unreviewedTargets defers a retryable failure — the verify loop still owns the slot', () => {
-    const recent = new Date(Date.now() - 3600_000).toISOString()           // 1h ago, <7d window
-    const terminal = new Date(Date.now() - 8 * 86_400_000).toISOString()   // 8d ago, window lapsed
+    const recent = new Date(Date.now() - 3600_000).toISOString()           // 1h ago
+    const old = new Date(Date.now() - 8 * 86_400_000).toISOString()        // 8d ago
     const targets = unreviewedTargets(idx([
-      failed(recent, 1, 'retryable'),          // window open, attempts left → defer
+      failed(recent, 1, 'retryable'),          // attempts left → defer
+      failed(old, 1, 'old'),                   // OLD but attempts left → still defers
       failed(recent, 3, 'exhausted'),          // retries spent → terminal
-      failed(terminal, 1, 'stale'),            // window lapsed → terminal
       held({ verification: { status: 'verified' } }, 'clean'),
     ]), new Map())
     const names = targets.map(x => x.name)
     expect(names).not.toContain('retryable')
+    expect(names).not.toContain('old')
     expect(names).toContain('exhausted')
-    expect(names).toContain('stale')
     expect(names).toContain('clean')
   })
 
@@ -127,7 +127,10 @@ describe('retryable vs terminal verify-failed (shared V-3 predicate)', () => {
     expect(got?.reason).toContain('装测失败')
   })
 
-  it('window lapsed (failure >7d) → terminal concern', async () => {
+  it('failure >7d with attempts LEFT still defers — the retry budget is attempt-bound, not wall-clock', async () => {
+    // G6: the old 7d window made queue-starved slots terminal with zero
+    // retries spent. Age alone no longer ends a failure — the slot waits
+    // for the verify loop to spend its 3 attempts.
     const entry = failed(new Date(Date.now() - 8 * 86_400_000).toISOString(), 1)
     const { argv, op } = files([entry])
     let calls = 0
@@ -136,7 +139,7 @@ describe('retryable vs terminal verify-failed (shared V-3 predicate)', () => {
       sha: noSha, ping,
     })
     expect(calls).toBe(0)
-    expect(outLines(op)[0]?.verdict).toBe('concern')
+    expect(outLines(op)).toHaveLength(0)
   })
 })
 

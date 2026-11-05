@@ -681,6 +681,25 @@ describe('verify/verify.checkSkillStructure + writeDummyProvider', () => {
     const cfg = JSON.parse(readFileSync(join(cfgDir, 'opencode.json'), 'utf8'))
     expect(JSON.stringify(cfg)).toContain('keep-me')
   })
+  it('writeDummyProvider rebuilds malformed/empty pre-existing config instead of throwing (G9)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'vs-'))
+    const cfgDir = join(home, '.config', 'opencode')
+    mkdirSync(cfgDir, { recursive: true })
+    const cfgPath = join(cfgDir, 'opencode.json')
+    writeFileSync(cfgPath, '{{{ not json')
+    writeDummyProvider(home)                                // catch arm — no throw
+    expect(() => JSON.parse(readFileSync(cfgPath, 'utf8'))).not.toThrow()
+    writeFileSync(cfgPath, '')
+    writeDummyProvider(home)                                // `|| '{}'` arm — no throw
+    expect(JSON.parse(readFileSync(cfgPath, 'utf8')).provider).toBeTruthy()
+  })
+  it('verify/merge: a version-less result lands on the display slot when no hold exists', () => {
+    const idx = mkIdx([mkEntry('v', { approval: 'approved', latestVersion: '1.0.0' })])
+    const out = mergeResults(idx, [
+      { name: 'v', status: 'verified', level: 'load', opencodeVersion: 'oc1', verifiedAt: '2026-06-01T00:00:00Z' },
+    ] as never)
+    expect(out.plugins.find(e => e.name === 'v')!.verification.status).toBe('verified')
+  })
 })
 
 describe('ai/digest.renderDigest edges', () => {

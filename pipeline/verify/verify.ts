@@ -294,7 +294,7 @@ export async function checkSkillStructure(
 ): Promise<{ ok: boolean; log?: string }> {
   try {
     const pack = await run('npm', ['pack', spec, '--pack-destination', home], { timeout: 60_000 })
-    const tgzName = pack.stdout.trim().split('\n').at(-1) ?? ''
+    const tgzName = pack.stdout.trim().split('\n').at(-1)!
     return await checkSkillTgz(join(home, tgzName), run, /^package\//, spec)
   } catch (e) {
     return { ok: false, log: String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(0, 2000) }
@@ -378,9 +378,9 @@ export async function verifyPackage(
   // derived names all match (one plugin is installed at a time, so loose
   // candidates can't misattribute). GitHub names are case-insensitive —
   // opencode may normalize either direction.
+  const repoBase = opts.git?.repo.split('/').pop()!   // split() always yields ≥1 element
   const apiNames: string[] = opts.git
-    ? [name, opts.git.repo, opts.git.repo.split('/').pop() ?? name, opts.git.repo.toLowerCase(),
-       (opts.git.repo.split('/').pop() ?? name).toLowerCase()]
+    ? [name, opts.git.repo, repoBase, opts.git.repo.toLowerCase(), repoBase.toLowerCase()]
       .filter((v, i, a) => a.indexOf(v) === i)
     : [name]
   const base = {

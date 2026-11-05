@@ -410,10 +410,10 @@ export function unreviewedTargets(
     // auto-retry may flip it to verified, and a premature short-circuit
     // concern would close the review FOREVER — verdicted keys never re-enter,
     // so a transient failure would become permanent human debt. Defer like
-    // 'unverified' until retries exhaust or the window lapses; then the
+    // 'unverified' until the attempts budget is spent; then the
     // verify-failed short-circuit writes the mechanical concern.
     // Harness-error rows were never measured — they review normally.
-    if (vf.status === 'failed' && !isHarnessFailure(vf) && retryable(vf, new Date(now))) return false
+    if (vf.status === 'failed' && !isHarnessFailure(vf) && retryable(vf)) return false
     return true
   }).sort((a, b) => (candidateHeldAt(a) || 0) - (candidateHeldAt(b) || 0))
 }
@@ -580,13 +580,13 @@ export async function main(
     retagOfHuman: boolean
   }
   const bySha = latestShaVerdicts(allVerdicts)
-  /** 'failed' that the verify loop has abandoned — retries exhausted or the
-   *  7d window lapsed. Only TERMINAL failures take the mechanical concern
+  /** 'failed' that the verify loop has abandoned — the attempts budget is
+   *  spent. Only TERMINAL failures take the mechanical concern
    *  short-circuit; a retryable slot still belongs to verify's auto-retry
    *  (writing concern now would close the review before the retry could
    *  self-heal it). Harness rows were never measured — also not terminal. */
   const terminalFailed = (vf: Work['vf']) =>
-    vf.status === 'failed' && !isHarnessFailure(vf) && !retryable(vf, runNow)
+    vf.status === 'failed' && !isHarnessFailure(vf) && !retryable(vf)
   const works: Work[] = await mapPool(candidates, 8, async e => {
     const ver = verOf(e) ?? '?'
     const caps = e.pendingUpdate?.capabilities ?? e.capabilities

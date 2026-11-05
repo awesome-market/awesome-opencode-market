@@ -345,6 +345,10 @@ describe('verify/plan', () => {
     // package-level human brake (version=null) covers every slot too
     const brake = new Map([[vkey('badpkg', null), { name: 'badpkg', version: null, verdict: 'concern', source: 'human', at: 't', reason: 'r' } as never]])
     expect(verifyQueued(e, new Date(), new Map(), brake)).toBe(false)
+    // a latest map present WITHOUT a human map → the concern check still runs
+    // (latestHuman ?? new Map()); an unrelated slot's verdict doesn't gate.
+    const other = new Map([[vkey('elsewhere', '1.0.0'), { name: 'elsewhere', version: '1.0.0', verdict: 'concern', source: 'ai', at: 't', reason: 'r' } as never]])
+    expect(verifyQueued(e, new Date(), other)).toBe(true)
     // retest/manual dispatch still bypasses — the human asked for it
     expect(planTargets(idx([e]), 48, true).map(t => t.name)).toEqual(['badpkg'])
   })

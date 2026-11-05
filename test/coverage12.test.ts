@@ -187,6 +187,12 @@ describe('verdicts human-ordering + held ?? null + pkgPass awaiting-review', () 
     const dg3 = { lastDigestAt: 't', announced: [akey(pkgPass)], day: 'd', dayAnnounced: [akey(pkgPass)] } as DigestState
     const r3 = applyMatureVerdicts(mkIdx([already]), [pkgPass], dg3)
     expect(r3.index.plugins[0]!.approvalReason).toBe('awaiting-review')
+    // approval 'legacy' + real reason + pkgPass → also reset (298 'legacy' arm)
+    const leg2 = mkEntry('lg2', { approval: 'legacy', approvalReason: 'predates AI review' })
+    const pkgPass2 = verdict({ name: 'lg2', version: null, verdict: 'pass', source: 'human', at: '2026-01-05T00:00:00Z' })
+    const dg4 = { lastDigestAt: 't', announced: [akey(pkgPass2)], day: 'd', dayAnnounced: [akey(pkgPass2)] } as DigestState
+    const r4 = applyMatureVerdicts(mkIdx([leg2]), [pkgPass2], dg4)
+    expect(r4.index.plugins[0]!.approvalReason).toBe('awaiting-review')
   })
 })
 

@@ -140,9 +140,9 @@ function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
       .filter((v): v is NonNullable<typeof v> =>
         v?.status === 'verified' && !!v.integrity && v.opencodeVersion === OPENCODE_VERSION)
     if (!donors.length) return p
-    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'] | undefined)
-      : PluginEntry['verification'] | undefined => {
-      if (!anchor || !ver || ver.status === 'verified') return ver
+    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'])
+      : PluginEntry['verification'] => {
+      if (!anchor || ver.status === 'verified') return ver
       const donor = donors.find(d => d.integrity === anchor)
       return donor ? { ...donor } : ver
     }
@@ -153,8 +153,8 @@ function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
     if (display === p.verification && (!p.pendingUpdate || pu === p.pendingUpdate.verification)) return p
     return {
       ...p,
-      verification: display ?? p.verification,
-      ...(p.pendingUpdate && pu ? { pendingUpdate: { ...p.pendingUpdate, verification: pu } } : {}),
+      verification: display,
+      ...(p.pendingUpdate ? { pendingUpdate: { ...p.pendingUpdate, verification: pu! } } : {}),
     }
   })
 }

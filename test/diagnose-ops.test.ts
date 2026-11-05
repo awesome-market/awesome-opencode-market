@@ -28,7 +28,7 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
 })
 const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
 const flaggedHeld = e({ name: 'bad', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['net:exfil'] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
-const failedHeld = e({ name: 'broken', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404' }, heldAt: '2026-01-01T00:00:00Z' } })
+const failedHeld = e({ name: 'broken', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3 }, heldAt: '2026-01-01T00:00:00Z' } })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '2.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
