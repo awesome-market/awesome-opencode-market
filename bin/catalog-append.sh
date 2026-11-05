@@ -30,8 +30,21 @@ for i in 1 2 3; do
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
   touch "$WT/$FILE"
   if [ -n "${KEY:-}" ]; then
-    grep -qF "\"name\":\"$KEY\"," "$WT/$FILE" || grep -qF "\"repo\":\"$KEY\"," "$WT/$FILE" \
-      || printf '%s\n' "$LINE" >> "$WT/$FILE"
+    # KEY dedupe blocks RE-submission only while the entry is actually live —
+    # a tombstoned/never-landed package must be able to come back through the
+    # front door; otherwise a stale seed line locks it out forever.
+    if grep -qF "\"name\":\"$KEY\"," "$WT/$FILE" || grep -qF "\"repo\":\"$KEY\"," "$WT/$FILE"; then
+      # in-flight if the entry is in plugins[] — pending counts (still queued);
+      # removed[] tombstones do NOT count: a gone package may re-submit.
+      LIVE=1
+      if [ -f "$WT/index.json" ]; then
+        node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(j.plugins.some(e=>e.name===process.argv[2])?0:1)' \
+          "$WT/index.json" "$KEY" || LIVE=0
+      fi
+      if [ "$LIVE" = 0 ]; then printf '%s\n' "$LINE" >> "$WT/$FILE"; fi
+    else
+      printf '%s\n' "$LINE" >> "$WT/$FILE"
+    fi
   else
     grep -qxF "$LINE" "$WT/$FILE" || printf '%s\n' "$LINE" >> "$WT/$FILE"
   fi

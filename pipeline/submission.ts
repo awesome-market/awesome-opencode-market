@@ -81,24 +81,32 @@ export function parseSubmission(body: string): Submission {
   return { name, repo, kind: name ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }
 }
 
-/** One-line JSONL for catalog-branch submissions.txt (consumed by run.ts --seed). */
-export function seedLine(s: Submission, issue: number): string {
+/** One-line JSONL for catalog-branch submissions.txt (consumed by run.ts --seed).
+ *  `version` records what the review actually scanned (npm version or repo tree
+ *  sha) — the human-verdict path pins approvals to it, and stale-seed detection
+ *  uses `at` to age submissions that never landed. */
+export function seedLine(s: Submission, issue: number, extra: { version?: string | null; pkg?: string | null } = {}): string {
   return JSON.stringify({
     name: s.name,
     repo: s.repo,
     type: s.type,
     category: s.category,
     desc: { en: s.descEn, ...s.descOther },
+    ...(extra.version ? { version: extra.version } : {}),
+    ...(extra.pkg ? { pkg: extra.pkg } : {}),
     issue,
+    at: new Date().toISOString(),
     notified: false,
   })
 }
 
 // CLI: ISSUE_BODY=<body> npx tsx pipeline/submission.ts          → JSON fields
-//      ISSUE_BODY=<body> npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
+//      ISSUE_BODY=<body> SEED_VERSION=<v> npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
 /* v8 ignore next 5 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const s = parseSubmission(process.env.ISSUE_BODY ?? '')
   const i = process.argv.indexOf('--seedline')
-  console.log(i > 0 ? seedLine(s, Number(process.argv[i + 1])) : JSON.stringify(s))
+  console.log(i > 0
+    ? seedLine(s, Number(process.argv[i + 1]), { version: process.env.SEED_VERSION ?? null, pkg: process.env.SEED_PKG ?? null })
+    : JSON.stringify(s))
 }

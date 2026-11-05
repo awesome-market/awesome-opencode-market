@@ -80,6 +80,15 @@ describe('submission parser', () => {
     const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
     expect(l).toMatchObject({ name: 'opencode-foo', repo: 'o/foo', type: 'skill', issue: 42, notified: false })
     expect(l.desc).toMatchObject({ en: 'Does the thing.', zh: '做那件事' })
+    expect(l.at).toBeTruthy()   // submission timestamp — stale-seed detection
+  })
+
+  it('seedLine extra: reviewed version + repo pkg name ride the line', () => {
+    const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42, { version: '2.3.0', pkg: 'oc-foo' }))
+    expect(l.version).toBe('2.3.0')
+    expect(l.pkg).toBe('oc-foo')
+    const bare = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
+    expect('version' in bare).toBe(false)
   })
 })
 
@@ -123,6 +132,34 @@ describe('markNotified', () => {
     })
     const { issues } = markNotified(ghIdx, ['{"repo":"o/r","issue":11,"notified":false}'])
     expect(issues).toEqual([])
+  })
+
+  it('stale: approved seed aged past staleDays without landing warns once', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const old = '2026-10-01T00:00:00Z'   // 35d ago
+    const lines = [
+      `{"name":"opencode-foo","issue":7,"notified":false,"at":"${old}"}`,          // landed → notify not stale
+      `{"name":"not-in-index","issue":8,"notified":false,"at":"${old}"}`,          // aged, absent → stale
+      `{"name":"also-missing","issue":9,"notified":false,"at":"${old}","staleWarned":true}`, // already warned
+      `{"name":"fresh-one","issue":10,"notified":false,"at":"2026-11-04T00:00:00Z"}`,        // too young
+      '{"name":"legacy-no-at","issue":11,"notified":false}',                                 // no timestamp → skip
+    ]
+    const { issues, stale, lines: out } = markNotified(idx, lines, { now: NOW })
+    expect(issues).toEqual([7])
+    expect(stale).toEqual([8])
+    expect(JSON.parse(out[1]!).staleWarned).toBe(true)
+    expect(JSON.parse(out[3]!).staleWarned).toBeUndefined()
+  })
+
+  it('stale: pending entry still counts as not-landed', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const pendIdx = CatalogIndex.parse({
+      version: '1', generatedAt: 't', categories: {}, removed: [],
+      plugins: [{ ...idx.plugins[0]!, approval: 'pending' }],
+    })
+    const { stale } = markNotified(pendIdx,
+      ['{"name":"opencode-foo","issue":7,"notified":false,"at":"2026-10-01T00:00:00Z"}'], { now: NOW })
+    expect(stale).toEqual([7])
   })
 })
 

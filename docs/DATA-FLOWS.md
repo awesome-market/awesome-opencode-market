@@ -70,7 +70,7 @@ flowchart TB
 |---|---|---|---|
 | `index.json` | catalog.yml publish / verify.yml merge | 站点构建、客户端、diagnose、docket、verify plan、applyMatureVerdicts | 完整目录（含 pending——数据面全量，展示面各自过滤） |
 | `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml | run.ts、diagnose（判重）、docket、digest | **append-only** 裁决流水；同 name@version 最新 `at` 胜出 |
-| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified 回写） | run.ts `--seed`、notify-published | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},issue,notified}`；兼容旧格式：纯包名行、`github:owner/repo` 行 |
+| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified 回写） | run.ts `--seed`、notify-published | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,at,notified,staleWarned?}`；`version`=被审版本（npm ver/repo treeSha），`at`=投稿时刻；兼容旧格式：纯包名行、`github:owner/repo` 行 |
 | `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟看 `announced` 集合成员（上过日报的那行才算）；缺失/损坏=-∞=全冻结 |
 | `digest/YYYY-MM-DD.md` | digest.yml（publish-digest.sh 兜底） | 人（手机/网页） | 日报：新放行表 + held 积压 + concerns + 审核单链接 |
 | `blocklist.json` | 手工 | run.ts | `{names[],slugs[]}` 硬封禁 |
@@ -227,7 +227,9 @@ discoverNpm + discoverGithub（并行）
        并对 categories 字典/条目 category 值做 catId 归一——
        remote 上的 legacy 中文键不会在重试路径原样回流）
   → notify-published：approval!=='pending' 的投稿 issue 评论+关闭，
-     submissions.txt 回写 notified:true（二次提交）
+     submissions.txt 回写 notified:true（二次提交）；
+     `at` 超 14 天仍未落地（缺席或 pending）→ 一次性 staleWarned 评论
+     （不关单——管线侧延迟不等于作者放弃）
 ```
 
 **前置步骤（顺序负载）**：`generate` 开头先把 catalog 分支取下来，跑 `applyMatureVerdicts(old, verdicts, digestState)`——成熟裁决先作用于旧 index，再做发现比对（否则高频包的 pendingUpdate 会被下一班 npm bump 覆盖，永远饥饿）。旧 index 缺失/损坏 → 直接拒跑（WF-1，不盲跑）。
@@ -244,17 +246,17 @@ discoverNpm + discoverGithub（并行）
 
 ## 2. 投稿流 — `submit.yml`
 
-**实现**：`pipeline/submission.ts::parseSubmission/seedLine`（issue 解析+种子行）· `pipeline/review.ts::reviewPackage/verdict/renderReview`（机械审+报告）· workflow 内嵌 node 脚本（ingest 去重/verdict 写回/sweep）
+**实现**：`pipeline/submission.ts::parseSubmission/seedLine`（issue 解析+种子行）· `pipeline/review.ts::reviewPackage/reviewRepo/verdict/repoVerdict/renderReview/renderRepoReview`（机械审+报告）· workflow 内嵌 node 脚本（ingest 去重/verdict 写回/sweep）
 
 ```mermaid
 flowchart TB
   ISS["[submit] issue<br/>表单或纯文本"] --> PA["parseSubmission"]
   PA --> K{"KIND"}
   K -->|"npm"| RV["reviewPackage<br/>npm 存在性+证据+扫描"]
-  K -->|"repo"| CL["合成 clean<br/>(无 npm 可扫)"]
+  K -->|"repo"| RR["reviewRepo<br/>存在性+树证据门+codeload 扫描"]
   K -->|"none"| INV["submission:invalid"]
   RV -->|"clean"| ING["ingest job<br/>grep 去重→append"]
-  CL --> ING
+  RR --> ING
   RV -->|"flagged"| NW["submission:needs-work<br/>+评论报告"]
   ING --> SL[("submissions.txt")]
   SL --> CAT["下一班 catalog run<br/>--seed 消费"]
@@ -269,9 +271,12 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
   → review job（permissions:{} 零权限——跑攻击者可控的 tarball；
       concurrency: sub-review-N，cancel-in-progress——重审幂等可丢弃）
       parseSubmission（issue-form ### 段 + freeform 兜底；repo 可无 name）
-      KIND: npm→机械审 review.ts；repo→合成 clean（无 npm 可扫）；none→invalid
-      机械审查：npm 存在性/插件证据/静态扫描 → verdict: clean|flagged|invalid
-      守卫：非作者触发重审 → flagged；issue>24h 且包注册晚于 issue → flagged（防蹲名）
+      KIND: npm→reviewPackage；repo→reviewRepo；none→invalid
+      机械审查：npm=存在性/插件证据/静态扫描；repo=仓库存在性+树证据门
+        （与目录收录同一 hasRepoEvidence）+codeload tarball 扫描
+        → verdict: clean|flagged|invalid；报告记录被审版本
+        （npm reviewedVersion/repo treeSha）+findings 折叠进 <details>
+      守卫：非作者触发重审 → flagged；issue>24h 且包/仓注册晚于 issue → flagged（防蹲名）
       verdict 取报告中 LAST 'verdict:' 注释标记（防包内文本注入伪造）
       产出 review.md artifact + verdict output（不直接写 issue——N-6 拆权）
   → report job（permissions: issues:write，needs review）：
@@ -279,8 +284,10 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
       打 submission:{approved|needs-work|invalid} 标签
       ⚠️ 机械通过只是"入场"，不是上架
   → ingest job（clean 时，concurrency: catalog-branch）：
-      catalog-append.sh KEY 模式（name/repo 键去重）→ append submissions.txt
-      （含 issue#,notified:false）→ catalog run --seed 消费
+      catalog-append.sh KEY 模式→ append submissions.txt
+      （含 issue#,notified:false,at,version=被审版本）
+      KEY 去重只挡"条目仍在 index.plugins"的重复投稿——
+      墓碑/未落地条目可重新投稿（removed[] 不算 in-flight）
   → verdict job（人工通道，见 §5）
   → sweep job（每日 UTC 05:23）：invalid/needs-work 30 天无更新自动关
 ```
@@ -491,8 +498,9 @@ flowchart TB
 **并发模型**：`concurrency: verdict-${{issue.number}}`——每条裁决事件必须落盘，**不能共享 catalog-branch 锁**（GitHub 并发组只留 1 个 pending，burst 会静默丢裁决——实锤过）。跨 issue 写竞争由 `catalog-append.sh` 的 fetch→reset→dedupe→commit→push 重试吸收；`APPLY_INDEX=1` 让裁决经 `release.ts` 在同一 commit 落到 index.json（concern 即时刹车，不用等下一班 catalog）。
 
 **submit.yml verdict job**（投稿通道，同语义，`concurrency: verdict-N`）：
-- 非 bot 打 `submission:approved` 标签 或 collaborator 评论 `/approve`/`/concern [理由]`
+- 非 bot 打 `submission:approved` 标签 或 collaborator 评论 `/approve`/`/concern [理由]`（整词匹配，`/approved`/`/approveanything` 不触发）
 - 目标=投稿包名（issue body 解析）；**评论带异目标 spec → argignored 告警**（不静默错目标）
+- **npm 版本钉审过的版本**：从 submissions.txt 种子行取 `version`（=reviewedVersion），不取点击时刻的 `npm view` latest；错位 → `vermismatch` 提示——新版本走自己的审查，人工 pass 不放行未见字节；种子行缺失 → 回落 latest
 - bot 打的标签不算（机械审永不自行发布）
 
 ---

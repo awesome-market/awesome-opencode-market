@@ -12,6 +12,7 @@ jobs:
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
       && (github.event_name == 'issues'
+          && (github.event.action != 'labeled' || github.event.label.name == 'submission')
           || (github.event_name == 'issue_comment'
               && !endsWith(github.event.comment.user.login, '[bot]')
               && (contains(github.event.issue.labels.*.name || 'x', 'submission:needs-work')
@@ -19,7 +20,7 @@ jobs:
     outputs:
       pkg: "${{ steps.parse.outputs.pkg }}"
       verdict: "${{ steps.scan.outputs.v }}"
-      subline: "${{ steps.parse.outputs.subline }}"
+      subline: "${{ steps.scan.outputs.subline }}"
     runs-on: ubuntu-latest
     concurrency:                       # one review per issue at a time — edited/opened
       group: sub-review-${{ github.event.issue.number }}   # bursts can't double-comment
@@ -37,34 +38,44 @@ jobs:
         id: parse
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
           npx tsx pipeline/submission.ts > /tmp/sub.json
-          npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM" > /tmp/sub.line
           PKG=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
           REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
           KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
           echo "pkg=${PKG:-$REPO}" >> "$GITHUB_OUTPUT"     # repo-only skills identify by repo
           echo "kind=$KIND" >> "$GITHUB_OUTPUT"
-          echo "subline=$(cat /tmp/sub.line)" >> "$GITHUB_OUTPUT"
       - name: static review
         id: scan
         env:
           PKG: ${{ steps.parse.outputs.pkg }}
           KIND: ${{ steps.parse.outputs.kind }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENTER: ${{ github.event.comment.user.login || github.event.issue.user.login }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           ISSUE_CREATED: ${{ github.event.issue.created_at }}
         run: |
+          # the review records WHICH version it scanned (npm reviewedVersion /
+          # repo tree sha); the seed line carries it so a later human verdict
+          # lands on the reviewed artifact, not whatever latest is then.
+          SEED_VERSION=""
           if [ "$KIND" = npm ]; then
             npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
+            SEED_VERSION=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            if [ "$SEED_VERSION" = "null" ]; then SEED_VERSION=""; fi
           elif [ "$KIND" = repo ]; then
-            # repo-only submission: no npm package to scan — honest verdict
-            printf 'GitHub-only 提交（%s）：未做 npm 扫描，目录按仓库条目收录。\n\n<!-- verdict: clean -->\n' "$PKG" > /tmp/review.md
+            # repo-only submission: existence + tree evidence gate + codeload
+            # scan — same machinery the catalog's github-kind admission runs
+            npx tsx pipeline/review.ts --repo "$PKG" > /tmp/review.md
+            SEED_VERSION=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/review.md | tail -1 | awk '{print $2}')
           else
             printf '未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n\n<!-- verdict: invalid -->\n' > /tmp/review.md
           fi
           [ -s /tmp/review.md ] || { echo "review produced no report"; exit 1; }
+          SEED_VERSION="$SEED_VERSION" npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM" > /tmp/sub.line
+          { echo 'subline<<SUBLINE_EOF'; cat /tmp/sub.line; echo 'SUBLINE_EOF'; } >> "$GITHUB_OUTPUT"
           # name-squatting guard: a re-review driven by someone other than the
           # issue author can attach the ORIGINAL author's declared metadata to
           # a different package (author deleted, name re-registered). Auto-approve
@@ -183,7 +194,8 @@ jobs:
           && github.event.sender.login != 'github-actions[bot]')
         || (github.event_name == 'issue_comment' && github.event.action == 'created'
           && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-          && (startsWith(github.event.comment.body, '/approve') || startsWith(github.event.comment.body, '/concern')))
+          && (github.event.comment.body == '/approve' || startsWith(github.event.comment.body, '/approve ')
+              || github.event.comment.body == '/concern' || startsWith(github.event.comment.body, '/concern ')))
       )
     runs-on: ubuntu-latest
     # per-issue group, NOT catalog-branch: every verdict event must land —
@@ -242,10 +254,10 @@ jobs:
           REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
           KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
           VERDICT=pass; REASON=""
-          if [[ "$COMMENT_BODY" == /concern* ]]; then
+          if [[ "$COMMENT_BODY" == "/concern" || "$COMMENT_BODY" == "/concern "* ]]; then
             VERDICT=concern
             REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/concern\s*||' | head -c 2000)
-          elif [[ "$COMMENT_BODY" == /approve* ]]; then
+          elif [[ "$COMMENT_BODY" == "/approve" || "$COMMENT_BODY" == "/approve "* ]]; then
             VERDICT=pass
             REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/approve\s*||' | head -c 2000)
           fi
@@ -259,15 +271,26 @@ jobs:
           # ack can warn instead of silently writing to the wrong target.
           TOK=$(printf '%s' "$REASON" | awk '{print $1}')
           case "$TOK" in
-            *@*|*/*) [ "$TOK" != "$ENTRY" ] && echo "argignored=$TOK" >> "$GITHUB_OUTPUT" ;;
+            *@*|*/*) if [ "$TOK" != "$ENTRY" ]; then echo "argignored=$TOK" >> "$GITHUB_OUTPUT"; fi ;;
           esac
-          # version+sha: latest npm version at approve-time for npm submissions;
-          # null for repo-only (github-kind) entries. sha is best-effort so a
-          # registry blip doesn't block a human decision.
+          # version+sha: pin to the version the BOT REVIEWED (recorded on the
+          # seed line at ingest), not approve-time dist-tags.latest — a human
+          # pass must release the artifact that was actually scanned. npm moved
+          # in between → the verdict keys to the reviewed version and the newer
+          # one goes through its own review (held-version semantics).
           VER=""; SHA=""
           if [ "$KIND" = npm ] && [ -n "$NAME" ]; then
-            VER=$(npm view "$NAME" version 2>/dev/null || true)
-            [ -n "$VER" ] && SHA=$(npm view "$NAME@$VER" dist.integrity 2>/dev/null || true)
+            git fetch origin catalog --quiet 2>/dev/null || true
+            VER=$(git show FETCH_HEAD:submissions.txt 2>/dev/null \
+              | node -e "const i=require('fs').readFileSync(0,'utf8');const k=process.argv[1];for(const l of i.split('\n')){try{const s=JSON.parse(l);if(s.name===k&&s.version){console.log(s.version);break}}catch{}}" "$NAME" || true)
+            CUR=$(npm view "$NAME" version 2>/dev/null || true)
+            if [ -z "$VER" ]; then
+              # no seed line / old line without a version — fall back to latest
+              VER="$CUR"
+            elif [ -n "$CUR" ] && [ "$CUR" != "$VER" ]; then
+              echo "vermismatch=$VER->$CUR" >> "$GITHUB_OUTPUT"
+            fi
+            if [ -n "$VER" ]; then SHA=$(npm view "$NAME@$VER" dist.integrity 2>/dev/null || true); fi
           fi
           node -e '
             const rec = {
@@ -303,6 +326,7 @@ jobs:
           V: ${{ steps.v.outputs.verdict }}
           TARGET: ${{ steps.v.outputs.target }}
           ARGIGNORED: ${{ steps.v.outputs.argignored }}
+          VERMISMATCH: ${{ steps.v.outputs.vermismatch }}
         with:
           script: |
             let msg = process.env.V === 'concern'
@@ -313,6 +337,10 @@ jobs:
             // instead of silently writing to the wrong-looking target (H-18)
             if (process.env.ARGIGNORED)
               msg += `\n\n注意：评论里的 \`${process.env.ARGIGNORED}\` 被忽略——本单裁决只作用于投稿包。要裁决其他包，请在对应 [review] 单操作或开 [concern] 表单。`
+            // npm published since the bot scanned — the verdict deliberately
+            // keys to the REVIEWED version; the newer one needs its own review
+            if (process.env.VERMISMATCH)
+              msg += `\n\n注意：裁决钉在初审扫描的版本 ${process.env.VERMISMATCH.split('->')[0]}；npm 现已发布 ${process.env.VERMISMATCH.split('->')[1]}——新版本上架前需要自己的审查（初审评论里可查看当时扫描详情）。`
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number, body: msg })
