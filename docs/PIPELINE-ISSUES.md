@@ -532,7 +532,7 @@ Pipeline/CI 安全：
 | S-4 解包收 `node_modules/**/*.md`（捆绑依赖 README 泄漏进发布目录） | ✅ | 两段式提取：`tzf` 列表 → 仅按名提取 `.md` 成员（node_modules 路径段滤除） |
 | S-5 tar 符号链接本体落进发布目录（死链）+ 旧 tar 的穿越假设 | ✅ | 同上——symlink 成员根本不进提取列表（任意 tar 版本都无穿越原语）；`.md` 命名 symlink 由 mdFiles `isSymbolicLink` 清扫 |
 | S-6 alert job 无 dedupe——连败 issue 轰炸 | ✅ | 按 `pipeline-alert`+标题查 open issue → 评论追加而非新开（digest watchdog 同款） |
-| S-7 9MB 全量 index.json 供客户端（含 pending 22%） | ✅ | 新增 `index.lite.json`：visible-only + 剥 `pendingUpdate` 内部字段；全量 index.json 保留为审计面 |
+| S-7 9MB 全量 index.json 供客户端（含 pending 22%） | ✅ | 曾产 `index.lite.json` 瘦索引——无消费者后已砍（死工件会腐化）；全量 index.json 保留为审计面，客户端 `fetchIndex` 走 health.json sha 校验路径 |
 | S-8 listPage 只有搜索框，无分类浏览（entry.category 字段闲置） | ✅ | category `<select>` + 组合过滤脚本（data-cats 持转义数组，`"slug"` 子串精确匹配） |
 | S-9 `removed[]` 2198 条不渲染——消失插件直接 404 | ✅ | `removed.html`：disappearedAt 倒序最新 300 条（name/slug/reason/date） |
 | S-10 skills 只有 JSON 无 UI | ✅ | `skills.html`：id+版本+文件链接（.md 原样可浏览）；listPage 头加 skills/removed 入口 |

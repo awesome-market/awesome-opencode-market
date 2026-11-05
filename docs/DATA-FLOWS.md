@@ -290,7 +290,7 @@ flowchart TB
   P --> SH["shard ×12<br/>matrix"]
   SH --> VP["verifyPackage<br/>隔离 HOME+XDG"]
   VP --> L1["L1 install 45s"]
-  L1 --> L15["L1.5 serve<br/>POST /api/session<br/>canary 轮询"]
+  L1 --> L15["L1.5 serve<br/>POST /api/session<br/>apiPluginState 轮询"]
   L15 --> L2["L2 tmux (tui)"]
   L15 --> L3["L3a jsdom (gui)"]
   L2 --> RS["results-N.json"]
@@ -490,7 +490,7 @@ flowchart TB
 
 ## 6. 日报流 — `digest.yml`（CI cron 21:15 UTC + dispatch；`bin/publish-digest.sh` 为手动兜底）
 
-**实现**：`pipeline/ai/digest.ts::renderDigest/nextDigestState`（三板块渲染+状态推进）· `verdicts.ts::loadVerdicts`（容错加载+坏行计数告警）· `digest.yml`（worktree fetch→reset→渲染→commit→push 重试壳，`concurrency: catalog-branch`）
+**实现**：`pipeline/ai/digest.ts::renderDigest/nextDigestState`（五板块渲染+状态推进）· `verdicts.ts::loadVerdicts`（容错加载+坏行计数告警）· `digest.yml`（worktree fetch→reset→渲染→commit→push 重试壳，`concurrency: catalog-branch`）
 
 pass 从写入到放行的时序——digest 是公示环节，**上过日报的那一行**才解锁成熟：
 
@@ -519,7 +519,7 @@ catalog worktree → fetch+reset → digest.ts --index --verdicts --state --out-
   ② held 积压清单（approval==='pending' || pendingUpdate——含"已上架但有滞留新版"）
   ③ concerns 表
   ④ 验证积压（verifyQueued 共享谓词——planTargets 同口径的队列长度，
-     96/班吞吐 vs 排队数一眼可见）
+     96/天吞吐 vs 排队数一眼可见）
   ⑤ 评审积压（无裁决 held 版本——diagnose 的真实工作量水位）
   → digest/YYYY-MM-DD.md + digest-state.json
      {lastDigestAt:now, announced:∪akey(全部已公示行), day, dayAnnounced}
