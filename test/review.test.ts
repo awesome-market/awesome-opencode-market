@@ -75,13 +75,15 @@ describe('review', () => {
 })
 
 describe('reviewRepo', () => {
-  const ghFetch = (o: { tree?: { path: string }[]; sha?: string; meta?: object; metaStatus?: number; tgz?: Buffer }) =>
+  const ghFetch = (o: { tree?: { path: string }[]; sha?: string; meta?: object; metaStatus?: number; tgz?: Buffer; pkgName?: string }) =>
     (async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('api.github.com/repos') && url.includes('/git/trees/'))
         return mkRes({ tree: o.tree ?? [], sha: o.sha ?? 'abc123' })
       if (url.includes('api.github.com/repos'))
         return mkRes(o.meta ?? { id: 1, stargazers_count: 9, topics: ['opencode-skill'], created_at: 'c', pushed_at: 'p' }, o.metaStatus ?? 200)
+      if (url.includes('raw.githubusercontent.com'))
+        return o.pkgName ? mkRes({ name: o.pkgName }) : mkRes({}, 404)
       if (url.includes('codeload.github.com'))
         return new Response(new Uint8Array(o.tgz ?? Buffer.from('x')), { status: o.tgz ? 200 : 500 })
       return mkRes({}, 404)
@@ -94,16 +96,18 @@ describe('reviewRepo', () => {
     expect(renderRepoReview(r)).toContain('not found')
   })
 
-  it('repo with evidence gets tree identity + verdict marker last', async () => {
+  it('repo with evidence gets tree identity + pkgName + verdict marker last', async () => {
     const r = await reviewRepo('o/sk', { fetchFn: ghFetch({
       tree: [{ path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' }],
-      sha: 'deadbee',
+      sha: 'deadbee', pkgName: 'oc-skill-x',
     }) })
     expect(r.exists).toBe(true)
     expect(r.treeSha).toBe('deadbee')
+    expect(r.pkgName).toBe('oc-skill-x')
     expect(r.evidence.length).toBeGreaterThan(0)
     const md = renderRepoReview(r)
     expect(md).toContain('deadbee')
+    expect(md).toContain('oc-skill-x')
     expect(md.trim()).toMatch(/<!-- verdict: (clean|flagged|invalid) -->$/)
   })
 
@@ -116,7 +120,7 @@ describe('reviewRepo', () => {
   })
 
   it('repoVerdict: evidence + redFlags → flagged', () => {
-    const base = { repo: 'o/r', exists: true, evidence: ['opencode-dir'], findings: [], redFlags: [], treeSha: 's', createdAt: 'c', stars: 1, truncated: false }
+    const base = { repo: 'o/r', exists: true, evidence: ['opencode-dir'], findings: [], redFlags: [], treeSha: 's', createdAt: 'c', stars: 1, pkgName: null, truncated: false }
     expect(repoVerdict(base)).toBe('clean')
     expect(repoVerdict({ ...base, redFlags: ['rf'] })).toBe('flagged')
     expect(repoVerdict({ ...base, evidence: [] })).toBe('invalid')

@@ -1,6 +1,6 @@
 /** Submission review: package/repo → markdown review report (scan findings, evidence, metrics). Human decides. */
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchRepoTree } from './fetch/github.ts'
+import { fetchRepoMeta, fetchRepoTree, fetchRepoPackage } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { hasPluginEvidence, hasRepoEvidence } from './discover/filter.ts'
 
@@ -51,13 +51,14 @@ export interface RepoReview {
   treeSha: string | null          // content identity of the scanned tree
   createdAt: string | null        // repo created_at — repojack mirror of the npm guard
   stars: number | null
+  pkgName: string | null          // repo's own package.json name — npm↔repo audit link
   truncated: boolean
 }
 
 export async function reviewRepo(repo: string, opts: { token?: string | undefined; fetchFn?: typeof fetch } = {}): Promise<RepoReview> {
   const { meta, status } = await fetchRepoMeta(repo, opts)
   if (status === 'not-found' || !meta) {
-    return { repo, exists: false, evidence: [], findings: [], redFlags: [], treeSha: null, createdAt: null, stars: null, truncated: false }
+    return { repo, exists: false, evidence: [], findings: [], redFlags: [], treeSha: null, createdAt: null, stars: null, pkgName: null, truncated: false }
   }
   const tree = await fetchRepoTree(repo, 'HEAD', opts)
   const ev = hasRepoEvidence(tree.paths ?? new Set(), meta.topics)
@@ -71,9 +72,11 @@ export async function reviewRepo(repo: string, opts: { token?: string | undefine
       redFlags = r.redFlags.map(f => `${f.rule}: ${strip(f.file)}`)
     } catch { /* scan failure reported as empty findings honestly below */ }
   }
+  const repoPkg = await fetchRepoPackage(repo, opts)
   return {
     repo, exists: true, evidence: ev.ok ? ev.via : [], findings, redFlags,
     treeSha: tree.sha ?? null, createdAt: meta.createdAt, stars: meta.stars,
+    pkgName: typeof repoPkg.pkg?.name === 'string' ? repoPkg.pkg.name : null,
     truncated: tree.truncated,
   }
 }
@@ -120,14 +123,14 @@ export function renderReview(r: Review): string {
 export function renderRepoReview(r: RepoReview): string {
   if (!r.exists) return `**${r.repo}** — repository not found on GitHub.\n\n<!-- verdict: invalid -->`
   const lines = [
-    `**${r.repo}** — GitHub 仓库${r.stars != null ? ` (${r.stars}★)` : ''}`,
+    `**${r.repo}** — GitHub 仓库${r.stars != null ? ` (${r.stars}★)` : ''}${r.pkgName ? `, package.json: \`${r.pkgName}\`` : ''}`,
     `Scanned tree: \`${r.treeSha ?? 'unknown'}\`${r.truncated ? ' (truncated — 深层路径可能漏检)' : ''}`,
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none — 缺少 opencode 专属信号（.opencode/ 目录、opencode.json 或 opencode-* topic），目录端同样会被证据门拒收'}`,
     '',
     r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',
     r.findings.length ? `\n${fold('### Findings', r.findings)}` : '\n### Findings: none — this does not mean safe.',
   ]
-  return `${lines.join('\n')}\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.treeSha ?? 'null'} -->\n<!-- verdict: ${repoVerdict(r)} -->`
+  return `${lines.join('\n')}\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.treeSha ?? 'null'} -->\n<!-- repoPkg: ${r.pkgName ?? 'null'} -->\n<!-- verdict: ${repoVerdict(r)} -->`
 }
 
 /* v8 ignore next 6 */

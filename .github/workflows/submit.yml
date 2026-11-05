@@ -60,7 +60,7 @@ jobs:
           # the review records WHICH version it scanned (npm reviewedVersion /
           # repo tree sha); the seed line carries it so a later human verdict
           # lands on the reviewed artifact, not whatever latest is then.
-          SEED_VERSION=""
+          SEED_VERSION=""; SEED_PKG=""
           if [ "$KIND" = npm ]; then
             npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
             SEED_VERSION=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
@@ -70,11 +70,13 @@ jobs:
             # scan — same machinery the catalog's github-kind admission runs
             npx tsx pipeline/review.ts --repo "$PKG" > /tmp/review.md
             SEED_VERSION=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            SEED_PKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            if [ "$SEED_PKG" = "null" ]; then SEED_PKG=""; fi
           else
             printf '未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n\n<!-- verdict: invalid -->\n' > /tmp/review.md
           fi
           [ -s /tmp/review.md ] || { echo "review produced no report"; exit 1; }
-          SEED_VERSION="$SEED_VERSION" npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM" > /tmp/sub.line
+          SEED_VERSION="$SEED_VERSION" SEED_PKG="$SEED_PKG" npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM" > /tmp/sub.line
           { echo 'subline<<SUBLINE_EOF'; cat /tmp/sub.line; echo 'SUBLINE_EOF'; } >> "$GITHUB_OUTPUT"
           # name-squatting guard: a re-review driven by someone other than the
           # issue author can attach the ORIGINAL author's declared metadata to
