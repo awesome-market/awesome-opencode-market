@@ -126,7 +126,23 @@ export function mergeEntries(
     out.approval = e.approval ?? prev?.approval ?? 'pending'
     out.approvalReason = e.approvalReason ?? prev?.approvalReason
     if (out.approval === 'pending') out.approvalReason ??= 'awaiting-review'
-    if (e.pendingUpdate) {
+    if (e.pendingUpdate && prev && !prev.pendingUpdate && prev.latestVersion === e.pendingUpdate.version
+        && prev.approval !== 'pending') {
+      // remote already RELEASED our held version between our fetch and this
+      // merge (a verdict/remerge landed first). Resurrecting the hold would
+      // re-pend a released version — adopt the remote's released display
+      // state instead (R-8).
+      delete out.pendingUpdate
+      out.latestVersion = prev.latestVersion
+      out.publishedAt = prev.publishedAt
+      out.capabilities = prev.capabilities
+      out.verification = prev.verification
+      out.features = prev.features
+      out.source = prev.source
+      out.integrity = prev.integrity
+      out.approval = prev.approval
+      out.approvalReason = prev.approvalReason
+    } else if (e.pendingUpdate) {
       out.pendingUpdate = e.pendingUpdate
       // same held version on both sides → keep the remote verification slot
       // (a verify-merge may have written into it after ours was built)

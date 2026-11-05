@@ -154,7 +154,7 @@ describe('F-1 gone-check: github entries get a live re-probe like npm', () => {
     latestVersion: null, verification: { status: 'unverified' },
   })
 
-  it('repo meta ok → filtered; 404 → repo-404; 500 → preserved', async () => {
+  it('repo meta ok + unrejected → kept; 404 → repo-404; 500 → preserved', async () => {
     const tgz = mkTgz()
     const run1 = async (repoRes: Response) => {
       const d = tmp('fa-')
@@ -163,9 +163,11 @@ describe('F-1 gone-check: github entries get a live re-probe like npm', () => {
       const f = baseFetch(tgz, url => url.includes('api.github.com/repos/o/gh') ? repoRes.clone() : null)
       return run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
     }
-    // repo still exists → filtered
+    // repo still exists + never discovery-rejected → kept, not tombstoned (R-3:
+    // absence from the search surface isn't evidence of filtering)
     let out = await run1(mkRes({ stargazers_count: 1 }))
-    expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('filtered')
+    expect(out.plugins.map(p => p.name)).toContain('o/gh')
+    expect(out.removed.find(r => r.name === 'o/gh')).toBeUndefined()
     // repo deleted → repo-404
     out = await run1(mkRes({}, 404))
     expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('repo-404')

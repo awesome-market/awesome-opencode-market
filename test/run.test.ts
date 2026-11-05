@@ -82,7 +82,8 @@ describe('pipeline/run', () => {
     expect(loadOldIndex(good)!.plugins).toEqual([])
     const bad = join(dir, 'bad.json')
     writeFileSync(bad, '{"version":"9"}')
-    expect(loadOldIndex(bad)).toBeNull()
+    // present-but-corrupt hard-fails — running blind would re-pend the catalog
+    expect(() => loadOldIndex(bad)).toThrow()
   })
 })
 

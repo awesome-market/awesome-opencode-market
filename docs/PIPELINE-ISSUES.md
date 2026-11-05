@@ -550,3 +550,33 @@ Pipeline/CI 安全：
 活 index 的 `categories` 字典键是中文标签（`主题与外观: {en: 主题与外观}`），而 `entry.category` 是英文 slug（`tools`/`sessions`）——设计本意是 slug 键 + `{en,zh}` 显示名（`src/categories.ts` 的 `CAT_NAMES`）。`buildIndex` 的 I-3 归一逻辑正确，但 `remerge`（发布重试路径）裸合并 `remote.categories`，catalog 分支上的旧中文键会被原样带回来、永不迁移。
 
 修复：`remerge` 对齐 `buildIndex`——remote/ours 两侧字典键经 `catId` 归一 + `CAT_NAMES` 回填、merged 条目的 `e.category` 值归一、按条目补齐字典项。活 index 无需手动修：下一次 catalog run 经 `buildIndex` 自愈，remerge 不再反向污染。测试：sec.test.ts +1（ours 中文值 + remote 中文键双侧归一）。
+
+## 附十二：收录发现流审计（C/R/F 系列，catalog.yml 全流程）
+
+链路：cron/dispatch → `generate`（零权限；old index/seed/blocklist/verdicts/digest-state 取数 → run.ts 发现+准入+扫描+hold 手术+gone-check+merge 门 → artifact）→ `publish`（worktree fetch→reset→remerge→commit→push ×4 → notify → dispatch site）→ `alert`。确认正确：WF-1/WF-2 姿态、增量复用按 held 版本比对、R-1 钉版治高频饥饿、trustFlags 双层、tarball https-only+双字节上限+tar7 abort、gone-check 只信 404 方向性 fail-closed、honest label 落盘。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| C-1 `--max 2000` 限"候选处理数"而非目录量——活跃 npm 条目 1936 逼近上限，字母序靠后老条目被系统性逐出（live 已有 949 条 capped 墓碑） | ✅ | cap 语义改为只限**新候选**：`existing` 全豁免 + `newbies.slice(newCap)`；投稿 seed 双侧豁免；超限新候选仅本轮不索引、无墓碑 |
+| C-2 `commit \|\| echo "no changes"` 假成功（真失败被吞 → push no-op → 全绿没写盘） | ✅ | `git diff --cached --quiet` 预判：真无变更才走 no-op 分支，commit 失败显式进下轮重试 |
+| C-3 generate（~30-60min 只读）全程占 catalog-branch 写锁——verify/digest/ingest 排队 | ✅ | 并发组移到 publish job 级；generate 无锁（多实例只读互不干扰） |
+| C-4 blocklist 解析失败 fail-open——被拉黑条目静默回收录 | ✅ | present-but-corrupt → `loadBlocklist` 抛错拒跑；文件缺失才视未配置。同修法：`loadOldIndex` present-but-corrupt 也不再静默降级 null |
+| C-5 alert job 无 dedupe → 连败 issue 轰炸 | ✅ | 查 `pipeline-alert` 既有 open issue → 评论追加（S-6/digest watchdog 同款） |
+| C-6 notify 标记 `commit && push \|\| true`：push 失败丢 notified → 下轮重复评论 | ✅ | 标记推送 3 次重试前置；推不上不评论不关单（宁可重发不丢事实） |
+| C-7 `gh workflow run site.yml \|\| echo` 吞失败 → 站点陈旧到下一班 | ✅ | dispatch 失败 10s 后重试一次，仍败只记日志 |
+| R-1 `integrity` 永不回填（实测 1707/1936 npm 条目 null——复用路径不碰 SRI，装前 sha 校验空转） | ✅ | 复用短路加 `needsIntegrity` 条件 → refreshMeta 从 packument `integrityOf[latestVersion]` 回填；长尾逐轮补齐 |
+| R-2 github 发现面系统性偏窄（sort=updated ×5 页 = topic 前 500；npm 侧同理截断<20% 也存在包被误标 filtered） | ✅ | 双管齐下：github 搜索 ≤10 页 + `fork:false` 服务端过滤；更根本的是 R-3——"没搜到"不再构成墓碑证据 |
+| R-3 gone-check 分不清三种缺席（证据拒/搜索漏/工人崩）→ 全标 filtered 且丢身份字段 | ✅ | `rejectedNpm`/`rejectedGh` 正向拒绝集合：探活 ok 且无拒绝记录 → 保留不碑；'filtered' 只剩正向拒绝语义 |
+| R-4 `agent-skill` topic + 裸 SKILL.md 算 OpenCode 特异信号——纯 Claude 技能仓库可混进目录 | ✅ | opencodeTopic 只留 `opencode-plugin`/`opencode-skill`；SKILL.md 只算产物不算归属；`.opencode/`、`opencode.json[c]`、专属 topic 三选一算特异 |
+| R-5 投稿包 404 时静默——投稿人不知"包不在 npm" | ✅ | seed npm 包 not-found/error 打 warn 日志（含包名）；issue 侧由 staleWarned 14d 兜底 |
+| R-6 复用短路只查 `isBlocked(name)`——slug 拉黑后老条目仍被复用 | ✅ | npm/github 双侧复用都过 `isBlocked(name, slug)` 双键 |
+| R-7 模板垃圾启发静默剔除——合法 org ≥6 近名包被整体误杀且无审计 | ✅ | 垃圾 owner 名单逐个上日志（不再只打计数） |
+| R-8 remerge 不对称：本地 hold、remote 已放行同版 → 重挂一轮已决 hold | ✅ | remote `latestVersion===heldVer` 且非 pending → 采纳 remote 展示态，hold 不复活 |
+| R-9 `--max` 未校验 NaN/非正 → queue 空靠 20% 门兜底 | ✅ | CLI 早退校验 `--max must be a positive number` |
+| F-1 tarball 成员数无上限——零字节文件炸弹撑爆 files[] | ✅ | `MAX_FILES=200_000` + `parser.abort`（可注入 `maxFiles` 参数便于测试） |
+| F-2 `preAdmit` fork 检查对 gh 候选死代码（`hasOwnCommits` 恒 undefined） | ✅ | 改由 `fork:false` 服务端过滤兜底（discover/github.ts query）——比 client 侧信号更可靠 |
+| F-3 每 repo 两次 raw 抓取（marketMeta+packageName） | 不改 | 两次不同路径且都有缓存语义，合并收益不值复杂度 |
+| F-4 `sub.desc`/`sub.category` 无限长——恶意投稿可膨胀 index | ✅ | desc ≤4000/语种、category ≤8×80、非字符串剔除（marketMeta 同款上限） |
+| F-5 `reusedNames` 不计 github-kind 复用 | ✅ | gh 复用计入 ghStats.reused + reusedNames |
+
+**验证**：typecheck 0 错；615 tests 全过；分支覆盖 90.6% 过门槛；新回归用例覆盖：integrity 回填、远端放行不复活 hold、blocklist 损坏硬退/缺文件放行、seed 元数据截断、existing 条目 cap 豁免、live-undiscovered 保留、正向 filtered、gh tree 暂态/404/证据拒三分支、searchTopic fork:false、scan 成员数 cap、stale-metrics refreshMeta。

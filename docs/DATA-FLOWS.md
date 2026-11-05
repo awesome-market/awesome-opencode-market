@@ -140,14 +140,14 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 
 **实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r3'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
-`generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额）→ `publish`（唯一 index writer：contents+issues 写权限；末尾 dispatch site.yml——V-8 单 Pages 发布者，dispatch 失败只记日志）→ `alert`（失败开 `pipeline-alert` issue）。整流 `concurrency: catalog-branch`——与 verify.yml、submit ingest、digest.yml 共享同一把分支写锁，写者串行。
+`generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额；**无并发锁**——只读 catalog 分支，不占写锁）→ `publish`（唯一 index writer：contents+issues+actions 写权限；`concurrency: catalog-branch` 只挂在写阶段——与 verify.yml、submit ingest、digest.yml 共享分支写锁，写者串行；末尾 dispatch site.yml，失败 10s 后重试一次——V-8 单 Pages 发布者）→ `alert`（失败查 `pipeline-alert` 既有 open issue，有则评论追加、无则新建——连败不轰炸）。blocklist.json 存在但损坏 → `generate` 拒跑（fail-closed：坏黑名单不等于没黑名单）；文件缺失才视为"未配置"。
 
 ```mermaid
 flowchart TB
   A["applyMatureVerdicts<br/>(旧index+verdicts)"] --> B["发现 npm+github"]
   B --> C["种子注入<br/>submissions.txt"]
   C --> D["入场过滤<br/>preAdmit+spam"]
-  D --> E["排序+cap 2000"]
+  D --> E["排序+cap(只限新候选)"]
   E --> F["worker ×10<br/>packument→证据<br/>→tarball 扫描"]
   F --> G["repo 元数据<br/>SKILL 探测"]
   G --> H["组装+hold 手术"]
@@ -162,14 +162,20 @@ flowchart TB
 逐步细节：
 
 ```
-discoverNpm + discoverGithub（并行）
+discoverNpm + discoverGithub（并行；npm keyword × ≤10 页 250/页，
+  github topic × ≤10 页 100/页、query 带 fork:false 服务端过滤）
   → + submissions.txt 种子注入（JSONL 声明式种子；纯名字；github:owner/repo）
       npm 种子注入 npmCands（discoveredVia=submission）
       repo-only 种子 → ghCands → 走 github-kind 路径
-      seed 绕过 --max 字母序截断（排序在 cap 后回补）
+      seed 元数据先消毒：desc 每语种 ≤4000 字符、category ≤8 项 ×80 字符、
+        非字符串值剔除（表单可改 → 按 marketMeta 同款上限处理）
   → 入场过滤：preAdmit(archived)——只作用 GitHub 侧（npm 候选无 archived/fork 信号）
-      + looksLikeTemplateSpam（owner 级 ≥6 近同名）
-  → 确定性排序 name-asc → cap（--max，默认 500；workflow 传 2000）
+      + looksLikeTemplateSpam（owner 级 ≥6 近同名；名单上日志可审计）
+  → 确定性排序 name-asc → cap（--max，默认 500；workflow 传 2000）：
+      **只限"新候选"数量**——已在 index 里的条目 + 投稿 seed 全部豁免
+      （旧语义把 cap 当目录总量：活跃条目逼近上限时字母序靠后的老条目
+      会被系统性逐出并批量立 'capped' 墓碑；现在超限的新候选只是本轮
+      不索引，不产生墓碑、下轮仍有机会进）
   → 逐候选 worker（10 并发）：
       更新检测三条路（本轮 vs 旧 index）：
         ① 版本变了（pk.version ≠ latestVersion）→ 走全流程，hold 进 pendingUpdate；
@@ -179,12 +185,16 @@ discoverNpm + discoverGithub（并行）
            ruleset 升级也不再团灭在飞 hold），只刷 distTags/repoId/metrics。
            槽位释放（重定向到 pk.latest）仅当在押版达终态：最新裁决 concern，
            或 failed 且 retryable 耗尽；pk.latest 上有**人工**裁决时主动跳车
-        ② 版本同 + ruleset 同 → 增量短路整体复用（metrics.checkedAt >7d
-           才 refreshMeta 重拉 packument/stars/downloads；否则零请求）
+        ② 版本同 + ruleset 同 → 增量短路整体复用；短路前仍过 isBlocked(name,slug)
+           双键检查（slug 拉黑后老条目不再被复用）。metrics.checkedAt >7d 或
+           **缺 integrity** → refreshMeta 重拉 packument/stars/downloads 并回填
+           SRI（老条目此前没有 integrity 字段——长尾逐轮补齐，装前 sha 校验才有
+           锚点）；否则零请求
         ③ 旧有条目候选里没有 → gone-check 探活（见下）
       fetchPackument → hasPluginEvidence（via ≥2 或含 'entry'——仅 keyword 不算数）
       → fetchTarball+scanTarball → capabilities{findings,redFlags,rulesetVersion}
-        （解压累计 >512MB 即中止=防 zip bomb；findings>500 截断 + 'scan-capped'
+        （解压累计 >512MB 即中止=防 zip bomb；**成员数 >200k 即中止**——零字节
+        文件炸弹不超字节上限但会撑爆 files[]；findings>500 截断 + 'scan-capped'
         标记行——截断本身也是信号；rules 含 lifecycle-script 全生命周期
         prepublish/prepack/postpack 与 literal-ip 的 IPv6+私网段排除）
         redFlags>0 → verification={status:'skipped'}（高危信号没跑）
@@ -199,14 +209,18 @@ discoverNpm + discoverGithub（并行）
   → github-kind 补集（无 npm 对应物的 repo 候选；coveredRepos 去重——
       npm 包已认领的 repo 不再重复收 github-kind）：
       证据门 hasRepoEvidence(tree 路径+topics)：OpenCode 专属信号
-        （.opencode/、opencode.json[c]、SKILL.md、扩展类 topic）
+        （.opencode/、opencode.json[c]、opencode-plugin/opencode-skill topic）
         + 可装产物（.opencode plugin/skill 路径、SKILL.md、package.json）
-        双缺即拒；通用 'opencode' topic 只是关联不是产物声明
+        双缺即拒。**裸 SKILL.md 只算产物、不算归属**（纯 Claude 技能仓库
+        不该混进 OpenCode 目录）；通用 'opencode'/'agent-skill' topic 只是
+        关联不是产物声明
       tree/tarball 固定走 HEAD ref——search 索引的 defaultBranch 可能过期
         （分支改名后具名 ref 404 会误杀）；codeload tarball 过同一套
         scanTarball，归档根前缀 strip
-      暂态 tree error/rate-limited → 保留旧条目；not-found/空 → gone-check
+      暂态 tree error/rate-limited → 保留旧条目（ghStats.treeTransient）；
+        tree not-found（404/409）→ rejectedGh 记录正向拒绝 → gone-check 定碑
       增量复用：pushedAt+ruleset 不变 → 整体沿用（modifiedAt 存 pushedAt）；
+        复用同样过 isBlocked(name,slug) 双键；gh 复用计入 reusedNames
         扫描失败留 scannedAt:null，'too large' 盖 rulesetVersion 记忆化
         （pushedAt 变了才重试），timeout 每轮重试
       type：投稿声明优先；纯 skill 证据（有 SKILL.md、无根 package.json、
@@ -215,19 +229,26 @@ discoverNpm + discoverGithub（并行）
       approval 继承 ghPrev（人工裁决过的状态跨轮保留）
       ghStats 审计行：admitted/reused/npm-covered/evidence-rejected/
         transient-kept/empty/scan-failed(oversize)
-  → gone-check：旧条目消失 → 探活：
+  → gone-check：旧条目消失 → 先分"缺席类型"再探活：
       fetch 错误(429/5xx/网络) → 保留旧条目不打墓碑（瞬时失败≠消失）
-      not-found → npm-404；cappedOut → capped；blocklist → manual；
-      github-kind 或证据消失 → filtered；其它 → unknown
+      **探活 ok 且本轮无正向拒绝记录 → 保留**（rejectedNpm/rejectedGh 集合：
+      被证据门拒才算 'filtered'——分页/排序窗口/搜索瞬断导致的"没搜到"
+      不构成拒绝证据，活着的条目不再被立错碑）
+      not-found → npm-404/repo-404；cappedOut → capped（防御性残留分支——
+      新 cap 语义下老条目不会再被截断）；blocklist → manual；
+      正向拒绝 → filtered；其它 → unknown
   → buildIndex = mergeEntries（双层缓存+trustFlags+skipped 不变量）
                 + dedupeSlugs + corruptionGate（空/掉幅>20% 拒发）
   → index.json → publish job 写 catalog
      （worktree 上 fetch→reset→remerge(ours vs remote)→commit→push，4 次重试；
+       commit 前先 `git diff --cached --quiet` 预判——区分"真无变更"和
+       commit 失败，杜绝 `commit || echo no-changes` 式假成功；
        remerge 保护 remote 侧 verify-merge 已写入的 verification/removed/identity，
-       并对 categories 字典/条目 category 值做 catId 归一——
-       remote 上的 legacy 中文键不会在重试路径原样回流）
+       对 categories 字典/条目 category 值做 catId 归一，且 remote 已放行的
+       在押版本不会复活 hold（R-8：采纳 remote 展示态））
   → notify-published：approval!=='pending' 的投稿 issue 评论+关闭，
-     submissions.txt 回写 notified:true（二次提交）；
+     submissions.txt 回写 notified:true——**先重试推送标记（3 次）再发评论**，
+     推送失败不评论不关闭（宁可下轮重发，不丢"已通知"事实）；
      `at` 超 14 天仍未落地（缺席或 pending）→ 一次性 staleWarned 评论
      （不关单——管线侧延迟不等于作者放弃）
 ```
@@ -835,6 +856,8 @@ UI（gui.ts webview / tui.tsx 终端）：
 | 写冲突不丢数据 | 数据分支写入都走 fetch→改→commit→push 重试循环；并发组见 §12 |
 | 裁决事件不丢 | verdict 类 job 用 per-issue 并发组（共享锁会丢 pending） |
 | 发布不破目录 | corruptionGate：空 index/掉幅>20% 拒发 |
+| 缺席≠被拒 | gone-check 的 'filtered' 只记正向拒绝（rejectedNpm/rejectedGh）；搜索面分页/排序窗口漏掉的活条目探活后保留；真 404 才 npm-404/repo-404 |
+| 外部输入损坏拒跑 | old index 损坏拒跑（WF-1）；blocklist 存在但不可解析同样拒跑——坏黑名单不等于没黑名单（缺文件才算未配置） |
 | 不可信代码零权限 | generate/verify jobs permissions:{} + egress 白名单 |
 | github-kind 特殊 | tree 证据门准入 + codeload 静态扫描（失败才 scannedAt:null）；不验证（无版本）/不 AI 审（无候选键）；只人工 verdict(version:null) 放行 |
 
@@ -844,7 +867,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 | 事件 | 工作流/脚本 | 并发组 | 写什么 |
 |---|---|---|---|
-| cron 03:17/11:00 UTC + dispatch | catalog.yml | catalog-branch（共享） | index.json、站点、tombstone、投稿通知 |
+| cron 03:17/11:00 UTC + dispatch | catalog.yml | 仅 publish 持 catalog-branch（共享）；generate 无锁只读 | index.json、站点、tombstone、投稿通知 |
 | cron 04:47/16:47 UTC + dispatch(targets, cap) | verify.yml | catalog-branch（共享） | index.json（verification 槽）、站点 |
 | issue [submit] opened/edited/labeled/comment | submit.yml review | sub-review-N（cancel 幂等） | 评论、submission 标签 |
 | 同上 clean 后 | submit.yml ingest | catalog-branch（共享） | submissions.txt |

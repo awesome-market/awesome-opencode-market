@@ -29,8 +29,11 @@ const MAX_UNPACKED = 512 * 1024 * 1024
 /** Findings ceiling — a pathological package (10k files, all matching) would
  *  otherwise write an unbounded array into index.json. */
 const MAX_FINDINGS = 500
+/** Member-count ceiling — a tarball of millions of zero-byte files stays under
+ *  the byte cap but would still OOM the files[] bookkeeping (F-1). */
+const MAX_FILES = 200_000
 
-export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
+export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<ScanResult> {
   const findings: ScanFinding[] = []
   const files: string[] = []
   let fileCount = 0, unpacked = 0, capped = false
@@ -48,6 +51,10 @@ export async function scanTarball(tgz: Buffer): Promise<ScanResult> {
         // skip macOS AppleDouble metadata (._*) — tar artifact, not package content
         if (/(^|\/)\._/.test(entry.path)) { entry.resume(); return }
         fileCount++
+        if (fileCount > maxFiles) {
+          parser.abort(new Error(`file count exceeds ${maxFiles} — possible tar bomb`))
+          return
+        }
         files.push(entry.path)
         const chunks: Buffer[] = []
         entry.on('data', (c: Buffer) => {

@@ -48,14 +48,17 @@ export function hasRepoEvidence(
   if (pkg) via.push('package')
   const pluginArtifact = has(/^\.opencode\/(plugin|plugins|skills)\//)
   if (pluginArtifact) via.push('opencode-artifact')
-  // generic 'opencode' topic is affiliation, not an artifact claim — only the
-  // extension-specific topics count
-  const opencodeTopic = topics.some(t => /^(opencode-plugin|opencode-skill|agent-skill)$/.test(t))
+  // topic tags are affiliation, not artifact claims — and only the opencode-*
+  // topics say anything about THIS host. 'agent-skill' is a cross-host generic
+  // tag (Claude/Cursor skills wear it too); 'opencode' alone is even weaker (R-4)
+  const opencodeTopic = topics.some(t => /^(opencode-plugin|opencode-skill)$/.test(t))
   if (opencodeTopic) via.push('opencode-topic')
 
-  const specific = via.includes('opencode-dir') || via.includes('opencode-config')
-    || skillFile || opencodeTopic
-  // SKILL.md is itself the installable skill artifact — counts for both sides
+  // the specific side needs an actual opencode trace: a .opencode/ dir, an
+  // opencode.json config, or an opencode-* topic. A bare SKILL.md is a
+  // cross-ecosystem convention — it proves an artifact exists, not that the
+  // artifact is for opencode (R-4)
+  const specific = via.includes('opencode-dir') || via.includes('opencode-config') || opencodeTopic
   const artifact = pluginArtifact || skillFile || pkg
   return { ok: specific && artifact, via }
 }

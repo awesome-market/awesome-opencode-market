@@ -621,16 +621,18 @@ describe('run.ts uncovered arms', () => {
     expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg'])
   })
 
-  it('gone-check: npm-404 → tombstone; error → keep stale; github → filtered; capped → capped', async () => {
+  it('gone-check: 404 → tombstone; error/undiscovered-but-alive → keep; rejected → filtered', async () => {
     const tgz = mkTgz()
     const d = tmp('rg-')
-    // old index carries only the entries that will go missing; the 16 keep-*
+    // old index carries only the entries that will go missing; the keep-*
     // candidates land fresh — fresh count > old count, gate stays green
     const oldIdx = idx([
       e({ name: 'gone404', slug: 'gone404' }),
       e({ name: 'gone500', slug: 'gone500' }),
       e({ name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' }, latestVersion: null, verification: { status: 'skipped' } }),
+      e({ name: 'bad/gh', slug: 'bad/gh', source: { kind: 'github', id: 'bad/gh', repo: 'bad/gh' }, latestVersion: null, verification: { status: 'skipped' } }),
       e({ name: 'z-capped', slug: 'z-capped' }),
+      e({ name: 'filtered-pkg', slug: 'filtered-pkg' }),
     ])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -643,9 +645,17 @@ describe('run.ts uncovered arms', () => {
         return new Response(JSON.stringify({ objects: [
           { package: { name: 'good-pkg', version: '1.0.0', keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } },
           { package: { name: 'z-capped', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } },
+          { package: { name: 'filtered-pkg', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } },
           ...keeps,
         ] }))
       }
+      // discovered but zero installable artifact → evidence gate rejects → filtered
+      if (url.includes('registry.npmjs.org/filtered-pkg'))
+        return new Response(JSON.stringify({ 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': { keywords: ['opencode'] } }, time: {} }))
+      if (url.includes('api.github.com/search'))
+        // bad/gh is discovered but its repo shows no opencode evidence → filtered;
+        // o/gh is NOT returned — outside the search surface
+        return new Response(JSON.stringify({ items: [{ full_name: 'bad/gh', description: '', archived: false, fork: false, pushed_at: 't', stargazers_count: 1, default_branch: 'main' }] }))
       if (url.includes('registry.npmjs.org/gone404')) return new Response('', { status: 404 })
       if (url.includes('registry.npmjs.org/gone500')) return new Response('', { status: 500 })
       if (url.includes('registry.npmjs.org/')) return new Response(packument('x'))
@@ -654,11 +664,13 @@ describe('run.ts uncovered arms', () => {
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't', maxEntries: 16 })
     const names = out.plugins.map(p => p.name)
     expect(names).toContain('gone500')     // transient error keeps the stale entry
+    expect(names).toContain('o/gh')        // live repo missed by the search surface → kept, not tombstoned (R-3)
+    expect(names).toContain('z-capped')    // existing entry bypasses the cap (C-1)
     expect(names).toContain('good-pkg')
     const reasons = Object.fromEntries(out.removed.map(r => [r.name, r.reason]))
     expect(reasons['gone404']).toBe('npm-404')
-    expect(reasons['o/gh']).toBe('filtered')
-    expect(reasons['z-capped']).toBe('capped')
+    expect(reasons['filtered-pkg']).toBe('filtered')   // discovered AND evidence-rejected → real filter
+    expect(reasons['bad/gh']).toBe('filtered')
   })
 
   it('seed name past the alphabetical cap still gets processed', async () => {
@@ -1043,7 +1055,7 @@ describe('run.ts remaining arms', () => {
     expect(g.deprecated).toBe(false)
     expect(g.metrics.checkedAt).toBe('2026-01-01T00:00:00Z')
   })
-  it('rate-limited tree → no hasSkill, warn counted; npm missing-but-found → filtered', async () => {
+  it('rate-limited tree → no hasSkill, warn counted; npm missing-but-found → kept', async () => {
     const tgz = mkTgz()
     const d = tmp('rl2-')
     const oldIdx = idx([e({ name: 'filtered-out', slug: 'filtered-out' })])
@@ -1056,8 +1068,11 @@ describe('run.ts remaining arms', () => {
       return base(tgz, {})(input)
     }) as typeof fetch
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
-    expect(out.removed.find(r => r.name === 'filtered-out')!.reason).toBe('filtered')
-    expect(out.plugins[0]!.contains).toEqual(['plugin'])   // parts list is explicit now
+    // 'filtered-out' was never discovered this run and still exists on npm —
+    // absence from the search surface is not evidence of filtering (R-3)
+    expect(out.plugins.map(p => p.name)).toContain('filtered-out')
+    expect(out.removed.find(r => r.name === 'filtered-out')).toBeUndefined()
+    expect(out.plugins.find(p => p.name === 'good-pkg')!.contains).toEqual(['plugin'])   // parts list is explicit now
   })
   it('publish gate: mass disappearance → run() throws', async () => {
     const tgz = mkTgz()
@@ -1065,7 +1080,9 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx(Array.from({ length: 10 }, (_, i) => e({ name: `old-${i}`, slug: `old-${i}` })))
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
-    await expect(run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: base(tgz, {}), now: 't' }))
+    // probes must 404 for the drop to be real — ok responses keep entries now (R-3)
+    await expect(run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: base(tgz, { 'registry.npmjs.org/old-': new Response('', { status: 404 }) }), now: 't' }))
       .rejects.toThrow('publish gate')
   })
   it('github-kind via seed repo: zh marketMeta + no repoId arms', async () => {
@@ -1087,6 +1104,243 @@ describe('run.ts remaining arms', () => {
     expect(g.description.zh).toBe('只有中文')
     expect(g.category).toEqual(['integrations'])   // zh marketMeta label normalized to id at merge
     expect(g.source.repoId).toBeUndefined()
+  })
+  it('reuse path backfills missing integrity from the packument (R-1)', async () => {
+    const tgz = mkTgz()
+    const d = tmp('ib-')
+    // entry predates the integrity field: reuse-matched (version + ruleset) and
+    // metrics fresh → would normally skip the network entirely; needsIntegrity
+    // forces one packument fetch to fill the SRI
+    const oldIdx = idx([e({
+      name: 'good-pkg', slug: 'o/good', latestVersion: '1.0.0', integrity: null,
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
+      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: 't' },
+    })])
+    const oldPath = join(d, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(oldIdx))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(pack({ dist: { integrity: 'sha512-BACKFILL' } }))
+      return base(tgz, {})(input)
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
+    expect(out.plugins[0]!.integrity).toBe('sha512-BACKFILL')
+  })
+  it('remerge: remote already released our held version → adopt its display, no resurrected hold (R-8)', () => {
+    const ours = e({
+      name: 'pkg', latestVersion: '1.0.0', approval: 'approved',
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
+    })
+    const remote = e({
+      name: 'pkg', latestVersion: '2.0.0', approval: 'approved',
+      verification: { status: 'verified' }, integrity: 'sha512-NEW',
+    })
+    const [out] = mergeEntries([ours], idx([remote]), '2.2.5')
+    expect(out!.latestVersion).toBe('2.0.0')          // remote's released display wins
+    expect(out!.pendingUpdate).toBeUndefined()         // hold is NOT resurrected
+    expect(out!.integrity).toBe('sha512-NEW')
+    // symmetric case: remote released a DIFFERENT version → our hold stays
+    const remote2 = e({ name: 'pkg', latestVersion: '3.0.0', approval: 'approved' })
+    const [out2] = mergeEntries([ours], idx([remote2]), '2.2.5')
+    expect(out2!.pendingUpdate?.version).toBe('2.0.0')
+    // remote saw the version but is still pending → hold kept (adopt-gate false arm)
+    const remote3 = e({ name: 'pkg', latestVersion: '2.0.0', approval: 'pending' })
+    const [out3] = mergeEntries([ours], idx([remote3]), '2.2.5')
+    expect(out3!.pendingUpdate?.version).toBe('2.0.0')
+  })
+  it('corrupt blocklist → run() refuses rather than running unprotected (C-4)', async () => {
+    const d = tmp('bl-')
+    const bl = join(d, 'blocklist.json')
+    writeFileSync(bl, 'not-json{')
+    await expect(run({ outPath: join(d, 'i.json'), blocklistPath: bl, fetchFn: base(mkTgz(), {}), now: 't' }))
+      .rejects.toThrow('blocklist unreadable')
+    // absent blocklist file → still optional
+    const ok = await run({ outPath: join(d, 'i2.json'), blocklistPath: join(d, 'absent.json'), fetchFn: base(mkTgz(), {}), now: 't' })
+    expect(ok.plugins.length).toBeGreaterThan(0)
+  })
+  it('seed metadata caps: desc ≤4k/lang, category ≤8×80 chars (F-4)', async () => {
+    const tgz = mkTgz()
+    const d = tmp('sc-')
+    const seed = join(d, 'seed.txt')
+    writeFileSync(seed, JSON.stringify({
+      name: 'good-pkg',
+      category: Array.from({ length: 20 }, (_, i) => `cat-${i}-${'x'.repeat(200)}`),
+      desc: { en: 'e'.repeat(5000), zh: '中'.repeat(5000) },
+    }))
+    const out = await run({ outPath: join(d, 'i.json'), seedPath: seed, fetchFn: base(tgz, {}), now: 't' })
+    const p = out.plugins.find(x => x.name === 'good-pkg')!
+    expect(p.category!.length).toBeLessThanOrEqual(8)
+    expect(p.category!.every(c => c.length <= 80)).toBe(true)
+    expect(p.description.en!.length).toBeLessThanOrEqual(4000)
+    expect(p.description.zh!.length).toBeLessThanOrEqual(4000)
+  })
+  it('searchTopic requests fork:false server-side (F-2)', async () => {
+    let seen = ''
+    const f = (async (input: RequestInfo | URL) => {
+      seen = String(input)
+      return new Response(JSON.stringify({ items: [] }))
+    }) as typeof fetch
+    await searchTopic('opencode', { fetchFn: f, maxPages: 1 })
+    expect(seen).toContain('fork:false')
+  })
+
+  it('searchTopic: missing optional item fields → null/[] arms', async () => {
+    const f = (async () => new Response(JSON.stringify({ items: [
+      { full_name: 'o/min', html_url: 'u', description: null, pushed_at: 't', stargazers_count: 0, default_branch: 'main' },
+      { full_name: 'o/mit', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', license: { spdx_id: 'MIT' }, topics: ['opencode-plugin'], id: 9, created_at: 'c' },
+    ] }))) as typeof fetch
+    const rs = await searchTopic('t', { fetchFn: f, maxPages: 1 })
+    expect(rs[0]!.id).toBeNull()
+    expect(rs[0]!.license).toBeNull()
+    expect(rs[0]!.topics).toEqual([])
+    expect(rs[0]!.createdAt).toBeNull()
+    expect(rs[1]!.license).toBe('MIT')
+    expect(rs[1]!.id).toBe(9)
+  })
+
+  it('seed edge cases: non-string desc/category values filtered; repo-only seed; discoveredVia merge', async () => {
+    const tgz = mkTgz()
+    const d = tmp('se-')
+    const seed = join(d, 'seed.txt')
+    writeFileSync(seed, [
+      JSON.stringify({ name: 'declared-pkg', category: ['tools', 5, 'x'.repeat(100)], desc: { en: '', zh: 5, ok: 'v' } }),
+      JSON.stringify({ repo: 'o/seedskill', desc: { zh: '技能' } }),
+      JSON.stringify({ name: 'good-pkg' }),
+    ].join('\n') + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/')) return new Response(pack({ repository: 'https://github.com/o/good' }))
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [{ path: '.opencode/skills/x/SKILL.md' }, { path: 'package.json' }], sha: 'abc' }))
+      if (url.includes('api.github.com/repos/o/seedskill')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', id: 7, topics: ['opencode-skill'], license: { spdx_id: 'MIT' } }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't' }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    const gp = out.plugins.find(p => p.name === 'good-pkg')!
+    expect(gp.discoveredVia).toContain('submission')
+    const dp = out.plugins.find(p => p.name === 'declared-pkg')!
+    expect(dp.category).toEqual(['tools', 'x'.repeat(80)])
+    const gh = out.plugins.find(p => p.name === 'o/seedskill')!
+    expect(gh.source.kind).toBe('github')
+    expect(gh.source.version).toBe('abc')
+  })
+
+  it('stale metrics (>7d) → refreshMeta re-fetch; sparse packument falls back to entry values', async () => {
+    const tgz = mkTgz()
+    const d = tmp('st-')
+    const oldIdx = idx([e({
+      name: 'good-pkg', slug: 'o/good',
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
+      metrics: { stars: null, npmDownloads30d: 42, checkedAt: '2000-01-01T00:00:00.000Z' },
+    })])
+    const oldPath = join(d, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(oldIdx))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(JSON.stringify({ versions: {}, 'dist-tags': {}, time: {}, maintainers: [] }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 5, archived: false, pushed_at: 't' }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-06-01T00:00:00.000Z' })
+    const p = out.plugins[0]!
+    expect(p.metrics.checkedAt).toBe('2026-06-01T00:00:00.000Z')
+    expect(p.metrics.npmDownloads30d).toBe(42)
+    expect(p.maintainers).toEqual([])
+  })
+
+  it('gh: tree 500 → keep prev (treeTransient); tree 404 → rejected → gone-check filtered; ev-reject arm', async () => {
+    const tgz = mkTgz()
+    const ghEntry = () => e({ name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' }, latestVersion: null, verification: { status: 'unverified' } })
+    const item = JSON.stringify({ items: [{ full_name: 'o/gh', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', id: 1, created_at: 't', license: null, topics: ['opencode-plugin'] }] })
+    const run1 = async (treeRes: Response) => {
+      const d = tmp('gt-')
+      writeFileSync(join(d, 'old.json'), JSON.stringify(idx([ghEntry()])))
+      const b = base(tgz, {})
+      const f = (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('api.github.com/search')) return new Response(item)
+        if (url.includes('git/trees/')) return treeRes.clone()
+        return b(input)
+      }) as typeof fetch
+      return run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    }
+    // transient tree error → keep old entry, no tombstone
+    let out = await run1(new Response('', { status: 500 }))
+    expect(out.plugins.map(p => p.name)).toContain('o/gh')
+    expect(out.removed).toHaveLength(0)
+    // tree genuinely gone (404) → positive rejection → repo meta ok → 'filtered'
+    out = await run1(new Response('', { status: 404 }))
+    expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('filtered')
+    // tree present but no opencode evidence → evidenceRejected → also 'filtered'
+    out = await run1(new Response(JSON.stringify({ tree: [{ path: 'README.md' }] })))
+    expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('filtered')
+  })
+
+  it('gh entry rebuild: repoId/sha spreads, zh description, ghPrev approvalReason', async () => {
+    const tgz = mkTgz()
+    const d = tmp('gr-')
+    const prev = e({
+      name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' },
+      latestVersion: null, verification: { status: 'unverified' },
+      approval: 'approved', approvalReason: 'human-ok',
+    })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [
+        { full_name: 'o/gh', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', id: 42, created_at: 't', license: { spdx_id: 'MIT' }, topics: ['opencode-plugin'] },
+      ] }))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }], truncated: true, sha: 'sha9' }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', topics: ['opencode-plugin'] }))
+      if (url.includes('.opencode-market.json')) return new Response(JSON.stringify({ description: { zh: '中文描述' } }))
+      if (url.includes('raw.githubusercontent.com')) return new Response('', { status: 404 })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.source.repoId).toBe(42)
+    expect(p.source.version).toBe('sha9')
+    expect(p.approval).toBe('approved')
+    expect(p.approvalReason).toBe('human-ok')
+    expect(p.description.zh).toBe('中文描述')
+  })
+
+  it('run.ts: non-pending prev + version bump → hold surgery carries prev.source.version', async () => {
+    const tgz = mkTgz()
+    const d = tmp('nl-')
+    const prev = e({
+      name: 'good-pkg', slug: 'o/good', approval: 'approved', approvalReason: 'ok',
+      latestVersion: '0.9.0',
+      source: { kind: 'npm', id: 'good-pkg', repo: 'o/good', version: 'v-pin' },
+      pendingUpdate: { version: '1.5.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' },
+    })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(pack({ repository: 'https://github.com/o/good' }))
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1 }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins[0]!
+    expect(p.source.version).toBe('v-pin')
+    expect(p.latestVersion).toBe('0.9.0')
+    // R-1: the live hold's pinned target is not redirected by upstream churn
+    expect(p.pendingUpdate?.version).toBe('1.5.0')
   })
 })
 
@@ -1152,7 +1406,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(r.issues).toEqual([])
   })
   it('renderReview: repo + evidence + unknown downloads arms', () => {
-    const md = renderReview({ name: 'p', exists: true, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [] })
+    const md = renderReview({ name: 'p', exists: true, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
     expect(md).toContain('repo: o/r')
     expect(md).toContain('keyword, entry')
     expect(md).toContain('unknown')

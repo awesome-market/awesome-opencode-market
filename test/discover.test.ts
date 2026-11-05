@@ -96,10 +96,14 @@ describe('discover/filter', () => {
     expect(hasRepoEvidence(S('package.json', 'README.md'), ['opencode']).ok).toBe(false)
     // extension-specific topic + package.json → installable plugin
     expect(hasRepoEvidence(S('package.json'), ['opencode-plugin']).ok).toBe(true)
-    expect(hasRepoEvidence(S('package.json'), ['agent-skill']).ok).toBe(true)
-    // SKILL.md is both the specific signal and the artifact
-    expect(hasRepoEvidence(S('SKILL.md'), []).ok).toBe(true)
-    expect(hasRepoEvidence(S('skills/x/SKILL.md'), ['opencode']).ok).toBe(true)
+    // 'agent-skill' is cross-host generic — not an opencode signal (R-4)
+    expect(hasRepoEvidence(S('package.json'), ['agent-skill']).ok).toBe(false)
+    // a bare SKILL.md is an artifact but proves nothing about the host (R-4)
+    expect(hasRepoEvidence(S('SKILL.md'), []).ok).toBe(false)
+    expect(hasRepoEvidence(S('skills/x/SKILL.md'), ['opencode']).ok).toBe(false)
+    // opencode-* topic + skill artifact → skill repo for this host
+    expect(hasRepoEvidence(S('SKILL.md'), ['opencode-skill']).ok).toBe(true)
+    expect(hasRepoEvidence(S('skills/x/SKILL.md', 'package.json'), ['opencode-plugin']).ok).toBe(true)
     // .opencode/ content + package.json → real plugin project
     expect(hasRepoEvidence(S('.opencode/plugin/x.ts', 'package.json'), []).ok).toBe(true)
     // .opencode/ alone without artifact → config share, not installable

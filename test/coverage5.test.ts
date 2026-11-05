@@ -74,6 +74,7 @@ describe('fetch/npm.ts + review.ts branches', () => {
   it('renderReview: >30 flags truncated, clean verdict on empty', () => {
     const r = {
       name: 'p', exists: true, evidence: ['keyword'], downloads30d: 5, repo: null, createdAt: null,
+      version: null, integrity: null,
       findings: Array.from({ length: 35 }, (_, i) => `f${i}`),
       redFlags: Array.from({ length: 35 }, (_, i) => `r${i}`),
     }
@@ -131,12 +132,12 @@ describe('run.ts remaining branches', () => {
     return mkRes('{}', 404)
   }) as typeof fetch
 
-  it('malformed blocklist file → treated as absent (no crash)', async () => {
+  it('malformed blocklist file → hard-fail (corrupt must not silently unblock, C-4)', async () => {
     const bl = join(mkdtempSync(join(tmpdir(), 'bl-')), 'blocklist.json')
     writeFileSync(bl, '{not json')
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
-    const idx = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
-    expect(idx.plugins).toHaveLength(5)
+    await expect(run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 }))
+      .rejects.toThrow('blocklist unreadable')
   })
   it('blocklist with non-array fields → filters to empty lists', async () => {
     const bl = join(mkdtempSync(join(tmpdir(), 'bl-')), 'blocklist.json')
@@ -144,6 +145,11 @@ describe('run.ts remaining branches', () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
     const idx = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     expect(idx.plugins).toHaveLength(5)
+    // non-string elements inside arrays are dropped per-element
+    const bl2 = join(mkdtempSync(join(tmpdir(), 'bl2-')), 'blocklist.json')
+    writeFileSync(bl2, JSON.stringify({ names: [1, 'ok-name'], slugs: [] }))
+    const idx2 = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl2, outPath: join(mkdtempSync(join(tmpdir(), 'o2-')), 'i.json'), now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
+    expect(idx2.plugins).toHaveLength(5)
   })
 })
 

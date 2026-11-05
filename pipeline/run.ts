@@ -1,5 +1,5 @@
 /** Daily pipeline orchestrator: discover → fetch → scan → assemble entries → merge+gate → index.json */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
@@ -32,26 +32,27 @@ export interface RunOptions {
 }
 
 export function loadOldIndex(path?: string): CatalogIndex | null {
-  if (!path) return null
-  try {
-    return CatalogIndex.parse(JSON.parse(readFileSync(path, 'utf8')))
-  } catch {
-    return null
-  }
+  if (!path || !existsSync(path)) return null
+  // a present-but-unreadable index must hard-fail: running blind would publish
+  // a fresh index that re-pends every approval and wipes verification state
+  // (same WF-1 posture the workflow enforces — defense in depth, C-4)
+  return CatalogIndex.parse(JSON.parse(readFileSync(path, 'utf8')))
 }
 
 interface Blocklist { names: string[]; slugs: string[] }
 
 function loadBlocklist(path?: string): Blocklist | null {
-  if (!path) return null
+  if (!path || !existsSync(path)) return null
   try {
     const b = JSON.parse(readFileSync(path, 'utf8')) as { names?: unknown; slugs?: unknown }
     return {
       names: Array.isArray(b.names) ? b.names.filter(x => typeof x === 'string') as string[] : [],
       slugs: Array.isArray(b.slugs) ? b.slugs.filter(x => typeof x === 'string') as string[] : [],
     }
-  } catch {
-    return null
+  } catch (e) {
+    // corrupt blocklist must not silently disable blocking (fail-open) — abort
+    // the run rather than re-admitting blocked entries (C-4)
+    throw new Error(`blocklist unreadable at ${path} — refusing to run without it: ${(e as Error).message}`)
   }
 }
 
@@ -108,14 +109,19 @@ export async function run(opts: RunOptions = {}) {
       let repo: string | null = null
       if (line.startsWith('{')) {
         try {
-          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: string[] | null; desc?: Record<string, string | null> }
+          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown> }
           name = s.name ?? null
           repo = s.repo ?? null
+          // seed metadata is attacker-adjacent (issue-form fields, editable) —
+          // cap counts/lengths like fetchMarketMeta does (F-4)
           const desc: Record<string, string> = {}
-          for (const [k, v] of Object.entries(s.desc ?? {})) if (v) desc[k] = v
+          for (const [k, v] of Object.entries(s.desc ?? {})) if (typeof v === 'string' && v) desc[k] = v.slice(0, 4_000)
+          const cats = Array.isArray(s.category)
+            ? s.category.map(c => typeof c === 'string' ? c.slice(0, 80) : '').filter(Boolean).slice(0, 8)
+            : []
           const meta = {
             ...(s.type ? { type: s.type } : {}),
-            ...(s.category?.length ? { category: s.category } : {}),
+            ...(cats.length ? { category: cats } : {}),
             ...(Object.keys(desc).length ? { desc } : {}),
           }
           if (name) seedMeta.set(name, meta)
@@ -154,38 +160,54 @@ export async function run(opts: RunOptions = {}) {
   // 2. cheap admission filters
   // npm candidates carry no archived/fork signals — preAdmit applies to GitHub side only
   const npmList = [...npmCands.values()]
-  const ghList = [...ghCands.values()].filter(c =>
-    preAdmit({ name: c.fullName, repoUrl: c.fullName, archived: c.archived, fork: c.fork }).admit)
+  const rejectedGh = new Set<string>()
+  const ghList = [...ghCands.values()].filter(c => {
+    const ok = preAdmit({ name: c.fullName, repoUrl: c.fullName, archived: c.archived, fork: c.fork }).admit
+    if (!ok) rejectedGh.add(c.fullName)
+    return ok
+  })
   const byOwner = new Map<string, string[]>()
   for (const c of npmList) {
     const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0] ?? c.name.split('/')[0]!
     byOwner.set(owner, [...(byOwner.get(owner) ?? []), c.name])
   }
   const spamOwners = new Set([...byOwner.entries()].filter(([, ns]) => looksLikeTemplateSpam(ns)).map(([o]) => o))
+  const rejectedNpm = new Set<string>()
   const admitted = npmList.filter(c => {
     const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0] ?? c.name.split('/')[0]!
-    return !spamOwners.has(owner)
+    if (spamOwners.has(owner)) { rejectedNpm.add(c.name); return false }
+    return true
   })
-  console.log(`admitted: ${admitted.length} npm + ${ghList.length} github (spam owners: ${spamOwners.size})`)
+  console.log(`admitted: ${admitted.length} npm + ${ghList.length} github (spam owners: ${[...spamOwners].join(', ') || 'none'})`)
 
-  // deterministic admission order: name asc — the slice cap must not flap (PIPELINE-ISSUES §F-1)
+  // deterministic admission order: name asc — the slice cap must not flap (PIPELINE-ISSUES §F-1).
+  // The cap bounds NEW-discovery work, not catalog size: entries already in the
+  // index bypass it like seeds do — they mostly hit the no-fetch reuse path, so
+  // processing them is cheap, and tombstoning live entries for alphabetical
+  // position silently evicts the catalog tail once discovery outgrows --max (C-1).
   const limit = opts.maxEntries ?? 500
   const sorted = [...admitted].sort((a, b) => a.name.localeCompare(b.name))
-  const queue = sorted.slice(0, limit)
+  const existing = sorted.filter(c => oldByName.has(c.name))
+  const newbies = sorted.filter(c => !oldByName.has(c.name))
+  const newCap = Math.max(0, limit - existing.length)
+  const queue = [...existing, ...newbies.slice(0, newCap)]
   // submissions bypass the cap — a human-reviewed seed must not starve behind
   // alphabetical truncation (E2E rehearsal: 'oc-market-…' sorts past the cap)
   const queued = new Set(queue.map(c => c.name))
   for (const c of sorted) if (seedNames.has(c.name) && !queued.has(c.name)) queue.push(c)
-  const cappedOut = new Set(sorted.slice(limit).map(c => c.name).filter(n => !seedNames.has(n)))
+  const cappedOut = new Set(newbies.slice(newCap).map(c => c.name).filter(n => !seedNames.has(n)))
 
   // github side gets the same deterministic cap — a topic-search burst must not
-  // silently grow the index past maxEntries. Submission-injected repos bypass.
+  // silently grow the index past maxEntries. Submissions and existing entries bypass.
   const isSeedRepo = (c: (typeof ghList)[number]) => c.discoveredVia.includes('submission')
   const ghSorted = [...ghList].sort((a, b) => a.fullName.localeCompare(b.fullName))
-  const ghQueue = ghSorted.slice(0, limit)
+  const ghExisting = ghSorted.filter(c => oldByName.has(c.fullName))
+  const ghNew = ghSorted.filter(c => !oldByName.has(c.fullName))
+  const ghNewCap = Math.max(0, limit - ghExisting.length)
+  const ghQueue = [...ghExisting, ...ghNew.slice(0, ghNewCap)]
   const ghQueued = new Set(ghQueue.map(c => c.fullName))
   for (const c of ghSorted) if (isSeedRepo(c) && !ghQueued.has(c.fullName)) ghQueue.push(c)
-  for (const c of ghSorted.slice(limit)) if (!isSeedRepo(c)) cappedOut.add(c.fullName)
+  for (const c of ghNew.slice(ghNewCap)) if (!isSeedRepo(c)) cappedOut.add(c.fullName)
 
   // 3. fetch + evidence gate + scan — concurrent batches of 10.
   //    Incremental short-circuit (S-2): name@version unchanged in old index → reuse
@@ -217,6 +239,9 @@ export async function run(opts: RunOptions = {}) {
         npmDownloads30d: downloads ?? e.metrics.npmDownloads30d,
         checkedAt: now,
       },
+      // backfill SRI for entries that predate the integrity field — the field
+      // pins the DISPLAYED version's tarball (R-1)
+      integrity: (pk && e.latestVersion ? pk.integrityOf[e.latestVersion] : null) ?? e.integrity,
       // refresh repoId so repojacking detection works on reused entries too
       ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
     }
@@ -230,9 +255,12 @@ export async function run(opts: RunOptions = {}) {
       // a held bump already carries that version's scan in pendingUpdate.
       if (prev && cand.version && cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)
           && (prev.pendingUpdate?.capabilities.rulesetVersion ?? prev.capabilities.rulesetVersion) === RULESET_VERSION
-          && !isBlocked(cand.name)) {
+          && !isBlocked(cand.name, prev.slug)) {
         const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
-        entries.push(stale ? await refreshMeta(prev) : prev)
+        // entries that predate the integrity field need one packument fetch to
+        // backfill the SRI — otherwise they'd stay sha-less until the next bump
+        const needsIntegrity = !prev.integrity && !!prev.latestVersion
+        entries.push(stale || needsIntegrity ? await refreshMeta(prev) : prev)
         reusedNames.add(cand.name)
         return
       }
@@ -241,16 +269,18 @@ export async function run(opts: RunOptions = {}) {
       if (!pk) {
         // transient failure ≠ disappearance — keep the old entry rather than
         // letting the candidate vanish into gone-check (which would double-fetch)
-        if (pkStatus === 'error' && prev && !isBlocked(prev.name)) {
+        if (pkStatus === 'error' && prev && !isBlocked(prev.name, prev.slug)) {
           entries.push(prev)
           reusedNames.add(prev.name)
-        } else if (pkStatus === 'error' && seedNames.has(cand.name)) {
-          console.warn(`submission ${cand.name}: packument fetch failed (transient) — skipped this run`)
+        } else if (seedNames.has(cand.name)) {
+          // a submitted package that 404s is dead on arrival — the issue gets
+          // no notify-published comment, so at least make it visible (R-5)
+          console.warn(`submission ${cand.name}: packument ${pkStatus} — submission not admitted`)
         }
         return
       }
       const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
-      if (!ev.ok) return
+      if (!ev.ok) { rejectedNpm.add(cand.name); return }
 
       // packument.repository is authoritative; the submission-declared repo is
       // the fallback — and a disagreement between them is itself a signal.
@@ -292,6 +322,7 @@ export async function run(opts: RunOptions = {}) {
             deprecatedMessage: pk.deprecatedMessage,
             replacement: replacementOf(pk.deprecatedMessage),
             source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
+            integrity: (heldPrev.latestVersion ? pk.integrityOf[heldPrev.latestVersion] : null) ?? heldPrev.integrity,
             metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads, checkedAt: now },
           })
           reusedNames.add(cand.name)
@@ -474,8 +505,9 @@ export async function run(opts: RunOptions = {}) {
       // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
       if (ghPrev && c.pushedAt && ghPrev.modifiedAt === c.pushedAt
           && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
-          && !isBlocked(c.fullName)) {
+          && !isBlocked(c.fullName, ghPrev.slug)) {
         ghStats.reused++
+        reusedNames.add(c.fullName)
         return ghPrev
       }
       // evidence gate: a topic tag alone never admits — the tree must show an
@@ -490,9 +522,9 @@ export async function run(opts: RunOptions = {}) {
         ghStats.treeTransient++
         return ghPrev ?? null
       }
-      if (!treeRes.paths) { ghStats.treeEmpty++; return null }   // not-found/empty — gone-check decides
+      if (!treeRes.paths) { ghStats.treeEmpty++; rejectedGh.add(c.fullName); return null }   // gone/empty — gone-check decides
       const ev = hasRepoEvidence(treeRes.paths, c.topics)
-      if (!ev.ok) { ghStats.evidenceRejected++; return null }
+      if (!ev.ok) { ghStats.evidenceRejected++; rejectedGh.add(c.fullName); return null }
       const marketMeta = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
       const repoPkg = await fetchRepoPackage(c.fullName, { fetchFn: f })
       // codeload resolves HEAD → default branch too, so no meta lookup needed
@@ -583,7 +615,12 @@ export async function run(opts: RunOptions = {}) {
     console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)
   }
 
-  // 4. gone-check: old entries missing from fresh set — probe before tombstoning (F-2)
+  // 4. gone-check: old entries missing from fresh set — probe before tombstoning (F-2).
+  //    'filtered' requires POSITIVE rejection evidence (admission gate actually
+  //    saw and rejected it this run). A live entry the discovery surface simply
+  //    missed — search truncated, topic sort window passed, worker crash — is
+  //    kept, not tombstoned: absence from a paginated search result is not
+  //    evidence of anything (R-3). Real departures still tombstone via 404.
   const freshNames = new Set(entries.map(e => e.name))
   const removedNow: RemovedEntry[] = []
   const goneCheck = async (e: PluginEntry) => {
@@ -598,6 +635,7 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
+      if (status === 'ok' && !rejectedNpm.has(e.name)) { entries.push(e); return }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
     // github-kind entries never pass through the candidate filters — but a
@@ -611,6 +649,7 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
+      if (status === 'ok' && !rejectedGh.has(e.name)) { entries.push(e); return }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }
     removedNow.push({
@@ -641,16 +680,21 @@ export async function run(opts: RunOptions = {}) {
 }
 
 // CLI entry (untestable in vitest — excluded from coverage)
-/* v8 ignore next 11 */
+/* v8 ignore next 16 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const arg = (k: string) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : undefined }
+  const max = arg('--max') !== undefined ? Number(arg('--max')) : undefined
+  if (max !== undefined && (!Number.isFinite(max) || max <= 0)) {
+    console.error('--max must be a positive number')
+    process.exit(2)
+  }
   run({
     ghToken: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN,
     outPath: arg('--out'),
     oldIndexPath: arg('--old'),
     seedPath: arg('--seed'),
     blocklistPath: arg('--blocklist'),
-    ...(arg('--max') ? { maxEntries: Number(arg('--max')) } : {}),
+    ...(max !== undefined ? { maxEntries: max } : {}),
     verdictsPath: arg('--verdicts'),
     digestStatePath: arg('--digest-state'),
   }).catch(e => { console.error(e); process.exit(1) })

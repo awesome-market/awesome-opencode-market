@@ -154,16 +154,22 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([]), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     expect(idx.plugins.map(e => e.name)).not.toContain('blocked-cand')
   })
-  it('cap → missing old entry gets capped tombstone', async () => {
+  it('cap bounds NEW candidates only — existing entries bypass it', async () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
-    // zzz-last must be a discovered candidate so it lands in cappedOut (sorted last)
+    // 5 alive + zzz-last are already indexed and get re-discovered → all bypass
+    // the cap. tail-new is a NEW candidate beyond the budget → truncated away,
+    // and never tombstoned (it was never in the index).
     const fetch = baseFetch(url => url.includes('/-/v1/search')
       ? mkRes({ objects: [...alive.map(e => ({ package: { name: e.name, version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } })),
-        { package: { name: 'zzz-last', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } }] })
+        { package: { name: 'zzz-last', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } },
+        { package: { name: 'tail-new', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } }] })
       : null)
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([mkEntry('zzz-last')]), outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 5 })
-    expect(idx.plugins).toHaveLength(5)
-    expect(idx.removed.find(r => r.name === 'zzz-last')?.reason).toBe('capped')
+    const names = idx.plugins.map(e => e.name)
+    expect(names).toContain('zzz-last')            // old entry survives the cap
+    expect(names).not.toContain('tail-new')        // over-budget new candidate truncated
+    expect(idx.removed.find(r => r.name === 'zzz-last')).toBeUndefined()
+    expect(idx.removed.find(r => r.name === 'tail-new')).toBeUndefined()
   })
   it('github-topic-only candidate becomes github-kind entry', async () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')

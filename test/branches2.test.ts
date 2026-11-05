@@ -82,6 +82,13 @@ describe('branches round 2', () => {
     const r = await scanTarball(readFileSync(dir + '/p.tgz'))
     expect(r.findings.filter(f => f.rule === 'binary-blob')).toHaveLength(0)
   })
+  it('scanTarball: member-count cap aborts (tar-bomb guard, F-1)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sc4-'))
+    mkdirSync(join(dir, 'pkg'))
+    for (const n of ['a.txt', 'b.txt', 'c.txt']) writeFileSync(join(dir, 'pkg', n), 'x')
+    execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    await expect(scanTarball(readFileSync(dir + '/p.tgz'), 2)).rejects.toThrow('file count exceeds')
+  })
   it('mergeEntries: aliases + discoveredVia union', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
       plugins: [{ ...mkEntry('a'), aliases: ['old-alias'], discoveredVia: ['github-topic' as const] }], removed: [] }

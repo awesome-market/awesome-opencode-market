@@ -33,8 +33,11 @@ export async function searchTopic(
 ): Promise<GhRepo[]> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const out: GhRepo[] = []
-  for (let page = 1; page <= (opts.maxPages ?? 5); page++) {
-    const url = `${GH_API}/search/repositories?q=topic:${encodeURIComponent(topic)}&sort=updated&per_page=100&page=${page}`
+  // fork:false is a zero-cost server-side filter — mirror forks only ever
+  // produce duplicate content entries (submission-seeded forks still get in,
+  // a human asked for those). maxPages 10 hits the search API's 1000-result cap.
+  for (let page = 1; page <= (opts.maxPages ?? 10); page++) {
+    const url = `${GH_API}/search/repositories?q=topic:${encodeURIComponent(topic)}+fork:false&sort=updated&per_page=100&page=${page}`
     const res = await f(url, { headers: ghHeaders(opts.token) })
     if (!res.ok) break
     const body = (await res.json()) as {

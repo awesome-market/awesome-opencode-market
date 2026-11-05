@@ -265,6 +265,11 @@ describe('remerge (WF-2 publish retry)', () => {
     const ours = mkIndex([mkEntry('a')])
     expect(remerge(ours, null)).toBe(ours)
   })
+  it('entry category with unknown id → {en:id} dict fallback', () => {
+    const ours = mkIndex([mkEntry('a', '1.0.0', { category: ['custom-x'] })])
+    const out = remerge(ours, mkIndex([]))
+    expect(out.categories['custom-x']).toEqual({ en: 'custom-x' })
+  })
 })
 
 describe('backfill (SEC-4)', () => {
