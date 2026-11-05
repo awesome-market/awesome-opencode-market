@@ -747,3 +747,32 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 4000 列单上限告警只进 console.warn——跑完即淹，summary 里看不到 | ✅ | 告警同时写 `GITHUB_STEP_SUMMARY`；summary 增列触顶/失败计数 |
 
 **验证**：typecheck 0 错；40 文件 861 tests 全过（docket +N 新例：candidateHeldAt 时钟口径/NaN fail-visible/canonical max(number)/reason 转义/双 ai:* 收敛/assignee 三态/包级刹车/总单聚合与自动关/并发池/summary 告警）；DATA-FLOWS §8 与 PIPELINE-ISSUES 附十七同步落地；D-T 文档漂移修正（15min→10min 与 docket.yml 实际一致）。
+
+## 附十八：收录发现流深审（G/O 系列，catalog.yml ↔ DATA-FLOWS 逐行复核后全量落地）
+
+对照 DATA-FLOWS §1 全文与 run.ts/discover/fetch/scan/merge 逐行复核：确认 R-1 pin、integrity 锚定、正反拒绝集合、flagPushed 门控、append-only 裁决等不变量全部真实存在；发现 1 处文档/代码硬矛盾、9 处功能缺口、8 组优化项，全部落地（`test/audit10.test.ts`，36 例新回归）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| G-1 cap 语义矛盾：文档说"只限新候选"，代码 `limit - existing.length` 让存量消耗预算——存量逼近 `--max` 时新发现名额趋零，≥上限则永久冻结且无告警 | ✅ | `newbies.slice(0, limit)`——存量+seed 全豁免（与文档既有表述对齐，与 C-1 已修的墓碑问题同根） |
+| G-2 `compat` 死字段：schema 声明、站点/客户端渲染，从未被写入 | ✅ | `compatStrings`（engines `k v; …` ≤300、peer `k@v, …` ≤500，攻击者文本不原样入库）填：npm 展示版 packument `engines`/`peerDependencies`、github-kind repo 根 package.json；refreshMeta/pin 路径同步刷展示版 compat |
+| G-3 repo 身份键大小写敏感：ghCands/seedRepoMeta/oldByName/removedByName/rejectedGh/catalog-append KEY 全裸大小写，coveredRepos/isBlockedAnyCase/notify 却走小写——投稿大小写漂移或仅大小写改名 → 双条目 + 墓碑/拉黑失明 | ✅ | 全链身份键 `toLowerCase()`：种子行名/repo 归一、ghCands 键、oldByName/removedByName 查键、rejectedGh 记键、gone-check 比对、shell KEY grep -i；既有条目 name 保持已存大小写（显示改名不分叉），新条目用 API canonical fullName；slug 恒小写 |
+| G-4 repo-only 种子 gh 条目元数据永久残缺：注入伪造 `id:null stars:0 archived:false createdAt:null`——repojack/name-reuse 对照失明、已归档投稿绕过 preAdmit、stars 冻结 | ✅ | `isSeedRepo && id==null` → ghWorker 证据门前 `fetchRepoMeta` 回填；meta 返回 archived 直接拒收；canonical fullName 锚定新条目名 |
+| G-5 `sub.type==='skill'` 剥离真实入口的 plugin 部件——"skill 包"带 main/exports 只走 structure 检查 | ✅ | `hasEntry` 无条件发 'plugin' 部件；声明 type 只设徽章不设验证级别 |
+| G-6 `versionCmp` 不识别 prerelease：`split('.').map(Number)` 遇 `-beta.5` → NaN → 0，`sec:version-rollback` 对预发布包永久失灵 | ✅ | semver-ish：release>自身预发布、数字标识<字母、等长前缀短者小；不可比→0（不算回退不误报） |
+| G-7 `obfuscation` 高严重级对文档误报：README/AGENTS.md 里的 eval(/hex 示例 → 假 redFlag → skipped → 只能靠人工 pass | ✅ | 限代码扩展名 `.js/.mjs/.cjs/.ts/.mts/.cts/.sh`（与 credential-read 同口径）；RULESET_VERSION r3→r4 |
+| G-8 `.wasm`/`.node` 等已知良性二进制一律 high redFlag——tree-sitter/sqlite-wasm/esbuild 类插件每版都要人工闸，FP 摊薄红旗 | ✅ | `KNOWN_BIN_EXT`（wasm/node/dll/so/dylib/exe/bin/dat/so.N）→ medium finding；未知二进制仍 high；仍是 finding 不无记录 |
+| G-9 corruptionGate 拒发无人工通道：合理批量消失（大面积下架/改名潮）时每班必 fail，只能改代码解锁 | ✅ | `workflow_dispatch force_publish` → `--force-gate`（stderr 记 override）；与 site.yml `force` 先例同构 |
+| G-10 `repoFileExists` 死代码 + `sec:repo-dir-traversal`/`sec:repo-declared-mismatch` 两条 finding 未进文档 | ✅ | 删 API+清 5 处测试引用；两条 finding 补记 §1；`renderRepoReview` 补「⚠️ 证据不足」段（npm/repo 同构——缺什么专属信号直说） |
+| O-1 npm 种子 `version:''` → 增量短路永不命中，~90d 存活期每班全量重扫 | ✅ | 有 prev 时先拉 abbreviated packument（install-v1）取 dist-tags.latest 进同版比较 |
+| O-2 discovery 关键词/主题串行：页级 15s 超时长尾跨循环叠加 | ✅ | `pipeline/pool.ts::mapPool`：npm ×3 / gh ×2 有界并发 |
+| O-3 `fetchRepoPackage`/`fetchRepoPackageName` 无条件取——tree 已证明不存在时是注定 404 | ✅ | tree 有 `package.json` 才发 fetchRepoPackage；pin 路径同门控（dir 缺失不浪费 raw 配额） |
+| O-4 `normalizeRepoUrl` 不认 `github:` shorthand → 丢整条 repo 关联（repoId/stars/mismatch 检测全缺） | ✅ | `github:owner/repo`（含 `#commit` 后缀）→ https 归一；gitlab:/bitbucket: 仍 null |
+| O-5 `treeRes.truncated` 无人消费：大树截断时证据门在残缺数据上判拒绝，与 'evidence-rejected' 混记 | ✅ | `ghStats.truncated` 单列计数；准入条目在截断树上建成 → `sec:tree-truncated` finding 入槽 |
+| O-6 blocklist 名单大小写由书写者负责：写 `Owner/Repo` 拦不住 | ✅ | `loadBlocklist` 加载即 `.toLowerCase()` 归一 |
+| O-7 generate job 无 egress 白名单；`fetchTarball` 只校验入口 https、redirect 跟随便降 | ✅ | generate 挂 harden-runner 白名单（npm registry/api + github api/raw/codeload/objects/release-assets）；fetch 手动跟随：每跳 parse+校验 https、无 Location/超 5 跳即拒 |
+| O-8 小项打包：`--seed` 路径不存在硬抛；gh 侧无 spam-owner 等价过滤；dead 种子关单后迟到上架永不通知；pin 路径不刷 marketMeta | ✅ | seed 缺失 warn 继续；gh owner 模板垃圾同跑 looksLikeTemplateSpam；dead 行落地仍补一次 notified 评论（关单≠聋）；pin 路径全量刷 repoMeta/marketMeta/desc/category/license/downloads + 展示槽 repo-dir-traversal/repo-mismatch/declared-mismatch 检查 |
+
+**连带落地**：`monorepo .opencode/` 任意深度证据识别（证据门+skill 路径+type 判定同口径）；`parseSubmission` 认 `npm 包名或 owner/repo` 标签（concern 表单同标签互通）；submission repo 字段归一小写；`catalog-append.sh` KEY 大小写不敏感；coverage8/9/10 三个漂移测试文件与现签名调和补交（renderRepoReview/§findGuiBundle/liveAlarms sec: 前缀/buildIndex opts/planTargets cap 签名/parseSubmission/detectFeatures 形参/resolveVerdictEvent 字面量重键）。
+
+**验证**：typecheck 0 错；43 文件 943 tests 全过（audit10 +36 新例：cap 只限新候选、compat 填充与截断、github: shorthand、嵌套证据门、redirect 降级/缺 Location/>5 跳拒收、abbreviated packument Accept、obfuscation 文档免疫/代码命中、wasm medium/未知 high、mapPool 并发上限、seed-gh meta 回填/archived 拒收、gh 大小写复用名单条、declared-skill 保 plugin 部件、forceGate 拒发/放行、缺 seed 容错、blocklist 显示大小写拦截、截断树 sec:tree-truncated）；DATA-FLOWS §0/§1/§4/§13 同步。

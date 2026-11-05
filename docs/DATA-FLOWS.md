@@ -70,7 +70,7 @@ flowchart TB
 |---|---|---|---|
 | `index.json` | catalog.yml publish / verify.yml merge | 站点构建、客户端、diagnose、docket、verify plan、applyMatureVerdicts | 完整目录（含 pending——数据面全量，展示面各自过滤） |
 | `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml；digest.yml 班内 `verdicts-compact.ts` 压实 | run.ts、diagnose（判重）、docket、digest、site 详情页（裁决记录区块） | **append-only** 裁决流水；同 name@version 最新 `at` 胜出；详情页折叠透出最近 10 条 + 全量链接。压实只丢「被同键更新行取代且超保留窗（默认 180d）的 AI 行」——畸形行、human 行、每键最新行、窗口内行全保留，最新行集合不变 → 全消费端语义不变 |
-| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
+| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入但**仍可在迟到上架时补发落地通知**（关单≠聋）；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
 | `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟看 `announced` 集合成员（上过日报的那行才算）；`announced` 按「每键最新裁决行 ∩ 公告候选（held 槽位/不在 index 的幽灵键/concern）」截断——已放行/永不需成熟的 pass 键也裁掉，不无限膨胀；**缺失/损坏**：消费端 announced=∅ 全冻结，生产端若已有日报历史则拒绝重渲（fail-closed，不全量公告） |
 | `digest/YYYY-MM-DD.md` | digest.yml（publish-digest.sh 兜底） | 人（手机/网页） | 日报：新放行表 + held 积压 + concerns + 审核单链接。入口：[review] 审核单正文"预告面"链接、站点列表页 `digest` 链接、README——异议窗口必须找得到日报才有意义 |
 | `blocklist.json` | 手工 | run.ts | `{names[],slugs[]}` 硬封禁 |
@@ -114,7 +114,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `license` / `deprecated` / `deprecatedMessage` / `replacement` | — | npm 元数据；replacement 从 deprecated 文案解析 |
 | `createdAt` / `modifiedAt` | string? | packument `time.created/modified`——`createdAt > firstSeenAt` ⇒ 名字被重新注册（`sec:name-reused`） |
 | `maintainers[]` | string[] | npm 维护者账号——变化 → `sec:maintainer-changed` |
-| `distTags` | obj | npm dist-tag 表——回滚检测（`sec:version-rollback`） |
+| `distTags` | obj | npm dist-tag 表——回滚检测（`sec:version-rollback`；versionCmp 含 prerelease 语义：release>自身预发布、数字标识<字母、等长前缀短者小，不可比→0=不算回退） |
 | `firstSeenAt` | string | 首次收录时间（merge 跨版本保留） |
 | `latestVersion` | string? | **展示版**——held 语义下钉在批准版；null=github-kind |
 | `publishedAt` | string? | 展示版的发布时间 |
@@ -122,7 +122,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `metrics` | obj | `{stars, npmDownloads30d, checkedAt}` |
 | `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[]}`；`scannedAt:null`=没扫过（≠扫过没发现） |
 | `verification` | obj | `{status, level?, opencodeVersion?, verifiedAt?, runUrl?, logExcerpt≤2048, retries?}`；status ∈ `verified|failed|unverified|skipped`，level ∈ `install|load|interactive|render|structure`；`retries` 只在 failed 上计数（V-3 自动重试预算） |
-| `compat` | obj | `{engines?, peer?}` |
+| `compat` | obj | `{engines?, peer?}`——npm 侧取 packument 展示版的 `engines`/`peerDependencies`，github-kind 取 repo 根 package.json；**序列化为两条展示字符串**（engines `k v; …` ≤300 字符，peer `k@v, …` ≤500 字符）——packument 字段是攻击者可控文本，绝不原样入库 |
 | `approval` | enum | `pending`=hold 默认 / `approved`=放行 / `legacy`=门禁前老条目（schema 默认 legacy 兼容旧 index） |
 | `approvalReason` | string? | pending 的理由；放行时清空 |
 | `pendingUpdate` | obj? | **被扣住的新版** `{version, capabilities, verification, features?, contains?, integrity?, publishedAt?, reason?, heldAt}` ——只存在于**非 pending** 条目（pending 条目的候选就是 `latestVersion` 本身）；`contains`=候选版的 parts、`integrity`=候选版的 tarball SRI（两者展示槽都钉在展示版，放行时随 pendingUpdate 提升） |
@@ -137,11 +137,11 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 
 ---
 
-## 1. 收录发现流 — `catalog.yml`（每天 2 班 UTC 03:17/11:00 + 手动）
+## 1. 收录发现流 — `catalog.yml`（每天 2 班 UTC 03:17/11:00 + 手动 `force_publish`）
 
-**实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r3'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
+**实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r4'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
-`generate`（permissions:{} 零权限，跑不可信元数据；可选 `MARKET_PAT` 提额；**无并发锁**——只读 catalog 分支，不占写锁）→ `publish`（唯一 index writer：contents+issues+actions 写权限；`concurrency: catalog-branch` 只挂在写阶段——与 verify.yml、submit ingest、digest.yml 共享分支写锁，写者串行；末尾 dispatch site.yml，失败 10s 后重试一次——V-8 单 Pages 发布者）→ `alert`（失败查 `pipeline-alert` 既有 open issue，有则评论追加、无则新建——连败不轰炸）。blocklist.json 存在但损坏 → `generate` 拒跑（fail-closed：坏黑名单不等于没黑名单）；文件缺失才视为"未配置"。
+`generate`（permissions:{} 零权限 + harden-runner egress 白名单（npm registry/api + github api/raw/codeload/objects/release-assets——它解析不可信 tarball 字节，出站只给必需域），跑不可信元数据；可选 `MARKET_PAT` 提额；**无并发锁**——只读 catalog 分支，不占写锁）→ `publish`（唯一 index writer：contents+issues+actions 写权限；`concurrency: catalog-branch` 只挂在写阶段——与 verify.yml、submit ingest、digest.yml 共享分支写锁，写者串行；末尾 dispatch site.yml，失败 10s 后重试一次——V-8 单 Pages 发布者）→ `alert`（失败查 `pipeline-alert` 既有 open issue，有则评论追加、无则新建——连败不轰炸）。blocklist.json 存在但损坏 → `generate` 拒跑（fail-closed：坏黑名单不等于没黑名单）；文件缺失才视为"未配置"；**名单条目加载即小写归一**——书写者用显示大小写也拦得住（查询侧 isBlockedAnyCase 同样小写化）。
 
 ```mermaid
 flowchart TB
@@ -166,12 +166,22 @@ flowchart TB
 discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/opencode/
   opencode-ai/opencode-skill/opencode-mcp/opencode-config）× ≤10 页 250/页，
   github topic ×7（前述 + opencode-theme/agent-skill）× ≤10 页 100/页、
-  query 带 fork:false 服务端过滤；分页中途非 ok 或吃满页 → console.warn
+  query 带 fork:false 服务端过滤；**关键词/主题循环有界并发**
+  （npm ×3、gh ×2，mapPool——页级 15s 超时的长尾不再跨循环叠加，对
+  registry/API 仍温和）；分页中途非 ok 或吃满页 → console.warn
   截断遥测——静默截断会被误读成"没有更多候选"）
   → + submissions.txt 种子注入（JSONL 声明式种子；纯名字；github:owner/repo；
-      dead:true 行直接跳过——撤回/超期终态不再消耗扫描预算）
+      dead:true 行直接跳过——撤回/超期终态不再消耗扫描预算；
+      **种子名字/repo 一律小写归一**——repo 身份键全链小写，投稿大小写
+      漂移不再产生双条目；`--seed` 文件不存在 → warn 继续（与其他可选
+      输入一致，本地误配不炸 run））
       npm 种子注入 npmCands（discoveredVia=submission）
-      repo-only 种子 → ghCands → 走 github-kind 路径
+      repo-only 种子 → ghCands → 走 github-kind 路径——注入的候选元数据是
+        伪造的（id:null、stars:0、archived:false），**ghWorker 在证据门前
+        先 fetchRepoMeta 回填**：repoId（repojack 对照）、createdAt（墓碑
+        对照）、pushedAt（增量复用）、canonical fullName（显示大小写锚定）、
+        真 archived（伪造的 false 曾让已归档投稿绕过 preAdmit）；
+        meta 返回 archived → 直接拒收
       seed 元数据先消毒：desc 每语种 ≤4000 字符、category ≤8 项 ×80 字符、
         version/pkg/issue/author 限长、非字符串值剔除（表单可改 → 按
         marketMeta 同款上限处理）；version=被审版本（npm ver / repo resolvedSha（commit sha））
@@ -179,7 +189,8 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
         finding `sec:repo-moved-since-review`（审查后仓库已变——github-kind
         无版本槽，裁决无法钉此，finding 是持久信号）
   → 入场过滤：preAdmit(archived)——只作用 GitHub 侧（npm 候选无 archived/fork 信号）
-      + looksLikeTemplateSpam（owner 级 ≥6 近同名；名单上日志可审计）
+      + looksLikeTemplateSpam（owner 级 ≥6 近同名；**npm/gh 两侧同跑**——
+        gh 侧 owner 下连发近同名 repo 是同一指纹的另一面；名单上日志可审计）
   → 确定性排序 name-asc → cap（--max，默认 500；workflow 传 2000）：
       **只限"新候选"数量**——已在 index 里的条目 + 投稿 seed 全部豁免
       （旧语义把 cap 当目录总量：活跃条目逼近上限时字母序靠后的老条目
@@ -197,10 +208,16 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
            ruleset 升级也不再团灭在飞 hold——但会**就地重扫在押 tarball**
            （packument.tarballOf 取 held 版 URL，capabilities 换新，
            verification/heldAt 不动；新红旗经 merge 的 skipped 不变量降级），
-           其余字段只刷 distTags/repoId/metrics。
+           pin 路径同时**全量刷 marketMeta/desc/category/license/downloads**
+           （hold 期间作者改 .opencode-market.json 不再冻结到放行）并对
+           展示槽跑 repo-dir-traversal/repo-mismatch/declared-mismatch
+           身份级检查——与新条目同口径。
            槽位释放（重定向到 pk.latest）仅当在押版达终态：最新裁决 concern，
            或 failed 且 retryable 耗尽；pk.latest 上有**人工**裁决时主动跳车
-        ② 版本同 + ruleset 同 → 增量短路整体复用；ruleset 比较读
+        ② 版本同 + ruleset 同 → 增量短路整体复用；**seed 候选先补版本**——
+           投稿行不带 version，先拉一份 abbreviated packument（install-v1）
+           拿 dist-tags.latest 再进同版比较（否则种子存活 ~90d 内每班都全量
+           重扫）；ruleset 比较读
            **cand.version 实际占据的槽位**（PU 版→PU caps，展示版→展示 caps，
            都不匹配→null 不短路——旧实现的 `PU ?? 展示` 跨槽回退把
            "PU 扫描失败无 rulesetVersion"误判成同规则，失败扫描永久冻结）。
@@ -217,16 +234,29 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       → fetchTarball+scanTarball → capabilities{findings,redFlags,rulesetVersion}
         （压缩报文按字节流上限 64MB——content-length 可缺可谎，流式计数
         超限即断；解压累计 >512MB 即中止=防 zip bomb；**成员数 >200k 即中止**；
-        媒体文件不缓冲（二进制豁免规则不需要字节体），非文本只留 8KB
-        isBinary 窗口；findings>500 截断 + 'scan-capped' 标记行；
-        rules 含 lifecycle-script 全生命周期与 literal-ip 私网段排除）
+        **fetch 手动跟随重定向**——入口 https 校验对 redirect 无效，每一跳
+        重新 parse+校验 https、无 Location/超 5 跳即拒（防 registry/mirror
+        降级 http 或指内网）；媒体文件不缓冲（二进制豁免规则不需要字节体），
+        非文本只留 8KB isBinary 窗口；findings>500 截断 + 'scan-capped' 标记行；
+        rules 含 lifecycle-script 全生命周期与 literal-ip 私网段排除；
+        **obfuscation（eval/new Function/长 hex）限定代码扩展名** `.js/.ts/.sh`
+        等——README/AGENTS.md 里的 eval 示例不再误升高危（credential-read
+        同口径）；**已知良性二进制载荷降级 medium**（.wasm/.node/.dll/.so/
+        .dylib/.exe/.bin/.dat——tree-sitter/sqlite-wasm/esbuild 插件常态携带，
+        high→verification skipped→每版都要人工 pass 的 FP 摊薄红旗信号；
+        仍是 finding，未豁免成无记录））
         redFlags>0 → verification={status:'skipped'}（高危信号没跑）；
         npm 侧 'too large' 同样盖 rulesetVersion 记忆化（确定性失败不重取，
         版本 bump 自带新槽自然重试）；其余扫描失败留 scannedAt:null 每轮重试
       fetchRepoMeta(repoId/stars)+fetchDownloads30d+fetchMarketMeta **并行**
-      （repo 根 .opencode-market.json 作者声明；死代码 fetchRepoTree 已删——
+      （repo 关联来自 `normalizeRepoUrl`——git+/git@/ssh/monorepo directory
+        + npm `github:owner/repo` 缩写都解析为同一 owner/repo 身份；
+        repo 根 .opencode-market.json 作者声明；死代码 fetchRepoTree 已删——
         skill 检测用 tarball scanFiles，树调用曾只为一条截断告警烧 API 配额）
-      repo package.json ≠ 包名 → finding 'sec:repo-mismatch:<actual>'
+      repo package.json ≠ 包名 → finding 'sec:repo-mismatch:<actual>'；
+      `repository.directory` 含 `..`/`.` → `sec:repo-dir-traversal`（目录
+      字段攻击者可控，穿越路径不取内容只记 finding）；投稿声明 repo ≠
+      packument repo → `sec:repo-declared-mismatch:<declared>`（比对全小写）
       墓碑对照（P1-5）：同名条目曾立碑 → 比 lastSource.repoId/createdAt——
         repoId 不同 → `sec:repo-recreated`；pkg createdAt 更新 → `sec:name-reused`
         （墓碑存 createdAt 就是为这一刻：名字复用 ≠ 对象复活）
@@ -235,10 +265,13 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
         任意字符串不进条目、不铸全局字典；识别不出退回 classify 分类器
       contains=按产物发牌：npm 'plugin' 需 main/exports 入口（opencode 实际
         加载的东西）；SKILL.md-only 包只领 'skill'（走 skill 验证链，不再
-        替不存在的 plugin 失败安装）；空数组=无可装载荷，显式记录而非省略
+        替不存在的 plugin 失败安装）；空数组=无可装载荷，显式记录而非省略；
+        **投稿声明 type='skill' 不再剥离真实入口的 plugin 部件**——声明设
+        徽章不设验证级别，带 main/exports 的 "skill 包" 仍走 install+load 链
       detectFeatures({exports, main, files:tarball 路径})——镜像官方 Host.resolve
       （server=./server|根入口；gui=./gui-experimental 仅 .cjs/.js；rpc 需 server 同在）
-      组装 entry：approval='pending', approvalReason='awaiting-review'
+      组装 entry：approval='pending', approvalReason='awaiting-review'；
+      compat 填展示版 engines/peerDependencies 序列化值（见 §表 compat 行）
       hold 手术（见 §7）
   → github-kind 补集（coveredRepos 去重，**全小写比较**——GitHub
       fullName 带显示大小写，小写变体不得穿透去重；**既有 gh 条目豁免
@@ -255,18 +288,29 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
         （分支改名后具名 ref 404 会误杀）；codeload tarball 过同一套
         scanTarball，归档根前缀 strip
       暂态 tree error/rate-limited → 保留旧条目（ghStats.treeTransient）；
-        tree not-found（404/409）→ rejectedGh 记录正向拒绝 → gone-check 定碑
+        tree not-found（404/409）→ rejectedGh 记录正向拒绝 → gone-check 定碑；
+        **tree truncated → ghStats.truncated 单列计数**（API 截了深层路径，
+        数据不全 ≠ 拒绝依据）；准入条目在残缺树上建成 → `sec:tree-truncated`
+        finding 入槽（深层 .opencode/ 可能没被看到）
+      repo 根 package.json 探测**先看 tree 再取**——tree 已告知存在性，
+        `fetchRepoPackage`/`fetchRepoPackageName` 只对存在路径发请求
+        （省一次注定 404 的 raw.githubusercontent 往返）；取回的
+        engines/peerDependencies 填 compat（npm 侧同口径序列化）
       增量复用：pushedAt+ruleset 不变 → 沿用 scan 但**刷新 metrics**
         （stars 随搜索结果候选更新——字节没变不代表热度没变，此前 stars
         永久冻结）；复用同样过 isBlockedAnyCase 双键；gh 复用计入 reusedNames
         扫描失败留 scannedAt:null，'too large' 盖 rulesetVersion 记忆化
         （pushedAt 变了才重试），timeout 每轮重试
       type：投稿声明优先；纯 skill 证据（有 SKILL.md、无根 package.json、
-        无 .opencode plugin 路径）→ 'skill'，否则 'plugin'
+        无 .opencode plugin 路径——**任意深度**，monorepo 子目录同样算数）
+        → 'skill'，否则 'plugin'
+      条目命名：既有条目保持已存 name（显示大小写改名不分叉身份）；新条目
+        用 fetchRepoMeta 的 canonical fullName；slug 恒小写
       latestVersion:null、verification:{status:'skipped'}、
       approval 继承 ghPrev（人工裁决过的状态跨轮保留）
-      ghStats 审计行：admitted/reused/npm-covered/**blocked**/
-        evidence-rejected/transient-kept/empty/scan-failed(oversize)
+      ghStats 审计行：admitted/reused/npm-covered/**blocked**/seed-archived/
+        evidence-rejected/transient-kept/empty/truncated-tree/
+        scan-failed(oversize)
         ——covered 只算 npm 认领，blocklist 拦截单列不再混入
   → gone-check：旧条目消失 → 先分"缺席类型"再探活：
       fetch 错误(429/5xx/网络) → 保留旧条目不打墓碑（瞬时失败≠消失）
@@ -288,7 +332,10 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       小写双键）；正向拒绝 → filtered；其它 → unknown
       墓碑记录加 createdAt（包/repo 生辰）——供 P1-5 同名再进对照
   → buildIndex = mergeEntries（双层缓存+trustFlags+skipped 不变量）
-                + dedupeSlugs + corruptionGate（空/掉幅>20% 拒发）
+                + dedupeSlugs + corruptionGate（空/掉幅>20% 拒发；
+                人工逃生门：workflow_dispatch `force_publish` → `--force-gate`
+                绕过拒发——大规模合理下架/上游改名潮时不再只能靠改代码解锁，
+                stderr 记录 override）
   → index.json → publish job 写 catalog
      （worktree 上 fetch→reset→remerge(ours vs remote)→release.ts 追赶应用
        →commit→push，4 次重试；
@@ -309,7 +356,9 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
      `at` 超 14 天仍未落地（缺席或 pending）→ 一次性 staleWarned 评论
      （不关单——管线侧延迟不等于作者放弃）；
      `at` 超 30 天仍未落地 → dead:true 终态 + 关单（与 submit sweep 同视界，
-     run.ts 跳过 dead 种子不再消耗扫描预算）
+     run.ts 跳过 dead 种子不再消耗扫描预算）；**dead 行不豁免落地通知**——
+     关单≠聋：条目之后经别条路放行上架时仍补发一次落地评论并标
+     notified（投稿人不再被告知"失败了"实则已上架）
   → submission-status：为每个仍有活种子的投稿 issue 维护一条
      edit-in-place 状态评论（排队中/评审中/已上架）——进度可见
 ```
@@ -369,7 +418,10 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
         （registry/API 瞬断 → error 可重试，绝不误报"不存在"；
         扫描失败 scanned:false → flagged——"没扫到"≠安全；
         证据门与目录同函数 ev.ok——keyword 无产物不再 clean）
-        报告记录被审版本（npm reviewedVersion/repo resolvedSha（commit sha））+findings 折叠进 <details>
+        报告记录被审版本（npm reviewedVersion/repo resolvedSha（commit sha））+findings 折叠进 <details>；
+        repo 报告证据不通过时给独立的「⚠️ 证据不足」段（与 npm 侧同构——
+        缺的专属信号 .opencode/ opencode.json opencode-* topic 直说，
+        并声明目录端同样拒收）
       守卫：非作者触发重审 → flagged（collaborator 催审豁免——他们本身就是人工复核）；
         issue>24h 且包/仓在 issue 后 **24h 窗口内**注册 → flagged（防蹲名；
         间隔更长的慢速作者发布不再永久误伤）
@@ -383,7 +435,8 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
       防滥用门：作者 open 投稿数 ≥5 → 撤 approved 标签改 needs-work + 说明评论，不入队
       catalog-append.sh KEY+ISSUE 模式→ 同 issue 重审**替换**旧种子行
       （一单一行，新 reviewedVersion 生效；不同 issue 同包装仍走 KEY+LIVE 去重——
-      墓碑/未落地条目可重新投稿，removed[] 不算 in-flight）
+      **KEY 比较大小写不敏感**（`Owner/Repo` 投稿与 `owner/repo` 候选是同一
+      身份）；墓碑/未落地条目可重新投稿，removed[] 不算 in-flight）
   → verdict job（人工通道，见 §5）
   → review-alert job（needs review/report/ingest，failure()）：
       审查/入库基础设施失败时在 issue 留"可能未完成"评论+run 链接——
@@ -1304,10 +1357,11 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `discover/github.ts` | `discoverGithub` `searchTopic` `normalizeRepoUrl` `TOPICS` | GitHub topic 搜索候选 |
 | `discover/filter.ts` | `preAdmit` `looksLikeTemplateSpam` `hasPluginEvidence` `hasRepoEvidence` `hasSkillPath` | 入场过滤（archived/模板农场/插件证据/repo 证据门/skill 路径） |
 | `discover/seed.ts` | `buildSeedList` `extractRepos` `filterByStars` `repoToNpm` | awesome-list 冷启动种子（一次性工具） |
-| `fetch/npm.ts` | `fetchPackument` `fetchTarball` `fetchDownloads30d` | npm 拉取（status: ok/not-found/error） |
-| `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `repoFileExists` | repo 元数据/文件树探测（rate-limited 状态透传） |
-| `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags（MAX_UNPACKED=512MB 解压上限防 zip bomb；MAX_FINDINGS=500 截断+scan-capped 标记） |
-| `scan/rules.ts` | `RULES` `RULESET_VERSION='r3'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding） |
+| `pool.ts` | `mapPool` | 有界并发辅助（发现循环 ×3/×2、worker 池 ×10） |
+| `fetch/npm.ts` | `fetchPackument`（含 abbreviated install-v1）`fetchTarball`（手动重定向逐跳 https 校验 ≤5 跳）`fetchDownloads30d` `compatStrings` | npm 拉取（status: ok/not-found/error） |
+| `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `fetchMarketMeta` | repo 元数据/文件树探测（rate-limited 状态透传） |
+| `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags（MAX_UNPACKED=512MB 解压上限防 zip bomb；MAX_FINDINGS=500 截断+scan-capped 标记；已知良性二进制扩展名降 medium） |
+| `scan/rules.ts` | `RULES` `RULESET_VERSION='r4'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding；obfuscation/credential-read 限代码扩展名） |
 | `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
 | `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并（其后 release.ts 追赶应用裁决，R-10） |
