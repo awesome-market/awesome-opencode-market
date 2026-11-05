@@ -41,19 +41,11 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: 
   }
 }
 
-/** A failed slot gets bounded automatic retries (V-3): fewer than 3 recorded
- *  attempts re-enters the queue. Beyond that the version is genuinely dead —
- *  the only remaining path is manual --retest.
- *  Deliberately NOT wall-clock bounded: the old 7d window expired while a
- *  target waited in a deep queue — 'queue delay' and 'retry budget spent'
- *  were conflated, and a slot could hit terminal-failed having used zero of
- *  its 3 attempts. The attempts counter alone is the budget; each retry only
- *  lands when a shard actually measures the slot. */
-export const MAX_FAILED_ATTEMPTS = 3
-
-export function retryable(v: PluginEntry['verification'] | undefined): boolean {
-  return v?.status === 'failed' && (v.retries ?? 0) < MAX_FAILED_ATTEMPTS
-}
+// V-3 bounded-retry predicate lives in verify/retryable.ts — diagnose
+// imports the same semantics there (importing them here would cycle
+// plan → diagnose → plan). Re-exported so run.ts/tests keep working.
+export { retryable, MAX_FAILED_ATTEMPTS } from './retryable.ts'
+import { retryable } from './retryable.ts'
 
 /** Shared queue membership (planTargets + digest backlog §④): an unflagged
  *  slot with an installable payload that is unverified, a retryable recent
@@ -76,7 +68,7 @@ export function verifyQueued(
   // a standing concern (slot-keyed or package brake) already judged these
   // bytes — re-verifying re-measures a condemned verdict. The verdict moving
   // re-enters the slot naturally; only --retest bypasses.
-  if (latest && slotVerdict(e.name, t.version, latest, latestHuman ?? new Map())?.verdict === 'concern') return false
+  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version)?.verdict === 'concern') return false
   const ver = t.verification
   // 'skipped' only exists because red flags vetoed a run — flags gone means
   // the skip reason no longer describes the slot, so it re-queues for an

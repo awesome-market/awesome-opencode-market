@@ -212,7 +212,7 @@ describe('submission-status.main dry path', () => {
     const { main } = await import('../pipeline/submission-status.ts')
     const dir = mkdtempSync(join(tmpdir(), 'ss-'))
     const idx = join(dir, 'index.json'), subs = join(dir, 'subs.txt')
-    writeFileSync(idx, JSON.stringify(mkIdx([mkEntry('p')]).valueOf()))
+    writeFileSync(idx, JSON.stringify(mkIdx([mkEntry('p', { approval: 'pending' })]).valueOf()))
     writeFileSync(subs, '{"name":"p","issue":1,"notified":false}\n')
     const logs: string[] = []
     const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(a.join(' ')) })
@@ -237,7 +237,7 @@ describe('notify-published.main + repo-name match', () => {
     const logs: string[] = []
     const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(String(a[0])) })
     try { main(['node', 'x', idx, subs, stale, dead]) } finally { spy.mockRestore() }
-    expect(logs).toContain('3')
+    expect(logs).toContain('3\to/r')
     const after = readFileSync(subs, 'utf8')
     expect(after).toContain('"notified":true')
     expect(after).toContain('"dead":true')

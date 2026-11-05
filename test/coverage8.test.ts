@@ -210,14 +210,14 @@ describe('re-features.main edge branches', () => {
 describe('submission-status edges + gh upsert', () => {
   it('submissionStatuses: garbage lines, missing key, repo-match fallback', async () => {
     
-    const idx = mkIdx([mkEntry('o/r', { source: { kind: 'github', id: 'o/r', repo: 'O/R' } })])
+    const idx = mkIdx([mkEntry('o/r', { approval: 'pending', source: { kind: 'github', id: 'o/r', repo: 'O/R' } })])
     const rows = submissionStatuses(idx, [
       'plain text', '{bad json', '{"repo":"o/r","issue":7,"notified":false}',
       '{"issue":8,"notified":false}',          // no name/repo → skipped
       '{"name":"","issue":9,"notified":false}',
     ])
     expect(rows.map(r => r.issue)).toEqual([7])
-    expect(rows[0]!.phase).toBe('published')    // repo-seed matched the github entry (approved → published)
+    expect(rows[0]!.phase).toBe('review')       // repo-seed matched the github entry (pending → review)
   })
 })
 

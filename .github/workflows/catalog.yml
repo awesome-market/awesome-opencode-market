@@ -67,12 +67,13 @@ jobs:
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
           GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out
           path: |
             /tmp/index.json
+            /tmp/seed-outcomes.json
           retention-days: 1
 
   publish:
@@ -125,7 +126,9 @@ jobs:
             # stale snapshot over it — re-derive state from the freshest
             # remote jsonl + digest-state (idempotent; a brake that arrived
             # mid-run stays a brake, our own mature release still releases).
-            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
+            # stderr carries the released/held line — keep the LAST attempt's
+            # output for the step summary below (each retry truncates it)
+            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log; then
               mv /tmp/index.released.json /tmp/index.json
               RELEASE_FAILED=0
             else
@@ -149,6 +152,17 @@ jobs:
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
+          # surface the release fold's outcome — "what released this run" is
+          # the single most-asked question and today it sits inside a megabyte
+          # of discovery logs (the run.ts line is in the generate job; this is
+          # the publish-time re-apply that actually lands)
+          if [ -s /tmp/release-fold.log ]; then
+            { echo '## 放行折叠 (release fold)'
+              echo ''
+              grep -E '^release: ' /tmp/release-fold.log | tail -1
+              echo ''
+            } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          fi
           # G10: the publish succeeded but the verdict fold failed on the
           # last attempt — brakes/releases are deferred ~12h while the index
           # shows stale approval state. The workflow alert job can't see this
@@ -171,6 +185,9 @@ jobs:
           # are best-effort — the index is already published.
           if [ -f /tmp/cat/submissions.txt ]; then
             npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
+            # stamp per-seed rejection reasons from generate — a rejected
+            # submission's status comment must say WHY, not sit at '排队中'
+            npx tsx pipeline/seed-outcome.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/seed-outcomes.json
             git -C /tmp/cat add submissions.txt
             flagPushed=0
             for i in 1 2 3; do
@@ -180,6 +197,7 @@ jobs:
               git fetch origin catalog 2>/dev/null || true
               git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
               npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
+              npx tsx pipeline/seed-outcome.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/seed-outcomes.json
               git -C /tmp/cat add submissions.txt
             done
             # gate on the flag push: commenting without persisting notified:true
@@ -190,9 +208,11 @@ jobs:
             # issues[] is already deduped per issue inside markNotified — one
             # comment+close per submission no matter how many seed rows match
             sort -un /tmp/notify.list -o /tmp/notify.list
-            while read -r N; do
+            SITE="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+            while IFS=$'\t' read -r N SLUG; do
               [ -n "$N" ] || continue
-              gh issue comment "$N" --body "✅ 已收录进插件目录（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
+              LINK=""; [ -n "$SLUG" ] && LINK="——详情：$SITE/p/$SLUG.html"
+              gh issue comment "$N" --body "✅ 已收录进插件目录$LINK（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
               gh issue close "$N" || true
               echo "notified + closed issue #$N"
             done < /tmp/notify.list

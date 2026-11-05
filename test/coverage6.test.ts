@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
-import { main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
+import { main as diagnoseMain, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { main as digestMain } from '../pipeline/ai/digest.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
@@ -70,6 +70,11 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p))
+/** canary-aware l05 mock — the batch always carries the two self-check
+ *  blocks; a map that omits them trips "classifier untrusted" and every
+ *  real score gets dropped (that's the point of the canary). */
+const l05Map = (fixed: Record<string, number> = {}) =>
+  new Map<string, number>([[L05_CANARY_BENIGN.id, 0.1], [L05_CANARY_HOSTILE.id, 0.9], ...Object.entries(fixed)])
 
 describe('ai/diagnose.main', () => {
   const files = (plugins: PluginEntry[], verdicts: AiVerdict[] = []) => {
@@ -87,7 +92,7 @@ describe('ai/diagnose.main', () => {
   it('l05 clean + ornith pass → pass verdict written', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.1]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.1 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -100,7 +105,7 @@ describe('ai/diagnose.main', () => {
   it('l05 flag + ornith pass → composite concern (layering wins)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.9]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.9 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -123,7 +128,7 @@ describe('ai/diagnose.main', () => {
   it('ornith fails + l05 flag → concern still written (fail-closed via L0.5)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.99]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.99 }),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
@@ -134,7 +139,7 @@ describe('ai/diagnose.main', () => {
   it('ornith fails + no l05 → NO verdict (stays held, retried next run)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
@@ -145,7 +150,7 @@ describe('ai/diagnose.main', () => {
     const { ip, vp, op } = files([failed])
     let called = false
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { called = true; throw new Error('must not be called') },
       sha: noSha,
     })
@@ -160,7 +165,7 @@ describe('ai/diagnose.main', () => {
     const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -173,7 +178,7 @@ describe('ai/diagnose.main', () => {
     const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
@@ -199,7 +204,7 @@ describe('ai/diagnose.main', () => {
   it('sha drift on a verdicted version → auto re-review', async () => {
     const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-old' })])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: '重审', reasonEn: 're' }),
       sha: () => 'sha512-new',
     })
@@ -212,7 +217,7 @@ describe('ai/diagnose.main', () => {
     const { ip, vp, op } = files([held])
     let called = false
     await diagnoseMain(argv(ip, vp, op, ['--budget', '0']), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { called = true; throw new Error('x') },
       sha: noSha,
     })
@@ -225,7 +230,7 @@ describe('ai/diagnose.main', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       await diagnoseMain(argv(ip, vp, op, ['--dry', '--name', 'pkg']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
         sha: noSha,
       })
@@ -233,7 +238,7 @@ describe('ai/diagnose.main', () => {
       expect(log.mock.calls.flat().join(' ')).toContain('"name":"pkg"')
       // --limit 1 slices candidates
       await diagnoseMain(argv(ip, vp, op, ['--limit', '1']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
         sha: noSha,
       })
@@ -243,7 +248,7 @@ describe('ai/diagnose.main', () => {
   it('existing verdict (any source) excludes the target; matching sha = no drift', async () => {
     const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-x' })])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
       sha: () => 'sha512-x',
     })
@@ -345,7 +350,7 @@ describe('notify-published.main', () => {
       expect(JSON.parse(out[0]!).notified).toBe(true)
       expect(JSON.parse(out[1]!).notified).toBe(false)
       expect(out[2]).toBe('not-json')
-      expect(log.mock.calls.flat().join('')).toBe('42')
+      expect(log.mock.calls.flat().join('')).toBe('42\to/pkg')
     } finally { log.mockRestore() }
   })
 })
