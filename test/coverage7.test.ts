@@ -16,7 +16,16 @@ vi.mock('node:child_process', () => ({
     if (cmd === 'npm') return 'sha512-abc\n'
     throw new Error(`unexpected exec ${cmd}`)
   },
-  execFile: () => { throw new Error('unused') },
+  execFile: (cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv },
+    cb: (err: Error | null, result?: { stdout: string; stderr?: string }) => void) => {
+    // docket's gh wrapper is async execFile (promisify) — record it the same
+    // way so the env-mapping assertion keeps covering the real call shape.
+    // The mock has no promisify.custom, so default-promisify resolves the
+    // callback's 2nd arg verbatim — hand it the {stdout} shape gh expects.
+    execCalls.push({ cmd, args, env: opts.env })
+    if (cmd === 'gh') cb(null, { stdout: '[]' })
+    else cb(new Error(`unexpected exec ${cmd}`))
+  },
 }))
 
 import { l05Score, makeIntegrityOf } from '../pipeline/ai/diagnose.ts'

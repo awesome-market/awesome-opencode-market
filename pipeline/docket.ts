@@ -22,10 +22,13 @@
  *    (gh cli + GH_TOKEN env; GH_REPO=owner/repo) */
 import { appendFileSync, readFileSync } from 'node:fs'
 import { exit, env } from 'node:process'
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
-import { vkey, akey, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
+import type { PluginEntry } from '../src/schema.ts'
+import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
+import { candidateHeldAt } from './ai/diagnose.ts'
 
 export interface DocketTarget {
   name: string
@@ -54,6 +57,17 @@ export interface DocketTarget {
   unscanned?: boolean
   heldAt?: string
   publishedAt?: string | undefined
+  /** verdict line's pinned tarball sha vs the slot's live integrity anchor —
+   *  a same-version re-tag means the judgment no longer covers the bytes
+   *  that would ship (applyMatureVerdicts' shaOk gate refuses the release) */
+  verdictSha?: string
+  integrity?: string | null
+  /** AI audit trail for the reviewer — judging model + L0.5 classifier score */
+  model?: string
+  l05Score?: number
+  /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
+   *  without opening the detail page */
+  scanPreview?: string[]
   /** aggregate repo-only backlog — a per-entry standing issue per
    *  version-less pending floods the tracker (400+ rows and growing); the
    *  aggregate carries the queue in ONE issue whose body regenerates */
@@ -72,6 +86,19 @@ export const issueTitle = (t: Pick<DocketTarget, 'name' | 'version'>) =>
  *  AI queue merely defers don't immediately spam the human one. */
 export const NO_VERDICT_AGE_MS = 48 * 3600e3
 
+/** The candidate-version clock's STRING form, mirroring candidateHeldAt's
+ *  source order (pendingUpdate.heldAt → candidate capabilities.scannedAt →
+ *  firstSeenAt): returns the first stamp that actually parses. firstSeenAt
+ *  alone undercounts a pending entry re-scanned after a version bump — the
+ *  scan stamp IS the candidate's birth, and the 48h window below must measure
+ *  the same clock diagnose's degraded-review window does. */
+function heldStamp(e: PluginEntry): string | undefined {
+  const caps = e.pendingUpdate?.capabilities ?? e.capabilities
+  for (const s of [e.pendingUpdate?.heldAt, caps.scannedAt, e.firstSeenAt])
+    if (s && Number.isFinite(Date.parse(s))) return s
+  return e.firstSeenAt || undefined
+}
+
 /** Pending targets that need a human surface: latest verdict came from AI,
  *  a live entry carries identity sec flags, or no verdict exists past the
  *  age threshold. */
@@ -87,11 +114,25 @@ export function docketTargets(
   const announced = new Set(digest?.announced ?? [])
   const out: DocketTarget[] = []
   const repoOnly: NonNullable<DocketTarget['backlog']> = []
+  /** Package-level human brake — applyMatureVerdicts' verdictFor overrides
+   *  EVERY slot of the package with a human concern on name@null until a
+   *  newer human pass lands on that slot key. Mirrored here so a braked
+   *  package doesn't spawn per-version issues whose release the gate will
+   *  never grant — the brake itself is the standing decision. (version=null
+   *  keys are github-kind SLOTS, not package brakes — verdictFor skips them.) */
+  const pkgBrake = (name: string, ver: string): AiVerdict | undefined => {
+    const h = human.get(vkey(name, null))
+    if (h?.verdict !== 'concern') return undefined
+    const slotHuman = human.get(vkey(name, ver))
+    if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, h.at) > 0) return undefined
+    return h
+  }
   for (const e of index.plugins) {
     // slot = what the issue is about: the pendingUpdate when held, else the
     // entry itself. heldAt/publishedAt follow the candidate, not the entry.
     const slot = e.pendingUpdate ?? e
-    const held = e.pendingUpdate ? e.pendingUpdate.heldAt : e.firstSeenAt
+    const held = heldStamp(e)
+    const preview = [...slot.capabilities.redFlags.slice(0, 2), ...slot.capabilities.findings.slice(0, 2)]
     const meta = {
       findings: slot.capabilities.findings.length,
       redFlags: slot.capabilities.redFlags.length,
@@ -102,6 +143,8 @@ export function docketTargets(
       ...(e.slug ? { slug: e.slug } : {}),
       ...(held ? { heldAt: held } : {}),
       ...(slot.publishedAt ? { publishedAt: slot.publishedAt } : {}),
+      ...(slot.integrity ? { integrity: slot.integrity } : {}),
+      ...(preview.length ? { scanPreview: preview.map(s => s.slice(0, 160)) } : {}),
     }
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
     // live entry. Held entries already have a review channel (the held
@@ -136,13 +179,23 @@ export function docketTargets(
       }
       continue
     }
+    // 包级人工 concern = 覆盖所有槽位的 standing decision——该版本没有独立
+    // 的"未决"状态可呈现（与同键人工裁决同等终局语义）；槽位上更新的人工
+    // pass 已按 verdictFor 规则解除了刹车，不在此列
+    if (pkgBrake(e.name, ver)) continue
     const rec = latest.get(vkey(e.name, ver))
     if (!rec) {
       // no verdict AT ALL on a held version: the diagnose queue is behind or
       // dead (launchd pause). Young holds stay AI's job; aged ones get the
       // same standing-issue channel as repo-only so they can't go invisible.
-      const held = Date.parse(e.pendingUpdate?.heldAt ?? e.firstSeenAt)
-      if (Number.isFinite(held) && now - held >= NO_VERDICT_AGE_MS) {
+      // candidateHeldAt — the SAME clock diagnose's 48h degraded window and
+      // digest §② use (pendingUpdate.heldAt → candidate scannedAt →
+      // firstSeenAt): firstSeenAt alone would flag a freshly-bumped pending
+      // entry as instantly overdue. Unparseable stamps → NaN → treated as
+      // AGED, not invisible — a corrupt clock must surface a human issue,
+      // never silently suppress one (fail-visible, matching diagnose).
+      const heldMs = candidateHeldAt(e)
+      if (!Number.isFinite(heldMs) || now - heldMs >= NO_VERDICT_AGE_MS) {
         out.push({ name: e.name, version: ver, verdict: 'none', ...meta })
       }
       continue
@@ -154,6 +207,9 @@ export function docketTargets(
       ...(rec.reason ? { reason: rec.reason } : {}),
       ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
       ...(hv ? { humanVerdict: hv } : {}),
+      ...(rec.sha ? { verdictSha: rec.sha } : {}),
+      ...(rec.model ? { model: rec.model } : {}),
+      ...(rec.l05 ? { l05Score: rec.l05.score } : {}),
       maturity: announced.has(akey(rec)) ? 'announced' : 'pending-announce',
       ...meta,
     })
@@ -172,15 +228,30 @@ export function docketTargets(
   return out
 }
 
+const execFileP = promisify(execFile)
+
 /* v8 ignore next 8 -- the real gh CLI is never invoked under unit tests */
-const gh = (args: string[]) =>
-  execFileSync('gh', args, {
+const gh = async (args: string[]): Promise<string> => {
+  const { stdout } = await execFileP('gh', args, {
     encoding: 'utf8',
     // `issue list --json body` × a full queue is multi-MB — the 1MB default
     // would crash the sync permanently once the backlog outgrows it
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, GH_TOKEN: env.GITHUB_TOKEN ?? env.GH_TOKEN },
   })
+  return stdout
+}
+
+/** gh may be sync (tests) or async (real execFile) — await unwraps both. */
+type GhFn = (args: string[]) => string | Promise<string>
+
+interface OpenIssue {
+  number: number
+  title: string
+  labels?: { name: string }[]
+  body?: string
+  assignees?: { login: string }[]
+}
 
 export interface IssueBodyOpts {
   repo?: string | null
@@ -192,12 +263,26 @@ export interface IssueBodyOpts {
   stuckLabel?: string | null
 }
 
+/** AGENTS.md 检验规则 — 裸枚举不是用户语言：verified→已实测可装可用 etc. */
+const VERI_ZH: Record<string, string> = {
+  verified: '已实测可装可用', failed: '装不上或加载失败',
+  skipped: '有高危信号没跑', unverified: '还没验',
+}
+
 /** Deterministic body (no timestamps) — the sync loop regenerates it for open
  *  issues and only edits when it actually differs, so verify-status changes,
  *  verdict flips, maturity transitions and stuck-label states propagate
  *  instead of leaving creation-time text stale. */
 export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   const L: string[] = [`## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '']
+  // reason/scan text is model- or plugin-influenced content rendered into
+  // the maintainer's highest-trust surface — escape markdown/HTML the same
+  // way digest.ts does (links, code spans, fake headings all stay inert),
+  // collapse whitespace, bound length (prompt-injection / formatting defense)
+  const clean = (s: string, max = 300) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/([\\[\]])/g, '\\$1')
+    .replace(/\s+/g, ' ').trim().slice(0, max)
   if (t.backlog) {
     // aggregate repo-only standing issue — per-entry issues at this scale are
     // tracker spam; the body regenerates every sync so the list stays live
@@ -227,12 +312,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${t.reason ?? 'sec:*'}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
   } else {
-    // reason text flows from verify log excerpts / model output — plugin-
-    // influenced content rendered into an issue body; flatten newlines and
-    // bound the length so a crafted excerpt can't smuggle markdown sections
-    const clean = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 300)
     L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
     if (t.reasonEn) L.push(`  - ${clean(t.reasonEn)}`)
+    if (t.model || t.l05Score !== undefined) {
+      L.push(`- AI 审计：${t.model ?? '模型未记录'}${t.l05Score !== undefined ? ` · L0.5 ${t.l05Score.toFixed(2)}` : ''}`)
+    }
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
       L.push(`- ⚠️ 静态扫描红旗 ${t.redFlags} 项：AI pass 已被忽略规则拦截——本版本**只能人工放行**（勾 \`verdict:pass\`）或维持拦截（勾 \`verdict:concern\`）`)
     } else if (t.verdict === 'pass' && t.unscanned) {
@@ -253,15 +337,23 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
         : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
   }
   if (t.humanVerdict) {
-    L.push(`- 最新人工判词：**${t.humanVerdict.verdict}**${t.humanVerdict.reason ? ` — ${t.humanVerdict.reason}` : ''}` +
+    L.push(`- 最新人工判词：**${t.humanVerdict.verdict}**${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}` +
       (t.humanVerdict.verdict === 'concern' && t.verdict === 'pass'
         ? '（在押刹车——AI 新判 pass 不会自动放行，本单为复审）' : ''))
   }
-  L.push(`- 验证状态：${t.verification ?? 'unverified'}`)
+  const vs = t.verification ?? 'unverified'
+  L.push(`- 验证状态：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}`)
   if (t.unscanned) {
     L.push('- 静态扫描：**未运行**（findings/redFlags 为空是缺数据，不是无发现）')
   } else if ((t.redFlags ?? 0) > 0 || (t.findings ?? 0) > 0) {
     L.push(`- 静态扫描：redFlags ${t.redFlags ?? 0} / findings ${t.findings ?? 0}`)
+  }
+  if (t.scanPreview?.length) {
+    L.push('- 扫描摘录（前几条，完整清单见详情页）：')
+    for (const s of t.scanPreview) L.push(`  - ${clean(s, 160)}`)
+  }
+  if (t.verdictSha && t.integrity && t.verdictSha !== t.integrity) {
+    L.push('- ⚠️ 裁决钉的字节与当前槽位完整性指纹不一致——疑似同版本换包（re-tag）：放行闸会拒绝按此裁决生效，等 drift 复审或人工重判')
   }
   if (t.heldAt) {
     L.push(`- 在押自：${t.heldAt.slice(0, 10)}${t.publishedAt ? `；npm 发布于 ${t.publishedAt.slice(0, 10)}` : ''}`)
@@ -290,16 +382,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   return L.join('\n')
 }
 
-interface OpenIssue {
-  number: number
-  title: string
-  labels?: { name: string }[]
-  body?: string
-}
-
 export async function main(
   args: string[] = process.argv,
-  ghFn: typeof gh = gh,
+  ghFn: GhFn = gh,
 ): Promise<void> {
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
   const [idxPath, verdictsPath, digestPath] = ['--index', '--verdicts', '--digest-state'].map(arg)
@@ -317,6 +402,26 @@ export async function main(
   const pagesBase = env.MARKET_PAGES_URL
     ?? `https://${repo.split('/')[0]}.github.io/${repo.split('/')[1]}`
 
+  // flag/concern issues are decisions waiting on a human — assign them so
+  // GitHub pushes a notification (the phone-decision loop's missing link).
+  // pass/none stay quiet: they're objection windows, not asks. Configured
+  // via the DOCKET_ASSIGNEE repo variable (comma-separated logins); unset =
+  // feature off. Assignment is best-effort — a rejected assignee must never
+  // fail the verdict sync itself.
+  const assignees = (env.DOCKET_ASSIGNEE ?? '').split(',').map(s => s.trim()).filter(Boolean)
+  const urgent = (t: DocketTarget) => t.verdict === 'flag' || t.verdict === 'concern'
+  const assignBestEffort = async (issue: string | number, only?: string[]) => {
+    if (!assignees.length) return
+    const want = only ?? assignees
+    if (!want.length) return
+    try {
+      await ghFn(['issue', 'edit', '-R', repo, String(issue), '--add-assignee', want.join(',')])
+      console.log(`[docket] assigned #${issue} → ${want.join(',')}`)
+    } catch (err) {
+      console.warn(`[docket] assignee write failed for #${issue} (non-fatal):`, err)
+    }
+  }
+
   // Enumerate open issues with REST pagination (strongly consistent — the
   // search API is eventually-consistent and could double-create within an
   // index-lag window). title-prefix filter, not label filter: an issue whose
@@ -324,10 +429,11 @@ export async function main(
   // covers EVERY open issue, not just review ones — warn loudly at the bound
   // so truncation is visible instead of silently dropping tails.
   const LIST_LIMIT = 4000
-  const listed = (JSON.parse(ghFn(['issue', 'list', '-R', repo,
-    '--state', 'open', '--json', 'number,title,labels,body', '--limit', String(LIST_LIMIT)])) as
-    OpenIssue[])
-  if (listed.length >= LIST_LIMIT) {
+  const listed = (JSON.parse(await ghFn(['issue', 'list', '-R', repo,
+    '--state', 'open', '--json', 'number,title,labels,body,assignees',
+    '--limit', String(LIST_LIMIT)])) as OpenIssue[])
+  const listCapped = listed.length >= LIST_LIMIT
+  if (listCapped) {
     console.warn(`[docket] open-issue listing hit limit ${LIST_LIMIT} — issues past the bound are not synced this tick`)
   }
   const open = listed.filter(i => i.title.startsWith('[review]'))
@@ -336,50 +442,80 @@ export async function main(
     const l = openByTitle.get(i.title)
     if (l) l.push(i); else openByTitle.set(i.title, [i])
   }
-  // canonical = newest issue per title; older same-title duplicates get
-  // closed below instead of pinning the queue forever
+  // canonical = NEWEST issue per title — issue numbers are monotonic, so
+  // max(number) is the deterministic pick and doesn't depend on the API's
+  // sort order (gh lists newest-first today; relying on array position was
+  // how the "keep newest" comment drifted from behavior). Older same-title
+  // duplicates get closed below instead of pinning the queue forever.
   const canonical = new Map<string, OpenIssue>()
-  for (const [title, l] of openByTitle) canonical.set(title, l[l.length - 1]!)
+  for (const [title, l] of openByTitle)
+    canonical.set(title, l.reduce((a, b) => (b.number > a.number ? b : a)))
 
   const created: string[] = []
   const updated: string[] = []
   const closed: string[] = []
+  interface Op { kind: 'create' | 'update' | 'close'; title: string; run: () => Promise<unknown> | unknown }
+  const ops: Op[] = []
 
   for (const [title, t] of wanted) {
     const ex = canonical.get(title)
     if (!ex) {
       console.log(`[docket] create ${title}`)
-      created.push(title)
-      if (!dry) {
-        ghFn(['issue', 'create', '-R', repo, '--title', title,
-          '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
-          '--body', issueBody(t, { repo, pagesBase })])
-      }
+      const args = ['issue', 'create', '-R', repo, '--title', title,
+        '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
+        '--body', issueBody(t, { repo, pagesBase })]
+      if (dry) { created.push(title); continue }
+      ops.push({ kind: 'create', title, run: async () => {
+        const url = String(await ghFn(args))
+        created.push(title)
+        // gh issue create prints the issue URL — parse the number back for
+        // the best-effort assignee pass (a mock/empty stdout just skips it)
+        const num = url.match(/(\d+)\s*$/)?.[1]
+        if (urgent(t) && num) await assignBestEffort(num)
+      } })
       continue
     }
     // drift-sync (K-2): the ai:* label and the body must track the CURRENT
     // verdict — a flip (ai:pass → ai:concern, or a verify landing) must not
     // leave creation-time text asking the maintainer to act on stale info.
-    // A stuck verdict:pass/concern label (applied but never written to the
-    // jsonl — write-back job failed) is folded into the body too: the label
-    // event can't re-fire, so the body is the only place that can say so.
+    // EVERY stale ai:* label goes, not just the first match — multi-label
+    // drift otherwise never converges. A stuck verdict:pass/concern label
+    // (applied but never written to the jsonl — write-back job failed) is
+    // folded into the body too: the label event can't re-fire.
     const curLabels = new Set((ex.labels ?? []).map(l => l.name))
-    const curAi = [...curLabels].find(l => l.startsWith('ai:')) ?? null
     const wantAi = t.verdict === 'pass' || t.verdict === 'concern' ? `ai:${t.verdict}` : null
+    const staleAi = [...curLabels].filter(l => l.startsWith('ai:') && l !== wantAi)
+    const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
     const stuck = [...curLabels].find(l => l === 'verdict:pass' || l === 'verdict:concern') ?? null
     const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck })
     const bodyDrift = ex.body !== undefined && ex.body.trim() !== body.trim()
     const edit = ['issue', 'edit', '-R', repo, String(ex.number)]
-    if (curAi !== wantAi) {
-      if (curAi) edit.push('--remove-label', curAi)
-      if (wantAi) edit.push('--add-label', wantAi)
-    }
+    for (const l of staleAi) edit.push('--remove-label', l)
+    if (missingAi) edit.push('--add-label', missingAi)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
     if (bodyDrift) edit.push('--body', body)
     if (edit.length > 5) {
-      console.log(`[docket] update #${ex.number} ${title}${curAi !== wantAi ? ` (${curAi ?? 'no-ai-label'} → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}${stuck ? ` (stuck ${stuck})` : ''}`)
-      updated.push(title)
-      if (!dry) ghFn(edit)
+      console.log(`[docket] update #${ex.number} ${title}${staleAi.length || missingAi ? ` (ai → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}${stuck ? ` (stuck ${stuck})` : ''}`)
+      if (dry) { updated.push(title); continue }
+      const curAssignees = new Set((ex.assignees ?? []).map(a => a.login))
+      ops.push({ kind: 'update', title, run: async () => {
+        await ghFn(edit)
+        updated.push(title)
+        if (urgent(t)) {
+          const missing = assignees.filter(a => !curAssignees.has(a))
+          if (missing.length) await assignBestEffort(ex.number, missing)
+        }
+      } })
+    } else if (urgent(t) && assignees.length) {
+      // no drift but the notification assignee is missing — still worth one
+      // best-effort write so an old issue picks up the ping
+      const missing = assignees.filter(a => !(ex.assignees ?? []).some(x => x.login === a))
+      if (missing.length && !dry) {
+        ops.push({ kind: 'update', title, run: async () => {
+          await assignBestEffort(ex.number, missing)
+          updated.push(title)
+        } })
+      }
     }
   }
 
@@ -404,8 +540,9 @@ export async function main(
     if (wanted.has(i.title) && canonical.get(i.title) === i) continue
     const why = wanted.has(i.title) ? '重复审核单（同目标已有在办单）' : closeReason(i)
     console.log(`[docket] close #${i.number} ${i.title} (${why})`)
-    closed.push(i.title)
-    if (!dry) {
+    if (dry) { closed.push(i.title); continue }
+    // per-issue ordering preserved inside one op: labels → comment → close
+    ops.push({ kind: 'close', title: i.title, run: async () => {
       // converge to the same terminal label the concern.yml ack sets —
       // otherwise closed issues keep `review:pending` forever and label
       // filters see a false queue
@@ -413,22 +550,47 @@ export async function main(
       const largs: string[] = []
       if (cur.has('review:pending')) largs.push('--remove-label', 'review:pending')
       if (!cur.has('review:decided')) largs.push('--add-label', 'review:decided')
-      if (largs.length) ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
-      ghFn(['issue', 'comment', '-R', repo, String(i.number),
+      if (largs.length) await ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
+      await ghFn(['issue', 'comment', '-R', repo, String(i.number),
         '--body', `该版本的审核单已自动关闭：${why}。`])
-      ghFn(['issue', 'close', '-R', repo, String(i.number)])
-    }
+      await ghFn(['issue', 'close', '-R', repo, String(i.number)])
+      closed.push(i.title)
+    } })
   }
-  console.log(`[docket] ${wanted.size} open-decision targets, ${open.length} review issues open`)
+
+  // bounded concurrency: serial gh calls made large backlogs brush the 10min
+  // timeout; 6-wide stays far under GitHub's secondary rate limits while the
+  // job-level review-docket group still serializes whole runs. A failed op
+  // doesn't cancel siblings — independent issues still converge this tick —
+  // but failures are collected and thrown AFTER the summary so the alert job
+  // still sees a red run (no silent partial sync).
+  const GH_POOL = 6
+  const failures: string[] = []
+  let cursor = 0
+  await Promise.all(Array.from({ length: Math.min(GH_POOL, ops.length) }, async () => {
+    while (cursor < ops.length) {
+      const op = ops[cursor++]!
+      try { await op.run() } catch (err) {
+        failures.push(`${op.kind} ${op.title}`)
+        console.error(`[docket] ${op.kind} failed: ${op.title}`, err)
+      }
+    }
+  }))
+
+  console.log(`[docket] ${wanted.size} open-decision targets, ${open.length} review issues open` +
+    (failures.length ? `, ${failures.length} write failure(s)` : ''))
   const summary = env.GITHUB_STEP_SUMMARY
   if (summary) {
     appendFileSync(summary, [
       '## review-docket', '',
       `- 待决目标 ${wanted.size} / 在办单 ${open.length}`,
       `- 新开 ${created.length} / 更新 ${updated.length} / 关闭 ${closed.length}`,
+      ...(listCapped ? [`- ⚠️ open issue 列表触顶 ${LIST_LIMIT}——超出部分本轮未同步，下一轮续收敛`] : []),
+      ...(failures.length ? [`- ⚠️ 写操作失败 ${failures.length}：${failures.join('; ')}`] : []),
       '', ...(created.length ? [`新开：${created.join(', ')}`, ''] : []),
     ].join('\n'))
   }
+  if (failures.length) throw new Error(`[docket] ${failures.length} write op(s) failed — ${failures.join('; ')}`)
 }
 
 /* v8 ignore next 4 */

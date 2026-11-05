@@ -690,7 +690,7 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | D-X watchdog dedupe `--search` 全文匹配——正文提到 "pipeline stale" 的 issue 会被误当 dedupe 目标 | ✅ | scope `in:title` |
 | D-Y watchdog 缺第三腿：`digest-state.json` 陈旧（"workflow 绿过但 state 没落盘"的最终兜底） | ✅ | >36h → pipeline-alert 追加 |
 | D-Z digest/watchdog worktree 无 `remove --force` 预清 | ✅ | 与 verify merge 同款预清 |
-| D-T docket 无 timeout + fetch 失败红化（瞬断该等下轮不该报警） | ✅ | timeout 15min；fetch 失败按"下轮再试"defer 不红 |
+| D-T docket 无 timeout + fetch 失败红化（瞬断该等下轮不该报警） | ✅ | timeout 10min；fetch 失败按"下轮再试"defer 不红 |
 
 **验证**：typecheck 0 错；新回归覆盖：akey 去重单行渲染、幽灵/刹车行标、mdEsc 链接逃逸、§② cap50+截断、六档相位标、§⑤ 共享谓词（<48h unverified 不计）、`verifyQueued` parts 拒收、`loadVerdicts` 非 ISO `at` 丢弃、docket maturity 相位（announced/pending-announce）。
 
@@ -727,3 +727,23 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 小项 | ✅ | `arg()` 缺 flag 时 `indexOf=-1` → 取 `args[0]` 而非 undefined（docket+digest 两处）；同题重单保留最新号关旧；关单注释按因区分（已决议/已放行/重复/出索引）；自动关单补齐 `review:decided`；标签+正文合并单次 `gh issue edit`；创建按严重度排序（flag 最后=最新最急）；`GITHUB_STEP_SUMMARY` 汇总；`--dry` dispatch input；`issueBody` 红旗 pass"只能人工放行"提示 |
 
 **验证**：typecheck 0 错；689 tests 全过（docket +13 新例：超龄档/年轻在押不归人工/flag 谓词与消除/严重度排序/成熟相位/红旗提示/stuck 警示/decided 终态/重复单关闭/关单原因）。
+
+## 附十七：审核单流三审（docket.yml 全流程，K-12…K-16 + 优化落地）
+
+对照 DATA-FLOWS §8 逐行核对 docket.ts/verdicts.ts/concern.yml 现状，并回归检查前几轮 agent 修复是否引入新问题。确认 K/HV/D/R 系列修复全部成立；本轮发现 1 中 2 低 2 边缘缺陷，全部修复并落地优化项。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| K-12 48h 无裁决时钟口径漂移：docket 用 `pu.heldAt ?? firstSeenAt`，未消费 R-12 的 `candidateHeldAt`（heldAt→候选槽 scannedAt→firstSeenAt）——pending+跨版本 bump 的老条目 `firstSeenAt` 是条目级跨版本保留，昨天才 bump 的候选被误判超龄，立即开 `verdict:'none'` 人工单，违反"年轻在押归 AI 队列"设计；同一时钟还驱动在押展示与排序键 | ✅ | `docketTargets` 导入 `candidateHeldAt`；`heldStamp` 展示值同口径（heldAt→scannedAt→firstSeenAt）；时间戳全不可解析 → NaN → 按超龄处理（fail-visible，坏时钟宁可多开单不静默吞） |
+| K-13 canonical 重单保留"最旧"：`gh issue list` 默认 created-desc（新→旧），取数组尾实为最旧单，与注释/测试名/文档"留最新"三处声明相反 | ✅ | canonical 改 `reduce` 取 `max(number)`——issue 号单调递增，不依赖 API 返回序 |
+| K-14 `issueBody` 裸插 AI reason：digest 对同一不可信字段做 escMd/escCell，审核单（最高信任面）反而不转义——模型输出可经 material 受 prompt injection，`\n\n### 伪造段落`/`[链接](evil)` 直接渲染在裁决界面 | ✅ | `issueBody` 全部外部文本过 `clean`：折叠空白 + `[` `]` `` ` `` `\` 转义 + HTML 实体 + 长度截断，与 digest 同口径 |
+| K-15 `ai:*` 标签漂移只收敛第一个匹配——单上残留多 `ai:*` 标签（人工误加/历史 bug）每轮只摘一个、永不收敛 | ✅ | 改 `filter` 全量比对：除 wantAi 外所有 `ai:*` 全摘；回归测试覆盖双 `ai:*` 残留 |
+| K-16 heldAt 不可解析 → `verdict:'none'` 静默跳过：该版本永远无 standing issue，与 diagnose "NaN=按老处理"语义相反 | ✅ | 并入 K-12：`!Number.isFinite(heldMs)` 视同超龄 fail-visible |
+| 包级人工刹车未镜像：`applyMatureVerdicts` 的 `verdictFor` 让 name\0null human concern 覆盖全部版本槽位，但 docket 仍对被刹包逐版本开单——刹车本身已是 standing decision，重复开单是噪音 | ✅ | `docketTargets` 镜像同一规则：name\0null 最新 human concern 压制该包版本级目标（除非有更新 human pass 释放）；github-kind 的 null 键是槽位键不适用 |
+| flag/concern 单无触达：开了单但无人被通知，维护者须主动刷列表——手机裁决闭环缺最后一环 | ✅ | `DOCKET_ASSIGNEE` repo 变量（逗号分隔登录名）→ flag/concern 单 `--add-assignee`；pass/none 不打扰（异议窗口非常态）；assignee 写失败 catch+warn 不拖垮同步；已存在单缺 assignee 时补指派 |
+| 正文信息密度不足：verification 裸枚举、无 AI 审计元数据、无 findings 摘要、无 integrity 漂移警示 | ✅ | 验证状态映射 AGENTS 四态中文（已实测可装可用/装不上或加载失败/有高危信号没跑/还没验）；`AI 判定：model · L0.5 score` 审计行；扫描计数+前几条扫描摘录（unscanned 槽显式标注"没扫到不等于安全"）；裁决 sha vs 槽位 integrity 不符警示（re-tag 时 shaOk 闸会拒）；包级刹车上下文 |
+| repo-only 'none' 单无聚合：500+ 在押规模下逐条 issue 是 tracker 洪水，只能等人工逐条裁决 | ✅ | 聚合为一张 `[review] (repo-only backlog)` standing 总单：正文每轮重生成、列前 40 条（在押久者优先）、给 `/approve 名`/`/concern 名 理由` 指引；积压清空自动关；`(…)` 哨兵让 titleTarget 解析 null——concern.yml isReview 排除 `[review] (` 前缀，逐条裁决不误关总单；逐条遗留单关单注明"并入总单" |
+| gh 写操作全串行 execFileSync：wanted 上百时 ~1s/op 逼近 timeout-minutes:10 | ✅ | `execFile` promisify + 6 路并发 worker pool；单 op 失败不拖垮兄弟（失败收集后统一抛出，alert job 照常见红）；job 级 review-docket 并发组仍串行整轮防双建 |
+| 4000 列单上限告警只进 console.warn——跑完即淹，summary 里看不到 | ✅ | 告警同时写 `GITHUB_STEP_SUMMARY`；summary 增列触顶/失败计数 |
+
+**验证**：typecheck 0 错；40 文件 861 tests 全过（docket +N 新例：candidateHeldAt 时钟口径/NaN fail-visible/canonical max(number)/reason 转义/双 ai:* 收敛/assignee 三态/包级刹车/总单聚合与自动关/并发池/summary 告警）；DATA-FLOWS §8 与 PIPELINE-ISSUES 附十七同步落地；D-T 文档漂移修正（15min→10min 与 docket.yml 实际一致）。

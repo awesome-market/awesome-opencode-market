@@ -48,7 +48,58 @@ describe('docketTargets', () => {
     expect(docketTargets(idx([e({ approval: 'approved' })]), [v()])).toEqual([])
   })
   it('no verdict yet → AI queue will handle, no human ask', () => {
-    expect(docketTargets(idx([e()]), [])).toEqual([])
+    // young candidate clock → still AI-owned; 't' fixtures are unparseable
+    // and would (correctly) fail-visible as aged — use real stamps here
+    const recent = { scannedAt: '2026-01-04T12:00:00Z', findings: [] as string[], redFlags: [] as string[] }
+    expect(docketTargets(idx([e({ firstSeenAt: '2026-01-04T00:00:00Z', capabilities: recent })]), [], null,
+      { now: '2026-01-05T00:00:00Z' })).toEqual([])
+  })
+  it('candidate clock: pending entry re-scanned recently stays young even when firstSeenAt is ancient', () => {
+    // F1 regression — firstSeenAt is entry-level and survives version bumps;
+    // the candidate slot's scannedAt is the real hold clock (same source
+    // order as diagnose's candidateHeldAt)
+    const t = docketTargets(idx([e({
+      firstSeenAt: '2020-01-01T00:00:00Z',
+      capabilities: { scannedAt: '2026-01-04T12:00:00Z', findings: [], redFlags: [] },
+    })]), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(t).toEqual([])
+  })
+  it('candidate clock: old scannedAt wins over newer firstSeenAt → aged none issue shows the scan stamp', () => {
+    const t = docketTargets(idx([e({
+      firstSeenAt: '2026-01-04T00:00:00Z',
+      capabilities: { scannedAt: '2020-06-01T00:00:00Z', findings: [], redFlags: [] },
+    })]), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z' }])
+  })
+  it('unparseable hold clock → fail-VISIBLE none issue, never silent suppression', () => {
+    const t = docketTargets(idx([e({
+      firstSeenAt: 'not-a-date',
+      capabilities: { scannedAt: null, findings: [], redFlags: [] },
+    })]), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(t[0]!.verdict).toBe('none')
+    expect(t[0]!.unscanned).toBe(true)
+  })
+  it('package-level human concern (name@null) suppresses per-version targets — the brake IS the decision', () => {
+    const t = docketTargets(idx([e()]), [
+      v({ verdict: 'pass' }),
+      v({ version: null, verdict: 'concern', source: 'human', at: '2026-01-02T00:00:00Z' }),
+    ])
+    expect(t).toEqual([])
+  })
+  it('package brake also suppresses the aged-none surface (a decision already exists)', () => {
+    const t = docketTargets(idx([e({ firstSeenAt: '2020-01-01T00:00:00Z' })]), [
+      v({ version: null, verdict: 'concern', source: 'human' }),
+    ], null, { now: '2026-01-05T00:00:00Z' })
+    expect(t).toEqual([])
+  })
+  it('a newer human pass on the slot lifts the package brake → target returns', () => {
+    const t = docketTargets(idx([e()]), [
+      v({ version: null, verdict: 'concern', source: 'human', at: '2026-01-01T00:00:00Z' }),
+      v({ verdict: 'pass', source: 'human', at: '2026-01-03T00:00:00Z' }),
+      v({ verdict: 'concern', at: '2026-01-04T00:00:00Z' }),
+    ])
+    expect(t[0]!.verdict).toBe('concern')
   })
   it('repo-only pendings aggregate into ONE standing backlog issue (no per-entry flood)', () => {
     const t = docketTargets(idx([e({ latestVersion: null }), e({ name: 'o/r2', slug: 'o/r2', latestVersion: null })]), [])
@@ -194,6 +245,44 @@ describe('issueBody', () => {
     expect(body).toContain('catalog/index.json')
     expect(body).not.toContain('详情页')
   })
+  it('AI/human reason text is markdown-escaped — links, code spans and fake headings stay inert', () => {
+    const body = issueBody({
+      name: 'p', version: '1.0.0', verdict: 'pass',
+      reason: 'see [click](https://evil.example) `x`\n### fake\n<tag>',
+      humanVerdict: v({ verdict: 'concern', source: 'human', reason: '[x](https://e) `c`' }),
+    })
+    expect(body).not.toContain('[click](https://evil.example)')
+    expect(body).toContain('\\[click\\]')
+    expect(body).not.toContain('\n### fake')
+    expect(body).toContain('&lt;tag&gt;')
+    expect(body).toContain('\\[x\\]')
+  })
+  it('verification status renders AGENTS Chinese wording, not bare enums', () => {
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'verified' })).toContain('已实测可装可用')
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'skipped' })).toContain('有高危信号没跑')
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'failed' })).toContain('装不上或加载失败')
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'unverified' })).toContain('还没验')
+  })
+  it('AI audit metadata (model + L0.5) renders for reviewer traceability', () => {
+    const body = issueBody({ name: 'p', version: '1', verdict: 'pass', model: 'ornith-35b', l05Score: 0.71 })
+    expect(body).toContain('AI 审计：ornith-35b')
+    expect(body).toContain('L0.5 0.71')
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass' })).not.toContain('AI 审计')
+  })
+  it('verdict sha vs slot integrity mismatch warns the release gate will refuse', () => {
+    const drift = issueBody({ name: 'p', version: '1', verdict: 'pass', verdictSha: 'sha-new', integrity: 'sha-old' })
+    expect(drift).toContain('完整性指纹不一致')
+    const same = issueBody({ name: 'p', version: '1', verdict: 'pass', verdictSha: 's', integrity: 's' })
+    expect(same).not.toContain('完整性指纹不一致')
+    const noSha = issueBody({ name: 'p', version: '1', verdict: 'pass', integrity: 's' })
+    expect(noSha).not.toContain('完整性指纹不一致')
+  })
+  it('scan preview lists the first findings inline (bounded excerpt)', () => {
+    const body = issueBody({ name: 'p', version: '1', verdict: 'pass', scanPreview: ['sec:x [y](https://e)', 'f1'] })
+    expect(body).toContain('扫描摘录')
+    expect(body).toContain('sec:x \\[y\\]')
+    expect(body).toContain('f1')
+  })
 })
 
 describe('docket main', () => {
@@ -238,7 +327,7 @@ describe('docket main', () => {
     writeFileSync(idxPath, JSON.stringify(idx([e()])))
     writeFileSync(vPath, JSON.stringify(v({ verdict: 'concern' })) + '\n')
     const calls: string[][] = []
-    const ghFn = (args: string[]) => {
+    const ghFn = async (args: string[]) => {
       calls.push(args)
       if (args.includes('list')) return JSON.stringify([{
         number: 7, title: '[review] pkg@1.0.0',
@@ -395,13 +484,22 @@ describe('docket main', () => {
     console.warn = (...a: unknown[]) => { warned.push(a.join(' ')) }
     const saved = process.env.GH_REPO
     process.env.GH_REPO = 'o/r'
+    const summary = join(dir, 'summary.md')
+    const savedSummary = process.env.GITHUB_STEP_SUMMARY
+    process.env.GITHUB_STEP_SUMMARY = summary
     try {
       await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
     } finally {
       process.env.GH_REPO = saved
+      if (savedSummary === undefined) delete process.env.GITHUB_STEP_SUMMARY
+      else process.env.GITHUB_STEP_SUMMARY = savedSummary
       console.warn = orig
     }
     expect(warned.join('\n')).toContain('hit limit')
+    // the cap warning must also land in STEP_SUMMARY — console.warn scrolls
+    // away, the summary is what the maintainer actually reads after a run
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync(summary, 'utf8')).toContain('触顶')
   })
 
   it('duplicate same-title issues: newest survives, older ones close as 重复审核单', async () => {
@@ -417,9 +515,11 @@ describe('docket main', () => {
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
       calls.push(args)
+      // gh issue list returns NEWEST-first — feed it in real API order so
+      // the canonical pick can't silently depend on array position
       if (args.includes('list')) return JSON.stringify([
-        { number: 1, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'old' },
         { number: 2, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'new' },
+        { number: 1, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'old' },
       ])
       return ''
     }
@@ -593,5 +693,112 @@ describe('docket main', () => {
     expect(edits).toContain('--remove-label ai:pass')
     expect(edits).not.toContain('--add-label ai:')
     expect(calls.some(c => c.includes('create'))).toBe(false)
+  })
+
+  it('EVERY stale ai:* label is stripped in one edit — multi-label drift converges', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk13-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    // flag target → wantAi=null; the issue carries TWO ai:* labels — the old
+    // find()-first logic peeled one per tick and never converged
+    writeFileSync(idxPath, JSON.stringify(idx([e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{
+        number: 4, title: '[review] pkg@1.0.0',
+        labels: [{ name: 'review:pending' }, { name: 'ai:pass' }, { name: 'ai:concern' }],
+        body: 'old',
+      }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+    expect(edits).toContain('--remove-label ai:pass')
+    expect(edits).toContain('--remove-label ai:concern')
+    expect(edits).not.toContain('--add-label ai:')
+  })
+
+  it('flag/concern issues get DOCKET_ASSIGNEE assignment; pass/none stay quiet', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk14-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([
+      e({ name: 'flagpkg', slug: 'o/flagpkg', approval: 'approved',
+        capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } }),
+      e({ name: 'passpkg', slug: 'o/passpkg' }),
+    ])))
+    writeFileSync(vPath, JSON.stringify(v({ name: 'passpkg' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return '[]'
+      if (args.includes('create')) return 'https://github.com/o/r/issues/42'
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    const savedA = process.env.DOCKET_ASSIGNEE
+    process.env.GH_REPO = 'o/r'
+    process.env.DOCKET_ASSIGNEE = 'maint1,maint2'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      if (savedA === undefined) delete process.env.DOCKET_ASSIGNEE
+      else process.env.DOCKET_ASSIGNEE = savedA
+    }
+    const assigns = calls.filter(c => c.join(' ').includes('--add-assignee'))
+    // exactly ONE assign — the flag issue; the pass issue is an objection
+    // window, not an ask, so it stays quiet (AGENTS: 常态安静)
+    expect(assigns.length).toBe(1)
+    expect(assigns[0]!.join(' ')).toContain('maint1,maint2')
+    expect(assigns[0]!.join(' ')).toContain('42')
+  })
+
+  it('a rejected assignee never fails the sync — notification is best-effort', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk15-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return '[]'
+      if (args.includes('create')) return 'https://github.com/o/r/issues/42'
+      if (args.join(' ').includes('--add-assignee')) throw new Error('assign failed: not a collaborator')
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    const savedA = process.env.DOCKET_ASSIGNEE
+    process.env.GH_REPO = 'o/r'
+    process.env.DOCKET_ASSIGNEE = 'ghost-user'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      if (savedA === undefined) delete process.env.DOCKET_ASSIGNEE
+      else process.env.DOCKET_ASSIGNEE = savedA
+    }
+    expect(calls.some(c => c.includes('create'))).toBe(true)
   })
 })

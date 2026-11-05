@@ -960,38 +960,66 @@ docket.ts：index+verdicts → docketTargets
   = ver = pendingUpdate?.version ?? (approval==='pending' ? latestVersion : null)
     且 ver 非空（或条目本就无版本——github-kind 的 null 键查不到 AI 裁决，自然排除）
     且 最新 verdict.source='ai'
+    且 无包级人工刹车（name\0null 键 human concern——applyMatureVerdicts
+      verdictFor 覆盖该包所有槽位，除非槽位上有更新 human pass；docket
+      镜像同一规则：被刹包不再产生命版本单——刹车本身就是 standing
+      decision；github-kind 的 null 键是槽位键不是刹车，不适用）
   （AI 已判、待人过目：pass 等放行窗口，concern 等人工翻案；
     人工裁决=终局 → 不进 wanted → 已开的单下轮自动关）
   ∨ flag 目标：可见条目（approval≠pending）展示槽含身份级 sec:* redFlag
     且展示版键上无人工裁决 → [review] name@latestVersion 开单，
-    人工 concern 即刹车回 pending（repojack 类信号的唯一评审面）
+    人工 concern 即刹车回 pending（repojack/换包类信号的唯一评审面；
+    sec:integrity-drift 同属此面——run.ts anchorIntegrity 的产物）
   ∨ none 目标（有版本）：在押版本键上无任何裁决且在押超 48h——
     diagnose 队列积压或停摆（launchd 暂停）时给同等的 standing issue，
-    年轻在押仍归 AI 队列，不提前骚扰人工
+    年轻在押仍归 AI 队列，不提前骚扰人工。
+    **在押时钟 = candidateHeldAt**（pendingUpdate.heldAt → 候选槽
+    capabilities.scannedAt → firstSeenAt，与 diagnose 48h 降级窗/digest §②
+    同源）：firstSeenAt 是条目级、跨版本 bump 保留，单用它会把"昨天刚
+    bump 的 pending"误判成立即超龄。时间戳全部不可解析 → NaN → 按"超龄"
+    处理（fail-visible：坏时钟宁可多开一张人工单也不静默吞掉）
   ∨ none 目标（repo-only，latestVersion=null）：AI 永不审版本-less 条目——
     **聚合进一张 standing 总单 `[review] (repo-only backlog)`**（条目名
     保留字防撞）：逐条 issue 在 500+ 在押规模下是 tracker 洪水，总单正文
     每轮重生成、列前 40 条（在押久者优先），逐条 `/approve|/concern 名`
-    裁决；积压清空总单自动关，逐条遗留单关单注明「并入总单」
+    裁决；积压清空总单自动关，逐条遗留单关单注明「并入总单」。
+    `(…)` 哨兵名让 titleTarget 解析为 null——concern.yml 的 isReview 排除
+    `[review] (` 前缀，逐条 `/approve 名` 裁决不会误关总单
   排序 = 严重度 pass → none → concern → flag，平手最老在押优先
   （与 diagnose FIFO 同向；手机上最新单就是最需处理的单）
 同步：
   缺失 → 开 [review] name@ver（labels: review:pending + ai:{verdict}——
-        none/flag 不带 ai:*；body：AI 判定+双语理由+扫描计数（scannedAt:null
-        目标槽显式标注 "unscanned——静态扫描未跑，空 findings≠检净"）+
-        在押/发布日期+pass 成熟相位(announced/pending-announce)+详情页链接
-        +手机点选说明）
-  已存在但漂移 → issue edit：ai:* 标签换向、review:pending 补回、
+        none/flag 不带 ai:*；body：AI 判定+双语理由（markdown/HTML 转义，
+        与 digest 同口径——模型/插件影响文本不能注入链接或假标题）+
+        AI 审计行（model + L0.5 得分）+验证状态中文措辞（AGENTS 四态：
+        已实测可装可用/装不上或加载失败/有高危信号没跑/还没验）+
+        扫描计数与前几条扫描摘录（scannedAt:null 目标槽显式标注
+        "unscanned——静态扫描未跑，空 findings≠检净"）+裁决 sha vs 槽位
+        integrity 不符警示（re-tag 时 shaOk 放行闸会拒）+在押/发布日期+
+        pass 成熟相位(announced/pending-announce)+详情页链接+手机点选
+        说明）；flag/concern 单额外 --add-assignee（DOCKET_ASSIGNEE repo
+        变量，逗号分隔登录名）——"等人裁决"变成推送通知；pass/none 不
+        打扰（异议窗口非常态打扰）；assignee 写失败只告警不影响同步
+  已存在但漂移 → issue edit：**所有**陈旧 ai:* 标签摘除（不只收敛第一
+        个——多标签漂移曾永不收敛）、wantAi 补齐、review:pending 补回、
         正文按 issueBody(t) 确定性重建（判词翻转/验证落地/成熟相位迁移/
         人工刹车上下文都传播——创建时刻的冻结文案不再误导，K-2/K-3/K-5）；
-        卡住的 verdict:* 标签（贴了但写盘 job 失败未落 jsonl）折进正文警示
+        卡住的 verdict:* 标签（贴了但写盘 job 失败未落 jsonl）折进正文警示；
+        flag/concern 单 assignee 缺失时补指派（best-effort）
   多余 → 关单+注明原因（已决议/已放行/标题重复只留最新单/条目已出索引），
         收敛到 review:decided 终态标签；
+        canonical = 同标题取 max(issue number)——issue 号单调递增，
+        不依赖 gh list 返回序（默认 newest-first，旧实现取数组尾实为
+        最旧单，与"留最新"语义相反）；
         列全部 open 单后按 [review] 前缀过滤，--limit 4000（REST 强一致，
-        到界大声告警不静默截尾）；STEP_SUMMARY 汇总新开/更新/关闭
+        到界告警进 console.warn + STEP_SUMMARY，不静默截尾）；
+        gh 写操作 6 路并发（job 级 review-docket 并发组仍串行整轮；单 op
+        失败不拖垮兄弟 op——失败收集后统一抛出，alert job 照常见红；
+        大 backlog 不再被串行 execFileSync 顶到 timeout）；
+        STEP_SUMMARY 汇总新开/更新/关闭/触顶/失败
   → bootstrap 标签（verdict:pass/concern, review:pending/decided, ai:pass/concern）
 workflow_run 触发只跳过 conclusion==='cancelled'（失败也跑——held 积压不
-等人，V-K）；concurrency: review-docket 串行化
+等人，V-K）；concurrency: review-docket 串行化；timeout-minutes: 10
 （三触发源可重叠——并发双跑曾会双建单，K-1）
 ```
 

@@ -56,6 +56,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # repo variable (Settings → Secrets and variables → Variables):
+          # comma-separated logins to ASSIGN flag/concern review issues to —
+          # the phone-decision push notification. Unset = quiet (no assigns).
+          DOCKET_ASSIGNEE: ${{ vars.DOCKET_ASSIGNEE }}
         run: |
           # K-6: no catalog branch (fork/dev) or transient fetch → defer to the
           # next tick instead of an hourly red job failure
