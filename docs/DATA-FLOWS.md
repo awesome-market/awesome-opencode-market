@@ -184,6 +184,9 @@ discoverNpm + discoverGithub（并行）
         ③ 旧有条目候选里没有 → gone-check 探活（见下）
       fetchPackument → hasPluginEvidence（via ≥2 或含 'entry'——仅 keyword 不算数）
       → fetchTarball+scanTarball → capabilities{findings,redFlags,rulesetVersion}
+        （解压累计 >512MB 即中止=防 zip bomb；findings>500 截断 + 'scan-capped'
+        标记行——截断本身也是信号；rules 含 lifecycle-script 全生命周期
+        prepublish/prepack/postpack 与 literal-ip 的 IPv6+私网段排除）
         redFlags>0 → verification={status:'skipped'}（高危信号没跑）
       fetchRepoMeta(repoId/stars) + fetchRepoTree(hasSkillPath：任意 SKILL.md/.opencode/skills→contains)
       + fetchMarketMeta（repo 根 .opencode-market.json 作者声明）
@@ -263,13 +266,17 @@ flowchart TB
 ```
 issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
   或 issue_comment(created) 且 issue 有 submission:{needs-work,invalid} 标签
-  → review job（concurrency: sub-review-N，cancel-in-progress——重审幂等可丢弃）
+  → review job（permissions:{} 零权限——跑攻击者可控的 tarball；
+      concurrency: sub-review-N，cancel-in-progress——重审幂等可丢弃）
       parseSubmission（issue-form ### 段 + freeform 兜底；repo 可无 name）
       KIND: npm→机械审 review.ts；repo→合成 clean（无 npm 可扫）；none→invalid
       机械审查：npm 存在性/插件证据/静态扫描 → verdict: clean|flagged|invalid
       守卫：非作者触发重审 → flagged；issue>24h 且包注册晚于 issue → flagged（防蹲名）
       verdict 取报告中 LAST 'verdict:' 注释标记（防包内文本注入伪造）
-      评论报告 + 打 submission:{approved|needs-work|invalid} 标签
+      产出 review.md artifact + verdict output（不直接写 issue——N-6 拆权）
+  → report job（permissions: issues:write，needs review）：
+      评论报告（含 verdict 对应的下一步指引页脚）+
+      打 submission:{approved|needs-work|invalid} 标签
       ⚠️ 机械通过只是"入场"，不是上架
   → ingest job（clean 时，concurrency: catalog-branch）：
       catalog-append.sh KEY 模式（name/repo 键去重）→ append submissions.txt
@@ -321,7 +328,8 @@ plan job（contents:read）：
         越过 retries 上限的手动补刀）
 verify job（permissions:{} 零权限 + harden-runner egress 白名单
       registry/api.npmjs.org, api.github.com, github.com, *.githubusercontent.com；
-      整 job if: shards != '[]'——空计划全跳）：
+      整 job if: shards != '[]'——空计划全跳；timeout-minutes 30——
+      12 目标串行 ~18min 上限（V-4 把 load 窗口加宽后 20min 太薄，N-21））：
       npm i -g @opencode/cli@2.2.5（与 OPENCODE_VERSION 常量钉齐——缓存键含宿主版本）
       verifyPackage(name@version)：
         L1 install: 隔离 HOME+XDG_CONFIG/DATA/CACHE → `opencode plugin add name@ver`（45s）
@@ -336,7 +344,8 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
         L3a render: features 含 gui → findGuiBundle + checkGuiBundle（jsdom+vm 真渲染）
         → VerifyResult{name,version,status,level,opencodeVersion,verifiedAt,logExcerpt≤2048}
         → results-<shard>.json artifact（7 天）
-merge job（contents+actions 写；actions 只为 dispatch site.yml——V-8 单发布者）：
+merge job（`if: always()`——分片挂了已落地的 results 照样合，不等整矩阵
+      成功（N-10）；contents+actions 写；actions 只为 dispatch site.yml——V-8 单发布者）：
       mergeResults 按 version 路由写槽
       r.version == pendingUpdate.version → 写 pendingUpdate.verification
       r.version == latestVersion 或空 → 写 entry.verification
@@ -690,7 +699,9 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       无 sha 的遗产条目退回 HEAD+modifiedAt）；
                       两者都 latestVersion/modifiedAt/sha 为空 → 跳过；
                       <id>@<ver> 缓存（actions/cache 滚动键）——未变技能零网络，
-                      失效键自动 prune；id 碰撞 → -x 确定性后缀
+                      失效键自动 prune；id 碰撞 → -x 确定性后缀；
+                      拉取走 SKILL_POOL 限界 worker 池（S-14——冷缓存下
+                      串行 npm view+curl 会超时，pool 化才跑得完）
                       解包走两段式：tzf 列表 → 仅按名提取 .md 成员
                       （symlink 成员不创建=无穿越原语；node_modules 段滤除）
       skills.html     技能浏览页（id+版本+文件链接）
@@ -751,6 +762,8 @@ fetchIndexCached（manifest-first 两段式）：
      与公告比对——不匹配=mismatch，保留旧缓存绝不钉存错对；
      匹配才 JSON.parse → sanitizeIndex → isVisible 过滤 → 写缓存
   health 不可达 → 退回 1h TTL + 失败快照兜底；crypto 不可用 → 不 pin 不谎称验证
+  缓存后端 storage()：webview=localStorage；Node 侧（TUI/main）无
+  localStorage → 模块级槽位兜底——否则每次开 dialog 都整拉 index（N-9）
   fetchOutcome()：first|updated|fresh|stale|mismatch —— 刷新按钮如实区分
   "已是最新"/"已刷新 N 条"/"校验未通过"
 UI（gui.ts webview / tui.tsx 终端）：
@@ -760,11 +773,13 @@ UI（gui.ts webview / tui.tsx 终端）：
     （github 插件仓无 npm 产物时）；否则四态同站点
   安装路由 installPlan(e)：{plugin:有npm版∧contains:plugin, skill:npm|github|null}
     双栖（contains 含 plugin+skill）→ 插件 pinSpec 装 + 技能装，一次点完
-  插件安装：pinSpec(e) = name@latestVersion（钉到批准版）
+  插件安装：pinSpec(e) = name@latestVersion（钉到批准版；VER_SAFE 字符
+       校验——crafted version 直接拒装，不让怪串进 spec）（N-8）
        gui: api.install → host `plugin add <spec>`（restrictedEnv，90s kill）
        tui: 同 spawn + 90s 超时
   技能安装（npm）：fetchPkgVersionMeta(name,latestVersion) 取批准版
-       tarball+integrity → fetch(15-30s timeout) → integrityMatches SRI
+       tarball+integrity → fetch(15-30s timeout；content-length+字节双闸
+       过 MAX_SKILL_TGZ) → integrityMatches SRI
        sha512 校验（公告值不匹配=拒装 fail-closed）→ installSkillTar
   技能安装（github）：codeload <repo>/tar.gz/HEAD → installSkillTar
        两段式解包剥 `<repo>-<ref>/` wrapper 根；version 记账=modifiedAt
@@ -785,6 +800,10 @@ UI（gui.ts webview / tui.tsx 终端）：
   pendingUpdate 透出：详情页"有 vX 在审"；github 条目显示 tree sha
   版本号：__PKG_VERSION__ 由 build.ts 从 package.json 注入（gui/tui 头部）
   extras：uncataloged 已装 spec → buildExtras 卡片（不在目录里的本机插件）
+  TUI 本地状态：ctx.storage.store（favorites/lang/skillVers/devlog/界面态）；
+       mySkills 标签页=contains:skill ∧ 本机已装；settings 页有
+       备份/恢复 ~/opencode-market-backup.json（恢复走字段形状校验——
+       构造的备份文件不能毁掉 state）
   devlog：宿主写 market.log（clearDevlog 清它）；渲染端 localStorage ring 300
 ```
 
@@ -830,7 +849,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例） | ai-verdicts.jsonl |
 | 手动兜底 | bin/publish-digest.sh | — | digest/*.md、digest-state.json |
 | push/PR | ci.yml | — | tsc + vitest ≥90%（合并门） |
-| push | spike.yml | — | dev 演练（非数据面） |
+| workflow_dispatch（手动） | spike.yml | — | dev 演练（非数据面；曾 on:push 白烧 runner+模型，N-17） |
 | 用户 plugin add | 客户端 | — | 本机 opencode.json（不在本仓库数据面） |
 
 **并发组语义**：`catalog-branch` 是分支写锁（catalog+verify+ingest+digest 串行——数据完整性）；`verdict-N` 按 issue 分（事件必须全落盘）；`sub-review-N` cancel-in-progress（重审幂等，burst 只留最新合理）；`review-docket` 串行化三触发源（cron/workflow_run/dispatch 可重叠，K-1）；`site-deploy` 串行化 Pages 发布（最后一个赢且拿最新数据）。
@@ -852,7 +871,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `discover/seed.ts` | `buildSeedList` `extractRepos` `filterByStars` `repoToNpm` | awesome-list 冷启动种子（一次性工具） |
 | `fetch/npm.ts` | `fetchPackument` `fetchTarball` `fetchDownloads30d` | npm 拉取（status: ok/not-found/error） |
 | `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `repoFileExists` | repo 元数据/文件树探测（rate-limited 状态透传） |
-| `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags |
+| `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags（MAX_UNPACKED=512MB 解压上限防 zip bomb；MAX_FINDINGS=500 截断+scan-capped 标记） |
 | `scan/rules.ts` | `RULES` `RULESET_VERSION='r3'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding） |
 | `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
