@@ -269,7 +269,7 @@ export default Plugin.define({
           let url: string
           let integrity: string | null = null
           if (plan.skill === 'github') {
-            // repo skills pin to the scanned tree sha (source.version) —
+            // repo skills pin to the resolved commit sha (source.version) —
             // installed bytes equal what the pipeline reviewed; HEAD only as
             // a fallback for pre-sha index data (no SRI exists for git archives)
             url = `https://codeload.github.com/${e.source!.repo}/tar.gz/${e.source?.version ?? 'HEAD'}`
@@ -848,7 +848,7 @@ export default Plugin.define({
                     <Show when={e.compat?.engines || e.compat?.peer}>
                       <text fg={theme.text.muted}>{t('compat')}: {[e.compat?.engines ? `opencode ${e.compat.engines}` : '', e.compat?.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}</text>
                     </Show>
-                    <Show when={e.source?.version}><text fg={theme.text.muted}>tree: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
+                    <Show when={e.source?.version}><text fg={theme.text.muted}>commit: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
                     <Show when={e.integrity}><text fg={theme.text.muted}>integrity: {(e.integrity ?? '').slice(0, 32)}…</text></Show>
                     {/* verify story — status/level/date + run link + log excerpt
                         (AGENTS: 报错三件套 — 发生了什么/为什么/下一步) */}

@@ -2,7 +2,7 @@
 import { withTimeout } from '../fetch/npm.ts'
 
 export const GH_API = 'https://api.github.com'
-export const TOPICS = ['opencode-plugin', 'opencode', 'agent-skill', 'opencode-skill'] as const
+export const TOPICS = ['opencode-plugin', 'opencode', 'agent-skill', 'opencode-skill', 'opencode-mcp', 'opencode-config', 'opencode-theme'] as const
 
 export interface GhRepo {
   fullName: string           // owner/repo
@@ -36,10 +36,13 @@ export async function searchTopic(
   // fork:false is a zero-cost server-side filter — mirror forks only ever
   // produce duplicate content entries (submission-seeded forks still get in,
   // a human asked for those). maxPages 10 hits the search API's 1000-result cap.
+  let hitPageCap = false
   for (let page = 1; page <= (opts.maxPages ?? 10); page++) {
     const url = `${GH_API}/search/repositories?q=topic:${encodeURIComponent(topic)}+fork:false&sort=updated&per_page=100&page=${page}`
     const res = await f(url, { headers: ghHeaders(opts.token) })
-    if (!res.ok) break
+    // a mid-pagination failure must be loud — the candidate tail silently
+    // vanished otherwise (truncation telemetry)
+    if (!res.ok) { console.warn(`[discover:github] '${topic}' page ${page} failed (${res.status}) — results truncated`); break }
     const body = (await res.json()) as {
       items?: Array<{
         full_name: string; description: string | null; archived: boolean
@@ -65,7 +68,11 @@ export async function searchTopic(
       })
     }
     if (items.length < 100) break
+    if (page === (opts.maxPages ?? 10)) hitPageCap = true
   }
+  // the search API hard-caps at 1000 results — a full last page means the
+  // window itself cut us off, not that discovery is complete
+  if (hitPageCap) console.warn(`[discover:github] '${topic}' hit the search window cap — tail results dropped`)
   return out
 }
 

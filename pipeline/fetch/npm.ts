@@ -38,13 +38,17 @@ export const withTimeout = (f: typeof fetch, timeoutMs: number): typeof fetch =>
 
 export async function fetchPackument(
   name: string,
-  opts: { registry?: string; fetchFn?: typeof fetch } = {},
+  opts: { registry?: string; fetchFn?: typeof fetch; abbreviated?: boolean } = {},
 ): Promise<PackumentResult> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const base = opts.registry ?? 'https://registry.npmjs.org'
   let res: Response
   try {
-    res = await f(`${base}/${encodeURIComponent(name)}`)
+    // gone-check probes only need existence + dist.tarball — the install-v1
+    // abbreviated document carries both and is a fraction of the full
+    // packument's size (readme/maintainers/time trimmed server-side)
+    res = await f(`${base}/${encodeURIComponent(name)}`,
+      opts.abbreviated ? { headers: { Accept: 'application/vnd.npm.install-v1+json' } } : undefined)
   } catch {
     return { pk: null, status: 'error' }
   }
@@ -111,8 +115,12 @@ export async function fetchPackument(
 const TARBALL_MAX = 64 * 1024 * 1024
 export async function fetchTarball(
   url: string,
-  opts: { fetchFn?: typeof fetch } = {},
+  opts: { fetchFn?: typeof fetch; maxBytes?: number } = {},
 ): Promise<Buffer> {
+  // callers that only need a content slice (AI review material) can pass a
+  // much smaller cap than the scan-path default — 8 concurrent 64MB fetches
+  // would be a memory spike for files the reviewer never reads anyway
+  const MAX = opts.maxBytes ?? TARBALL_MAX
   // tarballUrl comes from packument/registry — restrict to https so a hostile
   // registry/mirror can't steer the fetch at file:// or an internal address
   let scheme: string
@@ -126,10 +134,29 @@ export async function fetchTarball(
   const res = await f(url)
   if (!res.ok) throw new Error(`tarball fetch failed: ${res.status}`)
   const len = Number(res.headers.get('content-length') ?? 0)
-  if (len > TARBALL_MAX) throw new Error(`tarball too large: ${len} bytes`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  if (buf.length > TARBALL_MAX) throw new Error(`tarball too large: ${buf.length} bytes`)
-  return buf
+  if (len > MAX) throw new Error(`tarball too large: ${len} bytes (cap ${MAX})`)
+  // content-length can lie or be absent — stream with a byte cap so a
+  // hostile/buggy server can't OOM the worker (the 30s timeout alone
+  // allowed an unbounded arrayBuffer to ingest GBs before rejecting)
+  const chunks: Buffer[] = []
+  let total = 0
+  const reader = res.body?.getReader()
+  if (!reader) {
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length > MAX) throw new Error(`tarball too large: ${buf.length} bytes (cap ${MAX})`)
+    return buf
+  }
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > MAX) {
+      await reader.cancel()
+      throw new Error(`tarball too large: >${MAX} bytes`)
+    }
+    chunks.push(Buffer.from(value))
+  }
+  return Buffer.concat(chunks)
 }
 
 /** npm download counts, last-30-days window (field name stays honest: this is not installs). */

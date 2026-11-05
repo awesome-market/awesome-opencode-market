@@ -4,8 +4,10 @@ import { withTimeout } from '../fetch/npm.ts'
 export const NPM_SEARCH_URL = 'https://registry.npmjs.org/-/v1/search'
 export const NPM_REGISTRY = 'https://registry.npmjs.org'
 
-/** Configurable keyword net — wide on purpose, evidence filter comes later (DEV §4.5). */
-export const KEYWORDS = ['opencode-plugin', 'opencode', 'opencode-ai'] as const
+/** Configurable keyword net — wide on purpose, evidence filter comes later (DEV §4.5).
+ *  Covers the opencode-* family observed on the registry; keyword-only hits
+ *  never admit without artifact evidence downstream. */
+export const KEYWORDS = ['opencode-plugin', 'opencode', 'opencode-ai', 'opencode-skill', 'opencode-mcp', 'opencode-config'] as const
 
 export interface NpmSearchResult {
   name: string
@@ -35,10 +37,13 @@ export async function searchByKeyword(
   const size = opts.size ?? 250
   const maxPages = opts.maxPages ?? 10 // registry caps ~1000 results anyway
   const out: NpmSearchResult[] = []
+  let hitPageCap = false
   for (let page = 0; page < maxPages; page++) {
     const url = `${NPM_SEARCH_URL}?text=keywords:${encodeURIComponent(keyword)}&size=${size}&from=${page * size}`
     const res = await f(url)
-    if (!res.ok) break
+    // a mid-pagination failure must be loud — the candidate tail silently
+    // vanished otherwise (truncation telemetry)
+    if (!res.ok) { console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`); break }
     const body = (await res.json()) as { objects?: NpmSearchObject[]; total?: number }
     const objects = body.objects ?? []
     for (const o of objects) {
@@ -53,7 +58,9 @@ export async function searchByKeyword(
       })
     }
     if (objects.length < size) break
+    if (page === maxPages - 1) hitPageCap = true
   }
+  if (hitPageCap) console.warn(`[discover:npm] '${keyword}' exhausted ${maxPages} full pages — tail results dropped`)
   return out
 }
 

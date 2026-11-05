@@ -216,6 +216,27 @@ describe('applyMatureVerdicts — pendingUpdate release', () => {
     expect(e.approval).toBe('approved')
     expect(r.releases).toEqual(['p@1.1.0'])
   })
+  it('release promotes the HELD byte-anchor + parts — displayed slot values would certify the wrong version', () => {
+    // pu.integrity/pu.contains describe the CANDIDATE: leaving the displayed
+    // version's values in place would pin the new release to the OLD
+    // tarball's SRI and route installs by the old payload shape
+    const pu = mkPu('1.1.0', { integrity: 'sha512-new==', contains: ['skill'] })
+    const idx = mkIndex([mkEntry('p', {
+      pendingUpdate: pu, integrity: 'sha512-old==', contains: ['plugin'],
+    })])
+    const r = apply(idx, [mkVerdict('p', '1.1.0', 'pass', BEFORE, 'human')])
+    const e = r.index.plugins[0]!
+    expect(e.integrity).toBe('sha512-new==')
+    expect(e.contains).toEqual(['skill'])
+  })
+  it('legacy hold without pu.integrity falls back to the displayed anchor (heals via needsIntegrity backfill)', () => {
+    const pu = mkPu('1.1.0')   // no integrity/contains — pre-field hold
+    const idx = mkIndex([mkEntry('p', { pendingUpdate: pu, integrity: 'sha512-old==', contains: ['plugin'] })])
+    const r = apply(idx, [mkVerdict('p', '1.1.0', 'pass', BEFORE, 'human')])
+    const e = r.index.plugins[0]!
+    expect(e.integrity).toBe('sha512-old==')
+    expect(e.contains).toEqual(['plugin'])
+  })
   it('legacy entry releasing held version → self-heals to approved', () => {
     const idx = mkIndex([mkEntry('p', { approval: 'legacy', pendingUpdate: mkPu('1.1.0') })])
     const r = apply(idx, [mkVerdict('p', '1.1.0', 'pass', BEFORE, 'human')])
@@ -287,6 +308,19 @@ describe('mergeEntries — hold surgery', () => {
     const fresh = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { verification: { status: 'unverified' } }) })
     const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
     expect(out!.pendingUpdate!.verification.status).toBe('verified')
+  })
+  it('same held version → remote fills byte-anchor/parts ours lacks', () => {
+    // ours built without pu.integrity (older writer) — remote's anchor must
+    // survive the merge, not get stripped to undefined
+    const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { integrity: 'sha512-r==', contains: ['skill'] }) })
+    const fresh = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { verification: { status: 'unverified' } }) })
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    expect(out!.pendingUpdate!.integrity).toBe('sha512-r==')
+    expect(out!.pendingUpdate!.contains).toEqual(['skill'])
+    // ours wins on conflict though — this run's data is authoritative
+    const fresh2 = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { integrity: 'sha512-mine==', verification: { status: 'unverified' } }) })
+    const [out2] = mergeEntries([fresh2], mkIndex([prev]), '2.2.5', 'r')
+    expect(out2!.pendingUpdate!.integrity).toBe('sha512-mine==')
   })
   it('prev holds a version ours never saw → hold carried (unless ours released it)', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0') })

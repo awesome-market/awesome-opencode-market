@@ -329,6 +329,21 @@ describe('verifyShard sandbox probing', () => {
     expect(calls.some(c => c.endsWith('sb.sh'))).toBe(false)
     expect(calls).toContain('opencode')
   })
+
+  it('deep probe: sudo ok but chown/write chain broken → shard fails loudly (2025-11-04 regression)', async () => {
+    // `sudo -n -u nobody true` passes while the setupSandbox chain is broken —
+    // the exact blind spot that wrote 48 false 'failed' verdicts. The deep
+    // probe must reject the shard, never degrade to unconfined untrusted exec.
+    const home = mkdtempSync(join(tmpdir(), 'vsp-'))
+    const out = join(home, 'r.json')
+    const fake = (async (cmd: string, args: string[]) => {
+      if (cmd === 'sudo' && args.includes('chown')) throw new Error('chown: Operation not permitted')
+      if (cmd === 'sudo' && args.includes('touch')) throw new Error('touch: Permission denied')
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    await expect(verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn }))
+      .rejects.toThrow()
+  })
 })
 
 describe('shard-level hoists and boundaries', () => {

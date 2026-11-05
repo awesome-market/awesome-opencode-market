@@ -13,7 +13,8 @@ jobs:
   digest:
     # scope guard: a fork's schedule would fail on the missing catalog branch
     # and then alert-spam the fork's tracker. Manual dispatch stays open.
-    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
+    # Whitelist = the known data planes (org prod + terry2010 current prod).
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency: catalog-branch        # same writer lock as catalog/verify/ingest (I-4)
@@ -60,7 +61,10 @@ jobs:
           # catalog branch is data-only — dedicated worktree, never the main
           # checkout; clear a stale one first (crashed runs can leave /tmp/cat)
           git worktree remove /tmp/cat --force 2>/dev/null || true
-          git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
+          # no "-b catalog" fallback: origin/catalog was verified above, so a
+          # failed add means a real worktree problem — "-b" would branch off
+          # MAIN's HEAD (no index.json there) and burn 4 dumb retries
+          git worktree add /tmp/cat origin/catalog || { echo "worktree add failed though origin/catalog exists"; exit 1; }
           ok=0
           for i in 1 2 3 4; do
             # EVERY phase retries — the loop exists so a raced push re-renders
@@ -71,11 +75,20 @@ jobs:
             # reset leaves untracked files — a prior failed render's leftovers
             # would sneak into `git add digest/` below
             git -C /tmp/cat clean -fd digest/ 2>/dev/null || true
+            # bound the append-only verdict log before rendering: drops only
+            # superseded AI lines older than 180d (human lines + every key's
+            # latest line are always kept — semantics-preserving, idempotent).
+            # A failure must not block the digest: the log just stays bigger.
+            npx tsx pipeline/verdicts-compact.ts /tmp/cat/ai-verdicts.jsonl \
+              || echo "verdicts compact failed (non-fatal) — rendering on the un-compacted log"
             npx tsx pipeline/ai/digest.ts \
               --index /tmp/cat/index.json --verdicts /tmp/cat/ai-verdicts.jsonl \
               --state /tmp/cat/digest-state.json --out-dir /tmp/cat \
               || { echo "render attempt $i failed"; sleep 3; continue; }
             git -C /tmp/cat add digest/ digest-state.json
+            # ai-verdicts.jsonl may not exist on a fresh catalog branch —
+            # compaction only rewrites it when present, so stage conditionally
+            [ -f /tmp/cat/ai-verdicts.jsonl ] && git -C /tmp/cat add ai-verdicts.jsonl || true
             # staged-diff precheck: a REAL commit failure must not pass as
             # "nothing changed" — that's how a day's digest-state (the maturity
             # anchor) silently vanishes while the run stays green (C-2/V-S)
@@ -95,7 +108,7 @@ jobs:
   # targets plus a stale ai-verdicts.jsonl means the local job died silently
   # and submissions are rotting. Fires a pipeline-alert issue (deduped).
   watchdog:
-    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { issues: write }
@@ -133,13 +146,16 @@ jobs:
           ")
           echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; unreviewed targets: ${PENDING}"
           REASONS=""
-          if [ "${PENDING:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+          # LAST*=0 → the file has NO git history (never written). That is
+          # bootstrap, not staleness — without the >0 guard a fresh deployment
+          # false-alerts on every leg within its first day.
+          if [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
             REASONS="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
           fi
-          if [ "${IDX_AGE_H:-0}" -gt 36 ]; then
+          if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
           fi
-          if [ "${DS_AGE_H:-0}" -gt 36 ]; then
+          if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
           fi
           if [ -n "$REASONS" ]; then

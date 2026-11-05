@@ -56,19 +56,27 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
           return
         }
         files.push(entry.path)
+        const path = entry.path
+        // Buffer only what the checks need: media assets are binary-by-design
+        // and exempt from the blob rule (never buffered at all); non-text
+        // files only need isBinary's 8KB window; text needs the whole file.
+        const skipBody = MEDIA_EXT.test(path)
+        const bufCap = TEXT_EXT.test(path) || isPkgJson(path) ? Infinity : 8192
         const chunks: Buffer[] = []
+        let buffered = 0
         entry.on('data', (c: Buffer) => {
-          chunks.push(c)
           unpacked += c.length
           if (unpacked > MAX_UNPACKED) parser.abort(new Error(`unpacked size exceeds ${MAX_UNPACKED} — possible zip bomb`))
+          if (!skipBody && buffered < bufCap) {
+            chunks.push(c.subarray(0, bufCap - buffered))
+            buffered += c.length
+          }
         })
         entry.on('end', () => {
+          if (skipBody) return
           const buf = Buffer.concat(chunks)
-          const path = entry.path
           if (isBinary(buf)) {
-            if (!MEDIA_EXT.test(path)) {
-              pushFinding({ rule: 'binary-blob', severity: 'high', file: path, detail: 'binary file in package' })
-            }
+            pushFinding({ rule: 'binary-blob', severity: 'high', file: path, detail: 'binary file in package' })
             return
           }
           const text = TEXT_EXT.test(path) || isPkgJson(path) ? buf.toString('utf8') : null

@@ -226,7 +226,7 @@ export default Plugin.define({
       return wrap
     }
     // download + SRI enforcement live in the main process: the renderer only
-    // names the entry — the host resolves URL/tree-sha and the index-announced
+    // names the entry — the host resolves URL/commit-sha and the index-announced
     // SRI itself, so a compromised renderer can't fetch arbitrary tarballs or
     // skip the digest by passing integrity:null (was the url-mode hole).
     const installSkillNet = async (e: MarketEntry): Promise<string> => safe.writeSkill({ name: e.name })
@@ -733,8 +733,8 @@ export default Plugin.define({
         ...(e.compat?.engines || e.compat?.peer
           ? [`${t('compat')}: ${[e.compat.engines ? `opencode ${e.compat.engines}` : '', e.compat.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}`]
           : []),
-        // github-kind identity: the tree sha the evidence gate + scan saw
-        ...(e.source?.version ? [`tree: ${e.source.version.slice(0, 12)}`] : []),
+        // github-kind identity: the commit sha the evidence gate + scan saw
+        ...(e.source?.version ? [`commit: ${e.source.version.slice(0, 12)}`] : []),
         ...(e.integrity ? [`integrity: ${e.integrity.slice(0, 32)}…`] : []),
         `verify: ${v?.status ?? 'unverified'}${v?.level ? ` · ${t('verifyLevel')}: ${v.level}` : ''}`,
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
@@ -1154,7 +1154,7 @@ export default Plugin.define({
         },
         // skills are file-system installs: extract tarball → config/skills/<name>.
         // The renderer only NAMES the entry — the host resolves the download
-        // URL (github: the scanned tree sha, never HEAD) and the SRI (index-
+        // URL (github: the scanned commit sha, never HEAD) and the SRI (index-
         // announced, packument fallback) from the cached catalog itself, so a
         // compromised renderer can't fetch arbitrary tarballs or pass
         // integrity:null to skip the digest.

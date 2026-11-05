@@ -90,9 +90,13 @@ export async function fetchRepoTree(
   }
   // truncated responses still contain the front of the tree — usable for root
   // probes, but deep SKILL.md paths may be missed (surfaced via `truncated`).
-  // sha is the resolved tree hash — recorded on source.version as the content
-  // identity of what was scanned (audit: codeload bytes can't be re-verified
-  // by hash since archives aren't byte-deterministic).
+  // sha is the ref-RESOLVED commit hash, not the tree hash: GitHub's
+  // git/trees endpoint answers a commit-ish query (HEAD, branch) with the
+  // commit's sha in the response `sha` field (verified against the API — the
+  // commit's own `commit.tree.sha` differs). Recorded on source.version it
+  // doubles as the codeload pin (tar.gz/<sha>) — commits are immutable so
+  // installed bytes = scanned bytes (archives aren't byte-deterministic, so
+  // no SRI re-check exists).
   return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false, sha: b.sha ?? null }
 }
 

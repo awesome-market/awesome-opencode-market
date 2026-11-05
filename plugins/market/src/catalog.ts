@@ -473,14 +473,14 @@ export function descOf(e: MarketEntry): string {
 }
 
 /** The string an install records as "what version is on disk" — npm version,
- *  or the github tree sha that was installed (pushedAt only for pre-sha data). */
+ *  or the github commit sha that was installed (pushedAt only for pre-sha data). */
 export function verMarker(e: MarketEntry): string | undefined {
   return e.latestVersion ?? (e.source?.kind === 'github' ? e.source.version ?? e.modifiedAt ?? undefined : undefined)
 }
 
 /** Ordering compare for version markers: semver-ish strings compare part-wise
  *  (suffix differences fall back to lexicographic); ISO dates compare
- *  chronologically; unorderable pairs (tree sha vs sha) return 0 — we never
+ *  chronologically; unorderable pairs (commit sha vs sha) return 0 — we never
  *  claim a downgrade we can't prove. */
 export function versionCmp(a: string, b: string): number {
   if (a === b) return 0
@@ -521,10 +521,10 @@ export function isDowngrade(e: MarketEntry, installedVer?: string): boolean {
  *  'skill' resolves to npm tarball or github codeload. */
 export interface InstallPlan { plugin: boolean; skill: 'npm' | 'github' | null }
 export function installPlan(e: MarketEntry): InstallPlan {
-  // missing `contains` (legacy) falls back on type — an mcp/command/agent entry
-  // without declared parts has no plugin payload, not an implied 'plugin'.
+  // an explicit `contains` — including [] — is authoritative ([] = no
+  // installable payload); only a MISSING field (legacy) falls back on type.
   // Same rule as the site's installHint — the routing sites must not drift.
-  const parts = e.contains?.length ? e.contains
+  const parts = e.contains !== undefined ? e.contains
     : e.type === 'skill' ? ['skill']
     : e.type === 'plugin' ? ['plugin']
     : []

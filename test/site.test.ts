@@ -177,7 +177,7 @@ describe('buildSkillCatalog github-kind entries', () => {
     rmSync(out, { recursive: true, force: true })
   })
 
-  it('source.version (tree sha) pins codeload — served bytes = scanned bytes', async () => {
+  it('source.version (commit sha) pins codeload — served bytes = scanned bytes', async () => {
     const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
     const { src, tgz } = mkGhTgz()
     const out = mkdtempSync(join(tmpdir(), 'site-'))

@@ -140,6 +140,10 @@ export function mergeEntries(
       out.capabilities = prev.capabilities
       out.verification = prev.verification
       out.features = prev.features
+      // contains is version-scoped too — the remote released the HELD version
+      // and promoted its parts; keeping our pinned display parts would route
+      // installs for the released version by the old payload shape
+      out.contains = prev.contains
       out.source = prev.source
       out.integrity = prev.integrity
       out.approval = prev.approval
@@ -147,10 +151,17 @@ export function mergeEntries(
     } else if (out.approval !== 'pending') {
       if (e.pendingUpdate) {
         out.pendingUpdate = e.pendingUpdate
-        // same held version on both sides → keep the remote verification slot
-        // (a verify-merge may have written into it after ours was built)
         if (prev?.pendingUpdate?.version === e.pendingUpdate.version) {
-          out.pendingUpdate = { ...e.pendingUpdate, verification: prev.pendingUpdate.verification }
+          // same held version on both sides → keep the remote verification
+          // slot (a verify-merge may have written into it after ours was
+          // built); remote also fills byte-anchor/parts fields ours lacks
+          // (a drift-rescan could have re-anchored it between runs)
+          out.pendingUpdate = {
+            ...e.pendingUpdate,
+            verification: prev.pendingUpdate.verification,
+            integrity: e.pendingUpdate.integrity ?? prev.pendingUpdate.integrity,
+            contains: e.pendingUpdate.contains ?? prev.pendingUpdate.contains,
+          }
         }
       } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion) {
         // remote holds a version we never saw → keep the hold (unless ours just
@@ -174,7 +185,15 @@ export function mergeEntries(
     // displayed version's own scan/verify data (e.g. fresher verification
     // written by a verify-merge on the remote side of a rebase race).
     if (prevVer) {
-      if (sameRuleset) out.capabilities = prevVer.capabilities
+      if (sameRuleset) out.capabilities = {
+        // remote caps are authoritative for the slot — but findings/redFlags
+        // the fresh entry computed THIS run (evidence-regression markers,
+        // carried-forward extras) must union in: they're additive signals,
+        // never a reason to drop either side
+        ...prevVer.capabilities,
+        findings: [...new Set([...prevVer.capabilities.findings, ...e.capabilities.findings])],
+        redFlags: [...new Set([...prevVer.capabilities.redFlags, ...e.capabilities.redFlags])],
+      }
       out.verification = prevVer.verification
     }
 
@@ -184,7 +203,10 @@ export function mergeEntries(
     // version-level sec-delta:* flags attach to the version under review
     // (pendingUpdate.capabilities) and ride along when it releases.
     const cand: PluginEntry = out.pendingUpdate
-      ? { ...e, latestVersion: out.pendingUpdate.version, capabilities: out.pendingUpdate.capabilities }
+      ? { ...e, latestVersion: out.pendingUpdate.version, capabilities: out.pendingUpdate.capabilities,
+          // cand describes the HELD version — its parts live on pendingUpdate
+          // now that entry.contains is pinned to the displayed release
+          contains: out.pendingUpdate.contains ?? e.contains }
       : e
     const tf = trustFlags(prev, cand)
     const isDelta = (f: string) => f.startsWith('sec-delta:')
@@ -278,15 +300,18 @@ export function buildIndex(
   ]
   // categories registry (I-3): english ids are canonical — legacy zh labels
   // in old entries/dict keys normalize through catId() on every merge, so a
-  // single scheduled run migrates the whole index without a repair pass
-  for (const e of merged) e.category = (e.category ?? []).map(catId)
+  // single scheduled run migrates the whole index without a repair pass.
+  // Whitelist to CAT_NAMES: marketMeta/submission-declared categories are
+  // author-controlled text — arbitrary strings must not mint global dict
+  // entries or stick to entries (they fall back to classify at admission).
+  for (const e of merged) e.category = (e.category ?? []).map(catId).filter(id => CAT_NAMES[id] !== undefined)
   const categories: CatalogIndex['categories'] = {}
-  for (const [k, v] of Object.entries(old?.categories ?? {})) {
+  for (const [k] of Object.entries(old?.categories ?? {})) {
     const id = catId(k)
-    categories[id] ??= CAT_NAMES[id] ?? v
+    if (CAT_NAMES[id]) categories[id] ??= CAT_NAMES[id]!
   }
   for (const e of merged) for (const id of e.category) {
-    categories[id] ??= CAT_NAMES[id] ?? { en: id }
+    categories[id] ??= CAT_NAMES[id]!
   }
   const index = CatalogIndexSchema.parse({
     version: '1',

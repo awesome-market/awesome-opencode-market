@@ -4,8 +4,9 @@ import { execFileSync, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import { join, dirname, relative } from 'node:path'
-import { CatalogIndex } from '../../src/schema.ts'
+import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import type { PluginEntry } from '../../src/schema.ts'
+import { loadVerdicts, atCmp } from '../verdicts.ts'
 
 type Caps = PluginEntry['capabilities']
 type Ver = PluginEntry['verification']
@@ -46,12 +47,12 @@ export function approvalBadge(e: PluginEntry): string {
 /** user-visible entries — pending (under-review) entries never render on the site. */
 export const isVisible = (e: PluginEntry): boolean => e.approval !== 'pending'
 
-/** The installable parts an entry claims. Missing `contains` (legacy entries)
- *  falls back on `type` — an mcp/command/agent entry without declared parts
- *  has no plugin payload to `plugin add`, so it gets no hint. Same rule as
- *  the client's installPlan — the three routing sites must not drift. */
+/** The installable parts an entry claims. An explicit `contains` — including
+ *  [] — is authoritative ([] = no installable payload); only a MISSING field
+ *  (legacy entries) falls back on `type`. Same rule as the client's
+ *  installPlan — the three routing sites must not drift. */
 const entryParts = (e: Pick<PluginEntry, 'contains' | 'type'>): string[] =>
-  e.contains?.length ? e.contains
+  e.contains !== undefined ? e.contains
     : e.type === 'skill' ? ['skill']
     : e.type === 'plugin' ? ['plugin']
     : []
@@ -98,7 +99,7 @@ function siteRepoUrl(): string {
     const u = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
     memoRepo = u.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '')
   } catch {
-    memoRepo = 'https://github.com/terry2010/awesome-opencode-market'
+    memoRepo = 'https://github.com/awesome-market/awesome-opencode-market'
   }
   return memoRepo
 }
@@ -148,13 +149,13 @@ export function listPage(index: CatalogIndex): string {
   // parses it back so exact matching can't be fooled by quote/backslash chars.
   const filterJs = `function F(){const q=document.getElementById('q').value.toLowerCase(),c=document.getElementById('cat')?.value||'';document.querySelectorAll('.card').forEach(e=>{let ok=!q||e.textContent.toLowerCase().includes(q);if(ok&&c){try{ok=JSON.parse(e.dataset.cats).includes(c)}catch{ok=false}}e.style.display=ok?'':'none'})}`
   const empty = visible.length ? '' : '<p class=muted>no entries yet — the catalog is empty or still syncing</p>'
-  return page('catalog', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)} · <a href="skills.html">skills</a> · <a href="removed.html">removed</a></p>
+  return page('catalog', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)} · <a href="skills.html">skills</a> · <a href="removed.html">removed</a> · <a href="${esc(siteRepoUrl())}/tree/catalog/digest">digest</a></p>
     <input id=q placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="F()">${cats.length ? `<select id=cat onchange="F()" style="padding:8px;margin:8px 0"><option value="">all categories</option>${cats.map(c => `<option value="${esc(c)}">${esc(catName(c))}</option>`).join('')}</select>` : ''}<script>
     ${filterJs}
     </script>${empty}${cards}`)
 }
 
-export function detailPage(e: PluginEntry): string {
+export function detailPage(e: PluginEntry, verdicts?: AiVerdict[]): string {
   const s = scanLabel(e), v = verifyLabel(e)
   // this page lives at p/<slug>.html — slugs can nest (owner/repo, @scope/name),
   // so links back to site root need one "../" per slug segment
@@ -183,6 +184,20 @@ export function detailPage(e: PluginEntry): string {
   const puLog = pu?.verification.logExcerpt
     ? `<details><summary><b>next version failure log</b></summary><pre>${esc(pu.verification.logExcerpt)}</pre></details>` : ''
   const reviewLink = `${siteRepoUrl()}/issues?q=${encodeURIComponent(`is:issue [review] ${e.name}`)}`
+  // verdict audit surface (G1): the record itself lives on the catalog branch —
+  // surface the recent lines so "why was this braked/released" doesn't require
+  // digging through ai-verdicts.jsonl. Collapsed like findings (AGENTS rule):
+  // audit detail is there when wanted, not in the main reading path.
+  const mine = (verdicts ?? []).filter(x => x.name === e.name)
+    .sort((a, b) => atCmp(b.at, a.at)).slice(0, 10)
+  const verdictBlock = mine.length
+    ? `<h2>verdicts</h2><details><summary>review record (${mine.length}${verdicts && verdicts.filter(x => x.name === e.name).length > mine.length ? ` of ${verdicts.filter(x => x.name === e.name).length}` : ''})</summary><table>` +
+      mine.map(x => `<tr><td class=meta>${esc(x.at.slice(0, 10))}</td>` +
+        `<td><b>${x.verdict}</b>${x.version ? ` <code>@${esc(x.version)}</code>` : ''}</td>` +
+        `<td>${esc(x.source)}${x.by ? ` · ${esc(x.by)}` : ''}${x.issue ? ` · <a href="${siteRepoUrl()}/issues/${x.issue}">#${x.issue}</a>` : ''}</td>` +
+        `<td>${esc([...(x.reason ?? '')].slice(0, 200).join(''))}</td></tr>`).join('') +
+      `</table><p class=meta>完整流水：<a href="${siteRepoUrl()}/blob/catalog/ai-verdicts.jsonl">ai-verdicts.jsonl</a> · 成熟度公告：<a href="${siteRepoUrl()}/tree/catalog/digest">digest</a></p></details>`
+    : ''
   return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}${e.deprecated ? ' <span class=bad>deprecated</span>' : ''}</h1><p>${esc(e.description.en ?? '')}${e.description.zh ? `<br><span class=meta>${esc(e.description.zh)}</span>` : ''}</p>
     <table>${rows({
       type: esc(e.type), slug: `<code>${esc(e.slug)}</code>`,
@@ -216,12 +231,14 @@ export function detailPage(e: PluginEntry): string {
     ${puFindings}
     ${e.verification.logExcerpt ? `<details><summary><b>failure log</b></summary><pre>${esc(e.verification.logExcerpt)}</pre></details>` : ''}
     ${puLog}
+    ${verdictBlock}
     <p class=meta><a href="${up}index.html">← all plugins</a></p>${installHint(e, up)}`)
 }
 
-export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string): Promise<void> {
+export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string, verdictsPath?: string): Promise<void> {
   rmSync(outDir, { recursive: true, force: true })   // no stale files from a previous build
   mkdirSync(join(outDir, 'p'), { recursive: true })
+  const verdicts = verdictsPath ? loadVerdicts(verdictsPath) : undefined
   // index.json ships the FULL catalog (pending included) — it is the auditable
   // data plane; every UI/install surface filters pending itself.
   const indexJson = JSON.stringify(index)
@@ -245,7 +262,7 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
   for (const e of visible.plugins) {
     const p = join(outDir, 'p', `${e.slug}.html`)
     mkdirSync(dirname(p), { recursive: true })
-    writeFileSync(p, detailPage(e))
+    writeFileSync(p, detailPage(e, verdicts))
   }
 }
 
@@ -308,7 +325,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // zod-validate: a malformed index should die here with a readable error,
     // not halfway through a build (S-13)
     const idx = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8')))
-    await buildSite(idx, process.argv[3] ?? 'dist-site', process.env.SKILL_CACHE)
+    await buildSite(idx, process.argv[3] ?? 'dist-site', process.env.SKILL_CACHE, process.argv[4])
     console.log('site built')
   })()
 }
@@ -383,9 +400,9 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   for (const s of skills) {
     const isGh = s.source?.kind === 'github'
     const ghRepo = isGh ? ghRepoOf(s) : null
-    // github version marker = the scanned tree sha (source.version) — codeload
-    // pins to it so served bytes equal what the evidence gate + scan saw;
-    // pushedAt (modifiedAt) is only the fallback for pre-sha index data.
+    // github version marker = the resolved commit sha (source.version) —
+    // codeload pins to it so served bytes equal what the evidence gate + scan
+    // saw; pushedAt (modifiedAt) is only the fallback for pre-sha index data.
     const ver = isGh ? (s.source?.version ?? s.modifiedAt) : s.latestVersion
     if (isGh && !ghRepo) continue                     // malformed repo id
     if (!ver) continue                                // npm entry without a version — nothing to serve
@@ -417,7 +434,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     try {
       // pin to the approved version — `npm view <name>` resolves dist-tags.latest
       // which is the pendingUpdate users must not receive (hold semantics).
-      // github: codeload keyed by the scanned tree sha, not HEAD (version
+      // github: codeload keyed by the resolved commit sha, not HEAD (version
       // marker = the pinned bytes); repo goes through execFile argv, not a shell.
       const tb = c.ghRepo ? ghTarballOf(c.ghRepo, c.s.source?.version) : await tarballOf(`${c.s.name}@${c.ver}`)
       if (!tb) return

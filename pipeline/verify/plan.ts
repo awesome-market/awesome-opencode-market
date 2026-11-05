@@ -5,10 +5,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
+import { candidateHeldAt } from '../ai/diagnose.ts'
+import { OPENCODE_VERSION } from '../publish/merge.ts'
 import type { VerifyTarget } from './verify.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
-export function verifyTargetOf(e: PluginEntry): { version: string | null; unverified: boolean; flagged: boolean; features: string[] } {
+export function verifyTargetOf(e: PluginEntry): { version: string | null; unverified: boolean; flagged: boolean; features: string[]; hostStale: boolean } {
   const slot = e.pendingUpdate ?? null
   const version = slot ? slot.version : e.latestVersion
   const verification = slot ? slot.verification : e.verification
@@ -19,6 +21,10 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
     unverified: verification.status === 'unverified',
     flagged: caps.redFlags.length > 0,
     features,
+    // a verified result binds the host it ran on: a different (or absent —
+    // predating the field) opencodeVersion means the displayed claim was
+    // never exercised on the current runtime and re-enters the queue
+    hostStale: verification.status === 'verified' && verification.opencodeVersion !== OPENCODE_VERSION,
   }
 }
 
@@ -51,20 +57,48 @@ export function verifyQueued(e: PluginEntry, now = new Date()): boolean {
 /** The installable parts a verify run must prove, normalized from `contains`.
  *  Legacy entries predate the field — plugin-shaped unless the submission
  *  declared itself a skill (type 'skill' + no parts), whose payload is
- *  SKILL.md rather than a loadable plugin artifact. */
+ *  SKILL.md rather than a loadable plugin artifact.
+ *  With a hold in place the CANDIDATE's parts live on pendingUpdate.contains
+ *  (entry.contains is pinned to the displayed release); holds predating that
+ *  field still carry candidate parts on the entry itself. */
 export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains']> {
-  return e.contains?.length ? e.contains : [e.type === 'skill' ? 'skill' : 'plugin']
+  // an explicit contains field — including [] — is authoritative: []
+  // means "no installable payload" and must NOT fall back to type-inferred
+  // parts (skill-only npm packages would re-enter the plugin verify chain)
+  const c = e.pendingUpdate?.contains ?? e.contains
+  return c !== undefined ? c : [e.type === 'skill' ? 'skill' : 'plugin']
+}
+
+/** Slots whose recorded verify ran on a different host version — the bounded
+ *  re-verification backlog. Same filters as the queue (installable parts,
+ *  unflagged, versioned) but orthogonal membership: these are 'verified'
+ *  results invalidated by an opencode upgrade. */
+export function hostStaleVerify(e: PluginEntry): boolean {
+  const t = verifyTargetOf(e)
+  if (!t.version || t.flagged || !t.hostStale) return false
+  const parts = verifyPartsOf(e)
+  return parts.includes('plugin') || parts.includes('skill')
 }
 
 export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date()): VerifyTarget[] {
   const subs: VerifyTarget[] = []
+  const staleHost: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
-  for (const p of index.plugins) {
+  // FIFO by candidate hold age (same clock diagnose consumes) — index order
+  // is name-asc, so without this a deep backlog starves alphabetically-late
+  // packages forever while early ones hog every run's cap
+  const ordered = [...index.plugins]
+    .sort((a, b) => (candidateHeldAt(a) || 0) - (candidateHeldAt(b) || 0))
+  for (const p of ordered) {
     const t = verifyTargetOf(p)
     // retest (manual `targets` dispatch) may re-run failed/verified versions;
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
     // Flagged stays excluded in every mode: red-flagged code never executes here.
-    if (!t.version || t.flagged || (!retest && !verifyQueued(p, now))) continue
+    if (!t.version || t.flagged) continue
+    // host-version drift: a verified result recorded under a different
+    // opencodeVersion is stale evidence — re-verify (bounded by cap) rather
+    // than letting a compat claim ride the old runtime forever (P1-6)
+    if (!retest && !verifyQueued(p, now) && !t.hostStale) continue
     const parts = verifyPartsOf(p)
     // no plugin artifact AND no skill payload — nothing exists to honestly
     // verify (mcp/command/agent entries have no structure check yet)
@@ -75,11 +109,12 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
       parts,
     }
     // submission-originated entries verify first — a human asked for them.
-    // index.plugins is name-asc, so each tier stays alphabetical; backlog
-    // drains over as many runs as the cap requires.
-    ;(p.discoveredVia?.includes('submission') ? subs : rest).push(target)
+    // Host-stale re-verification outranks the normal queue: those entries
+    // are DISPLAYED as verified on a runtime the claim was never exercised
+    // on. Within each tier the pre-sort above keeps oldest-held first.
+    ;(p.discoveredVia?.includes('submission') ? subs : t.hostStale ? staleHost : rest).push(target)
   }
-  return [...subs, ...rest].slice(0, cap)
+  return [...subs, ...staleHost, ...rest].slice(0, cap)
 }
 
 /** Greedy weight-balanced sharding: each target lands on the currently
@@ -110,8 +145,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // 8/shard: post-V-4 worst case ≈ 8 × ~3.7min ≈ 30min — fits the 35min job
   // timeout with margin (the old 12/shard math predates the widened windows).
   // Feature-routed targets cost extra stages — charge them so shards balance
-  // by minutes, not headcount.
-  const shards = shard(targets, 8, t => 1 + (t.features?.length ?? 0))
+  // by minutes, not headcount. Dual plugin+skill pays for BOTH checks (the
+  // structure pass is a second npm pack+tar cycle on top of the load chain).
+  const shards = shard(targets, 8, t =>
+    1 + (t.features?.length ?? 0) + (t.parts?.includes('plugin') && t.parts?.includes('skill') ? 1 : 0))
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))
   // matrix list goes to a file, not stdout-position — a future log line can't

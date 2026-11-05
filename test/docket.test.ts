@@ -50,10 +50,10 @@ describe('docketTargets', () => {
   it('no verdict yet → AI queue will handle, no human ask', () => {
     expect(docketTargets(idx([e()]), [])).toEqual([])
   })
-  it('repo-only pending (latestVersion null, no verdict) → standing human review issue', () => {
-    const t = docketTargets(idx([e({ latestVersion: null })]), [])
-    expect(t).toEqual([{ name: 'pkg', version: null, verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: 't' }])
+  it('repo-only pendings aggregate into ONE standing backlog issue (no per-entry flood)', () => {
+    const t = docketTargets(idx([e({ latestVersion: null }), e({ name: 'o/r2', slug: 'o/r2', latestVersion: null })]), [])
+    expect(t).toEqual([{ name: '(repo-only backlog)', version: null, verdict: 'none',
+      backlog: [{ name: 'pkg', heldAt: 't' }, { name: 'o/r2', heldAt: 't' }] }])
   })
   it('repo-only pending WITH a human verdict → decided, no standing issue', () => {
     const t = docketTargets(idx([e({ latestVersion: null })]),
@@ -153,6 +153,14 @@ describe('issueBody', () => {
     const b2 = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', maturity: 'announced' })
     expect(b2).toContain('待放行闸')
   })
+  it('ai pass on a flagged/unscanned slot never promises 按班放行 in the maturity line', () => {
+    const flagged = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', redFlags: 2, maturity: 'announced' })
+    expect(flagged).toContain('放行闸被旗标/未扫描锁定')
+    expect(flagged).not.toContain('按班放行')
+    const blind = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', unscanned: true, maturity: 'announced' })
+    expect(blind).toContain('放行闸被旗标/未扫描锁定')
+    expect(blind).not.toContain('按班放行')
+  })
   it('stuck verdict:* label produces a warning block', () => {
     const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass' }, { stuckLabel: 'verdict:pass' })
     expect(body).toContain('未写盘')
@@ -189,7 +197,7 @@ describe('issueBody', () => {
 })
 
 describe('docket main', () => {
-  it('creates a label-free-of-ai verdict issue for repo-only pendings + closes decided ones', async () => {
+  it('creates ONE aggregate issue for repo-only pendings + closes decided ones', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
@@ -212,7 +220,8 @@ describe('docket main', () => {
     } finally { process.env.GH_REPO = saved }
     const create = calls.find(c => c.includes('create'))
     expect(create).toBeTruthy()
-    expect(create!.join(' ')).toContain('[review] pkg')
+    expect(create!.join(' ')).toContain('[review] (repo-only backlog)')
+    expect(create!.join(' ')).toContain('`pkg`')
     // 'none' verdicts carry no ai: label — the body itself says "AI 不审"
     expect(create!.join(' ')).not.toContain('ai:')
     expect(calls.some(c => c.includes('close') && c.includes('9'))).toBe(true)

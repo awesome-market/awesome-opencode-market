@@ -15,30 +15,80 @@
  *  Usage:
  *    tsx pipeline/ai/digest.ts --index index.json --verdicts ai-verdicts.jsonl \
  *      --state digest-state.json --out-dir . [--date YYYY-MM-DD] [--dry] */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
   effectiveVerdict, vkey, akey } from '../verdicts.ts'
-import { verifyQueued } from '../verify/plan.ts'
+import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
 export interface DigestInput {
   index: CatalogIndex
   verdicts: AiVerdict[]
-  /** previous digest-state.json (null = bootstrap: everything announces) */
+  /** previous digest-state.json (null = bootstrap: only verdicts inside
+   *  BOOTSTRAP_WINDOW announce — see below) */
   prev: DigestState | null
   now: Date
 }
 
+/** Bootstrap guard (G3): the FIRST digest ever rendered (prev=null, no
+ *  digest/*.md history — state loss with history already hard-fails in main)
+ *  must not announce the entire verdict backlog at once. Every announced
+ *  pass matures at the next applyMatureVerdicts — months of accumulated
+ *  verdicts would all release within ~6h of one render, collapsing the
+ *  objection window the digest exists to provide. Restricting bootstrap to
+ *  verdicts younger than this window stages the backlog: old candidates
+ *  announce normally from the SECOND digest on, giving the whole set a
+ *  full ~24h of rendered visibility before it can mature. */
+export const BOOTSTRAP_WINDOW_MS = 14 * 86_400_000
+const bootstrapCutoff = (prev: DigestState | null, now: Date) =>
+  prev === null ? now.getTime() - BOOTSTRAP_WINDOW_MS : -Infinity
+
+/** The vkeys applyMatureVerdicts can ever query for a PASS release:
+ *  every pendingUpdate slot + the displayed slot of pending entries. A pass
+ *  on any other key (an approved display slot, a superseded hold) can never
+ *  be asked to mature — announcing it is noise, not signal. */
+function heldSlotKeys(index: CatalogIndex): Set<string> {
+  const s = new Set<string>()
+  for (const e of index.plugins) {
+    if (e.pendingUpdate) s.add(vkey(e.name, e.pendingUpdate.version))
+    if (e.approval === 'pending') s.add(vkey(e.name, e.latestVersion))
+  }
+  return s
+}
+
+/** Which LIVE verdict lines belong in a digest (Bug-1 + bounded `announced`):
+ *  — a line on a held slot (it can actually mature there);
+ *  — any line for a name absent from index (ghost verdict — announced ⚠️);
+ *  — any 'concern' line (brakes/judgments stay visible on every slot).
+ *  A 'pass' on an already-approved displayed slot is never rendered nor kept
+ *  in `announced`: nothing can mature off it and dropping it cannot resurrect
+ *  — if its key ever becomes a slot again the line re-announces once. */
+function announcementCandidates(verdicts: AiVerdict[], index?: CatalogIndex): AiVerdict[] {
+  const live = [...latestVerdicts(verdicts).values()]
+  if (!index) return live
+  const slots = heldSlotKeys(index)
+  const inIndex = new Set(index.plugins.map(e => e.name))
+  return live.filter(v =>
+    slots.has(vkey(v.name, v.version)) || !inIndex.has(v.name) || v.verdict === 'concern')
+}
+
 /** State transition for one render — kept separate from markdown so the
  *  maturity semantics are unit-testable without string matching. */
-export function nextDigestState(verdicts: AiVerdict[], prev: DigestState | null, now: Date): DigestState {
+export function nextDigestState(verdicts: AiVerdict[], prev: DigestState | null, now: Date, index?: CatalogIndex): DigestState {
   const day = now.toISOString().slice(0, 10)
   const nowIso = now.toISOString()
-  const seen = new Set(verdicts.filter(v => v.at <= nowIso).map(akey))
+  // Only the LATEST line per key can ever be the effective verdict, and only
+  // candidate lines are announce-able — a superseded line's akey must never
+  // (re-)enter announced: pruned once, it would look "never announced" and
+  // phantom-announce in every later digest (Bug-1). Bootstrap (prev=null)
+  // additionally windows `seen` — see BOOTSTRAP_WINDOW_MS.
+  const cutoff = bootstrapCutoff(prev, now)
+  const seen = new Set(announcementCandidates(verdicts, index)
+    .filter(v => v.at <= nowIso && Date.parse(v.at) >= cutoff).map(akey))
   const prevAnnounced = new Set(prev?.announced ?? [])
   const firstSeen = [...seen].filter(k => !prevAnnounced.has(k))
   const dayAnnounced = [...new Set([...(prev?.day === day ? prev.dayAnnounced : []), ...firstSeen])]
@@ -47,8 +97,10 @@ export function nextDigestState(verdicts: AiVerdict[], prev: DigestState | null,
   // announced is bounded by the CURRENT latest verdict per key: a superseded
   // line can never win latestVerdicts again (`at` is monotonic), so its
   // announcement slot is dead weight — pruning it keeps digest-state small
-  // instead of growing with every verdict ever written.
-  const liveAkeys = new Set([...latestVerdicts(verdicts).values()].map(akey))
+  // instead of growing with every verdict ever written. Non-candidate keys
+  // drop out too — a mature pass on a slot that no longer needs it (released
+  // display, retired hold) is dead weight the same way.
+  const liveAkeys = new Set(announcementCandidates(verdicts, index).map(akey))
   const announced = [...new Set([...prevAnnounced, ...seen])].filter(k => liveAkeys.has(k))
   return { lastDigestAt: anchor, day, dayAnnounced, announced }
 }
@@ -62,7 +114,9 @@ function repoUrl(): string {
     const url = execSync('git remote get-url origin', { encoding: 'utf8' }).trim()
     return url.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '')
   } catch {
-    return 'https://github.com/terry2010/awesome-opencode-market'
+    // org prod — the canonical issue plane; a fork fallback would render
+    // review links that resolve to an empty issue search (G5)
+    return 'https://github.com/awesome-market/awesome-opencode-market'
   }
 }
 
@@ -71,12 +125,23 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
   const nowIso = now.toISOString()
 
   // §①/§③ display set = verdict lines first announced TODAY: yesterday's
-  // dayAnnounced (same-day cumulative) + lines never announced before.
+  // dayAnnounced (same-day cumulative — keeps lines superseded since the
+  // morning render in today's file as history) + candidate lines never
+  // announced before. Non-candidate lines (superseded, or pass on a slot
+  // that needs no maturity) never enter — no phantom re-announcements.
+  const candidates = announcementCandidates(verdicts, index)
   const prevAnnounced = new Set(prev?.announced ?? [])
   const todayFirst = new Set(prev?.day === day ? prev.dayAnnounced : [])
-  for (const v of verdicts) {
-    if (v.at <= nowIso && !prevAnnounced.has(akey(v))) todayFirst.add(akey(v))
+  const cutoff = bootstrapCutoff(prev, now)
+  for (const v of candidates) {
+    if (v.at <= nowIso && Date.parse(v.at) >= cutoff && !prevAnnounced.has(akey(v))) todayFirst.add(akey(v))
   }
+  // bootstrap withheld count — candidates old enough to be excluded by the
+  // window; surfaced in the header so the staged announce is visible, not
+  // silent (they announce normally from the next digest on)
+  const withheld = prev === null
+    ? candidates.filter(v => v.at <= nowIso && Date.parse(v.at) < cutoff).length
+    : 0
   // dedupe by akey — a verdict line pushed twice (a retry that appended the
   // same line) must not render two identical rows
   const seenAkey = new Set<string>()
@@ -100,7 +165,7 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
   // silently-invisible data: future-dated verdicts can never announce or
   // mature — surface them instead of letting them sit forever (clock skew
   // on a diagnose machine would otherwise look like "nothing to report").
-  const future = verdicts.filter(v => v.at > nowIso).length
+  const future = candidates.filter(v => v.at > nowIso).length
 
   // §② held — oldest first (matches diagnose's consumption order), with the
   // hold reason visible: "waiting for AI" and "AI concern → needs human" are
@@ -116,16 +181,22 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
   // drain shows the real number, retryable failures included.
   const queue = index.plugins.filter(e => verifyQueued(e, now))
   const qSubs = queue.filter(e => e.discoveredVia?.includes('submission')).length
+  // host-version drift backlog (P1-6): verified results recorded under a
+  // different opencodeVersion re-enter the verify queue ahead of normal work
+  const hostStale = index.plugins.filter(e => hostStaleVerify(e)).length
   const weekAgo = now.getTime() - 7 * 86_400_000
   const verOf = (e: PluginEntry) => (e.pendingUpdate ? e.pendingUpdate.verification : e.verification)
   const recentFailed = index.plugins.filter(e => {
     const v = verOf(e)
     return v.status === 'failed' && Number.isFinite(Date.parse(v.verifiedAt ?? '')) && Date.parse(v.verifiedAt!) >= weekAgo
   }).length
+  // same hold clock §②/§⑤/planTargets use (candidateHeldAt) — one queue,
+  // one "oldest" definition; firstSeenAt alone undercounts verify-rescans
   const oldestWait = queue
-    .map(e => e.pendingUpdate?.heldAt ?? e.firstSeenAt)
-    .filter((d): d is string => Number.isFinite(Date.parse(d ?? '')))
-    .sort()[0]
+    .map(candidateHeldAt)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b)
+    .map(t => new Date(t).toISOString())[0]
 
   // review backlog (D-7): the diagnose consumption predicate itself —
   // unreviewedTargets, shared with the watchdog's PENDING count, so the
@@ -165,17 +236,33 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
     const vf = e.pendingUpdate?.verification ?? e.verification
     const rec = ver ? latest.get(vkey(e.name, ver)) : undefined
     if (rec && eff(rec)?.verdict === 'concern') return '已打标 concern'
+    // failed outranks the pass phases: a mature pass whose slot then failed
+    // verification can NEVER release (release gate excludes failed) — showing
+    // '待放行闸' would promise a release that's structurally impossible until
+    // the slot re-verifies. '验证失败' is the honest terminal-looking phase.
+    if (vf.status === 'failed') return '验证失败'
+    // mirror applyMatureVerdicts' AI gates: an announced AI pass on a flagged
+    // or never-scanned slot can NEVER auto-release — '待放行闸' would promise
+    // a release that structurally won't happen without a human verdict
+    const caps = e.pendingUpdate?.capabilities ?? e.capabilities
+    if (rec?.verdict === 'pass' && rec.source === 'ai' &&
+        (caps.redFlags.length > 0 || caps.scannedAt === null))
+      return 'AI pass 被旗标/未扫描拦截·需人工'
     if (rec?.verdict === 'pass') return willAnnounce(rec) ? '已公告·待放行闸' : '已裁决·待日报公告'
     if (vf.status === 'unverified') return '待验证'
-    if (vf.status === 'failed') return '验证失败'
     return '待评审'
   }
 
   // reason text is model/human output rendered into a committed markdown
-  // file — escape link syntax so package-metadata-driven text can't inject
-  // clickable markup (D-F); '|' for the tables
-  const escMd = (s: string) => s.replace(/([\\[\]])/g, '\\$1')
-  const escCell = (s: string) => escMd(s).replaceAll('|', '\\|')
+  // file — escape link syntax AND raw HTML so package-metadata-driven text
+  // can't inject clickable markup (D-F); '|' for the tables. Entities for
+  // <>& — backslash-escaped `<` still parses as raw HTML in some renderers.
+  const escMd = (s: string) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/([\\[\]])/g, '\\$1')
+  // cells must stay one line — a multi-line verdict reason would break the
+  // markdown table row (writers normalize already; this is the belt)
+  const escCell = (s: string) => escMd(s.replace(/\s*\n\s*/g, ' ')).replaceAll('|', '\\|')
   const reasonOf = (v: AiVerdict) => escCell(v.reason ?? '') + (v.reasonEn ? ` / ${escCell(v.reasonEn)}` : '')
   const repo = repoUrl()
   const reviewLink = (v: AiVerdict) => {
@@ -199,11 +286,16 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
     const reason = e.pendingUpdate?.reason ?? e.approvalReason
     return `- \`${e.name}\` ${ver} · ${phaseOf(e)}${reason ? ` — ${oneLine(escMd(reason))}` : ''}`
   }
-  // bounded list — a full backlog dump is unusable on a phone; oldest first
+  // first 50 inline (phone-readable); the REST of the backlog stays human-
+  // readable in a collapsed block — "见 index.json" is a dead end for the
+  // raw-JSON machine plane (G3)
   const HELD_CAP = 50
   const heldList = held.length
     ? held.slice(0, HELD_CAP).map(heldLine).join('\n') +
-      (held.length > HELD_CAP ? `\n- …还有 ${held.length - HELD_CAP} 条（最老优先截断；完整清单见 index.json）` : '')
+      (held.length > HELD_CAP
+        ? `\n\n<details><summary>…其余 ${held.length - HELD_CAP} 条（最老优先，点开看全量）</summary>\n\n` +
+          held.slice(HELD_CAP).map(heldLine).join('\n') + '\n\n</details>'
+        : '')
     : '_空_'
   return `# marketplace digest ${day}
 
@@ -211,7 +303,7 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
 > "no findings" ≠ safe.
 > 📱 手机操作：点行的「审核单」链接开 issue → **Labels** 勾 \`verdict:pass\` 或 \`verdict:concern\` 即可写回裁决，零打字。
 > 行标说明：⛔已被更新的 concern 刹车 = 该行已公告但不会放行；⚠️不在目录 = 该 verdict 针对的条目当前不在 index（已下架或未入库），公告照发但无槽可落。
-${future ? `> ⚠️ ${future} 条 verdict 时间戳在未来，本期未计入——检查 verdict 写入端时钟。\n` : ''}
+${future ? `> ⚠️ ${future} 条 verdict 时间戳在未来，本期未计入——检查 verdict 写入端时钟。\n` : ''}${withheld ? `> ⚠️ 首次公告（bootstrap）：${withheld} 条早于 ${BOOTSTRAP_WINDOW_MS / 86_400_000} 天的历史裁决本期暂不公告——避免存量一次性成熟跳过异议窗口；下一期日报起恢复正常公告。\n` : ''}
 ## ① 今日新放行（pass verdicts — ${passes.length}）
 
 ${passes.length ? table(passes) : '_无_'}
@@ -226,7 +318,7 @@ ${concerns.length ? table(concerns) : '_无_'}
 
 ## ④ 验证积压（queue — ${queue.length}）
 
-- 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}
+- 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}${hostStale ? ` / 宿主版本漂移待重验 ${hostStale}` : ''}
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
@@ -259,10 +351,24 @@ export async function main(args: string[] = process.argv): Promise<void> {
   const verdicts = loadVerdicts(verdictsPath)
   const prev = loadDigestState(statePath)
 
+  // state LOSS ≠ bootstrap: prev=null with digests already published means
+  // digest-state.json vanished or went corrupt. Rendering on would announce
+  // every live verdict at once — the whole backlog skipping its objection
+  // window in one shot (fail-open). Refuse loudly instead; the watchdog's
+  // alert job opens a pipeline-alert issue on this failure (Bug-2).
+  if (prev === null) {
+    let hasHistory = false
+    try { hasHistory = readdirSync(join(outDir, 'digest')).some(f => f.endsWith('.md')) } catch { /* no dir */ }
+    // throw (not exit): the main().catch wrapper prints and exits 1 the same
+    // way, but the failure stays assertable in tests
+    if (hasHistory)
+      throw new Error(`digest-state.json missing/corrupt but digest/*.md exists — refusing to re-announce everything. Restore digest-state.json (or rebuild it from ai-verdicts.jsonl) and rerun.`)
+  }
+
   const md = renderDigest({ index, verdicts, prev, now })
   const day = now.toISOString().slice(0, 10)
   const digestPath = join(outDir, 'digest', `${day}.md`)
-  const next = nextDigestState(verdicts, prev, now)
+  const next = nextDigestState(verdicts, prev, now, index)
   if (dry) {
     console.log(md)
     console.log(`[digest] lastDigestAt ${prev?.lastDigestAt ?? '∅'} → ${next.lastDigestAt}; announced ${prev?.announced.length ?? 0} → ${next.announced.length}`)

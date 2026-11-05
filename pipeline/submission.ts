@@ -34,6 +34,16 @@ function field(map: Map<string, string>, ...labels: string[]): string | null {
   return null
 }
 
+/** Full section value (not first-line) — for free-text fields like the
+ *  description where a multi-line answer must not be silently truncated. */
+function fieldFull(map: Map<string, string>, ...labels: string[]): string | null {
+  for (const l of labels) {
+    const v = map.get(l)
+    if (v) return v.trim()
+  }
+  return null
+}
+
 const PKG_RE = /^(@[a-z0-9-]+\/)?[a-z0-9-_.]+$/i
 const LANG_LINE = /^([a-z]{2,3}(?:-[A-Za-z]{2,8})?)\s*[:：]\s*(.+)$/
 
@@ -56,7 +66,10 @@ export function parseSubmission(body: string): Submission {
   const repoM = repoRaw?.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/) ?? body.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/)
   const repo = repoM ? repoM[1]!.replace(/\.git$/, '').replace(/\/$/, '') : null
 
-  const descEn = field(map, 'Description (English) / 英文描述', '英文描述', 'english description', 'description (en)') ?? null
+  // description is free text — keep the whole answer (newlines collapsed so a
+  // catalog one-liner can't break layout), capped like every other seed field
+  const descEnRaw = fieldFull(map, 'Description (English) / 英文描述', '英文描述', 'english description', 'description (en)')
+  const descEn = descEnRaw ? descEnRaw.replace(/\s*\n\s*/g, ' ').slice(0, 4000) : null
   const descOtherRaw = map.get('Other languages (optional) / 其他语言描述') ?? map.get('其他语言描述（可选）') ?? map.get('other languages') ?? ''
   const descOther: Record<string, string> = {}
   for (const line of descOtherRaw.split('\n')) {
@@ -84,29 +97,34 @@ export function parseSubmission(body: string): Submission {
 /** One-line JSONL for catalog-branch submissions.txt (consumed by run.ts --seed).
  *  `version` records what the review actually scanned (npm version or repo tree
  *  sha) — the human-verdict path pins approvals to it, and stale-seed detection
- *  uses `at` to age submissions that never landed. */
-export function seedLine(s: Submission, issue: number, extra: { version?: string | null; pkg?: string | null } = {}): string {
+ *  uses `at` to age submissions that never landed. `author` feeds the ingest
+ *  rate limit (open-submission cap per account). */
+export function seedLine(s: Submission, issue: number, extra: { version?: string | null; pkg?: string | null; author?: string | null } = {}): string {
   return JSON.stringify({
     name: s.name,
     repo: s.repo,
     type: s.type,
     category: s.category,
-    desc: { en: s.descEn, ...s.descOther },
+    // descOther spread first so an `en:` line in "other languages" can't
+    // silently override the dedicated English description field
+    desc: { ...s.descOther, ...(s.descEn ? { en: s.descEn } : {}) },
     ...(extra.version ? { version: extra.version } : {}),
     ...(extra.pkg ? { pkg: extra.pkg } : {}),
     issue,
+    ...(extra.author ? { author: extra.author } : {}),
     at: new Date().toISOString(),
     notified: false,
   })
 }
 
 // CLI: ISSUE_BODY=<body> npx tsx pipeline/submission.ts          → JSON fields
-//      ISSUE_BODY=<body> SEED_VERSION=<v> npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
+//      ISSUE_BODY=<body> SEED_VERSION=<v> SEED_PKG=<p> SEED_AUTHOR=<a>
+//        npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
 /* v8 ignore next 5 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const s = parseSubmission(process.env.ISSUE_BODY ?? '')
   const i = process.argv.indexOf('--seedline')
   console.log(i > 0
-    ? seedLine(s, Number(process.argv[i + 1]), { version: process.env.SEED_VERSION ?? null, pkg: process.env.SEED_PKG ?? null })
+    ? seedLine(s, Number(process.argv[i + 1]), { version: process.env.SEED_VERSION ?? null, pkg: process.env.SEED_PKG ?? null, author: process.env.SEED_AUTHOR ?? null })
     : JSON.stringify(s))
 }

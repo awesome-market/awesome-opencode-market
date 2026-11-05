@@ -21,11 +21,12 @@ jobs:
     # a partially-failed verify still left valid catalog data — syncing the
     # docket against it is safe; only a cancelled run means "nothing landed".
     # Scope guard: a fork's hourly cron would churn labels/issues against a
-    # catalog branch it doesn't have.
+    # catalog branch it doesn't have. Whitelist = the known data planes
+    # (org prod + terry2010 current prod).
     if: >-
       (github.event_name != 'workflow_run'
         || github.event.workflow_run.conclusion != 'cancelled')
-      && (github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market')
+      && (github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —

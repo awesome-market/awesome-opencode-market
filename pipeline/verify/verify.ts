@@ -5,7 +5,7 @@
  *  own 'verified' verdict (V-1). */
 import { execFile, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, chmodSync,
-  openSync, readSync, fstatSync, closeSync } from 'node:fs'
+  openSync, readSync, fstatSync, closeSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -41,6 +41,13 @@ export interface VerifyResult {
   opencodeVersion: string
   verifiedAt: string
   logExcerpt?: string
+  /** true when the shard THREW around the package check (sandbox setup, fs,
+   *  spawn) rather than measuring the package — an infrastructure signal,
+   *  not a verdict. merge drops these: writing them as 'failed' would burn
+   *  retry budget and feed diagnose's verify-failed concern short-circuit
+   *  on packages that were never actually tested (the 2025-11-04 incident:
+   *  a sandbox perms bug recorded 48 innocent packages as install-failed). */
+  harness?: boolean
 }
 
 /** Shard input unit (verify.yml plan emits these). Legacy string shards coerce. */
@@ -231,7 +238,10 @@ export async function checkSkillStructure(
       .find(p => /(^|\/)SKILL\.md$/.test(p.replace(/^package\//, '')))
     if (!skillEntry) return { ok: false, log: `no SKILL.md in ${spec} tarball` }
     const body = (await run('tar', ['xzf', tgz, '-O', skillEntry], { timeout: 30_000 })).stdout
-    const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(body)
+    // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
+    // SKILL.md files picked up both from Windows editors; neither changes
+    // whether opencode can parse the manifest
+    const fm = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(body)
     if (!fm?.[1] || !/^name:\s*\S/m.test(fm[1])) {
       return { ok: false, log: `SKILL.md in ${spec} lacks a frontmatter block with a name field` }
     }
@@ -467,6 +477,22 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
     if (!ok) {
       console.warn(`sandbox user '${sandboxUser}' unavailable — running unconfined`)
       sandboxUser = undefined
+    } else {
+      // deep probe: `sudo -u nobody true` succeeding does NOT prove the
+      // chown/mkdir/write chain works — the 2025-11-04 incident was exactly
+      // that gap (runner-owned 0711 home → nobody EACCES → 48 packages
+      // recorded install-failed in ~30s). Rehearse setupSandbox on a
+      // throwaway home and prove the sandbox uid can actually write inside
+      // uh. Failure here is INFRASTRUCTURE — fail the shard loudly rather
+      // than degrade to unconfined execution of untrusted plugin code.
+      const ph = mkdtempSync(join(tmpdir(), 'sbprobe-'))
+      try {
+        await setupSandbox(ph, sandboxUser, probe)
+        await probe('sudo', ['-n', '-u', sandboxUser, 'touch', join(ph, 'u', '.probe')],
+          { timeout: 10_000 })
+      } finally {
+        rmSync(ph, { recursive: true, force: true })
+      }
     }
   }
   // Untrusted code runs inside this process (L3a gui bundles). A fire-and-forget
@@ -490,6 +516,11 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
     // Runner-side on purpose: `opencode --version` executes no plugin code.
     const ocVer = passOpts.opencodeVersion ??
       await ocVersion({ PATH: process.env.PATH }, opts.execFn ?? exec).catch(() => 'unknown')
+    // consecutive-throw circuit breaker: verifyPackage RETURNS 'failed' for
+    // package problems — a throw means the harness itself broke (fs, sudo,
+    // spawn). Three in a row is an outage, not three bad packages: stop
+    // burning the remaining targets; they stay unverified for the next run.
+    let harnessStreak = 0
     for (const t of targets) {
       const target = coerceTarget(t)
       try {
@@ -501,8 +532,13 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
           ...(target.features ? { features: target.features } : {}),
           ...(target.parts ? { parts: target.parts } : {}),
         }))
+        harnessStreak = 0
       } catch (e) {
-        // one bad target must not take the shard down — record it as failed
+        harnessStreak++
+        // one bad target must not take the shard down — record it, but flag
+        // it as a harness error so merge drops it instead of writing a false
+        // package 'failed' (burns retries + feeds the diagnose concern
+        // short-circuit on packages never actually tested)
         results.push({
           name: target.name,
           ...(target.version ? { version: target.version } : {}),
@@ -510,10 +546,16 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
           opencodeVersion: 'unknown',
           verifiedAt: new Date().toISOString(),
           logExcerpt: `harness error: ${String(e).slice(0, 2000)}`,
+          harness: true,
         })
       }
       console.log(`verify ${target.name}@${target.version ?? 'latest'}: ${results.at(-1)!.status}`)
       flush()
+      if (harnessStreak >= 3) {
+        console.error(`harness failure streak (${harnessStreak} consecutive throws) — aborting shard; ` +
+          `${targets.length - results.length} targets left unverified for the next run`)
+        break
+      }
     }
     return results
   } finally {

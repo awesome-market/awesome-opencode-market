@@ -21,6 +21,8 @@ export const VerifyResultFile = z.object({
   opencodeVersion: z.string(),
   verifiedAt: z.string(),
   logExcerpt: z.string().optional(),
+  // shard threw around the package check — infrastructure signal, dropped below
+  harness: z.boolean().optional(),
 })
 
 function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['verification']): PluginEntry['verification'] {
@@ -33,15 +35,33 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
     ...(r.logExcerpt ? { logExcerpt: r.logExcerpt } : {}),
     // consecutive-failure counter — plan lets a recent failure back into the
     // queue while retries < 3 (V-3). Cleared whenever the status isn't failed.
+    // Legacy failed records predate the field: `?? 1` used to count the first
+    // observed retry as attempt #2, silently shortening the retry budget —
+    // absent means zero prior retries, so the first counted failure is #1.
     ...(r.status === 'failed'
-      ? { retries: prev?.status === 'failed' ? (prev.retries ?? 1) + 1 : 1 }
+      ? { retries: prev?.status === 'failed' ? (prev.retries ?? 0) + 1 : 1 }
       : {}),
   }
 }
 
+// honest-label invariant — the same rule mergeEntries' skipIfFlagged applies
+// on the catalog path: a slot that gained redFlags between plan and merge
+// must not display 'verified' (the flags may describe bytes the run never
+// measured). 'failed' keeps its real outcome — it IS a measurement.
+const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
+  flagged && v.status === 'verified'
+    ? { status: 'skipped', level: v.level ?? 'install' }
+    : v
+
 export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUrl?: string): CatalogIndex {
   const byName = new Map<string, VerifyResult[]>()
-  for (const r of results) byName.set(r.name, [...(byName.get(r.name) ?? []), r])
+  for (const r of results) {
+    // harness:true rows are infrastructure failures the shard flagged — the
+    // package was never measured. Dropping (not writing 'failed') keeps the
+    // slot honest: unverified stays queued, a prior verdict stays standing.
+    if (r.harness) continue
+    byName.set(r.name, [...(byName.get(r.name) ?? []), r])
+  }
   return {
     ...index,
     plugins: index.plugins.map(p => {
@@ -50,10 +70,16 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
       let out = p
       for (const r of rs) {
         if (r.version && p.pendingUpdate?.version === r.version) {
-          out = { ...out, pendingUpdate: { ...out.pendingUpdate!, verification: toVerification(r, runUrl, out.pendingUpdate!.verification) } }
-        } else if (!r.version || r.version === out.latestVersion) {
-          // legacy version-less results and exact display-version matches
-          out = { ...out, verification: toVerification(r, runUrl, out.verification) }
+          const pu = out.pendingUpdate!
+          out = { ...out, pendingUpdate: { ...pu, verification: skipIfFlagged(
+            toVerification(r, runUrl, pu.verification), pu.capabilities.redFlags.length > 0) } }
+        } else if (r.version ? r.version === out.latestVersion : !out.pendingUpdate) {
+          // versioned display match — or a legacy version-less result, which
+          // is only unambiguous when NO hold exists (with a pendingUpdate it
+          // can't say which version it measured → drop rather than risk
+          // writing the held slot's verdict onto the displayed one)
+          out = { ...out, verification: skipIfFlagged(
+            toVerification(r, runUrl, out.verification), out.capabilities.redFlags.length > 0) }
         }
         // version matches neither slot → stale result (npm moved on mid-flight), drop
       }
@@ -84,5 +110,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // next CatalogIndex.parse (site build, plan) rejects wholesale
   const merged = CatalogIndex.parse(mergeResults(index, results, process.env.RUN_URL))
   writeFileSync(outPath!, JSON.stringify(merged, null, 2))
-  console.log(`merged ${results.length} verify results${dropped ? ` (${dropped} malformed dropped)` : ''}`)
+  const harnessDropped = results.filter(r => r.harness).length
+  console.log(`merged ${results.length - harnessDropped} verify results` +
+    `${dropped ? ` (${dropped} malformed dropped)` : ''}` +
+    `${harnessDropped ? ` (${harnessDropped} harness errors dropped — infrastructure, not package verdicts)` : ''}`)
 }

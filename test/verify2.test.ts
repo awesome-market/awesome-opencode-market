@@ -11,6 +11,7 @@ import { VerifyResultFile } from '../pipeline/verify/merge.ts'
 import { judgeTuiPane } from '../pipeline/verify/tui.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
+import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
 
 /** serve reports dead on arrival — a test must never boot a real `opencode`
  *  binary (dev boxes may have one installed). */
@@ -36,7 +37,8 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
   version: '1', generatedAt: 'x', categories: {}, plugins, removed: [],
 })
 const caps = (redFlags: string[] = []) => ({ scannedAt: 't', findings: [], redFlags })
-const verf = (status: 'unverified' | 'verified' | 'skipped' | 'failed') => ({ status }) as PluginEntry['verification']
+const verf = (status: 'unverified' | 'verified' | 'skipped' | 'failed', extra: Record<string, unknown> = {}) =>
+  ({ status, ...extra }) as PluginEntry['verification']
 
 describe('verifyPackage pinning', () => {
   const vHome = () => mkdtempSync(join(tmpdir(), 'vh2-'))
@@ -113,6 +115,37 @@ describe('verify/merge version routing', () => {
     ])
     expect(m.plugins[0]!.verification.status).toBe('verified')
   })
+  it('version-less result is DROPPED when a hold exists — it cannot say which version it measured', () => {
+    const e = entry({
+      latestVersion: '1.0.0', verification: verf('unverified'),
+      pendingUpdate: { version: '1.1.0', capabilities: caps(), verification: verf('unverified'), heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', status: 'failed', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+    ])
+    const p = m.plugins[0]!
+    expect(p.verification.status).toBe('unverified')
+    expect(p.pendingUpdate!.verification.status).toBe('unverified')
+  })
+  it('harness:true results are dropped entirely — infrastructure is not a package verdict', () => {
+    const e = entry({ verification: verf('unverified') })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'failed', level: 'install', opencodeVersion: '2.2.5',
+        verifiedAt: 'v', logExcerpt: 'harness error: sudo: a password is required', harness: true },
+    ])
+    const v = m.plugins[0]!.verification
+    expect(v.status).toBe('unverified')   // slot untouched — stays queued
+    expect(v.retries).toBeUndefined()     // no retry budget burned
+  })
+  it('legacy failed without retries counts the first observed failure as attempt 1', () => {
+    const e = entry({
+      verification: { status: 'failed', level: 'install', verifiedAt: '2026-01-01T00:00:00Z' } as PluginEntry['verification'],
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'failed', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+    ])
+    expect(m.plugins[0]!.verification.retries).toBe(1)   // was 2 before the ?? 0 fix
+  })
   it('pending new entry: result for latestVersion lands in verification (release gate reads it)', () => {
     const e = entry({ approval: 'pending', latestVersion: '3.0.0', verification: verf('unverified') })
     const m = mergeResults(idx([e]), [
@@ -151,14 +184,23 @@ describe('verify/plan', () => {
     expect(verifyQueued(dual)).toBe(true)
   })
   it('skips verified, flagged, and version-less entries', () => {
-    const verified = entry({ name: 'a', verification: verf('verified') })
+    const verified = entry({ name: 'a', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
     const flagged = entry({ name: 'b', verification: verf('unverified'), capabilities: caps(['x:y']) })
     const noVer = entry({ name: 'c', latestVersion: null, verification: verf('unverified') })
     expect(planTargets(idx([verified, flagged, noVer]))).toEqual([])
   })
+  it('host-version drift: verified@different opencodeVersion re-queues (P1-6)', () => {
+    const stale = entry({ name: 'stale', verification: verf('verified', { opencodeVersion: '9.9.9' }) })
+    const legacy = entry({ name: 'legacy', verification: verf('verified') })   // no recorded host → also stale
+    const current = entry({ name: 'current', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
+    const fresh = entry({ name: 'fresh', verification: verf('unverified') })
+    const got = planTargets(idx([stale, legacy, current, fresh]))
+    // stale-host tier outranks the normal queue; the current-host verify stays out
+    expect(got.map(t => t.name)).toEqual(['stale', 'legacy', 'fresh'])
+  })
   it('retest mode re-runs failed/verified but NEVER flagged targets', () => {
     const failed = entry({ name: 'a', verification: verf('failed') })
-    const verified = entry({ name: 'b', verification: verf('verified') })
+    const verified = entry({ name: 'b', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
     const flagged = entry({ name: 'c', verification: verf('failed'), capabilities: caps(['r:f']) })
     const skipped = entry({ name: 'd', verification: verf('skipped'), capabilities: caps(['r:f']) })
     expect(planTargets(idx([failed, verified, flagged, skipped]))).toEqual([])
@@ -198,6 +240,34 @@ describe('verify/plan', () => {
       entry({ name: `p${String(i).padStart(3, '0')}`, verification: verf('unverified') }))
     expect(planTargets(idx(es), 48)).toHaveLength(48)
   })
+  it('FIFO: oldest-held drains first regardless of name order', () => {
+    // name-asc would put 'aaa' first; heldAt must win — a deep backlog
+    // otherwise starves alphabetically-late packages forever
+    const old = entry({ name: 'zzz', firstSeenAt: '2026-01-01T00:00:00Z', verification: verf('unverified') })
+    const mid = entry({ name: 'mmm', firstSeenAt: '2026-01-03T00:00:00Z', verification: verf('unverified') })
+    const new_ = entry({ name: 'aaa', firstSeenAt: '2026-01-05T00:00:00Z', verification: verf('unverified') })
+    const got = planTargets(idx([new_, mid, old]))
+    expect(got.map(t => t.name)).toEqual(['zzz', 'mmm', 'aaa'])
+  })
+  it('submission tier still jumps ahead of older organic entries', () => {
+    const sub = entry({ name: 'sub', discoveredVia: ['submission'], firstSeenAt: '2026-01-05T00:00:00Z', verification: verf('unverified') })
+    const org = entry({ name: 'org', discoveredVia: ['npm-keyword'], firstSeenAt: '2026-01-01T00:00:00Z', verification: verf('unverified') })
+    expect(planTargets(idx([org, sub])).map(t => t.name)).toEqual(['sub', 'org'])
+  })
+  it('verifyPartsOf prefers pendingUpdate.contains — the held version its own parts', () => {
+    const e = entry({
+      contains: ['plugin'],   // displayed version's parts (pinned at hold time)
+      pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: verf('unverified'),
+        contains: ['plugin', 'skill'], heldAt: 't' },
+    })
+    expect(verifyPartsOf(e)).toEqual(['plugin', 'skill'])
+    // legacy hold without pu.contains → entry.contains still describes the candidate
+    const legacy = entry({
+      contains: ['plugin', 'skill'],
+      pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: verf('unverified'), heldAt: 't' },
+    })
+    expect(verifyPartsOf(legacy)).toEqual(['plugin', 'skill'])
+  })
   it('submission-originated targets sort ahead of the alphabetical queue', () => {
     // index.plugins order is name-asc: acrawl, asub, zsub
     const crawled = entry({ name: 'acrawl', discoveredVia: ['npm-keyword'], verification: verf('unverified') })
@@ -219,7 +289,7 @@ describe('verify/plan', () => {
       verification: verf('verified'), features: ['server'],
       pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: verf('unverified'), features: ['tui'], heldAt: 't' },
     })
-    expect(verifyTargetOf(e)).toEqual({ version: '2.0.0', unverified: true, flagged: false, features: ['tui'] })
+    expect(verifyTargetOf(e)).toEqual({ version: '2.0.0', unverified: true, flagged: false, features: ['tui'], hostStale: false })
   })
   it('shard spreads items across buckets (greedy balance, deterministic)', () => {
     expect(shard([1, 2, 3, 4, 5], 2)).toEqual([[1, 4], [2, 5], [3]])
@@ -493,8 +563,22 @@ describe('verifyShard', () => {
     expect(results).toHaveLength(2)
     expect(results.every(r => r.status === 'failed')).toBe(true)
     expect(results[0]!.logExcerpt).toContain('harness error')
+    expect(results.every(r => r.harness === true)).toBe(true)   // flagged for merge to drop
     // incremental flush — the file exists even though every target failed
     const onDisk = JSON.parse(readFileSync(out, 'utf8')) as { name: string }[]
     expect(onDisk.map(r => r.name)).toEqual(['a', 'b'])
+  })
+
+  it('three consecutive harness throws abort the shard — remaining targets stay unverified', async () => {
+    const { verifyShard } = await import('../pipeline/verify/verify.ts')
+    const home = mkdtempSync(join(tmpdir(), 'vs-'))
+    const out = join(home, 'results.json')
+    const notDir = join(home, 'afile')
+    writeFileSync(notDir, 'x')
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const results = await verifyShard(['a', 'b', 'c', 'd'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
+    // streak hits 3 at 'c' → 'd' never attempted (an outage is not 4 bad packages)
+    expect(results.map(r => r.name)).toEqual(['a', 'b', 'c'])
+    expect(results.every(r => r.harness === true)).toBe(true)
   })
 })

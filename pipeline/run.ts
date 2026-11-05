@@ -13,7 +13,7 @@ import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, vke
 import { retryable } from './verify/plan.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry, type RemovedEntry, type AiVerdict } from '../src/schema.ts'
-import { classify } from '../src/categories.ts'
+import { classify, catId, CAT_NAMES } from '../src/categories.ts'
 import { detectFeatures } from '../src/features.ts'
 
 export interface RunOptions {
@@ -63,6 +63,26 @@ export function replacementOf(msg: string | null): string | null {
   return m?.[1] ?? null
 }
 
+/** Re-tag guard: `integrity` must describe the bytes REVIEWED, not whatever
+ *  the registry serves now. Same version string + different SRI =
+ *  unpublish/republish — the single most suspicious supply-chain signal, so
+ *  freeze the reviewed anchor and flag the slot instead of silently
+ *  re-certifying new bytes. `sec:integrity-drift` rides the normal
+ *  sec:* → trustFlags/docket-flag surface; merge's skipIfFlagged keeps the
+ *  affected slot honestly 'skipped' until a human decides.
+ *  oldSha null → backfill (nothing to compare — anchors didn't exist yet);
+ *  newSha null → keep the old anchor (a missing registry value proves nothing). */
+export const DRIFT_FLAG = 'sec:integrity-drift'
+export function anchorIntegrity(
+  capabilities: PluginEntry['capabilities'],
+  oldSha: string | null | undefined,
+  newSha: string | null | undefined,
+): { integrity: string | null; capabilities: PluginEntry['capabilities'] } {
+  if (newSha == null) return { integrity: oldSha ?? null, capabilities }
+  if (oldSha == null || oldSha === newSha) return { integrity: newSha, capabilities }
+  return { integrity: oldSha, capabilities: { ...capabilities, redFlags: [...new Set([...capabilities.redFlags, DRIFT_FLAG])] } }
+}
+
 const METRICS_STALE_MS = 7 * 24 * 3600 * 1000
 
 export async function run(opts: RunOptions = {}) {
@@ -86,9 +106,21 @@ export async function run(opts: RunOptions = {}) {
     }
   }
   const oldByName = new Map((old?.plugins ?? []).map(e => [e.name, e]))
+  // latest tombstone per name — the re-entry identity check compares against
+  // the most recent disappearance (a package can cycle in and out)
+  const removedByName = new Map<string, RemovedEntry>()
+  for (const r of old?.removed ?? []) {
+    const cur = removedByName.get(r.name)
+    if (!cur || r.disappearedAt > cur.disappearedAt) removedByName.set(r.name, r)
+  }
   const blocklist = loadBlocklist(opts.blocklistPath)
   const isBlocked = (name: string, slug?: string) =>
     !!blocklist && (blocklist.names.includes(name) || (!!slug && blocklist.slugs.includes(slug)))
+  // github fullName carries display case ('Owner/Repo') while slugs and
+  // hand-written blocklist rows are lowercase — a case-variant name must not
+  // slip past the list. npm names are registry-lowercase already.
+  const isBlockedAnyCase = (name: string, slug?: string) =>
+    isBlocked(name, slug) || isBlocked(name.toLowerCase(), slug)
 
   // 1. discover (+ optional seed file: one npm name or github:owner/repo per line)
   const [npmCands, ghCands] = await Promise.all([
@@ -97,9 +129,15 @@ export async function run(opts: RunOptions = {}) {
   ])
   // seeds: submissions.txt lines — JSONL (issue-form submissions carry declared
   // metadata) or legacy plain names or github:owner/repo
-  const seedMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
+  interface SeedMeta {
+    type?: string; category?: string[]; desc?: Record<string, string>
+    /** reviewed artifact identity: npm version or repo commit sha — repo seeds
+     *  use it for moved-since-review drift detection */
+    version?: string; pkg?: string; issue?: number; author?: string
+  }
+  const seedMeta = new Map<string, SeedMeta>()
   // repo-only submissions (name:null) keep declared metadata too — keyed by repo
-  const seedRepoMeta = new Map<string, { type?: string; category?: string[]; desc?: Record<string, string> }>()
+  const seedRepoMeta = new Map<string, SeedMeta>()
   const seedNames = new Set<string>()
   if (opts.seedPath) {
     let seeded = 0
@@ -109,7 +147,8 @@ export async function run(opts: RunOptions = {}) {
       let repo: string | null = null
       if (line.startsWith('{')) {
         try {
-          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown> }
+          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown>; version?: string; pkg?: string; issue?: number; author?: string; dead?: boolean }
+          if (s.dead) continue   // withdrawn/expired submission — stop spending scan budget on it
           name = s.name ?? null
           repo = s.repo ?? null
           // seed metadata is attacker-adjacent (issue-form fields, editable) —
@@ -119,10 +158,14 @@ export async function run(opts: RunOptions = {}) {
           const cats = Array.isArray(s.category)
             ? s.category.map(c => typeof c === 'string' ? c.slice(0, 80) : '').filter(Boolean).slice(0, 8)
             : []
-          const meta = {
+          const meta: SeedMeta = {
             ...(s.type ? { type: s.type } : {}),
             ...(cats.length ? { category: cats } : {}),
             ...(Object.keys(desc).length ? { desc } : {}),
+            ...(s.version ? { version: s.version.slice(0, 80) } : {}),
+            ...(s.pkg ? { pkg: s.pkg.slice(0, 214) } : {}),
+            ...(s.issue ? { issue: s.issue } : {}),
+            ...(s.author ? { author: s.author.slice(0, 100) } : {}),
           }
           if (name) seedMeta.set(name, meta)
           else if (repo) seedRepoMeta.set(repo, meta)
@@ -195,6 +238,10 @@ export async function run(opts: RunOptions = {}) {
   // alphabetical truncation (E2E rehearsal: 'oc-market-…' sorts past the cap)
   const queued = new Set(queue.map(c => c.name))
   for (const c of sorted) if (seedNames.has(c.name) && !queued.has(c.name)) queue.push(c)
+  // seeds front-run the queue — a human asked for them; under a worker time
+  // budget the tail position could starve a submission for runs. sort is
+  // stable, so each tier keeps its deterministic name-asc order.
+  queue.sort((a, b) => Number(seedNames.has(b.name)) - Number(seedNames.has(a.name)))
   const cappedOut = new Set(newbies.slice(newCap).map(c => c.name).filter(n => !seedNames.has(n)))
 
   // github side gets the same deterministic cap — a topic-search burst must not
@@ -207,6 +254,7 @@ export async function run(opts: RunOptions = {}) {
   const ghQueue = [...ghExisting, ...ghNew.slice(0, ghNewCap)]
   const ghQueued = new Set(ghQueue.map(c => c.fullName))
   for (const c of ghSorted) if (isSeedRepo(c) && !ghQueued.has(c.fullName)) ghQueue.push(c)
+  ghQueue.sort((a, b) => Number(isSeedRepo(b)) - Number(isSeedRepo(a)))
   for (const c of ghNew.slice(ghNewCap)) if (!isSeedRepo(c)) cappedOut.add(c.fullName)
 
   // 3. fetch + evidence gate + scan — concurrent batches of 10.
@@ -216,13 +264,43 @@ export async function run(opts: RunOptions = {}) {
   const reusedNames = new Set<string>()
   let rateLimitedCalls = 0
 
+  const addFinding = (caps: PluginEntry['capabilities'], f: string): PluginEntry['capabilities'] =>
+    caps.findings.includes(f) ? caps : { ...caps, findings: [...caps.findings, f] }
+
+  // bounded worker pool (was 10-at-a-time batches): a slow candidate stalled
+  // a whole batch's barrier — the pool lets the next candidate start as soon
+  // as any worker frees, same concurrency without the tail latency
+  const POOL = 10
+  const pool = async <T>(items: T[], fn: (x: T) => Promise<void>) => {
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(POOL, items.length) }, async () => {
+      for (;;) {
+        const i = next++
+        if (i >= items.length) return
+        await fn(items[i]!)
+      }
+    }))
+  }
+
   const refreshMeta = async (e: PluginEntry): Promise<PluginEntry> => {
-    const { pk } = await fetchPackument(e.name, { fetchFn: f })
-    const repoMetaRes = e.source.repo
-      ? await fetchRepoMeta(e.source.repo, { token: opts.ghToken, fetchFn: f })
-      : null
+    const [pkRes, repoMetaRes, downloads] = await Promise.all([
+      fetchPackument(e.name, { fetchFn: f }),
+      e.source.repo ? fetchRepoMeta(e.source.repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+      fetchDownloads30d(e.name, { fetchFn: f }),
+    ])
+    const { pk } = pkRes
     if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
-    const downloads = await fetchDownloads30d(e.name, { fetchFn: f })
+    // SRI pins the DISPLAYED version's tarball (R-1) — but it must describe
+    // the bytes REVIEWED: a same-version registry re-tag freezes the old
+    // anchor + flags the slot rather than silently re-certifying new bytes.
+    // The held slot gets the same check via pu.integrity.
+    const disp = pk && e.latestVersion
+      ? anchorIntegrity(e.capabilities, e.integrity, pk.integrityOf[e.latestVersion] ?? null)
+      : { integrity: e.integrity ?? null, capabilities: e.capabilities }
+    const held = pk && e.pendingUpdate
+      ? anchorIntegrity(e.pendingUpdate.capabilities, e.pendingUpdate.integrity ?? null,
+          pk.integrityOf[e.pendingUpdate.version] ?? null)
+      : null
     return {
       ...e,
       ...(pk ? {
@@ -241,7 +319,9 @@ export async function run(opts: RunOptions = {}) {
       },
       // backfill SRI for entries that predate the integrity field — the field
       // pins the DISPLAYED version's tarball (R-1)
-      integrity: (pk && e.latestVersion ? pk.integrityOf[e.latestVersion] : null) ?? e.integrity,
+      integrity: disp.integrity,
+      capabilities: disp.capabilities,
+      ...(held ? { pendingUpdate: { ...e.pendingUpdate!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
       // refresh repoId so repojacking detection works on reused entries too
       ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
     }
@@ -253,13 +333,24 @@ export async function run(opts: RunOptions = {}) {
       // incremental short-circuit: same version + same ruleset → reuse wholesale.
       // Under hold-by-default the candidate to compare is the HELD version —
       // a held bump already carries that version's scan in pendingUpdate.
+      // The ruleset check must read the capabilities of the slot cand.version
+      // ACTUALLY occupies: a scan-failed pendingUpdate carries no
+      // rulesetVersion, and the old `?? prev.capabilities` fallback borrowed
+      // the displayed slot's ruleset — failed held scans froze forever.
+      const slotCaps = prev
+        ? prev.pendingUpdate?.version === cand.version ? prev.pendingUpdate.capabilities
+          : prev.latestVersion === cand.version ? prev.capabilities
+          : null
+        : null
       if (prev && cand.version && cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)
-          && (prev.pendingUpdate?.capabilities.rulesetVersion ?? prev.capabilities.rulesetVersion) === RULESET_VERSION
+          && slotCaps?.rulesetVersion === RULESET_VERSION
           && !isBlocked(cand.name, prev.slug)) {
         const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
         // entries that predate the integrity field need one packument fetch to
-        // backfill the SRI — otherwise they'd stay sha-less until the next bump
-        const needsIntegrity = !prev.integrity && !!prev.latestVersion
+        // backfill the SRI — otherwise they'd stay sha-less until the next bump.
+        // Same for held slots whose hold predates pendingUpdate.integrity.
+        const needsIntegrity = (!prev.integrity && !!prev.latestVersion)
+          || (!!prev.pendingUpdate && !prev.pendingUpdate.integrity)
         entries.push(stale || needsIntegrity ? await refreshMeta(prev) : prev)
         reusedNames.add(cand.name)
         return
@@ -280,7 +371,25 @@ export async function run(opts: RunOptions = {}) {
         return
       }
       const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
-      if (!ev.ok) { rejectedNpm.add(cand.name); return }
+      // the gate reads LATEST-version metadata — a regression (author drops
+      // the opencode keyword, renames main) must not tombstone an existing
+      // entry's still-valid approved slot. Keep the entry, surface the
+      // regression as a finding, and drop a hold pinned to the regressed
+      // version so merge re-evaluates instead of releasing evidence-less code.
+      if (!ev.ok) {
+        // only an APPROVED slot is worth protecting — a still-pending entry
+        // that loses its evidence tombstones normally (nothing displayed)
+        if (prev && prev.approval !== 'pending' && !isBlocked(prev.name, prev.slug)) {
+          const base = prev.pendingUpdate?.version === pk.latest
+            ? (() => { const { pendingUpdate: _pu, ...r } = prev; return r })()
+            : prev
+          entries.push({ ...base, capabilities: addFinding(base.capabilities, `sec:evidence-regressed@${pk.latest}`) })
+          reusedNames.add(cand.name)
+        } else {
+          rejectedNpm.add(cand.name)
+        }
+        return
+      }
 
       // packument.repository is authoritative; the submission-declared repo is
       // the fallback — and a disagreement between them is itself a signal.
@@ -315,14 +424,21 @@ export async function run(opts: RunOptions = {}) {
           const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
           if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
           const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
-          // ruleset staleness on a pinned hold: the held version never
-          // re-enters the full scan path, so a ruleset upgrade would leave it
-          // permanently judged by retired rules — re-scan the HELD tarball in
-          // place. verification/heldAt/verdict annotations stay untouched
-          // (keyed to the version, not the ruleset); new redFlags surface via
-          // merge's skipIfFlagged → the release gate still holds.
+          // ruleset staleness OR a byte-swap on a pinned hold: the held
+          // version never re-enters the full scan path, so a ruleset upgrade
+          // would leave it permanently judged by retired rules and a same-
+          // version re-tag (unpublish+republish) would carry the OLD scan and
+          // verdicts onto NEW bytes. Re-scan the HELD tarball in place; a
+          // confirmed integrity drift also flags the slot (redFlag → the
+          // release gate holds until a human decides) and re-anchors to the
+          // bytes actually scanned. verification/heldAt/verdict annotations
+          // stay keyed to the version; merge's skipIfFlagged downgrades the
+          // held slot's verification honestly.
           let puCaps = heldPin.capabilities
-          if (puCaps.rulesetVersion !== RULESET_VERSION) {
+          let puIntegrity = heldPin.integrity ?? null
+          const regSha = pk.integrityOf[heldPin.version] ?? null
+          const puDrift = puIntegrity !== null && regSha !== null && puIntegrity !== regSha
+          if (puCaps.rulesetVersion !== RULESET_VERSION || puDrift) {
             const url = pk.tarballOf[heldPin.version]
             if (url) {
               try {
@@ -331,18 +447,36 @@ export async function run(opts: RunOptions = {}) {
                   scannedAt: now,
                   rulesetVersion: RULESET_VERSION,
                   findings: r.findings.map(x => `${x.rule}:${x.file}`),
-                  redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
+                  // a confirmed re-tag stays flagged even after the fresh
+                  // scan — "bytes changed under a stable version" is the
+                  // signal a reviewer must see
+                  redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...(puDrift ? [DRIFT_FLAG] : [])])],
                 }
+                puIntegrity = regSha ?? puIntegrity  // anchor the bytes just scanned
               } catch (e) {
                 console.warn(`hold re-scan failed ${cand.name}@${heldPin.version}:`, (e as Error).message)
+                // rescan unavailable ≠ drift excused: flag on the stale caps
+                if (puDrift) puCaps = { ...puCaps, redFlags: [...new Set([...puCaps.redFlags, DRIFT_FLAG])] }
               }
+            } else if (puDrift) {
+              puCaps = { ...puCaps, redFlags: [...new Set([...puCaps.redFlags, DRIFT_FLAG])] }
             }
           }
+          // legacy holds predate pu.integrity — backfill the current anchor so
+          // drift detection engages going forward
+          puIntegrity = puIntegrity ?? regSha
+          // the DISPLAYED version can re-tag too — same freeze+flag rule as
+          // refreshMeta; its anchor only ever describes the reviewed bytes
+          const dispA = heldPrev.latestVersion
+            ? anchorIntegrity(heldPrev.capabilities, heldPrev.integrity, pk.integrityOf[heldPrev.latestVersion] ?? null)
+            : { integrity: heldPrev.integrity ?? null, capabilities: heldPrev.capabilities }
+          const puChanged = puCaps !== heldPin.capabilities || puIntegrity !== (heldPin.integrity ?? null)
           entries.push({
             ...heldPrev,
-            ...(puCaps !== heldPin.capabilities
-              ? { pendingUpdate: { ...heldPin, capabilities: puCaps } }
+            ...(puChanged
+              ? { pendingUpdate: { ...heldPin, capabilities: puCaps, integrity: puIntegrity } }
               : {}),
+            capabilities: dispA.capabilities,
             distTags: pk.distTags,
             modifiedAt: pk.modifiedAt,
             maintainers: pk.maintainers,
@@ -350,7 +484,7 @@ export async function run(opts: RunOptions = {}) {
             deprecatedMessage: pk.deprecatedMessage,
             replacement: replacementOf(pk.deprecatedMessage),
             source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
-            integrity: (heldPrev.latestVersion ? pk.integrityOf[heldPrev.latestVersion] : null) ?? heldPrev.integrity,
+            integrity: dispA.integrity,
             metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads, checkedAt: now },
           })
           reusedNames.add(cand.name)
@@ -373,30 +507,27 @@ export async function run(opts: RunOptions = {}) {
             redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
           }
         } catch (e) {
-          console.warn(`scan failed ${cand.name}:`, (e as Error).message)
+          const msg = (e as Error).message
+          console.warn(`scan failed ${cand.name}:`, msg)
+          // oversize tarballs fail deterministically — stamp the ruleset so
+          // the incremental short-circuit skips the doomed refetch every run
+          // (retries resume on any version bump, which carries no stamp)
+          if (/too large/.test(msg)) scan.rulesetVersion = RULESET_VERSION
         }
       }
 
-      const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+      // independent metadata probes run concurrently — repoMeta/downloads/
+      // marketMeta don't depend on each other and the serial awaits were pure
+      // queue latency (the dead fetchRepoTree call that used to sit here only
+      // fed a truncated-warning; skill detection uses tarball scanFiles)
+      const [repoMetaRes, downloads, marketMeta] = await Promise.all([
+        repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+        fetchDownloads30d(cand.name, { fetchFn: f }),
+        repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+      ])
       if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
       const repoMeta = repoMetaRes?.meta ?? null
-      const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
-      // one recursive tree call covers all path probes (was 2 contents HEAD calls)
-      const treeRes = repo && repoMeta?.defaultBranch
-        ? await fetchRepoTree(repo, repoMeta.defaultBranch, { token: opts.ghToken, fetchFn: f })
-        : null
-      if (treeRes?.status === 'rate-limited') rateLimitedCalls++
-      if (treeRes?.paths && treeRes.truncated)
-        console.warn(`repo tree truncated for ${repo} — deep .opencode/skills probes may miss`)
-      // skills can ship in the published tarball without being in the repo tree
-      // (generated/export-subset artifacts) — scan files are the fuller signal.
-      // contains must claim what USERS CAN INSTALL: for npm entries that's the
-      // tarball, so repo-tree-only skills don't count — a SKILL.md the codeload
-      // tarball lacks is an unshipped repo file, and a 'skill' part on it makes
-      // installSkill extract nothing (verify's structure check then fails it
-      // correctly, but the claim was wrong upstream).
       const hasSkill = hasSkillPath(new Set(scanFiles.map(f => f.replace(/^package\//, ''))))
-      const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
       // npm↔repo correspondence: the repo's own package.json should name this
       // package. A positive mismatch (claiming an unrelated popular repo to
       // borrow its stars/trust) → finding; absence of evidence isn't proof.
@@ -413,22 +544,46 @@ export async function run(opts: RunOptions = {}) {
       }
       if (declaredRepo && declaredRepo !== repo)
         scan.findings.push(`sec:repo-declared-mismatch:${declaredRepo}`)
+      // tombstone identity check: a same-name package re-entering after a
+      // disappearance is compared against the tombstone record — a different
+      // repoId on the same repo or a NEWER package createdAt means the
+      // recycled name is a new object, not a resurrection (name-reuse
+      // detection the live-path trustFlags can't see across the tombstone gap)
+      const tomb = removedByName.get(cand.name)
+      if (tomb?.lastSource?.kind === 'npm') {
+        if (pk.createdAt && tomb.createdAt && Date.parse(pk.createdAt) > Date.parse(tomb.createdAt) + 1000) {
+          scan.redFlags.push('sec:name-reused')
+        }
+        const tombRepo = tomb.lastSource.repo
+        if (repo && tombRepo && repo.toLowerCase() === tombRepo.toLowerCase()
+            && repoMeta?.id && tomb.lastSource.repoId && repoMeta.id !== tomb.lastSource.repoId) {
+          scan.redFlags.push('sec:repo-recreated')
+        }
+      }
       // author-claimed fields precedence: repo .opencode-market.json > issue submission > auto-derived
       const sub = seedMeta.get(cand.name)
 
-      // contains = the full parts list: npm-admitted entries always carry a
-      // plugin part (evidence gate required it), plus 'skill' when skill
-      // artifacts were found — dual-nature packages advertise both.
+      // contains claims only what the artifacts support: an npm 'plugin' part
+      // requires an entry point (main/exports — what opencode loads); a
+      // tarball whose only artifact is SKILL.md declares 'skill' and routes
+      // off the plugin verify chain instead of failing a nonexistent plugin
+      // install. An explicit empty list means "no installable payload".
+      const hasEntry = !!(pk.main || pk.exports)
       const parts: NonNullable<PluginEntry['contains']> = [
-        ...(sub?.type === 'skill' ? [] : ['plugin' as const]),
+        ...(hasEntry && sub?.type !== 'skill' ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
+      // marketMeta/submission category strings are author-controlled — only
+      // canonical taxonomy ids may bind; an unrecognized claim falls back to
+      // the classifier instead of minting a global category
+      const claimedCats = (marketMeta?.category ?? sub?.category ?? [])
+        .map(catId).filter(c => CAT_NAMES[c] !== undefined)
       const entry: PluginEntry = {
         name: cand.name,
         slug,
         aliases: [],
         type: (sub?.type === 'skill' ? 'skill' : 'plugin'),
-        ...(parts.length ? { contains: parts } : {}),
+        contains: parts,
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(repoMeta?.id ? { repoId: repoMeta.id } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
         description: {
@@ -436,7 +591,8 @@ export async function run(opts: RunOptions = {}) {
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
         features: detectFeatures({ exports: pk.exports, main: pk.main, files: scanFiles }),
-        category: marketMeta?.category ?? sub?.category ?? classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
+        category: claimedCats.length ? claimedCats
+          : classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
         deprecated: pk.deprecated,
         deprecatedMessage: pk.deprecatedMessage,
@@ -451,7 +607,10 @@ export async function run(opts: RunOptions = {}) {
         integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
         metrics: { stars: repoMeta?.stars ?? null, npmDownloads30d: downloads, checkedAt: now },
         capabilities: scan,
-        verification: scan.redFlags.length > 0
+        // no installable payload → 'skipped' like repo-only entries: the
+        // release gate treats it as "deliberately not run", and verifyPartsOf
+        // honors the explicit empty contains (never queues)
+        verification: parts.length === 0 || scan.redFlags.length > 0
           ? { status: 'skipped', level: 'install' }
           : { status: 'unverified' },
         compat: {},
@@ -469,6 +628,13 @@ export async function run(opts: RunOptions = {}) {
             capabilities: entry.capabilities,
             verification: entry.verification,
             ...(entry.features ? { features: entry.features } : {}),
+            // the CANDIDATE's parts must be captured before display pinning —
+            // entry.contains is about to be rewound to the displayed version;
+            // explicit [] means "no installable payload" and must survive
+            contains: entry.contains,
+            // same for the candidate's tarball SRI — entry.integrity is about
+            // to be pinned to the displayed version below; release promotes it
+            integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
             publishedAt: entry.publishedAt,
             reason: 'awaiting-review',
             heldAt: now,
@@ -480,6 +646,10 @@ export async function run(opts: RunOptions = {}) {
           entry.capabilities = prev.capabilities
           entry.verification = prev.verification
           entry.features = prev.features
+          // contains is version-scoped like capabilities/verification: pin it
+          // to the DISPLAYED version's parts so install routing never offers
+          // the held candidate's payload shape for the shown release
+          entry.contains = prev.contains
           entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
         } else {
           // npm has no latest tag at all — carry the whole display state
@@ -491,6 +661,7 @@ export async function run(opts: RunOptions = {}) {
           entry.capabilities = prev.capabilities
           entry.verification = prev.verification
           entry.features = prev.features
+          entry.contains = prev.contains
           entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
         }
       } else if (prev) {
@@ -507,18 +678,26 @@ export async function run(opts: RunOptions = {}) {
         }
       }
       // integrity follows the DISPLAYED version — a held entry pins the approved
-      // tarball's SRI, not the pending one (packument carries every version)
-      entry.integrity = (entry.latestVersion ? pk.integrityOf[entry.latestVersion] : null) ?? null
+      // tarball's SRI, not the pending one (packument carries every version).
+      // Compare against the prior anchor ONLY when it described the same
+      // version string: a held bump re-tags the DISPLAYED version under its
+      // own name (drift → freeze + flag); a candidate bump re-anchors fresh
+      // and comparing across versions would false-positive every release.
+      if (prev && entry.latestVersion === prev.latestVersion) {
+        const dispA = anchorIntegrity(entry.capabilities, prev.integrity,
+          entry.latestVersion ? pk.integrityOf[entry.latestVersion] ?? null : null)
+        entry.integrity = dispA.integrity
+        entry.capabilities = dispA.capabilities
+      } else {
+        entry.integrity = (entry.latestVersion ? pk.integrityOf[entry.latestVersion] : null) ?? null
+      }
       entries.push(entry)
       console.log(`  [${entries.length}] ${cand.name}`)
     } catch (e) {
       console.warn(`candidate ${cand.name} failed:`, (e as Error).message)
     }
   }
-  const BATCH = 10
-  for (let i = 0; i < queue.length; i += BATCH) {
-    await Promise.all(queue.slice(i, i + BATCH).map(worker))
-  }
+  await pool(queue, worker)
 
   // 3b. github-topic candidates with no npm counterpart (D-1: ghList wiring).
   //     Search results already carry id/stars/createdAt/license/topics — the tree
@@ -526,21 +705,37 @@ export async function run(opts: RunOptions = {}) {
   //     static scan npm packages get. fetchMarketMeta/package.json hit
   //     raw.githubusercontent (CDN, uncounted) so they stay free under API quota
   //     exhaustion.
-  const coveredRepos = new Set(entries.map(e => e.source.repo).filter(Boolean))
-  const ghMissing = ghQueue.filter(c => !coveredRepos.has(c.fullName) && !isBlocked(c.fullName, c.fullName))
-  // admission audit counters — gate outcomes must be countable, not just silent nulls
-  const ghStats = { covered: ghQueue.length - ghMissing.length, reused: 0, treeTransient: 0, treeEmpty: 0, evidenceRejected: 0, scanFailed: 0, scanOversize: 0, admitted: 0 }
-  for (let i = 0; i < ghMissing.length; i += BATCH) {
-    const batch = await Promise.all(ghMissing.slice(i, i + BATCH).map(async (c) => {
+  // npm↔gh dedup compares repo identity case-insensitively — GitHub's display
+  // case ('Owner/Repo') vs the packument-normalized value must not slip a
+  // duplicate through. An EXISTING gh entry is exempt from the covered filter:
+  // it is the canonical record for its repo and keeps being processed for
+  // metrics/scan freshness (slug-dedup merges the two views at publish).
+  const coveredRepos = new Set(entries.map(e => e.source.repo?.toLowerCase()).filter(Boolean))
+  const ghMissing = ghQueue.filter(c =>
+    !coveredRepos.has(c.fullName.toLowerCase())
+    && !isBlockedAnyCase(c.fullName, c.fullName.toLowerCase()))
+  // admission audit counters — gate outcomes must be countable, not just silent
+  // nulls. 'covered' counts only npm-covered candidates; blocklist drops get
+  // their own counter (the old math lumped them into covered).
+  const ghStats = {
+    covered: ghQueue.length - ghMissing.length
+      - ghQueue.filter(c => isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())).length,
+    blocked: 0, reused: 0, treeTransient: 0, treeEmpty: 0, evidenceRejected: 0, scanFailed: 0, scanOversize: 0, admitted: 0,
+  }
+  ghStats.blocked = ghQueue.filter(c => isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())).length
+  const ghWorker = async (c: (typeof ghMissing)[number]) => {
       const ghPrev = oldByName.get(c.fullName)
       // incremental reuse: pushedAt unchanged + same ruleset → carry the prior
       // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
       if (ghPrev && c.pushedAt && ghPrev.modifiedAt === c.pushedAt
           && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
-          && !isBlocked(c.fullName, ghPrev.slug)) {
+          && !isBlockedAnyCase(c.fullName, ghPrev.slug)) {
         ghStats.reused++
         reusedNames.add(c.fullName)
-        return ghPrev
+        // pushedAt unchanged means the BYTES are identical — but stars move
+        // while code doesn't; refresh the metrics stamp from the search hit
+        // (free: already in memory) instead of freezing it forever
+        return { ...ghPrev, metrics: { ...ghPrev.metrics, stars: c.stars, checkedAt: now } }
       }
       // evidence gate: a topic tag alone never admits — the tree must show an
       // opencode-specific signal AND an installable artifact. 'HEAD' resolves
@@ -585,6 +780,29 @@ export async function run(opts: RunOptions = {}) {
       ghStats.admitted++
       const hasSkill = hasSkillPath(treeRes.paths) || hasSkillPath(new Set(scanFiles))
       const sub = seedRepoMeta.get(c.fullName)
+      // repo drift: the submission review scanned tree `sub.version`; if HEAD's
+      // tree hash moved, the bytes a reviewer saw are gone — flag it and drop
+      // carried-over approval so the new bytes re-enter review instead of
+      // inheriting a judgment made on different code (repo submissions have no
+      // version slot, so verdicts can't pin this — the entry must say so)
+      const drifted = !!(sub?.version && treeRes.sha && sub.version !== treeRes.sha)
+      if (drifted) scan.findings.push('sec:repo-moved-since-review')
+      // same signal one level down: the package.json `name` the review saw
+      // differs from what's at HEAD now
+      if (sub?.pkg && repoPkg.pkg?.name && sub.pkg !== repoPkg.pkg.name)
+        scan.findings.push(`sec:repo-pkg-changed:${repoPkg.pkg.name}`)
+      // tombstone identity: a same-name repo reappearing with a different
+      // repoId (or a newer createdAt) is a recreated repo under a recycled
+      // fullName, not a resurrection
+      const tomb = removedByName.get(c.fullName)
+      if (tomb?.lastSource?.kind === 'github') {
+        if (c.id && tomb.lastSource.repoId && c.id !== tomb.lastSource.repoId) {
+          scan.redFlags.push('sec:repo-recreated')
+        }
+        if (tomb.createdAt && c.createdAt && Date.parse(c.createdAt) > Date.parse(tomb.createdAt) + 1000) {
+          scan.redFlags.push('sec:name-reused')
+        }
+      }
       // type drives the site badge: declared wins; otherwise a repo whose only
       // artifact is skills (no root package.json, no .opencode plugin path)
       // is a skill repo, not a plugin
@@ -599,12 +817,16 @@ export async function run(opts: RunOptions = {}) {
         ...(pluginArtifact || feats.length ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
+      // marketMeta/submission categories are author-controlled — whitelist
+      // to the canonical taxonomy (unrecognized claims fall back to classify)
+      const ghClaimedCats = (marketMeta?.category ?? sub?.category ?? [])
+        .map(catId).filter(cc => CAT_NAMES[cc] !== undefined)
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
         aliases: [],
         type,
-        ...(ghParts.length ? { contains: ghParts } : {}),
+        contains: ghParts,
         discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}), ...(treeRes.sha ? { version: treeRes.sha } : {}) },
         description: {
@@ -612,7 +834,8 @@ export async function run(opts: RunOptions = {}) {
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
         features: feats,
-        category: marketMeta?.category ?? sub?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
+        category: ghClaimedCats.length ? ghClaimedCats
+          : classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
         license: c.license,
         deprecated: false,
         deprecatedMessage: null,
@@ -633,15 +856,18 @@ export async function run(opts: RunOptions = {}) {
         // Display layers render latestVersion===null as "nothing to install".
         verification: { status: 'skipped', level: 'install' },
         compat: {},
+        // drift is surfaced as a finding, not an approval demotion: repo-kind
+        // verdicts key on name@'' (no version slot) so a standing human pass
+        // would re-approve the entry at publish anyway — the durable signal
+        // for "reviewed bytes changed" is the finding itself.
         approval: ghPrev?.approval ?? 'pending',
         ...(ghPrev?.approvalReason ? { approvalReason: ghPrev.approvalReason } : {}),
       }
       return entry
-    }))
-    entries.push(...batch.filter((e): e is PluginEntry => e !== null))
   }
+  await pool(ghMissing, async c => { const e = await ghWorker(c); if (e) entries.push(e) })
   console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +
-    `${ghStats.evidenceRejected} evidence-rejected, ${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ` +
+    `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ` +
     `${ghStats.scanFailed} scan-failed of which ${ghStats.scanOversize} oversize)`)
   if (rateLimitedCalls > 0) {
     console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)
@@ -655,19 +881,103 @@ export async function run(opts: RunOptions = {}) {
   //    evidence of anything (R-3). Real departures still tombstone via 404.
   const freshNames = new Set(entries.map(e => e.name))
   const removedNow: RemovedEntry[] = []
+
+  // periodic ruleset sweep (bounded slice per run): carried-over entries whose
+  // scan predates the current ruleset never re-enter discovery, so without a
+  // sweep a ruleset upgrade would leave them judged by retired rules forever.
+  // Failed scans stay retryable (undefined rulesetVersion is stale by
+  // definition); the oversize stamp exempts itself since it IS current-rules.
+  let rescanBudget = 20
+  const staleCaps = (c: PluginEntry['capabilities'] | undefined) =>
+    c !== undefined && c.rulesetVersion !== RULESET_VERSION
+  const rescanStaleNpm = async (e: PluginEntry, pk: { tarballOf: Record<string, string | undefined>; integrityOf: Record<string, string | undefined> } | null): Promise<PluginEntry> => {
+    if (!pk) return e
+    const needScan = staleCaps(e.capabilities) || staleCaps(e.pendingUpdate?.capabilities)
+    let caps = e.capabilities
+    const pu = e.pendingUpdate
+    let puCaps = pu?.capabilities
+    let puScanned = false
+    if (needScan && rescanBudget > 0) {
+      rescanBudget--
+      const scanOf = async (ver: string | null, c: PluginEntry['capabilities']) => {
+        if (!staleCaps(c) || !ver) return c
+        const url = pk.tarballOf[ver]
+        if (!url) return c
+        try {
+          const r = await scanTarball(await fetchTarball(url, { fetchFn: f }))
+          return {
+            scannedAt: now, rulesetVersion: RULESET_VERSION,
+            findings: r.findings.map(x => `${x.rule}:${x.file}`),
+            redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
+          }
+        } catch { return c }
+      }
+      caps = await scanOf(e.latestVersion, caps)
+      if (pu) {
+        const next = await scanOf(pu.version, puCaps!)
+        if (next !== puCaps) { puCaps = next; puScanned = true }
+      }
+    }
+    // integrity drift check is free — the gone-probe already fetched pk, and
+    // an entry dropped from discovery never reaches refreshMeta/pin paths, so
+    // this sweep is the only place a re-tag here can be caught. Displayed slot
+    // freezes its anchor (install SRI fails closed on the swapped bytes); the
+    // held slot re-anchors to whatever bytes the current caps describe — the
+    // rescanned tarball when a rescan ran, else the previously anchored ones.
+    const dispA = e.latestVersion
+      ? anchorIntegrity(caps, e.integrity ?? null, pk.integrityOf[e.latestVersion] ?? null)
+      : { integrity: e.integrity ?? null, capabilities: caps }
+    let puIntegrity = pu?.integrity ?? null
+    if (pu) {
+      const regSha = pk.integrityOf[pu.version] ?? null
+      const drift = puIntegrity !== null && regSha !== null && puIntegrity !== regSha
+      if (drift) puCaps = { ...puCaps!, redFlags: [...new Set([...puCaps!.redFlags, DRIFT_FLAG])] }
+      puIntegrity = puScanned ? (regSha ?? puIntegrity) : (puIntegrity ?? regSha)
+    }
+    const puChanged = pu !== undefined
+      && (puCaps !== pu.capabilities || puIntegrity !== (pu.integrity ?? null))
+    return {
+      ...e, capabilities: dispA.capabilities, integrity: dispA.integrity,
+      ...(pu && puChanged ? { pendingUpdate: { ...pu, capabilities: puCaps!, integrity: puIntegrity } } : {}),
+    }
+  }
+  const rescanStaleGh = async (e: PluginEntry): Promise<PluginEntry> => {
+    if (rescanBudget <= 0 || !staleCaps(e.capabilities)) return e
+    rescanBudget--
+    try {
+      const repo = e.source.repo ?? e.name
+      const tree = await fetchRepoTree(repo, 'HEAD', { token: opts.ghToken, fetchFn: f })
+      if (tree.status === 'rate-limited') rateLimitedCalls++
+      if (!tree.paths) return e
+      const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/HEAD`, { fetchFn: f })
+      const r = await scanTarball(tgz)
+      const strip = (p: string) => p.replace(/^[^/]+\//, '')
+      return {
+        ...e,
+        capabilities: {
+          scannedAt: now, rulesetVersion: RULESET_VERSION,
+          findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+          redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
+        },
+        ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),
+      }
+    } catch { return e }
+  }
+
   const goneCheck = async (e: PluginEntry) => {
     let reason: RemovedEntry['reason'] = 'unknown'
     if (cappedOut.has(e.name)) reason = 'capped'
-    else if (isBlocked(e.name, e.slug)) reason = 'manual'
+    else if (isBlockedAnyCase(e.name, e.slug)) reason = 'manual'
     else if (e.source.kind === 'npm') {
-      const { status } = await fetchPackument(e.name, { fetchFn: f })
+      // abbreviated packument — the probe only needs existence + dist.tarball
+      const { pk, status } = await fetchPackument(e.name, { fetchFn: f, abbreviated: true })
       if (status === 'error') {
         // transient failure (429/5xx/network) is NOT proof of disappearance —
         // keep the stale entry rather than emitting a false tombstone (F-2).
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedNpm.has(e.name)) { entries.push(e); return }
+      if (status === 'ok' && !rejectedNpm.has(e.name)) { entries.push(await rescanStaleNpm(e, pk)); return }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
     // github-kind entries never pass through the candidate filters — but a
@@ -681,18 +991,19 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedGh.has(e.name)) { entries.push(e); return }
+      if (status === 'ok' && !rejectedGh.has(e.name)) { entries.push(await rescanStaleGh(e)); return }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }
     removedNow.push({
       slug: e.slug, name: e.name, lastSource: e.source,
       disappearedAt: now, reason,
+      // the birth stamp lets a future same-name re-entry tell "resurrected
+      // object" from "recycled name" (name-reuse detection, P1-5)
+      createdAt: e.createdAt,
     })
   }
   const missing = (old?.plugins ?? []).filter(e => !freshNames.has(e.name))
-  for (let i = 0; i < missing.length; i += BATCH) {
-    await Promise.all(missing.slice(i, i + BATCH).map(goneCheck))
-  }
+  await pool(missing, goneCheck)
   if (removedNow.length) {
     console.log(`removed: ${removedNow.length} (${removedNow.map(r => `${r.name}:${r.reason}`).join(', ')})`)
   }

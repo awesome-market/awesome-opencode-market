@@ -1,8 +1,11 @@
 /** Stage-5 tests: digest rendering + maturity window + diagnose candidate pick. */
 import { describe, it, expect } from 'vitest'
-import { renderDigest, nextDigestState } from '../pipeline/ai/digest.ts'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { renderDigest, nextDigestState, main as digestMain } from '../pipeline/ai/digest.ts'
 import { verdictRecord, reviewMaterial, unreviewedTargets } from '../pipeline/ai/diagnose.ts'
-import { applyMatureVerdicts, latestVerdicts, digestStateOf, akey } from '../pipeline/verdicts.ts'
+import { applyMatureVerdicts, latestVerdicts, digestStateOf, akey, explainEntry, loadVerdicts } from '../pipeline/verdicts.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -28,7 +31,8 @@ describe('renderDigest', () => {
   it('lists unannounced verdicts, held queue, concerns', () => {
     const old = v({ name: 'old', at: '2025-12-01T00:00:00Z' })
     const md = renderDigest({
-      index: idx([entry(), entry({ name: 'held', pendingUpdate: { version: '9.9', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })]),
+      index: idx([entry({ pendingUpdate: { version: '1.1.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } }),
+        entry({ name: 'held', pendingUpdate: { version: '9.9', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })]),
       verdicts: [v(), old, v({ name: 'flagged', verdict: 'concern', reason: 'inject|ed' })],
       prev: digestStateOf('2026-01-01T00:00:00Z', [old]),  // `old` already announced in a past digest
       now: new Date('2026-01-03T21:00:00Z'),
@@ -106,8 +110,11 @@ describe('renderDigest', () => {
     })
     expect(md).toContain('验证积压（queue — 1）')
   })
-  it('missing digest-state = bootstrap announces everything seen', () => {
-    const md = renderDigest({ index: idx([]), verdicts: [v({ at: '2001-01-01T00:00:00Z' })], prev: null, now: new Date('2026-01-03') })
+  it('missing digest-state = bootstrap announces everything inside the window', () => {
+    // G3: the first-ever digest windows the announce — a backlog months old
+    // must not all mature off one render. Verdicts within the window still
+    // announce normally.
+    const md = renderDigest({ index: idx([]), verdicts: [v()], prev: null, now: new Date('2026-01-03') })
     expect(md).toContain('| pkg ⚠️不在目录 |')
   })
   it('D-E ghost verdict: a name absent from index is announced but marked', () => {
@@ -120,9 +127,25 @@ describe('renderDigest', () => {
   it('D-V a pass superseded by a newer concern is marked, not implied as releasing', () => {
     const p = v({ name: 'flop', at: '2026-01-03T10:00:00Z' })
     const c = v({ name: 'flop', verdict: 'concern', source: 'human', at: '2026-01-03T12:00:00Z', reason: 'changed mind' })
-    const md = renderDigest({ index: idx([]), verdicts: [p, c], prev: null, now: new Date('2026-01-03T21:00:00Z') })
+    // the mark's real window: p was announced in the MORNING render, then a
+    // human concern flipped it before the evening re-render — same-day
+    // cumulative keeps p's row as history, marked so it can't read as
+    // "about to ship". (A same-render supersession = p never announces.)
+    const prev = {
+      lastDigestAt: '2026-01-03T12:00:00Z', day: '2026-01-03',
+      dayAnnounced: [akey(p)], announced: [akey(p)],
+    }
+    const md = renderDigest({ index: idx([]), verdicts: [p, c], prev, now: new Date('2026-01-03T21:00:00Z') })
     expect(md).toContain('flop ⚠️不在目录 ⛔已被更新的 concern 刹车')
     expect(md).toContain('| flop ⚠️不在目录 | 1.1.0 | human |')   // concern row still lists
+  })
+  it('a superseded-before-first-render pass simply never announces', () => {
+    const p = v({ name: 'flop', at: '2026-01-03T10:00:00Z' })
+    const c = v({ name: 'flop', verdict: 'concern', source: 'human', at: '2026-01-03T12:00:00Z', reason: 'changed mind' })
+    const md = renderDigest({ index: idx([]), verdicts: [p, c], prev: null, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).not.toContain('flop ⚠️不在目录 ⛔')   // dead line has no row at all
+    expect(md).toContain('（pass verdicts — 0）')
+    expect(md).toContain('| flop ⚠️不在目录 | 1.1.0 | human |')
   })
   it('D-F reason text cannot inject markdown links into the committed file', () => {
     const md = renderDigest({
@@ -145,7 +168,8 @@ describe('renderDigest', () => {
     }))
     const md = renderDigest({ index: idx(many), verdicts: [], prev: null, now: new Date('2026-01-31T21:00:00Z') })
     expect(md).toContain('审核队列积压（held — 60）')
-    expect(md).toContain('还有 10 条')
+    expect(md).toContain('<details><summary>…其余 10 条')
+    expect(md).toContain('</details>')
   })
   it('D-H held lines carry the phase tag (which lever applies)', () => {
     const pu = (over: object = {}) => ({
@@ -166,6 +190,21 @@ describe('renderDigest', () => {
     expect(md).toContain('`waiting-verify` v2.0 · 待验证')
     expect(md).toContain('`needs-review` (未发布过) · 待评审')
     expect(md).toContain('`passed` v2.0 · 已公告·待放行闸')
+  })
+  it('verify-failed after a mature pass shows 验证失败, not 待放行闸 (release is structurally impossible)', () => {
+    const pu = {
+      version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'failed' as const, level: 'install' as const }, heldAt: '2026-01-01T00:00:00Z',
+    }
+    const ver = v({ name: 'stuck', version: '2.0' })
+    const md = renderDigest({
+      index: idx([entry({ name: 'stuck', approval: 'approved', pendingUpdate: pu })]),
+      verdicts: [ver],
+      prev: digestStateOf('2026-01-02T21:00:00Z', [ver]),   // pass already announced
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('`stuck` v2.0 · 验证失败')
+    expect(md).not.toContain('`stuck` v2.0 · 已公告·待放行闸')
   })
   it('D-C pendingReview shares unreviewedTargets — unverified <48h held is deferred, not counted', () => {
     // 'young' is held+unverified but held <48h → diagnose defers to verify;
@@ -299,5 +338,166 @@ describe('reviewMaterial', () => {
     const rec = verdictRecord(entry({ pendingUpdate: { version: '3.0.1', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } }), 'pass', 'looks fine')
     expect(rec.version).toBe('3.0.1')
     expect(rec.source).toBe('ai')
+  })
+})
+
+describe('announcement candidates (Bug-1/O1)', () => {
+  const held = (name: string, ver: string) => entry({
+    name, pendingUpdate: {
+      version: ver, capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'unverified' }, heldAt: '2026-01-01T00:00:00Z',
+    },
+  })
+
+  it('a superseded verdict line never re-announces — no phantom rows', () => {
+    const index = idx([held('pkg', '1.1.0')])
+    const v1 = v({ at: '2026-01-02T00:00:00Z', reason: 'first pass' })
+    const v2 = v({ verdict: 'concern', at: '2026-01-02T12:00:00Z', reason: 'flipped' })
+    const s1 = nextDigestState([v1], null, new Date('2026-01-02T21:00:00Z'), index)
+    expect(s1.announced).toEqual([akey(v1)])
+    const s2 = nextDigestState([v1, v2], s1, new Date('2026-01-03T21:00:00Z'), index)
+    expect(s2.announced).toEqual([akey(v2)])          // v1 pruned with supersession
+    // day 3: v1's akey is absent from prev.announced — it must NOT come back
+    const md = renderDigest({ index, verdicts: [v1, v2], prev: s2, now: new Date('2026-01-04T21:00:00Z') })
+    expect(md).not.toContain('first pass')
+    expect(md).not.toContain('flipped')              // v2 was already announced too
+    expect(md).toContain('（pass verdicts — 0）')
+  })
+
+  it('pass on an already-approved display slot is never announced nor rendered', () => {
+    const index = idx([entry({ name: 'live', latestVersion: '1.0.0' })])
+    const pv = v({ name: 'live', version: '1.0.0' })
+    expect(nextDigestState([pv], null, new Date('2026-01-02T21:00:00Z'), index).announced).toEqual([])
+    const md = renderDigest({ index, verdicts: [pv], prev: null, now: new Date('2026-01-02T21:00:00Z') })
+    expect(md).toContain('（pass verdicts — 0）')
+    expect(md).not.toContain('| live |')
+  })
+
+  it('concern on an approved displayed slot still announces (brake surface)', () => {
+    const index = idx([entry({ name: 'live' })])
+    const c = v({ name: 'live', version: '1.0.0', verdict: 'concern', source: 'human' })
+    expect(nextDigestState([c], null, new Date('2026-01-02T21:00:00Z'), index).announced).toEqual([akey(c)])
+    const md = renderDigest({ index, verdicts: [c], prev: null, now: new Date('2026-01-02T21:00:00Z') })
+    expect(md).toContain('| live |')
+  })
+
+  it('ghost verdict (name absent from index) still announces', () => {
+    const g = v({ name: 'ghost' })
+    const s = nextDigestState([g], null, new Date('2026-01-02T21:00:00Z'), idx([]))
+    expect(s.announced).toEqual([akey(g)])
+  })
+
+  it('a pruned pass re-announces once if its slot comes back', () => {
+    const pv = v({ name: 'pkg', version: '2.0.0' })
+    const heldI = idx([held('pkg', '2.0.0')])
+    const s1 = nextDigestState([pv], null, new Date('2026-01-02T21:00:00Z'), heldI)
+    expect(s1.announced).toEqual([akey(pv)])
+    // released → approved, hold gone → key no longer a slot → pruned
+    const liveI = idx([entry({ name: 'pkg', latestVersion: '2.0.0' })])
+    const s2 = nextDigestState([pv], s1, new Date('2026-01-03T21:00:00Z'), liveI)
+    expect(s2.announced).toEqual([])
+    // entry returns pending on the same version (removed→re-entry) →
+    // the live pass line re-announces ONCE — a fresh objection window
+    const brakeI = idx([entry({ name: 'pkg', latestVersion: '2.0.0', approval: 'pending' })])
+    const s3 = nextDigestState([pv], s2, new Date('2026-01-04T21:00:00Z'), brakeI)
+    expect(s3.announced).toEqual([akey(pv)])
+  })
+
+  it('nextDigestState without index keeps legacy all-live behavior (tests/tools)', () => {
+    const pv = v({ name: 'pkg', version: '1.0.0' })
+    expect(nextDigestState([pv], null, new Date('2026-01-02T21:00:00Z')).announced).toEqual([akey(pv)])
+  })
+})
+
+describe('digest audit fixes', () => {
+  const tmp = () => mkdtempSync(join(tmpdir(), 'digest-'))
+
+  it('refuses to re-announce when digest-state is lost but digest history exists (Bug-2)', async () => {
+    const d = tmp()
+    try {
+      writeFileSync(join(d, 'index.json'), JSON.stringify(idx([])))
+      writeFileSync(join(d, 'ai-verdicts.jsonl'), '')
+      mkdirSync(join(d, 'digest'))
+      writeFileSync(join(d, 'digest', '2026-01-01.md'), '# old digest')
+      await expect(digestMain(['--index', join(d, 'index.json'), '--verdicts', join(d, 'ai-verdicts.jsonl'),
+        '--state', join(d, 'digest-state.json'), '--out-dir', d, '--dry']))
+        .rejects.toThrow(/missing\/corrupt/)
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('true bootstrap (no digest history) proceeds with prev=null', async () => {
+    const d = tmp()
+    try {
+      writeFileSync(join(d, 'index.json'), JSON.stringify(idx([])))
+      writeFileSync(join(d, 'ai-verdicts.jsonl'), '')
+      await digestMain(['--index', join(d, 'index.json'), '--verdicts', join(d, 'ai-verdicts.jsonl'),
+        '--state', join(d, 'digest-state.json'), '--out-dir', d, '--dry'])
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('escapes raw HTML in reasons — injected links must not render (Bug-3)', () => {
+    const md = renderDigest({
+      index: idx([]), verdicts: [v({ name: 'evil', reason: 'see <a href=https://x>here</a> & <img src=x>' })],
+      prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('&lt;a href')
+    expect(md).not.toContain('<a href')
+    expect(md).not.toContain('<img')
+  })
+
+  it('normalizes `at` offsets to Z-ISO at the read boundary (Bug-4)', () => {
+    const d = tmp()
+    try {
+      const f = join(d, 'v.jsonl')
+      writeFileSync(f, JSON.stringify(v({ at: '2026-01-02T08:00:00+08:00' })) + '\n')
+      const [vv] = loadVerdicts(f)
+      expect(vv?.at).toBe('2026-01-02T00:00:00.000Z')
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('phase label: announced AI pass on an unscanned slot does not promise release', () => {
+    const pu = {
+      version: '2.0', heldAt: '2026-01-01T00:00:00Z',
+      capabilities: { scannedAt: null, findings: [], redFlags: [] },
+      verification: { status: 'skipped' as const },
+    }
+    const e = entry({ name: 'pkg', pendingUpdate: pu })
+    const pv = v({ name: 'pkg', version: '2.0' })
+    const prev = {
+      lastDigestAt: '2026-01-03T12:00:00Z', day: '2026-01-03',
+      dayAnnounced: [akey(pv)], announced: [akey(pv)],
+    }
+    const md = renderDigest({ index: idx([e]), verdicts: [pv], prev, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).toContain('AI pass 被旗标/未扫描拦截·需人工')
+    expect(md).not.toContain('已公告·待放行闸')
+  })
+
+  it('§④ oldest wait uses the shared hold clock (candidateHeldAt), not firstSeenAt', () => {
+    const e = entry({
+      name: 'old', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z',
+      capabilities: { scannedAt: '2025-12-01T00:00:00Z', findings: [], redFlags: [] },
+      verification: { status: 'unverified' },
+    })
+    const md = renderDigest({ index: idx([e]), verdicts: [], prev: null, now: new Date('2026-01-04T00:00:00Z') })
+    expect(md).toContain('最老等待 2025-12-01')
+  })
+
+  it('held backlog beyond 50 stays readable in a collapsed block', () => {
+    const es = Array.from({ length: 53 }, (_, i) => entry({
+      name: `h${i}`, approval: 'pending', firstSeenAt: `2026-01-${String(i % 28 + 1).padStart(2, '0')}T00:00:00Z`,
+      capabilities: { scannedAt: '2026-01-01T00:00:00Z', findings: [], redFlags: [] },
+    }))
+    const md = renderDigest({ index: idx(es), verdicts: [], prev: null, now: new Date('2026-01-04T00:00:00Z') })
+    expect(md).toContain('<details><summary>…其余 3 条')
+    expect(md).toContain('`h52`')                      // beyond the cap — inside <details>
+    expect(md).toContain('</details>')
+  })
+
+  it('explainEntry: pass on an already-approved displayed slot reports released', () => {
+    const e = entry({ approval: 'approved', latestVersion: '1.0.0' })
+    const pv = v({ name: 'pkg', version: '1.0.0' })
+    const disp = explainEntry(e, [pv], null).find(s => s.slot === 'displayed')
+    expect(disp?.outcome).toBe('release')
+    expect(disp?.why).toContain('已上架')
   })
 })

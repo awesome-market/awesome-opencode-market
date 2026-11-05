@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseSubmission, seedLine } from '../pipeline/submission.ts'
 import { markNotified } from '../pipeline/notify-published.ts'
+import { submissionStatuses } from '../pipeline/submission-status.ts'
 import { run } from '../pipeline/run.ts'
 import { CatalogIndex } from '../src/schema.ts'
 
@@ -90,6 +91,31 @@ describe('submission parser', () => {
     const bare = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
     expect('version' in bare).toBe(false)
   })
+
+  it('seedLine author: issue author rides the seed for provenance/abuse gates', () => {
+    const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42, { author: 'alice' }))
+    expect(l.author).toBe('alice')
+    const bare = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
+    expect('author' in bare).toBe(false)
+  })
+
+  it('descEn keeps the full multi-line answer (collapsed), not just line 1', () => {
+    const s = parseSubmission(`### 英文描述\n\nFirst line.\nSecond line with details.\nThird.`)
+    expect(s.descEn).toBe('First line. Second line with details. Third.')
+  })
+
+  it('descOther en: line cannot override the dedicated English description', () => {
+    const s = parseSubmission(`### 英文描述\n\nReal English desc.\n\n### 其他语言描述（可选）\n\nen: impostor\nzh: 中文`)
+    const l = JSON.parse(seedLine(s, 1))
+    expect(l.desc.en).toBe('Real English desc.')
+    expect(l.desc.zh).toBe('中文')
+  })
+
+  it('descOther en: survives only when the dedicated field is empty', () => {
+    const s = parseSubmission(`### 其他语言描述（可选）\n\nen: fallback en\nzh: 中文`)
+    const l = JSON.parse(seedLine(s, 1))
+    expect(l.desc.en).toBe('fallback en')
+  })
 })
 
 describe('markNotified', () => {
@@ -136,17 +162,18 @@ describe('markNotified', () => {
 
   it('stale: approved seed aged past staleDays without landing warns once', () => {
     const NOW = Date.parse('2026-11-05T00:00:00Z')
-    const old = '2026-10-01T00:00:00Z'   // 35d ago
+    const old = '2026-10-16T00:00:00Z'   // 20d ago — past staleDays(14), under deadDays(30)
     const lines = [
       `{"name":"opencode-foo","issue":7,"notified":false,"at":"${old}"}`,          // landed → notify not stale
       `{"name":"not-in-index","issue":8,"notified":false,"at":"${old}"}`,          // aged, absent → stale
-      `{"name":"also-missing","issue":9,"notified":false,"at":"${old}","staleWarned":true}`, // already warned
+      `{"name":"also-missing","issue":9","notified":false,"at":"${old}","staleWarned":true}`, // already warned
       `{"name":"fresh-one","issue":10,"notified":false,"at":"2026-11-04T00:00:00Z"}`,        // too young
       '{"name":"legacy-no-at","issue":11,"notified":false}',                                 // no timestamp → skip
     ]
-    const { issues, stale, lines: out } = markNotified(idx, lines, { now: NOW })
+    const { issues, stale, dead, lines: out } = markNotified(idx, lines, { now: NOW })
     expect(issues).toEqual([7])
     expect(stale).toEqual([8])
+    expect(dead).toEqual([])
     expect(JSON.parse(out[1]!).staleWarned).toBe(true)
     expect(JSON.parse(out[3]!).staleWarned).toBeUndefined()
   })
@@ -158,8 +185,29 @@ describe('markNotified', () => {
       plugins: [{ ...idx.plugins[0]!, approval: 'pending' }],
     })
     const { stale } = markNotified(pendIdx,
-      ['{"name":"opencode-foo","issue":7,"notified":false,"at":"2026-10-01T00:00:00Z"}'], { now: NOW })
+      ['{"name":"opencode-foo","issue":7,"notified":false,"at":"2026-10-16T00:00:00Z"}'], { now: NOW })
     expect(stale).toEqual([7])
+  })
+
+  it('dead: seed aged past deadDays without landing is terminal + deduped', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const ancient = '2026-09-01T00:00:00Z'   // 65d ago
+    const lines = [
+      `{"name":"not-in-index","issue":8,"notified":false,"at":"${ancient}"}`,       // → dead
+      `{"name":"also-missing","issue":9,"notified":false,"at":"${ancient}","staleWarned":true}`, // warned then died → dead
+      `{"name":"opencode-foo","issue":7,"notified":false,"at":"${ancient}"}`,       // landed → notify wins over dead
+      `{"name":"gone","issue":12,"notified":false,"at":"${ancient}","dead":true}`,  // already dead → untouched
+      `{"name":"dup-a","issue":5,"notified":false,"at":"${ancient}"}`,
+      `{"name":"dup-b","issue":5,"notified":false,"at":"${ancient}"}`,               // same issue twice → one dead entry
+    ]
+    const { issues, stale, dead, lines: out } = markNotified(idx, lines, { now: NOW })
+    expect(issues).toEqual([7])
+    expect(stale).toEqual([])
+    expect(dead.sort()).toEqual([5, 8, 9])
+    expect(JSON.parse(out[0]!).dead).toBe(true)
+    expect(JSON.parse(out[4]!).dead).toBe(true)
+    expect(JSON.parse(out[5]!).dead).toBe(true)
+    expect(JSON.parse(out[3]!).dead).toBe(true)   // pre-dead line passes through
   })
 })
 
@@ -204,7 +252,7 @@ describe('run: JSONL seed declared metadata', () => {
       if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
       if (url.includes('/git/trees/')) return mkRes({ tree: [
         { path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' },
-      ] })
+      ], sha: 'tree-head-1' })
       return mkRes({}, 404)
     }) as typeof fetch
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
@@ -212,6 +260,86 @@ describe('run: JSONL seed declared metadata', () => {
     expect(e.source.kind).toBe('github')
     expect(e.discoveredVia).toContain('submission')
     expect(e.type).toBe('skill')   // declared type honored for repo-only seeds
+  })
+
+  it('repo seed: tree moved since review → drift finding, not silent re-scan', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seed-'))
+    const seed = join(dir, 'submissions.txt')
+    // version = the commit sha the submission REVIEW scanned
+    writeFileSync(seed, JSON.stringify({ name: null, repo: 'o/drift', type: 'skill', version: 'tree-at-review', issue: 7, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('/git/trees/')) return mkRes({ tree: [
+        { path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' },
+      ], sha: 'tree-head-2' })   // HEAD moved since the review
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'o/drift')!
+    expect(e.capabilities.findings).toContain('sec:repo-moved-since-review')
+  })
+
+  it('dead seeds are skipped — no candidate injection, no scan budget', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seed-'))
+    const seed = join(dir, 'submissions.txt')
+    writeFileSync(seed,
+      JSON.stringify({ name: 'dead-pkg', repo: null, issue: 8, notified: false, dead: true }) + '\n' +
+      JSON.stringify({ name: 'live-pkg', repo: null, issue: 9, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('registry.npmjs.org/dead-pkg')) throw new Error('dead seed must never be fetched')
+      if (url.includes('registry.npmjs.org/live-pkg')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/t.tgz')) return mkRes({}, 404)
+      if (url.includes('api.github.com')) return mkRes({}, 404)
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    expect(idx.plugins.find(p => p.name === 'dead-pkg')).toBeUndefined()
+    expect(idx.plugins.find(p => p.name === 'live-pkg')).toBeDefined()
+  })
+})
+
+describe('submissionStatuses', () => {
+  const basePlugin = { name: 'p1', slug: 'p1', aliases: [], type: 'plugin' as const, discoveredVia: [], source: { kind: 'npm' as const, id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' as const }, compat: {} }
+  const mkIdx = (plugins: unknown[]) => CatalogIndex.parse({ version: '1', generatedAt: 't', categories: {}, plugins, removed: [] })
+
+  it('phases: queued (no entry) / review (pending) / published (visible)', () => {
+    const idx = mkIdx([
+      { ...basePlugin, name: 'pend-pkg', approval: 'pending' },
+      { ...basePlugin, name: 'live-pkg', approval: 'approved' },
+    ])
+    const rows = submissionStatuses(idx, [
+      '{"name":"queued-pkg","issue":1,"notified":false}',
+      '{"name":"pend-pkg","issue":2,"notified":false}',
+      '{"name":"live-pkg","issue":3,"notified":false}',
+      '{"name":"done-pkg","issue":4,"notified":true}',     // terminal — skipped
+      '{"name":"dead-pkg","issue":5,"notified":false,"dead":true}', // terminal — skipped
+      '{"name":"noissue","notified":false}',               // no issue — skipped
+    ])
+    expect(rows.map(r => [r.issue, r.phase])).toEqual([
+      [1, 'queued'], [2, 'review'], [3, 'published'],
+    ])
+    expect(rows[0]!.phaseLabel).toBe('排队中')
+  })
+
+  it('one row per issue — newest seed wins; repo seeds match by repo', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'o/r', source: { kind: 'github', id: 'o/r', repo: 'o/r' }, approval: 'pending' }])
+    const rows = submissionStatuses(idx, [
+      '{"name":"old-name","issue":9,"notified":false}',
+      '{"repo":"o/r","issue":9,"notified":false}',   // same issue, later line wins
+      '{"repo":"o/other","issue":10,"notified":false}',
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows.find(r => r.issue === 9)!.key).toBe('o/r')
+    expect(rows.find(r => r.issue === 9)!.phase).toBe('review')
+    expect(rows.find(r => r.issue === 10)!.phase).toBe('queued')
   })
 })
 

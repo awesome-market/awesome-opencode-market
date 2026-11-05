@@ -22,7 +22,9 @@ jobs:
   plan:
     # scope: prod-only is real, not a comment — a fork's schedule would burn
     # 2×N×35min of shard compute daily. Manual dispatch stays open everywhere.
-    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
+    # Whitelist = the known data planes: awesome-market org (planned prod) and
+    # terry2010's fork (current prod — client default index + live catalog).
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
     outputs: { shards: "${{ steps.shards.outputs.list }}" }
     permissions: { contents: read }
@@ -145,7 +147,9 @@ jobs:
     # holding the workflow-level lock starved catalog/digest/submit for no
     # reason. Job-level shares the same group namespace.
     concurrency: catalog-branch
-    permissions: { contents: write, actions: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
+    # issues: write — a persistent release.ts failure during merge files a
+    # deduped pipeline-alert (G10); the job still never executes untrusted code
+    permissions: { contents: write, actions: write, issues: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -154,8 +158,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
       - name: "merge results + commit to catalog (rebase-retry: re-merge against fresh head each attempt, WF-2)"
+        id: merge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           # download-artifact only creates the dir when artifacts exist — a
@@ -169,12 +175,26 @@ jobs:
           # bare `add` then fails twice (path exists, branch exists) for the whole job
           git worktree remove /tmp/cat --force 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
-          ok=0
+          ok=0; pushed=0
+          RELEASE_FAILED=0
           for i in 1 2 3 4; do
             git fetch origin catalog
             git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
+            # fold mature verdicts against the freshest remote state before
+            # committing — a 'verified' result landing on an already-announced
+            # pass (or a human brake that arrived mid-run) applies in THIS
+            # commit instead of waiting for the next catalog generate (~12h).
+            # Non-fatal: the verify results still land; the next catalog run
+            # re-derives the same verdict state.
+            if npx tsx pipeline/release.ts /tmp/index.new.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
+              mv /tmp/index.released.json /tmp/index.new.json
+              RELEASE_FAILED=0
+            else
+              RELEASE_FAILED=1
+              echo "::warning::release.ts failed — verify results committed without verdict fold (next catalog run re-derives)"
+            fi
             cp /tmp/index.new.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
             # staged-diff precheck (same C-2 fix as catalog-append): a real
@@ -185,14 +205,33 @@ jobs:
               ok=1; break
             fi
             git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
-            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; pushed=1; break; }
             echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
           done
           [ "$ok" = 1 ] || { echo "verify merge failed after retries"; exit 1; }
+          # G10: results landed but the verdict fold failed on the last
+          # attempt — brakes/releases deferred ~12h. Publish was green so the
+          # workflow alert job stays silent; file a deduped pipeline-alert.
+          if [ "$RELEASE_FAILED" = 1 ]; then
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "release apply failed" --json number --jq '.[0].number' 2>/dev/null || true)
+            RBODY="verify merge landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$RBODY" || true
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" \
+                --title "release apply failed during verify merge (run ${GITHUB_RUN_ID})" \
+                --body "$RBODY" --label pipeline-alert || true
+            fi
+          fi
+          # only a real push changed the public index — an all-harness-dropped
+          # or no-change merge must not burn a full site rebuild
+          echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
       # V-8: site.yml is the single Pages publisher — dispatch it so fresh
       # verification labels land on the site now instead of at the next
-      # catalog run (~8h later).
+      # catalog run (~8h later). Skipped when the merge changed nothing.
       - name: trigger site rebuild
+        if: steps.merge.outputs.pushed == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run site.yml || echo "site dispatch failed — the next catalog run will refresh"

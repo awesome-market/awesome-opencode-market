@@ -1,7 +1,15 @@
 import { z } from 'zod'
 
+// z.looseObject everywhere in this file (not z.object): the catalog-branch
+// data plane gets PARSED-AND-REWRITTEN by release.ts / verify-merge / remerge,
+// and the writer may run an older schema than the pipeline that produced the
+// file — default z.object strips unknown keys, so a forward field (e.g. a new
+// pendingUpdate slot property) would silently die on the next apply. Loose
+// keeps unknown keys flowing through validation so forward fields survive
+// the rewrite; known keys still validate strictly.
+
 /** Localized text: en required, zh optional */
-export const LocalizedText = z.object({ en: z.string(), zh: z.string().optional() })
+export const LocalizedText = z.looseObject({ en: z.string(), zh: z.string().optional() })
 export type LocalizedText = z.infer<typeof LocalizedText>
 
 export const PluginType = z.enum(['plugin', 'skill', 'agent', 'command', 'mcp', 'theme', 'bundle', 'rule'])
@@ -15,7 +23,7 @@ export const VerificationStatus = z.enum(['verified', 'failed', 'unverified', 's
 /** deepest stage reached: install → load (server canary) → interactive (L2 tmux) → render (L3a gui harness) */
 export const VerificationLevel = z.enum(['install', 'load', 'interactive', 'render', 'structure'])
 
-export const Source = z.object({
+export const Source = z.looseObject({
   kind: SourceKind,
   id: z.string(),                    // npm name or owner/repo
   repo: z.string().optional(),       // canonical owner/repo when known
@@ -23,7 +31,7 @@ export const Source = z.object({
   version: z.string().optional(),    // resolved version or ref
 })
 
-export const Capabilities = z.object({
+export const Capabilities = z.looseObject({
   /** null = never scanned (renders differently from empty findings) */
   scannedAt: z.string().nullable(),
   /** scan ruleset version — cacheKey component; bump to re-scan unchanged packages */
@@ -32,7 +40,7 @@ export const Capabilities = z.object({
   redFlags: z.array(z.string()),
 })
 
-export const Verification = z.object({
+export const Verification = z.looseObject({
   status: VerificationStatus,
   level: VerificationLevel.optional(),
   opencodeVersion: z.string().optional(),
@@ -53,12 +61,23 @@ export type Approval = z.infer<typeof Approval>
 
 /** A version bump held back from display (hold-by-default). Display fields stay
  *  pinned to the last approved version until this releases via verdict+verify. */
-export const PendingUpdate = z.object({
+export const PendingUpdate = z.looseObject({
   version: z.string(),
   capabilities: Capabilities,
   verification: Verification,
   /** new version's detected features — promoted to display on release */
   features: z.array(PluginFeature).optional(),
+  /** the HELD version's installable parts — entry.contains is pinned to the
+   *  displayed version while a hold exists, so the candidate's payload
+   *  description must live here (verify routing + release promotion read it).
+   *  Absent on holds created before this field existed; those still carry
+   *  candidate parts on the entry itself. */
+  contains: z.array(z.enum(['plugin', 'skill', 'mcp', 'command', 'agent', 'hook'])).optional(),
+  /** the HELD version's tarball SRI — entry.integrity is pinned to the
+   *  displayed version while a hold exists, so the candidate's integrity
+   *  must live here for release to promote it (same version-scoped rule as
+   *  contains). Absent on holds created before this field existed. */
+  integrity: z.string().nullable().optional(),
   publishedAt: z.string().nullable().optional(),
   /** AI concern reason / awaiting-review */
   reason: z.string().optional(),
@@ -66,12 +85,12 @@ export const PendingUpdate = z.object({
 })
 export type PendingUpdate = z.infer<typeof PendingUpdate>
 
-export const Compat = z.object({
+export const Compat = z.looseObject({
   engines: z.string().optional(),
   peer: z.string().optional(),
 })
 
-export const PluginEntry = z.object({
+export const PluginEntry = z.looseObject({
   name: z.string(),
   slug: z.string(),
   aliases: z.array(z.string()).default([]),
@@ -100,7 +119,7 @@ export const PluginEntry = z.object({
    *  drift check: the bytes a client fetches must equal what review approved.
    *  null for github-kind entries (codeload archives have no registry integrity). */
   integrity: z.string().nullable().optional(),
-  metrics: z.object({
+  metrics: z.looseObject({
     stars: z.number().int().nonnegative().nullable().default(null),
     npmDownloads30d: z.number().int().nonnegative().nullable().default(null),
     checkedAt: z.string(),
@@ -120,16 +139,20 @@ export type PluginEntry = z.infer<typeof PluginEntry>
 export const RemovedReason = z.enum(['npm-404', 'repo-404', 'filtered', 'capped', 'manual', 'unknown'])
 export type RemovedReason = z.infer<typeof RemovedReason>
 
-export const RemovedEntry = z.object({
+export const RemovedEntry = z.looseObject({
   slug: z.string(),
   name: z.string(),
   lastSource: Source.optional(),
   disappearedAt: z.string(),
   reason: RemovedReason,
+  /** package/repo birth stamp at disappearance — a same-name re-entry with a
+   *  NEWER createdAt is a re-registration under a recycled identity (the
+   *  tombstone-side mirror of trustFlags' createdAt>firstSeenAt check) */
+  createdAt: z.string().nullable().optional(),
 })
 export type RemovedEntry = z.infer<typeof RemovedEntry>
 
-export const CatalogIndex = z.object({
+export const CatalogIndex = z.looseObject({
   version: z.literal('1'),
   generatedAt: z.string(),
   categories: z.record(z.string(), LocalizedText),
@@ -139,7 +162,7 @@ export const CatalogIndex = z.object({
 export type CatalogIndex = z.infer<typeof CatalogIndex>
 
 /** One record in catalog-branch ai-verdicts.jsonl (append-only, AI-DIAGNOSIS §4). */
-export const AiVerdict = z.object({
+export const AiVerdict = z.looseObject({
   name: z.string(),
   /** null = github-kind entries (no versions); matches latestVersion: null */
   version: z.string().nullable().default(null),
@@ -149,8 +172,10 @@ export const AiVerdict = z.object({
   /** English rendering for ai-sourced records (bilingual audit trail) */
   reasonEn: z.string().optional(),
   /** ISO-8601 — a malformed timestamp would silently land in the digest's
-   *  "future-dated" bucket and never mature; validate at the boundary */
-  at: z.iso.datetime(),
+   *  "future-dated" bucket and never mature; validate at the boundary.
+   *  Offsets (+08:00) accepted — loadVerdicts normalizes to Z so akey/time
+   *  compares stay lexicographic; rejecting offsets would drop the line. */
+  at: z.iso.datetime({ offset: true }),
   /** stamped by our writers, never by the model — AI can't forge 'human' */
   source: z.enum(['ai', 'human']),
   /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */
@@ -159,7 +184,7 @@ export const AiVerdict = z.object({
    *  written without an LLM call, e.g. verify-fail short-circuit / sha reuse) */
   model: z.string().optional(),
   /** L0.5 classifier evidence: which model + its max score over the material */
-  l05: z.object({ model: z.string(), score: z.number() }).optional(),
+  l05: z.looseObject({ model: z.string(), score: z.number() }).optional(),
   /** human verdicts: which maintainer decided (audit — a free-text reason can
    *  omit or spoof this; stamped by the writer from github.actor) */
   by: z.string().optional(),
@@ -174,7 +199,7 @@ export type AiVerdict = z.infer<typeof AiVerdict>
  *  NOT at ≤ lastDigestAt: a verdict pushed to the branch after a digest render
  *  but carrying an older `at` must not mature unseen. Absent → empty → every
  *  pass stays frozen until the next digest republishes (fail-closed). */
-export const DigestState = z.object({
+export const DigestState = z.looseObject({
   lastDigestAt: z.string(),
   /** verdict-line keys ("name\0version\0at") announced across digests so far —
    *  cumulative; a NEW judgment on the same name@version is a new key and must

@@ -59,6 +59,9 @@ behind every surface:
 - Skill file catalog:
   `https://awesome-market.github.io/awesome-opencode-market/skills/`
 - [Browse the catalog on the web](https://awesome-market.github.io/awesome-opencode-market/)
+- [Daily digest](https://github.com/awesome-market/awesome-opencode-market/tree/catalog/digest)
+  — the announcement surface: every version about to be released is posted
+  here first, so objections can land before it ships
 
 ## Suggest a plugin or skill
 

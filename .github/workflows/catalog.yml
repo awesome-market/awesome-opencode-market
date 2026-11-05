@@ -8,6 +8,7 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     permissions: {}             # processes untrusted npm metadata — no write token (WF-3)
     # no concurrency lock: generate only READS the catalog branch — holding
     # catalog-branch for ~30-60min would block every verify/digest/ingest
@@ -86,6 +87,7 @@ jobs:
             git -C /tmp/cat rm -rf . >/dev/null 2>&1 || true
           fi
           ok=0
+          RELEASE_FAILED=0
           for i in 1 2 3 4; do
             git fetch origin catalog 2>/dev/null || true
             git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
@@ -104,8 +106,13 @@ jobs:
             # mid-run stays a brake, our own mature release still releases).
             if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
               mv /tmp/index.released.json /tmp/index.json
+              RELEASE_FAILED=0
             else
-              echo "verdict apply skipped (non-fatal — next catalog run re-derives it)"
+              # non-fatal but tracked: a failed fold leaves brakes/releases
+              # unapplied until the next run — the post-loop check below
+              # turns a persistent failure into a pipeline-alert issue
+              RELEASE_FAILED=1
+              echo "::warning::release.ts failed during publish attempt $i — verdict apply skipped (next catalog run re-derives)"
             fi
             cp /tmp/index.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
@@ -121,22 +128,47 @@ jobs:
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
+          # G10: the publish succeeded but the verdict fold failed on the
+          # last attempt — brakes/releases are deferred ~12h while the index
+          # shows stale approval state. The workflow alert job can't see this
+          # (publish itself was green), so file a deduped pipeline-alert.
+          if [ "$RELEASE_FAILED" = 1 ]; then
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "release apply failed" --json number --jq '.[0].number' 2>/dev/null || true)
+            RBODY="catalog publish landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$GH_REPO" --body "$RBODY" || true
+            else
+              gh issue create --repo "$GH_REPO" \
+                --title "release apply failed during catalog publish (run ${GITHUB_RUN_ID})" \
+                --body "$RBODY" --label pipeline-alert || true
+            fi
+          fi
           # notify+close submission issues whose package just landed. Flag the
           # seeds BEFORE commenting (and retry the flag push): a lost flag push
           # would re-notify the same issues next run (C-6). Comments themselves
           # are best-effort — the index is already published.
           if [ -f /tmp/cat/submissions.txt ]; then
-            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list > /tmp/notify.list
+            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
             git -C /tmp/cat add submissions.txt
+            flagPushed=0
             for i in 1 2 3; do
-              if git -C /tmp/cat diff --cached --quiet; then break; fi
+              if git -C /tmp/cat diff --cached --quiet; then flagPushed=1; break; fi
               git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || true
-              git -C /tmp/cat push origin HEAD:catalog && break
+              git -C /tmp/cat push origin HEAD:catalog && { flagPushed=1; break; }
               git fetch origin catalog 2>/dev/null || true
               git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
-              npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list > /tmp/notify.list
+              npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
               git -C /tmp/cat add submissions.txt
             done
+            # gate on the flag push: commenting without persisting notified:true
+            # means the next run re-marks and re-comments — and a close that
+            # races a lost push leaves the seed marked-but-uncommented. When
+            # the push fails we skip the whole block; it self-heals next run.
+            if [ "$flagPushed" = 1 ]; then
+            # issues[] is already deduped per issue inside markNotified — one
+            # comment+close per submission no matter how many seed rows match
+            sort -un /tmp/notify.list -o /tmp/notify.list
             while read -r N; do
               [ -n "$N" ] || continue
               gh issue comment "$N" --body "✅ 已收录进插件目录（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
@@ -146,12 +178,29 @@ jobs:
             # approved-but-never-landed: seed aged 14d+ without becoming visible.
             # Honest status comment, once per seed (staleWarned flag); the issue
             # is NOT closed — a pipeline-side delay is not author abandonment.
-            touch /tmp/stale.list
+            touch /tmp/stale.list /tmp/dead.list
             while read -r N; do
               [ -n "$N" ] || continue
               gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || true
               echo "stale-warned issue #$N"
             done < /tmp/stale.list
+            # dead = terminal: seed aged 30d+ without landing — same horizon as
+            # the submit.yml abandonment sweep. Close so approved-but-stuck
+            # submissions can't hang open forever (F-11); resubmit = new issue.
+            while read -r N; do
+              [ -n "$N" ] || continue
+              gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || true
+              gh issue close "$N" || true
+              echo "dead-closed issue #$N"
+            done < /tmp/dead.list
+            # progress visibility: refresh the pinned status comment on every
+            # submission issue that still has a live seed — edit-in-place, one
+            # comment per issue, best-effort (never fails the publish).
+            GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" GH_REPO="$GH_REPO" \
+              npx tsx pipeline/submission-status.ts /tmp/index.json /tmp/cat/submissions.txt || true
+            else
+              echo "submissions flag push failed — skipping issue notify/close this run (self-heals next run)"
+            fi
           fi
       # V-8: site.yml is the single Pages publisher — dispatch it so this push's
       # index lands on the site now instead of at the next scheduled rebuild.

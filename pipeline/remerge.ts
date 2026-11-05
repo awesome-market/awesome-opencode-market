@@ -8,18 +8,22 @@ import { CAT_NAMES, catId } from '../src/categories.ts'
 import { mergeEntries, OPENCODE_VERSION } from './publish/merge.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 
-/** Same id normalization buildIndex applies (I-3): remote's categories dict
- *  and entry.category values may predate the english-id convention — without
- *  this, the retry path re-publishes legacy zh keys forever. */
+/** Same id normalization + whitelist buildIndex applies (I-3): remote's
+ *  categories dict and entry.category values may predate the english-id
+ *  convention — and only CAT_NAMES ids may live in the dict, so
+ *  author-declared strings can't mint global categories. */
 const normCats = (rec: CatalogIndex['categories']): CatalogIndex['categories'] =>
-  Object.fromEntries(Object.entries(rec).map(([k, v]) => { const id = catId(k); return [id, CAT_NAMES[id] ?? v] }))
+  Object.fromEntries(Object.entries(rec).flatMap(([k]) => {
+    const id = catId(k)
+    return CAT_NAMES[id] ? [[id, CAT_NAMES[id]!] as const] : []
+  }))
 
 export function remerge(ours: CatalogIndex, remote: CatalogIndex | null): CatalogIndex {
   if (!remote) return ours
   const plugins = mergeEntries(ours.plugins, remote, OPENCODE_VERSION, RULESET_VERSION)
-  for (const e of plugins) e.category = (e.category ?? []).map(catId)
+  for (const e of plugins) e.category = (e.category ?? []).map(catId).filter(id => CAT_NAMES[id] !== undefined)
   const categories: CatalogIndex['categories'] = { ...normCats(remote.categories), ...normCats(ours.categories) }
-  for (const e of plugins) for (const id of e.category ?? []) categories[id] ??= CAT_NAMES[id] ?? { en: id }
+  for (const e of plugins) for (const id of e.category ?? []) categories[id] ??= CAT_NAMES[id]!
   return {
     ...ours,
     generatedAt: new Date().toISOString(),

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { run, loadOldIndex } from '../pipeline/run.ts'
+import { run, loadOldIndex, anchorIntegrity, DRIFT_FLAG } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 
 function mkTgz(): Buffer {
@@ -12,6 +12,18 @@ function mkTgz(): Buffer {
   mkdirSync(join(dir, 'pkg'), { recursive: true })
   writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
   writeFileSync(join(dir, 'pkg/index.js'), 'export default { id: "p", setup() {} }')
+  const out = join(dir, 'p.tgz')
+  execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+  return readFileSync(out)
+}
+
+/** Same shape as mkTgz plus a nested skill payload — dual-nature tarball. */
+function mkTgzSkill(): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
+  mkdirSync(join(dir, 'pkg/skills/x'), { recursive: true })
+  writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+  writeFileSync(join(dir, 'pkg/index.js'), 'export default { id: "p", setup() {} }')
+  writeFileSync(join(dir, 'pkg/skills/x/SKILL.md'), '---\nname: x\n---\n# skill\n')
   const out = join(dir, 'p.tgz')
   execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
   return readFileSync(out)
@@ -186,6 +198,56 @@ describe('github-kind hardening', () => {
     expect(withPkg.plugins.find(p => p.name === 'o/r')?.type).toBe('plugin')
   })
 
+  it('hold surgery splits contains per version — candidate parts on pendingUpdate, displayed parts stay on entry', async () => {
+    // v1.0.0 plugin-only → v2.0.0 adds a skill payload: install routing reads
+    // entry.contains for the DISPLAYED version, so the held candidate's parts
+    // must live on pendingUpdate.contains — the dual-nature boundary case
+    let ver = '1.0.0'
+    const tgzA = mkTgz()        // plugin only
+    const tgzB = mkTgzSkill()   // plugin + SKILL.md
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) {
+        return new Response(JSON.stringify({ objects: [
+          { package: { name: 'good-pkg', version: ver, description: 'd',
+            keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } }] }))
+      }
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org') && url.includes('good-pkg')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: ver },
+          versions: { [ver]: { repository: 'https://github.com/o/good', license: 'MIT',
+            dist: { tarball: `https://x/t-${ver}.tgz` }, keywords: ['opencode'], main: 'index.js' } },
+          time: { [ver]: 't' },
+        }))
+      }
+      if (url.includes('x/t-1.0.0.tgz')) return new Response(new Uint8Array(tgzA))
+      if (url.includes('x/t-2.0.0.tgz')) return new Response(new Uint8Array(tgzB))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+        { path: '.opencode/plugin/x.ts' }, { path: 'package.json' }, { path: 'README.md' }] }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 3, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 7 }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'hold-'))
+    const out1 = join(d, 'i1.json')
+    await run({ outPath: out1, fetchFn: f, now: '2026-11-02T00:00:00Z' })
+    // approve the displayed entry so the bump triggers hold surgery
+    // (pending entries move their candidate in place — nothing to protect)
+    const first = JSON.parse(readFileSync(out1, 'utf8'))
+    first.plugins[0].approval = 'approved'
+    delete first.plugins[0].approvalReason
+    writeFileSync(out1, JSON.stringify(first))
+    ver = '2.0.0'
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: '2026-11-03T00:00:00Z' })
+    const e = idx2.plugins.find(p => p.name === 'good-pkg')!
+    expect(e.latestVersion).toBe('1.0.0')
+    expect(e.pendingUpdate?.version).toBe('2.0.0')
+    expect(e.contains).toEqual(['plugin'])                          // displayed v1's parts
+    expect(e.pendingUpdate?.contains).toEqual(['plugin', 'skill'])   // candidate v2's parts
+  })
+
   it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {
     let codeloadHits = 0
     const f = ghBase(
@@ -214,5 +276,41 @@ describe('classify', () => {
     expect(classify('x', 'x', 'git commit review')).toContain('workflow')
     expect(classify('x', 'x', 'zzz nothing')).toEqual(['other'])
     expect(classify('tok', 'x', 'llm pricing token').length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('anchorIntegrity — same-version byte drift (re-tag guard)', () => {
+  const caps = { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] }
+  it('same sha → anchor kept, no flag', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', 'sha512-a')
+    expect(r.integrity).toBe('sha512-a')
+    expect(r.capabilities.redFlags).toEqual([])
+  })
+  it('no prior anchor → backfill (field predates this entry)', () => {
+    const r = anchorIntegrity(caps, null, 'sha512-a')
+    expect(r.integrity).toBe('sha512-a')
+    expect(r.capabilities.redFlags).toEqual([])
+  })
+  it('registry sha missing → keep the old anchor (absence proves nothing)', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', null)
+    expect(r.integrity).toBe('sha512-a')
+    const r2 = anchorIntegrity(caps, 'sha512-a', undefined)
+    expect(r2.integrity).toBe('sha512-a')
+  })
+  it('DIFFERENT sha under the same version → freeze old anchor + sec flag', () => {
+    // unpublish+republish is the signal — the index must NOT start certifying
+    // the new bytes as the reviewed artifact
+    const r = anchorIntegrity(caps, 'sha512-old', 'sha512-new')
+    expect(r.integrity).toBe('sha512-old')
+    expect(r.capabilities.redFlags).toContain(DRIFT_FLAG)
+  })
+  it('drift flag is deduped — repeated refresh does not stack it', () => {
+    const flagged = { ...caps, redFlags: [DRIFT_FLAG] }
+    const r = anchorIntegrity(flagged, 'sha512-old', 'sha512-new')
+    expect(r.capabilities.redFlags.filter(f => f === DRIFT_FLAG)).toHaveLength(1)
+  })
+  it('capabilities object untouched on no-drift (same reference → no churn)', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', 'sha512-a')
+    expect(r.capabilities).toBe(caps)
   })
 })

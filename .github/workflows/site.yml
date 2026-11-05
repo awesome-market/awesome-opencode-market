@@ -27,6 +27,9 @@ jobs:
       - run: |
           git fetch origin catalog
           git show origin/catalog:index.json > index.json
+          # verdict audit surface for detail pages — absent file just means
+          # "no verdicts yet" (loadVerdicts tolerates missing paths)
+          git show origin/catalog:ai-verdicts.jsonl > ai-verdicts.jsonl 2>/dev/null || touch ai-verdicts.jsonl
           # the redirection above creates the file even when git show fails —
           # check content like catalog.yml's WF-1 rule instead of letting a
           # bare JSON.parse error stand in for "fetch failed"
@@ -42,7 +45,7 @@ jobs:
           path: .skill-cache
           key: skill-cache-${{ github.run_id }}
           restore-keys: skill-cache-
-      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
+      - run: npx tsx pipeline/site/build.ts index.json /tmp/site ai-verdicts.jsonl
         env:
           SKILL_CACHE: .skill-cache
           # absolute base path for 404.html links — served at arbitrary depth

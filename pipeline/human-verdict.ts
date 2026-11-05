@@ -46,11 +46,16 @@ export interface VerdictResolved {
 
 /** `[review] name[@ver]` — scoped names keep their leading '@' (the last '@'
  *  is the version separator; a leading one at index 0 is not). `[concern]`
- *  titles carry free text, not a spec — never parse them as targets. */
+ *  titles carry free text, not a spec — never parse them as targets. `(...)`
+ *  names are sentinel placeholders (the repo-only aggregate) — treating one
+ *  as a real target would route labels/comments at a name that can never be
+ *  an entry and flag every cross-target command as a "mismatch". */
 export function titleTarget(t: string): { name: string; ver: string } | null {
   const m = t.match(/^\[review\]\s+(.+)$/)
   if (!m) return null
-  return splitSpec(m[1]!.trim())
+  const spec = splitSpec(m[1]!.trim())
+  if (/^\(.*\)$/.test(spec.name)) return null
+  return spec
 }
 
 export function splitSpec(spec: string): { name: string; ver: string } {
@@ -65,8 +70,10 @@ const VER_CHARS = /^[A-Za-z0-9._+~-]+$/
 const cleanVer = (v: string) => (VER_CHARS.test(v) ? v : '')
 
 /** reasons are single-line audit text: collapse all whitespace (a multi-line
- *  value would corrupt the k=v $GITHUB_OUTPUT protocol, H-7). */
-const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim().slice(0, 2000)
+ *  value would corrupt the k=v $GITHUB_OUTPUT protocol AND the digest's
+ *  markdown table, H-7). Code-point slice — UTF-16 .slice can split a
+ *  surrogate pair and emit a lone surrogate into JSON/output. */
+const oneLine = (s: string) => [...s.replace(/\s+/g, ' ').trim()].slice(0, 2000).join('')
 
 /** repo-only entries are identified by owner/repo — never by a version. A
  *  scoped npm name `@o/p` also contains '/', so exclude '@'-leading names. */
@@ -93,7 +100,12 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     const t = titleTarget(e.issueTitle)
     if (!t) return { skip: 'noresolve' }
     name = t.name; ver = t.ver
-    verdict = e.label === 'verdict:pass' ? 'pass' : 'concern'
+    // whitelist, not else→concern: any stray label reaching this channel must
+    // not silently become a brake (defense-in-depth — the workflow gate only
+    // fires on verdict:* today, but the parser is the contract)
+    if (e.label === 'verdict:pass') verdict = 'pass'
+    else if (e.label === 'verdict:concern') verdict = 'concern'
+    else return { skip: 'noresolve' }
     reason = `via label ${e.label} by ${e.actor} (issue #${e.issueNumber})`
   } else if (e.event === 'issue_comment') {
     // case-insensitive: phone keyboards autocapitalize `/Approve`/`/Concern`
@@ -115,8 +127,9 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
       if (specShape || (!tt && (!rest.includes(' ') || /^[a-z0-9@_./-]+$/i.test(sp[0]!)))) {
         // sanitize the arg version BEFORE comparing: a garbage version
         // (`pkg@$(id)`) degrades to "unspecified" → title/index target, not
-        // a divergence worth flagging
-        name = t.name; ver = cleanVer(t.ver); reason = sp.slice(1).join(' ')
+        // a divergence worth flagging. `*` is the explicit package-scope
+        // sentinel — survive it so the workflow writes version:null.
+        name = t.name; ver = t.ver === '*' ? '*' : cleanVer(t.ver); reason = sp.slice(1).join(' ')
         // arg-spec on a titled issue that points somewhere else: land the
         // verdict on the ARG (explicit intent), but flag it so the workflow
         // doesn't close the wrong review issue (H-4)
@@ -141,13 +154,24 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     name = formField(map, 'npm 包名或 owner/repo', '包名')
     ver = formField(map, '版本（可留空）', '版本')
     const act = formField(map, '操作 / Action', '操作')
-    verdict = /pass|放行/.test(act) ? 'pass' : 'concern'
+    // word-boundary: 'compass'/'bypass'/'passable' contain 'pass' as a
+    // substring — an ambiguous action must fall to concern (the form's
+    // default), never silently upgrade to a release verdict
+    verdict = /\bpass\b|放行/i.test(act) ? 'pass' : 'concern'
     reason = formField(map, '理由 / Reason', '理由')
   } else {
     return { skip: 'noresolve' }
   }
 
-  ver = cleanVer(ver)
+  // `pkg@*` = explicit PACKAGE scope (every version / the whole package) —
+  // preserved through cleanVer so the workflow can write a version:null
+  // verdict, which applyMatureVerdicts reads as a package-level brake.
+  // Anything else version-ish still goes through the charset sanitizer.
+  ver = ver === '*' ? '*' : cleanVer(ver)
+  // name is maintainer-controlled text bound for $GITHUB_OUTPUT — a form
+  // field or title carrying a newline would inject extra k=v lines (the
+  // reason/ver/mismatch fields are already oneLine'd; name was the gap)
+  name = oneLine(name)
   const repo = isRepoName(name)
   if (repo) ver = ''
   if (!name || !verdict) return { skip: 'noresolve' }
@@ -170,21 +194,54 @@ export function isDupVerdict(lines: string[], name: string, version: string | nu
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string }
       if (v.name !== name || (v.version ?? null) !== version) continue
-      return v.source === 'human' && v.verdict === verdict && (v.reason ?? '') === reason
+      // normalize BOTH sides — a writer that stored a multi-line reason vs a
+      // caller passing the raw comment text must still dedupe correctly
+      return v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') === oneLine(reason)
     } catch { continue }
   }
   return false
 }
 
+/** Reason-only amendment (HV-2 counterpart): the latest human line for this
+ *  key carries the SAME verdict but a DIFFERENT reason — a typo fix or a
+ *  late "/concern pkg new reason". Appending with a fresh `at` would mint a
+ *  new akey ∉ digest-state.announced and freeze an already-announced pass
+ *  for another digest cycle. Reusing the prior line's `at` keeps the
+ *  announcement key (and maturity) stable; the audit trail keeps BOTH lines.
+ *  Returns the `at` to reuse, or null when no amend applies (caller writes
+ *  a normal fresh timestamp). Only fires when the LATEST line for the key
+ *  is the matching human verdict — an AI line or a verdict flip on top means
+ *  this is a new decision, not an edit. */
+export function amendAt(lines: string[], name: string, version: string | null, verdict: string, reason: string): string | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.trim()
+    if (!l) continue
+    try {
+      const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string; at?: string }
+      if (v.name !== name || (v.version ?? null) !== version) continue
+      if (v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') !== oneLine(reason)
+          && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v.at))
+        return v.at
+      return null
+    } catch { continue }
+  }
+  return null
+}
+
 /* v8 ignore next 14 — thin env→stdout adapter */
 if (import.meta.url === `file://${process.argv[1]}`) {
   // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason>`
-  // → prints dup=1|0 for the workflow's append gate
+  // → prints dup=1|0 plus amend=<at>| (empty) — amend is the prior human
+  // line's timestamp to reuse when this is a reason-only correction, so the
+  // workflow can stamp the record without resetting digest maturity
   if (process.argv[2] === 'dedupe') {
     const { readFileSync } = await import('node:fs')
     const [, , , file, name, ver, verdict, reason] = process.argv
     const lines = readFileSync(file!, 'utf8').split('\n')
-    console.log(`dup=${isDupVerdict(lines, name!, ver || null, verdict!, reason ?? '') ? 1 : 0}`)
+    const ver_ = ver || null
+    const dup = isDupVerdict(lines, name!, ver_, verdict!, reason ?? '')
+    console.log(`dup=${dup ? 1 : 0}`)
+    console.log(`amend=${dup ? '' : amendAt(lines, name!, ver_, verdict!, reason ?? '') ?? ''}`)
     process.exit(0)
   }
   const p = process.env

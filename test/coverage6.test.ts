@@ -1241,7 +1241,8 @@ describe('run.ts remaining arms', () => {
     const gp = out.plugins.find(p => p.name === 'good-pkg')!
     expect(gp.discoveredVia).toContain('submission')
     const dp = out.plugins.find(p => p.name === 'declared-pkg')!
-    expect(dp.category).toEqual(['tools', 'x'.repeat(80)])
+    // the 80-char claim isn't a canonical taxonomy id — whitelisted out
+    expect(dp.category).toEqual(['tools'])
     const gh = out.plugins.find(p => p.name === 'o/seedskill')!
     expect(gh.source.kind).toBe('github')
     expect(gh.source.version).toBe('abc')
@@ -1425,7 +1426,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(r.issues).toEqual([])
   })
   it('renderReview: repo + evidence + unknown downloads arms', () => {
-    const md = renderReview({ name: 'p', exists: true, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
+    const md = renderReview({ name: 'p', exists: true, status: 'ok', evidenceOk: true, scanned: true, scanError: null, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
     expect(md).toContain('repo: o/r')
     expect(md).toContain('keyword, entry')
     expect(md).toContain('unknown')

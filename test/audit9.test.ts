@@ -69,12 +69,15 @@ describe('R-9: pendingUpdate only exists on a displayed entry', () => {
   it('R-8 still fires when ours is in transitional pending+pu and remote released the held version', () => {
     // brake fired mid-run → ours pending+pu@1.1.0; remote already released
     // 1.1.0 — adopt the released display state, not the pending shadow.
-    const prev = mkEntry('p', { approval: 'approved', latestVersion: '1.1.0' })
-    const fresh = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', pendingUpdate: mkPu('1.1.0') })
+    // contains is version-scoped too: the remote released the HELD payload —
+    // keeping our pinned display parts would misroute installs for 1.1.0.
+    const prev = mkEntry('p', { approval: 'approved', latestVersion: '1.1.0', contains: ['skill'] })
+    const fresh = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', contains: ['plugin'], pendingUpdate: mkPu('1.1.0') })
     const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
     expect(out!.approval).toBe('approved')
     expect(out!.latestVersion).toBe('1.1.0')
     expect(out!.pendingUpdate).toBeUndefined()
+    expect(out!.contains).toEqual(['skill'])
   })
 })
 
@@ -87,6 +90,18 @@ describe('publish catch-up apply (remerge ours-wins + release.ts re-derive)', ()
     const r = applyMature(mkIndex([merged]), [mkVerdict('p', '1.0.0', 'concern', AFTER, 'human', 'human brake')], null)
     expect(r.index.plugins[0]!.approval).toBe('pending')
     expect(r.index.plugins[0]!.approvalReason).toBe('human brake')
+  })
+  it('release promotes the HELD version\'s own integrity — a stale SRI pins the wrong tarball', () => {
+    const held = mkEntry('p', {
+      integrity: 'sha512-OLD', latestVersion: '1.0.0',
+      pendingUpdate: mkPu('1.1.0', { integrity: 'sha512-NEW', publishedAt: '2026-02-01' }),
+    })
+    const ver = mkVerdict('p', '1.1.0', 'pass', BEFORE)
+    const r = applyMature(mkIndex([held]), [ver], digestStateOf(DIGEST, [ver]))
+    const out = r.index.plugins[0]!
+    expect(out.latestVersion).toBe('1.1.0')
+    expect(out.integrity).toBe('sha512-NEW')      // pu.integrity promoted
+    expect(out.pendingUpdate).toBeUndefined()
   })
 })
 
