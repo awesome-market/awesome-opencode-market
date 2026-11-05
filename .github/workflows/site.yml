@@ -11,7 +11,7 @@ permissions: {}
 jobs:
   site:
     runs-on: ubuntu-latest
-    permissions: { pages: write, id-token: write }
+    permissions: { pages: write, id-token: write, contents: read }
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -25,7 +25,25 @@ jobs:
       - run: |
           git fetch origin catalog
           git show origin/catalog:index.json > index.json
+      # S-1: extracted skill docs are version-pinned — cache by <id>@<ver> so
+      # unchanged skills cost zero network on redeploys (rolling cache key;
+      # the build prunes entries no longer referenced).
+      - uses: actions/cache@v4
+        with:
+          path: .skill-cache
+          key: skill-cache-${{ github.run_id }}
+          restore-keys: skill-cache-
       - run: npx tsx pipeline/site/build.ts index.json /tmp/site
+        env:
+          SKILL_CACHE: .skill-cache
+      # S-3: deploy gate — an empty/broken catalog published is worse than a
+      # stale one. Compare against the LIVE site's health.json; if that fetch
+      # fails the absolute floor still applies (never gate on network flakiness).
+      - name: deploy gate — refuse a catastrophically shrunken catalog
+        run: |
+          curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" -o /tmp/prev-health.json \
+            || echo '{"entries":null}' > /tmp/prev-health.json
+          npx tsx -e "import {readFileSync} from 'node:fs'; import {healthGate} from './pipeline/site/build.ts'; const msg = healthGate(JSON.parse(readFileSync('/tmp/prev-health.json','utf8')), JSON.parse(readFileSync('/tmp/site/health.json','utf8'))); if (msg) { console.error('deploy gate: '+msg); process.exit(1) } console.log('deploy gate: ok')"
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
@@ -37,13 +55,21 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
-      - name: open failure issue
+      - name: open (or append to) failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # S-6: dedupe — a failing deploy streak comments on the one open
+          # alert instead of spawning an issue per run (same rule as the
+          # digest watchdog).
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "site workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the site deploy workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "site workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "site workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the site deploy workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

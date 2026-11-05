@@ -135,12 +135,14 @@ jobs:
             console.log(JSON.stringify({
               v, isrepo: isRepo ? 1 : 0,
               heldver: e?.pendingUpdate?.version ?? "",
+              displayed: e?.latestVersion ?? "",
               vstatus: (e?.pendingUpdate?.verification ?? e?.verification)?.status ?? "",
             }))
           ' "$NAME" "$VER")
           V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
           ISREPO=$(node -pe 'JSON.parse(process.argv[1]).isrepo' "$INFO")
           HELDVER=$(node -pe 'JSON.parse(process.argv[1]).heldver' "$INFO")
+          DISPLAYED=$(node -pe 'JSON.parse(process.argv[1]).displayed' "$INFO")
           VSTATUS=$(node -pe 'JSON.parse(process.argv[1]).vstatus' "$INFO")
           if [ "$ISREPO" = "0" ] && [ -z "$V" ]; then
             gh issue comment "$ISSUE" --body "⚠️ 无法确定 \`$NAME\` 的目标版本（索引里无 latestVersion/pendingUpdate）——未写入 verdict，请显式指定 \`name@version\`。" || true
@@ -168,6 +170,14 @@ jobs:
           echo "target=$NAME${V:+@$V}" >> "$GITHUB_OUTPUT"
           echo "heldver=$HELDVER" >> "$GITHUB_OUTPUT"
           echo "vstatus=$VSTATUS" >> "$GITHUB_OUTPUT"
+          # K-4: a version that is neither the held candidate nor the displayed
+          # release has no live slot — the verdict is archived but changes
+          # nothing; the ack must say so instead of implying it will act
+          DEADSLOT=""
+          if [ "$ISREPO" = "0" ] && [ -n "$V" ] && [ "$V" != "$HELDVER" ] && [ "$V" != "$DISPLAYED" ]; then
+            DEADSLOT=1
+          fi
+          echo "deadslot=$DEADSLOT" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
         env:
@@ -185,6 +195,7 @@ jobs:
           TARGET: ${{ steps.n.outputs.target }}
           HELDVER: ${{ steps.n.outputs.heldver }}
           VSTATUS: ${{ steps.n.outputs.vstatus }}
+          DEADSLOT: ${{ steps.n.outputs.deadslot }}
           MISMATCH: ${{ steps.v.outputs.mismatch }}
           EVENT: ${{ github.event_name }}
           TITLE: ${{ github.event.issue.title }}
@@ -210,6 +221,10 @@ jobs:
             // maintainer probably saw a stale review issue (H-stale)
             if (process.env.HELDVER && !process.env.TARGET.endsWith(`@${process.env.HELDVER}`))
               msg += `\n\n注意：当前在押版本是 v${process.env.HELDVER}——此裁决针对的是另一个版本，不会改变在押目标。`
+            // verdict version is neither the held candidate nor the displayed
+            // release — archived in jsonl but with NO live slot (K-4)
+            if (process.env.DEADSLOT)
+              msg += `\n\n⚠️ ${process.env.TARGET} 既不是当前在押候选也不是展示版本——裁决已存档（ai-verdicts.jsonl 可审计），但**没有生效槽位**：不会改变上架状态。要重判当前目标，请对相应版本重新裁决。`
             await github.rest.issues.createComment({ ...ref, body: msg })
             const isReview = process.env.TITLE.startsWith('[review]')
             if (isReview) {

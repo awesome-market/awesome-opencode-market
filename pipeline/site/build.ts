@@ -1,8 +1,9 @@
 /** Thin static site generator — renders index.json to plain HTML. Astro can replace this later without changing data. */
-import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync, cpSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join, dirname, relative } from 'node:path'
-import type { CatalogIndex, PluginEntry } from '../../src/schema.ts'
+import { CatalogIndex } from '../../src/schema.ts'
+import type { PluginEntry } from '../../src/schema.ts'
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
@@ -45,14 +46,19 @@ export function page(title: string, body: string): string {
 
 export function listPage(index: CatalogIndex): string {
   const visible = index.plugins.filter(isVisible)
+  const cats = [...new Set(visible.flatMap(e => e.category))].sort()
   const cards = visible.map(e => {
     const s = scanLabel(e), v = verifyLabel(e)
-    return `<div class=card><a href="p/${esc(e.slug)}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${approvalBadge(e)}
-      <div>${esc(e.description.en ?? '')}</div>
+    return `<div class=card data-cats="${esc(JSON.stringify(e.category))}"><a href="p/${esc(e.slug)}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${approvalBadge(e)}
+      <div>${esc(e.description.en ?? '')}${e.description.zh ? `<div class=meta>${esc(e.description.zh)}</div>` : ''}</div>
       <div class=meta><span class="${s.cls}">${s.text}</span> · <span class="${v.cls}">${v.text}</span>${e.latestVersion ? ` · v${esc(e.latestVersion)}` : ''}</div></div>`
   }).join('\n')
-  return page('plugins', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)}</p>
-    <input id=q placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="document.querySelectorAll('.card').forEach(c=>c.style.display=c.textContent.toLowerCase().includes(this.value.toLowerCase())?'':'none')">${cards}`)
+  // F() combines text search + category select; data-cats holds the raw
+  // category array (entity-escaped) — substring match on `"slug"` is exact.
+  return page('plugins', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)} · <a href="skills.html">skills</a> · <a href="removed.html">removed</a></p>
+    <input id=q placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="F()">${cats.length ? `<select id=cat onchange="F()" style="padding:8px;margin:8px 0"><option value="">all categories</option>${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>` : ''}<script>
+    function F(){const q=document.getElementById('q').value.toLowerCase(),c=document.getElementById('cat')?.value||'';document.querySelectorAll('.card').forEach(e=>{e.style.display=(!q||e.textContent.toLowerCase().includes(q))&&(!c||e.dataset.cats.includes('"'+c+'"'))?'':'none'})}
+    </script>${cards}`)
 }
 
 export function detailPage(e: PluginEntry): string {
@@ -66,7 +72,7 @@ export function detailPage(e: PluginEntry): string {
     ? `<details><summary>findings (${e.capabilities.findings.length}${e.capabilities.redFlags.length ? `, ${e.capabilities.redFlags.length} red flag` : ''})</summary><ul>${e.capabilities.findings.map(f => `<li><code>${esc(f)}</code>${rf.has(f) ? ' <span class=bad>red flag</span>' : ''}</li>`).join('')}</ul></details>` : '<p class=muted>none</p>'
   const underReview = e.pendingUpdate
     ? `<tr><td>next version</td><td><code>v${esc(e.pendingUpdate.version)}</code> <span class=muted>under review — not installable yet</span></td></tr>` : ''
-  return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}</h1><p>${esc(e.description.en ?? '')}</p>
+  return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}</h1><p>${esc(e.description.en ?? '')}${e.description.zh ? `<br><span class=meta>${esc(e.description.zh)}</span>` : ''}</p>
     <table>${rows({
       type: esc(e.type), slug: `<code>${esc(e.slug)}</code>`,
       license: e.license ? esc(e.license) : 'unknown',
@@ -86,17 +92,23 @@ export function detailPage(e: PluginEntry): string {
     <p class=meta><a href="../index.html">← all plugins</a> · install: <code>opencode plugin add ${esc(e.source.id)}${e.latestVersion ? `@${esc(e.latestVersion)}` : ''}</code></p>`)
 }
 
-export function buildSite(index: CatalogIndex, outDir: string): void {
+export function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string): void {
+  rmSync(outDir, { recursive: true, force: true })   // no stale files from a previous build
   mkdirSync(join(outDir, 'p'), { recursive: true })
   // index.json ships the FULL catalog (pending included) — it is the auditable
   // data plane; every UI/install surface filters pending itself.
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index))
   const visible = { ...index, plugins: index.plugins.filter(isVisible) }
+  // index.lite.json — visible-only, hold internals stripped (pendingUpdate is
+  // pipeline bookkeeping, not catalog data). Smaller fetch for thin UIs.
+  writeFileSync(join(outDir, 'index.lite.json'), JSON.stringify({ ...visible, plugins: visible.plugins.map(({ pendingUpdate: _p, ...e }) => e) }))
   // privacy note + health endpoint (dsh parity)
   writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
-  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, generatedAt: index.generatedAt }))
-  buildSkillCatalog(visible, outDir)
+  const skillStats = buildSkillCatalog(visible, outDir, undefined, cacheDir)
+  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, skills: skillStats, generatedAt: index.generatedAt }))
   writeFileSync(join(outDir, 'index.html'), listPage(visible))
+  writeFileSync(join(outDir, 'skills.html'), skillsPage(skillStats.entries))
+  writeFileSync(join(outDir, 'removed.html'), removedPage(index))
   for (const e of visible.plugins) {
     const p = join(outDir, 'p', `${e.slug}.html`)
     mkdirSync(dirname(p), { recursive: true })
@@ -104,11 +116,38 @@ export function buildSite(index: CatalogIndex, outDir: string): void {
   }
 }
 
-/* v8 ignore next 6 */
+/** Deploy gate (S-3): refuse to publish a catastrophically shrunken catalog —
+ *  an empty site is worse than a stale one. site.yml fetches the LIVE
+ *  health.json for `prev`; fetch failure → prev=null → absolute floor only. */
+export function healthGate(prev: { entries?: number } | null, cur: { entries: number }): string | null {
+  if (cur.entries < 200) return `entries=${cur.entries} below floor 200`
+  if (typeof prev?.entries === 'number' && prev.entries > 0 && cur.entries < prev.entries * 0.5)
+    return `entries ${cur.entries} < 50% of previous deploy ${prev.entries}`
+  return null
+}
+
+/** skills index → browseable page (files are served as raw .md). */
+export function skillsPage(entries: { name: string; version: string; files: string[] }[]): string {
+  const cards = entries.map(s =>
+    `<div class=card><b>${esc(s.name)}</b> <code>v${esc(s.version)}</code><div class=meta>${s.files.map(f => `<a href="skills/${esc(s.name)}/${esc(f)}">${esc(f)}</a>`).join(' · ') || 'no files'}</div></div>`).join('\n')
+  return page('skills', `<h1>skills</h1><p class=meta>${entries.length} skills · <a href="skills/index.json">index.json</a> · <a href="index.html">← all plugins</a></p>${cards}`)
+}
+
+/** Recently removed entries — explains the 404s for vanished plugins. */
+export function removedPage(index: CatalogIndex): string {
+  const rem = [...(index.removed ?? [])].sort((a, b) => b.disappearedAt.localeCompare(a.disappearedAt))
+  const cards = rem.slice(0, 300).map(r =>
+    `<div class=card><b>${esc(r.name)}</b> <code>${esc(r.slug)}</code><div class=meta>${esc(r.reason)} · removed ${esc(r.disappearedAt.slice(0, 10))}</div></div>`).join('\n')
+  return page('removed', `<h1>removed entries</h1><p class=meta>${rem.length} total · latest 300 shown · <a href="index.html">← all plugins</a></p>${cards || '<p class=muted>none</p>'}`)
+}
+
+/* v8 ignore next 7 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { readFileSync } = await import('node:fs')
-  const idx = JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8'))
-  buildSite(idx, process.argv[3] ?? 'dist-site')
+  // zod-validate: a malformed index should die here with a readable error,
+  // not halfway through a build (S-13)
+  const idx = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8')))
+  buildSite(idx, process.argv[3] ?? 'dist-site', process.env.SKILL_CACHE)
   console.log('site built')
 }
 
@@ -126,7 +165,8 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
         // untrusted: https only. Injected tarballOf impls (tests) own their scheme.
         return /^https:\/\//i.test(u) ? u : null
       } catch { return null }
-    }): void {
+    },
+  cacheDir?: string): { candidates: number; landed: number; degraded: boolean; entries: { name: string; version: string; files: string[] }[] } {
   const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
@@ -136,45 +176,85 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   const baseOf = (n: string) => n.split('/').pop()!.replace(/^@/, '')
   const counts = new Map<string, number>()
   for (const s of skills) { const b = baseOf(s.name); counts.set(b, (counts.get(b) ?? 0) + 1) }
+  const usedIds = new Set<string>()   // S-12: collision guard (namespaced a--x vs a real 'a--x' package)
+  const keep = new Set<string>()      // cache keys still in use — stale entries get pruned
+  const cacheKey = (id: string, ver: string) => encodeURIComponent(`${id}@${ver}`)
   const mdFiles = (root: string): string[] => {
     const out: string[] = []
     const walk = (d: string) => {
       for (const ent of readdirSync(d, { withFileTypes: true })) {
         const p = join(d, ent.name)
-        if (ent.isDirectory()) walk(p)
+        // a '.md'-named symlink member can still land via named extraction —
+        // it is a dead link on Pages; delete rather than publish it
+        if (ent.isSymbolicLink()) { rmSync(p, { force: true }); continue }
+        if (ent.isDirectory() && ent.name !== 'node_modules') walk(p)
         else if (ent.isFile() && ent.name.toLowerCase().endsWith('.md')) out.push(p)
       }
     }
     try { walk(root) } catch { /* unreadable dir → empty */ }
     return out.slice(0, 20)
   }
+  let candidates = 0
   for (const s of skills) {
+    if (!s.latestVersion) continue                    // repo-only skill: no npm artifact
+    candidates++
     const base = baseOf(s.name)
-    const id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
+    let id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
+    while (usedIds.has(id)) id += '-x'                // S-12 deterministic suffix
+    usedIds.add(id)
+    const ver = s.latestVersion
     const dest = join(dir, id)
+    const key = cacheKey(id, ver)
+    const hit = cacheDir ? join(cacheDir, key) : null
+    // S-1: version-pinned cache — unchanged skills skip npm+curl+tar entirely
+    if (hit && existsSync(hit)) {
+      rmSync(dest, { recursive: true, force: true })
+      cpSync(hit, dest, { recursive: true })
+      const files = mdFiles(dest).map((f) => relative(dest, f))
+      if (files.length) { entries.push({ name: id, version: ver, files }); keep.add(key); continue }
+      rmSync(hit, { recursive: true, force: true })   // poisoned cache → refetch
+    }
     const tmp = `${dest}.tmp`
     try {
       // pin to the approved version — `npm view <name>` resolves dist-tags.latest
       // which is the pendingUpdate users must not receive (hold semantics)
-      const tb = s.latestVersion ? tarballOf(`${s.name}@${s.latestVersion}`) : null
+      const tb = tarballOf(`${s.name}@${ver}`)
       if (!tb) continue
       rmSync(tmp, { recursive: true, force: true })
       mkdirSync(tmp, { recursive: true })
       const tgz = join(tmp, 'pkg.tgz')
       execFileSync('curl', ['-fsSL', tb, '-o', tgz], { timeout: 30_000 })
-      // GNU tar refuses '..' members by default — same extraction semantics as
-      // the old shell pipeline; a non-zero exit skips the skill entirely
-      execFileSync('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1'], { timeout: 30_000 })
+      // two-pass extraction (S-4/S-5): only named .md members are extracted —
+      // symlink/hardlink members are never created (no traversal primitive on
+      // ANY tar version, not just ≥1.29) and bundled-dep docs under
+      // node_modules never touch disk. '--' ends option parsing so a member
+      // named like a flag cannot be re-parsed (names are registry input).
+      const members = execFileSync('tar', ['tzf', tgz], { encoding: 'utf8', timeout: 30_000 })
+        .split('\n').filter((n) => /\.md$/i.test(n) && !n.split('/').includes('node_modules')).slice(0, 50)
+      if (members.length)
+        execFileSync('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1', '--', ...members], { timeout: 30_000 })
       rmSync(tgz, { force: true })
+      if (!members.length) continue
       const files = mdFiles(tmp).map((f) => relative(tmp, f))
       if (!files.length) continue
       rmSync(dest, { recursive: true, force: true })
       renameSync(tmp, dest)
-      entries.push({ name: id, version: s.latestVersion ?? '1', files })
+      if (hit) { mkdirSync(cacheDir!, { recursive: true }); rmSync(hit, { recursive: true, force: true }); cpSync(dest, hit, { recursive: true }) }
+      keep.add(key)
+      entries.push({ name: id, version: ver, files })
     } catch {
       rmSync(tmp, { recursive: true, force: true })
       /* tarball fetch failed — skip skill */
     }
   }
+  // prune stale cache dirs (version bumped or skill removed from catalog)
+  if (cacheDir && existsSync(cacheDir))
+    for (const c of readdirSync(cacheDir)) if (!keep.has(c)) rmSync(join(cacheDir, c), { recursive: true, force: true })
+  const landed = entries.length
+  // S-2: a near-empty catalog is a fetch outage, not a real state — log loudly
+  const degraded = candidates > 0 && landed < candidates / 2
+  if (degraded) console.warn(`[site] skills degraded: ${landed}/${candidates} landed`)
+  else console.log(`[site] skills ${landed}/${candidates} landed`)
   writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries }))
+  return { candidates, landed, degraded, entries }
 }

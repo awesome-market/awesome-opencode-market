@@ -503,3 +503,44 @@ Pipeline/CI 安全：
 | H-18 `[submit]` 单上 ARG 参数被静默忽略 | ✅ | 首词为异目标 spec（`@`/`/` 形态）→ `argignored` 输出 → ack 明示忽略原因 |
 
 **验证**：typecheck 0 错；555 tests 全过；YAML 校验过；`test/human-verdict.test.ts` 25 用例。
+
+## 附十：审核单流审计（K 系列，docket.yml 全流程）
+
+链路：cron 每小时 / catalog+verify `workflow_run` / 手动 → `docketTargets`（held/待决目标，latest verdict source=ai + repo-only 'none' 常驻单）→ diff open [review] 单：缺则建、多余则关 → `concern.yml` 回写（标签/评论 → human verdict → ack 关单）。确认正确：execFileSync argv 无注入面、repo-only 兜底是唯一人工通道、create/close 幂等可重入、标题↔vkey 经 titleTarget+index-first 双重校准。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| K-1 三触发源可重叠 → 并发双建 [review] 单 | ✅ | job 级 `concurrency: review-docket`（串行不 cancel，天然可重入） |
+| K-2 open 单的 `ai:*` 标签/正文冻结在创建时刻，判词翻转后显示错信息 | ✅ | 全漂移同步：`gh issue list --json labels,body` + `issueBody(t)` 确定性重建——`ai:*` 标签随当前判词换、`review:pending` 缺了补回、正文与 want 不一致即 edit（判词翻转/验证落地都会传播） |
+| K-3 docket 只看原始 latest，不显示 R-4 的 human-stickiness（ai pass 压在押 human concern → 单上无刹车上下文） | ✅ | `verdicts.ts` 抽 `latestHumanVerdicts`/`effectiveVerdict` 复用；docketTargets 附 `humanVerdict` 字段，正文写「在押刹车——AI 新判 pass 不会自动放行，本单为复审」（原始 latest 仍驱动选单：复审通道刻意保留） |
+| K-4 判词落在死版本上（既不在押也不展示）→ ack 暗示生效实际蒸发 | ✅ | `concern.yml` resolve 步输出 `deadslot`（V ∉ {heldver, displayed} 且非 repo）→ ack 明示「裁决已存档但没有生效槽位」 |
+| K-5 `--label review:pending` 过滤漏掉手动摘标签的单 | ✅ | 改列全部 open 单后按 `[review]` 标题前缀客户端过滤——被摘标签的想要的单补回标签、不想要的照常关 |
+| K-6 fork/瞬断下 cron 每小时红失败（`git fetch origin catalog` 无分支） | ✅ | fetch 失败 `exit 0` 下轮重试；prod 侧 catalog 恒在，语义不变 |
+| K-7 `gh label create --force ×6` 每 run 全量重置 | 不改 | 幂等且保证新仓库自举；改存在性检查省的 API 调用不值复杂度 |
+
+**验证**：typecheck 0 错；560 tests 全过；7 个 workflow YAML 校验过；`docket.test.ts` +5 用例（stickiness 上下文、刹车正文、标签/正文漂移重同步、摘标签补回）。
+
+## 附十一：站点发布流审计（S 系列，site.yml + pipeline/site/build.ts）
+
+链路：catalog/verify push 后 dispatch → `site.yml`（`site-deploy` 串行，单 Pages 发布者）→ 现取 `origin/catalog:index.json` → `build.ts` 渲染 index/list/detail/skills/privacy/health → upload-pages-artifact → deploy-pages → alert。确认正确：B-5 deploy 时取数不碰陈旧物、esc() 全覆盖包控字段、hold 语义贯彻（skill tarball pin 批准版 + pending 不渲染 + 客户端自滤）、tar 穿越经实测被工具链挡下（本项后由两段式提取根治）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| S-1 skills 每 deploy 全量串行重建（274×npm+curl+tar，pin 版本未变也重拉） | ✅ | `<id>@<ver>` 版本pin缓存（`.skill-cache` + actions/cache 滚动键）；命中零网络，build 末 prune 失效键 |
+| S-2 registry 抖动 → skills/index.json 静默 `{skills:[]}` | ✅ | `landed/candidates/degraded` 计数进 health.json + build 日志告警；degraded = 有候选但落地不足一半 |
+| S-3 发布无数据闸门——坏 index 会推空目录上线 | ✅ | `healthGate(prev, cur)`：entries<200 绝对地板 或 <上次发布 50% → gate 步失败不部署；live health.json 拉不到只退绝对地板 |
+| S-4 解包收 `node_modules/**/*.md`（捆绑依赖 README 泄漏进发布目录） | ✅ | 两段式提取：`tzf` 列表 → 仅按名提取 `.md` 成员（node_modules 路径段滤除） |
+| S-5 tar 符号链接本体落进发布目录（死链）+ 旧 tar 的穿越假设 | ✅ | 同上——symlink 成员根本不进提取列表（任意 tar 版本都无穿越原语）；`.md` 命名 symlink 由 mdFiles `isSymbolicLink` 清扫 |
+| S-6 alert job 无 dedupe——连败 issue 轰炸 | ✅ | 按 `pipeline-alert`+标题查 open issue → 评论追加而非新开（digest watchdog 同款） |
+| S-7 9MB 全量 index.json 供客户端（含 pending 22%） | ✅ | 新增 `index.lite.json`：visible-only + 剥 `pendingUpdate` 内部字段；全量 index.json 保留为审计面 |
+| S-8 listPage 只有搜索框，无分类浏览（entry.category 字段闲置） | ✅ | category `<select>` + 组合过滤脚本（data-cats 持转义数组，`"slug"` 子串精确匹配） |
+| S-9 `removed[]` 2198 条不渲染——消失插件直接 404 | ✅ | `removed.html`：disappearedAt 倒序最新 300 条（name/slug/reason/date） |
+| S-10 skills 只有 JSON 无 UI | ✅ | `skills.html`：id+版本+文件链接（.md 原样可浏览）；listPage 头加 skills/removed 入口 |
+| S-11 site job 缺 `contents: read` 显式权限 | ✅ | permissions 补上（public repo 匿名 fetch 碰巧可用，显式更稳） |
+| S-12 id 碰撞：`@a/x`(namespaced→a--x) vs 真名 `a--x` → 目录互覆盖 | ✅ | `usedIds` 集合，碰撞追加 `-x` 确定性后缀 |
+| S-13 CLI main 不校验——坏 index 崩中途（不会发半成品但报错差） | ✅ | `CatalogIndex.parse` 前置 zod 校验 |
+| S-14 listPage 不渲染 `description.zh` | ✅ | 卡片+详情页补 zh 行（实测当前数据 zh=0，前瞻） |
+| S-15 `version: s.latestVersion ?? '1'` 不可达代码 | ✅ | null 版本早被跳过，直接 `ver` |
+| S-16 buildSite 不清理旧输出——残留文件会一起发出去 | ✅ | 开头 `rmSync(outDir)` 重建 |
+
+**验证**：typecheck 0 错；569 tests 全过；build.ts 覆盖率 97.6%；site.yml YAML 校验过；site.test.ts +14 用例（缓存命中/种子/清理、两段式提取含 node_modules+symlink 对抗包、id 碰撞、闸门、lite 索引、removed/skills 页、分类下拉、陈旧输出清理）。

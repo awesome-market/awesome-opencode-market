@@ -62,6 +62,28 @@ export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
   return m
 }
 
+/** Latest HUMAN verdict per key — the brake layer under latestVerdicts.
+ *  Shared by applyMatureVerdicts (R-4 stickiness) and display surfaces
+ *  (docket/digest) that need to show "a human brake stands" context. */
+export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
+  const m = new Map<string, AiVerdict>()
+  for (const v of verdicts) {
+    if (v.source !== 'human') continue
+    const k = vkey(v.name, v.version)
+    const cur = m.get(k)
+    if (!cur || v.at >= cur.at) m.set(k, v)
+  }
+  return m
+}
+
+/** R-4: an ai 'pass' can never outrank a human 'concern' on the same key —
+ *  only a newer HUMAN verdict lifts a human brake. An ai 'concern' may still
+ *  override a human 'pass' (conservative direction stays open). */
+export function effectiveVerdict(v: AiVerdict | undefined, human: Map<string, AiVerdict>): AiVerdict | undefined {
+  const h = v ? human.get(vkey(v.name, v.version)) : undefined
+  return v?.verdict === 'pass' && v.source === 'ai' && h?.verdict === 'concern' ? h : v
+}
+
 /** Release gate (AI-DIAGNOSIS §10): the target version's own verification must
  *  have run. 'verified' = install/load passed. 'skipped' = deliberately not
  *  run (red-flag short-circuit, or no-install-concept kinds like github entries)
@@ -101,17 +123,8 @@ export function applyMatureVerdicts(
   const releases: string[] = []
   const held: string[] = []
   if (latest.size === 0) return { index, releases, held }
-  const latestHuman = new Map<string, AiVerdict>()
-  for (const v of verdicts) {
-    if (v.source !== 'human') continue
-    const k = vkey(v.name, v.version)
-    const cur = latestHuman.get(k)
-    if (!cur || v.at >= cur.at) latestHuman.set(k, v)
-  }
-  const effective = (v: AiVerdict | undefined): AiVerdict | undefined => {
-    const h = v ? latestHuman.get(vkey(v.name, v.version)) : undefined
-    return v?.verdict === 'pass' && v.source === 'ai' && h?.verdict === 'concern' ? h : v
-  }
+  const latestHuman = latestHumanVerdicts(verdicts)
+  const effective = (v: AiVerdict | undefined): AiVerdict | undefined => effectiveVerdict(v, latestHuman)
   // Maturity = the verdict LINE was announced in a digest — membership, not a
   // timestamp comparison. A verdict pushed late with an old `at` can never
   // slip under the anchor; it must appear in a future digest first.

@@ -535,16 +535,17 @@ pass → 需 mature（v.at ≤ lastDigestAt）
 
 ## 8. 审核单流 — `docket.yml`（hourly :40 + catalog/verify 成功完成后 + 手动）
 
-**实现**：`pipeline/docket.ts::docketTargets/issueTitle`（目标+开单/关单，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts`
+**实现**：`pipeline/docket.ts::docketTargets/issueTitle/issueBody`（目标+开单/关单/漂移同步，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts/latestHumanVerdicts` · job 级 `concurrency: review-docket`（K-1，触发源可重叠）
 
 ```mermaid
 flowchart TB
-  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai"]
+  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai<br/>+ humanVerdict 上下文"]
   VJ[("ai-verdicts.jsonl")] --> DT
   DT --> W["wanted 集合<br/>[review] name@ver"]
-  OPEN["gh issue list<br/>--label review:pending"] --> DF{"diff"}
+  OPEN["gh issue list<br/>open ∧ 标题前缀 [review]"] --> DF{"diff"}
   W --> DF
   DF -->|"缺失"| OPENI["开审核单<br/>labels: review:pending+ai:*"]
+  DF -->|"漂移(ai标签/正文)"| EDIT["issue edit<br/>标签换向+正文重建"]
   DF -->|"多余(人工已裁决/已放行)"| CLOSEI["自动关单"]
   OPENI -.->|"人打标签/评论"| CON["concern.yml<br/>→ human verdict"]
 ```
@@ -561,9 +562,13 @@ docket.ts：index+verdicts → docketTargets
 同步：
   缺失 → 开 [review] name@ver（labels: review:pending + ai:{verdict}，
         body：AI 判定+双语理由+验证状态+手机点选说明）
-  多余 → 关单（已决议/已放行；gh issue list --label review:pending --limit 500）
+  已存在但漂移 → issue edit：ai:* 标签换向、review:pending 补回、
+        正文按 issueBody(t) 确定性重建（判词翻转/验证落地/人工刹车上下文
+        都传播——创建时刻的冻结文案不再误导，K-2/K-3/K-5）
+  多余 → 关单（已决议/已放行；列全部 open 单后按 [review] 前缀过滤，--limit 500）
   → bootstrap 标签（verdict:pass/concern, review:pending/decided, ai:pass/concern）
-workflow_run 触发只认 conclusion==='success'；无并发组（操作 issue 不写数据分支，幂等）
+workflow_run 触发只认 conclusion==='success'；concurrency: review-docket 串行化
+（三触发源可重叠——并发双跑曾会双建单，K-1）
 ```
 
 人 → 标签 → concern.yml → verdict → 关单 → docket 下轮清理。闭环。
@@ -734,7 +739,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `submission.ts` | `parseSubmission` `seedLine` | issue-form/freeform 解析+种子行 |
 | `review.ts` | `reviewPackage` `verdict` `renderReview` | 投稿机械审（报告含 LAST verdict 标记） |
 | `notify-published.ts` | `markNotified` | 投稿落地通知标记（approval≠pending 才算） |
-| `docket.ts` | `docketTargets` `issueTitle` | [review] 审核单同步（gh CLI） |
+| `docket.ts` | `docketTargets` `issueTitle` `issueBody` | [review] 审核单同步+漂移收敛（gh CLI） |
 | `backfill.ts` | `backfill` | 老条目身份字段一次性修补（createdAt/maintainers/repoId） |
 | `verify/plan.ts` | `verifyTargetOf` `planTargets` `shard` | 验证目标（候选槽语义+retest）+12 片分片 |
 | `verify/verify.ts` | `verifyPackage` `xdgEnv` `writeDummyProvider` `loadedSignal` `coerceTarget` | L1 install + L1.5 lazy-load canary 验证 |

@@ -17,6 +17,9 @@ jobs:
       github.event_name != 'workflow_run'
       || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —
+    # two parallel runs both see an empty open-set and double-create issues
+    concurrency: review-docket
     permissions: { issues: write, contents: read }
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +45,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          git fetch origin catalog
+          # K-6: no catalog branch (fork/dev) or transient fetch → defer to the
+          # next tick instead of an hourly red job failure
+          git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next tick"; exit 0; }
           git show origin/catalog:index.json > /tmp/index.json
           git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || touch /tmp/ai-verdicts.jsonl
           npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl

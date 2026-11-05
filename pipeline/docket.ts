@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs'
 import { exit, env } from 'node:process'
 import { execFileSync } from 'node:child_process'
 import { CatalogIndex, AiVerdict } from '../src/schema.ts'
-import { vkey, latestVerdicts, loadVerdicts } from './verdicts.ts'
+import { vkey, latestVerdicts, latestHumanVerdicts, loadVerdicts } from './verdicts.ts'
 
 export interface DocketTarget {
   name: string
@@ -23,6 +23,10 @@ export interface DocketTarget {
   reason?: string
   reasonEn?: string
   verification?: string
+  /** latest human verdict on this key, when one exists — the issue body must
+   *  show a standing human brake (R-4) instead of implying the AI verdict is
+   *  the only word on the table */
+  humanVerdict?: AiVerdict
 }
 
 export const issueTitle = (t: Pick<DocketTarget, 'name' | 'version'>) =>
@@ -31,6 +35,7 @@ export const issueTitle = (t: Pick<DocketTarget, 'name' | 'version'>) =>
 /** Pending targets whose latest verdict came from AI — i.e. awaiting human eyes. */
 export function docketTargets(index: CatalogIndex, verdicts: AiVerdict[]): DocketTarget[] {
   const latest = latestVerdicts(verdicts)
+  const human = latestHumanVerdicts(verdicts)
   const out: DocketTarget[] = []
   for (const e of index.plugins) {
     const ver = e.pendingUpdate ? e.pendingUpdate.version
@@ -51,12 +56,14 @@ export function docketTargets(index: CatalogIndex, verdicts: AiVerdict[]): Docke
     }
     const rec = latest.get(vkey(e.name, ver))
     if (rec?.source !== 'ai') continue
+    const hv = human.get(vkey(e.name, ver))
     out.push({
       name: e.name, version: ver, verdict: rec.verdict,
       ...(rec.reason ? { reason: rec.reason } : {}),
       ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
       ...(e.pendingUpdate?.verification?.status ?? e.verification?.status
         ? { verification: e.pendingUpdate?.verification?.status ?? e.verification!.status } : {}),
+      ...(hv ? { humanVerdict: hv } : {}),
     })
   }
   return out
@@ -64,6 +71,35 @@ export function docketTargets(index: CatalogIndex, verdicts: AiVerdict[]): Docke
 
 const gh = (args: string[]) =>
   execFileSync('gh', args, { encoding: 'utf8', env: { ...process.env, GH_TOKEN: env.GITHUB_TOKEN ?? env.GH_TOKEN } })
+
+/** Deterministic body (no timestamps) — the sync loop regenerates it for open
+ *  issues and only edits when it actually differs, so verify-status changes
+ *  and verdict flips propagate instead of leaving creation-time text stale. */
+export function issueBody(t: DocketTarget): string {
+  const hv = t.humanVerdict
+  const humanLine = hv
+    ? `- 最新人工判词：**${hv.verdict}**${hv.reason ? ` — ${hv.reason}` : ''}` +
+      (hv.verdict === 'concern' && t.verdict === 'pass'
+        ? '（在押刹车——AI 新判 pass 不会自动放行，本单为复审）'
+        : '')
+    : ''
+  return [
+    `## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '',
+    t.verdict === 'none'
+      ? '- 当前 AI 判定：**无**（repo-only 条目无可装 npm 包，AI 不审——只能人工裁决）'
+      : `- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${t.reason}` : ''}`,
+    t.reasonEn ? `  - ${t.reasonEn}` : '',
+    humanLine,
+    t.verification ? `- 验证状态：${t.verification}` : '- 验证状态：unverified',
+    `- 数据：catalog 分支 \`index.json\` / \`ai-verdicts.jsonl\``, '',
+    '### 📱 手机裁决（点选，零打字）',
+    '本 issue → **Labels** → 勾选其一：',
+    '- `verdict:pass` — 人工放行（覆盖 AI concern）',
+    '- `verdict:concern` — 人工拦截（锁死该版本）',
+    '',
+    '打标签后 verdict job 自动写回 `ai-verdicts.jsonl` 并关闭本单。也可评论 `/approve` 或 `/concern 理由`。',
+  ].filter(l => l !== '').join('\n')
+}
 
 export async function main(
   args: string[] = process.argv,
@@ -81,31 +117,44 @@ export async function main(
   const targets = docketTargets(index, verdicts)
   const wanted = new Map(targets.map(t => [issueTitle(t), t]))
 
-  const open = JSON.parse(ghFn(['issue', 'list', '-R', repo, '--label', 'review:pending',
-    '--state', 'open', '--json', 'number,title', '--limit', '500'])) as { number: number; title: string }[]
-  const openByTitle = new Map(open.map(i => [i.title, i.number]))
+  // title-prefix filter, not label filter: an issue whose review:pending
+  // label was stripped by hand still converges (K-5)
+  const open = (JSON.parse(ghFn(['issue', 'list', '-R', repo,
+    '--state', 'open', '--json', 'number,title,labels,body', '--limit', '500'])) as
+    { number: number; title: string; labels?: { name: string }[]; body?: string }[])
+    .filter(i => i.title.startsWith('[review]'))
+  const openByTitle = new Map(open.map(i => [i.title, i]))
 
   for (const [title, t] of wanted) {
-    if (openByTitle.has(title)) continue
-    const body = [
-      `## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '',
-      t.verdict === 'none'
-        ? '- 当前 AI 判定：**无**（repo-only 条目无可装 npm 包，AI 不审——只能人工裁决）'
-        : `- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${t.reason}` : ''}`,
-      t.reasonEn ? `  - ${t.reasonEn}` : '',
-      t.verification ? `- 验证状态：${t.verification}` : '- 验证状态：unverified',
-      `- 数据：catalog 分支 \`index.json\` / \`ai-verdicts.jsonl\``, '',
-      '### 📱 手机裁决（点选，零打字）',
-      '本 issue → **Labels** → 勾选其一：',
-      '- `verdict:pass` — 人工放行（覆盖 AI concern）',
-      '- `verdict:concern` — 人工拦截（锁死该版本）',
-      '',
-      '打标签后 verdict job 自动写回 `ai-verdicts.jsonl` 并关闭本单。也可评论 `/approve` 或 `/concern 理由`。',
-    ].filter(l => l !== '').join('\n')
-    console.log(`[docket] create ${title}`)
-    if (!dry) {
-      ghFn(['issue', 'create', '-R', repo, '--title', title,
-        '--label', 'review:pending', ...(t.verdict === 'none' ? [] : ['--label', `ai:${t.verdict}`]), '--body', body])
+    const body = issueBody(t)
+    const ex = openByTitle.get(title)
+    if (!ex) {
+      console.log(`[docket] create ${title}`)
+      if (!dry) {
+        ghFn(['issue', 'create', '-R', repo, '--title', title,
+          '--label', 'review:pending', ...(t.verdict === 'none' ? [] : ['--label', `ai:${t.verdict}`]), '--body', body])
+      }
+      continue
+    }
+    // drift-sync (K-2): the ai:* label and the body must track the CURRENT
+    // verdict — a flip (ai:pass → ai:concern, or a verify landing) must not
+    // leave creation-time text asking the maintainer to act on stale info
+    const curLabels = new Set((ex.labels ?? []).map(l => l.name))
+    const curAi = [...curLabels].find(l => l.startsWith('ai:')) ?? null
+    const wantAi = t.verdict === 'none' ? null : `ai:${t.verdict}`
+    const labelArgs: string[] = []
+    if (curAi !== wantAi) {
+      if (curAi) labelArgs.push('--remove-label', curAi)
+      if (wantAi) labelArgs.push('--add-label', wantAi)
+    }
+    if (!curLabels.has('review:pending')) labelArgs.push('--add-label', 'review:pending')
+    const bodyDrift = ex.body !== undefined && ex.body.trim() !== body.trim()
+    if (labelArgs.length || bodyDrift) {
+      console.log(`[docket] update #${ex.number} ${title}${curAi !== wantAi ? ` (${curAi ?? 'no-ai-label'} → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}`)
+      if (!dry) {
+        if (labelArgs.length) ghFn(['issue', 'edit', '-R', repo, String(ex.number), ...labelArgs])
+        if (bodyDrift) ghFn(['issue', 'edit', '-R', repo, String(ex.number), '--body', body])
+      }
     }
   }
 
