@@ -82,7 +82,11 @@ jobs:
 
   verify:
     needs: plan
-    if: ${{ fromJSON(needs.plan.outputs.shards) != '[]' && fromJSON(needs.plan.outputs.shards) != 'null' }}
+    # string-compare the output — `fromJSON('[]') != '[]'` compares ARRAY to
+    # string and is truthy, so an empty plan previously ran an empty matrix,
+    # which GitHub fails at expansion ("does not contain any values"), and the
+    # failure then cascaded into merge (ENOENT /tmp/results) + a bogus alert
+    if: ${{ needs.plan.outputs.shards != '[]' && needs.plan.outputs.shards != '' && needs.plan.outputs.shards != 'null' }}
     strategy:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
@@ -154,6 +158,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # download-artifact only creates the dir when artifacts exist — a
+          # fully-empty shard set must not ENOENT the merge
+          mkdir -p /tmp/results
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
           git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }

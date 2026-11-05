@@ -3,7 +3,7 @@
  *  pendingUpdate.verification when the held version was tested, the entry's own
  *  verification when the displayed version was. Results for versions neither
  *  slot holds are stale (npm moved on) and are dropped. */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
@@ -68,7 +68,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
   const results: VerifyResult[] = []
   let dropped = 0
-  for (const f of readdirSync(resultsDir!).filter(f => f.startsWith('results-'))) {
+  // an absent dir is a legitimately empty shard set (all targets flagged,
+  // every shard timed out pre-flush) — merge zero rows, not a crash
+  const files = existsSync(resultsDir!) ? readdirSync(resultsDir!) : []
+  for (const f of files.filter(f => f.startsWith('results-'))) {
     const raw: unknown = JSON.parse(readFileSync(join(resultsDir!, f), 'utf8'))
     if (!Array.isArray(raw)) { console.warn(`${f}: not a result array — skipped`); dropped++; continue }
     for (const r of raw) {
