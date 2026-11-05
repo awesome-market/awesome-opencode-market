@@ -522,7 +522,8 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
         mk({ name: 'b', pendingUpdate: { version: '2', heldAt: 't', capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' } } }),
       ], removed: [] })
     expect(html).toContain('tools &amp; capabilities · 工具与能力')
-    expect(html).toContain('aka old-a')
+    expect(html).toContain('old-a')
+    expect(html).toContain('data-zh="又名"')
     expect(html).toContain('>deprecated</span>')
     expect(html).toContain('update under review')
     expect(html).toContain('JSON.parse')   // category filter parses the JSON array back
@@ -549,6 +550,147 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     expect(h).toMatch(/href="\/[^"]*removed\.html"/)
     expect(h).toMatch(/href="\/[^"]*index\.html"/)
     expect(h).not.toContain('href="removed.html"')   // relative link would die on deep 404s
+    rmSync(out, { recursive: true, force: true })
+  })
+})
+
+describe('site audit hardening — gate totals, active content, i18n, url safety', () => {
+  it('healthGate compares TOTAL catalog size — a visible collapse (mass brake) must not freeze the deploy', async () => {
+    const { healthGate } = await import('../pipeline/site/build.ts')
+    // prev deploy: 3000 total / 2082 visible; current: same total but only
+    // 400 visible (brakes pulled approvals back to pending) → gate must PASS:
+    // the brake HAS to reach the site or the flagged packages keep serving.
+    expect(healthGate({ entries: 2082, total: 3000 }, { entries: 400, total: 3000 })).toBeNull()
+    // genuine catalog shrink still blocks — total halves
+    expect(healthGate({ entries: 2082, total: 3000 }, { entries: 1500, total: 1400 })).toContain('50%')
+    // floor also reads total: a catalog of pending-only entries is not "empty"
+    expect(healthGate(null, { entries: 0, total: 500 })).toBeNull()
+    // legacy prev without `total` falls back to entries
+    expect(healthGate({ entries: 1000 }, { entries: 400, total: 3000 })).toBeNull()
+    expect(healthGate({ entries: 1000 }, { entries: 400, total: 400 })).toContain('50%')
+  })
+
+  it('health.json carries total + builtAt + commit alongside the visible count', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    process.env.SITE_COMMIT = 'abc123'
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk(), mk({ name: 'b', approval: 'pending' })], removed: [] }, out)
+    delete process.env.SITE_COMMIT
+    const h = JSON.parse(readFileSync(join(out, 'health.json'), 'utf8'))
+    expect(h.entries).toBe(1)        // visible only — informational
+    expect(h.total).toBe(2)          // full catalog incl. pending — gate input
+    expect(h.builtAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(h.commit).toBe('abc123')
+    rmSync(out, { recursive: true, force: true })
+  })
+
+  it('SKIP_SKILLS=1 publishes an empty skills catalog without fetching tarballs', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    process.env.SKIP_SKILLS = 'true'
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-x', contains: ['skill'], latestVersion: '1' })], removed: [] }, out)
+    delete process.env.SKIP_SKILLS
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills).toEqual([])
+    const h = JSON.parse(readFileSync(join(out, 'health.json'), 'utf8'))
+    expect(h.skills).toMatchObject({ candidates: 0, landed: 0, degraded: false })
+    rmSync(out, { recursive: true, force: true })
+  })
+
+  it('web-active payload files (.html/.svg/.js) are withheld from the HTTP skill catalog', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    writeFileSync(join(src, 'package', 'evil.html'), '<script>alert(1)</script>')
+    writeFileSync(join(src, 'package', 'icon.svg'), '<svg onload=alert(1)>')
+    writeFileSync(join(src, 'package', 'helper.js'), 'console.log(1)')
+    writeFileSync(join(src, 'package', 'notes.txt'), 'ok')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-act', contains: ['skill'], latestVersion: '1' })], removed: [] }
+    await buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    const files: string[] = cat.skills[0].files
+    expect(files).toEqual(['SKILL.md', 'notes.txt'].sort())
+    expect(existsSync(join(out, 'skills', 'sk-act', 'evil.html'))).toBe(false)
+    expect(existsSync(join(out, 'skills', 'sk-act', 'helper.js'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('npm skill version binds to the approved bytes — integrity tag appended', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const tgzPath = join(src, 's.tgz')
+    const sri = `sha512-${createHash('sha512').update(readFileSync(tgzPath)).digest('base64')}`
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-v', contains: ['skill'], latestVersion: '1.2.3', integrity: sri })], removed: [] }
+    await buildSkillCatalog(idx, out, () => `file://${tgzPath}`)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    // version tag = sha256 of the announced SRI, hex — semver-safe build metadata
+    const tag = createHash('sha256').update(sri).digest('hex').slice(0, 10)
+    expect(cat.skills[0].version).toBe(`1.2.3+${tag}`)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('SRI check honors the announced algo — sha1 verifies, unparseable proceeds', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const tgzPath = join(src, 's.tgz')
+    const buf = readFileSync(tgzPath)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx = (integrity: string | null): CatalogIndex => ({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-algo', contains: ['skill'], latestVersion: '1', integrity })], removed: [] })
+    const url = `file://${tgzPath}`
+    // correct sha1 → lands (previously hard-failed on the sha512-only compare)
+    expect((await buildSkillCatalog(idx(`sha1-${createHash('sha1').update(buf).digest('base64')}`), out, () => url)).landed).toBe(1)
+    // wrong sha1 → real mismatch → skipped
+    expect((await buildSkillCatalog(idx('sha1-deadbeef'), out, () => url)).landed).toBe(0)
+    // unparseable integrity → unverifiable → proceeds (same contract as client)
+    expect((await buildSkillCatalog(idx('not-a-sri'), out, () => url)).landed).toBe(1)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('unsafe slugs never reach the filesystem — detail page skipped, entry kept in index.json', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const evil = mk({ name: 'evil', slug: '../../escape' })
+    const good = mk({ name: 'good', slug: 'o/good' })
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [evil, good], removed: [] }, out)
+    expect(existsSync(join(out, 'p', 'o', 'good.html'))).toBe(true)
+    // nothing may land outside p/ — check the would-be traversal target
+    expect(existsSync(join(out, 'escape.html'))).toBe(false)
+    expect(existsSync(join(out, '..', 'escape.html'))).toBe(false)
+    const full = JSON.parse(readFileSync(join(out, 'index.json'), 'utf8'))
+    expect(full.plugins).toHaveLength(2)   // data plane keeps it — auditability
+    rmSync(out, { recursive: true, force: true })
+  })
+
+  it('non-https verification.runUrl renders as text — never a javascript: link', async () => {
+    const evil = detailPage(mk({ verification: { status: 'verified', level: 'install', runUrl: 'javascript:alert(1)' } }))
+    expect(evil).not.toContain('href="javascript:')
+    expect(evil).toContain('javascript:alert(1)')
+    const ok = detailPage(mk({ verification: { status: 'verified', level: 'install', runUrl: 'https://ci.example/run/1' } }))
+    expect(ok).toContain('href="https://ci.example/run/1"')
+  })
+
+  it('pages ship data-en/data-zh pairs + the footer lang toggle', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] }, out)
+    const html = readFileSync(join(out, 'index.html'), 'utf8')
+    expect(html).toContain('data-zh="未扫描"')
+    expect(html).toContain('id=langsw')
+    expect(html).toContain('ocm-lang')
+    const d = readFileSync(join(out, 'p', 'o', 'p.html'), 'utf8')
+    expect(d).toContain('data-zh="隐私"')          // footer privacy link, depth-aware
+    expect(d).toContain('href="../../privacy.html"')
     rmSync(out, { recursive: true, force: true })
   })
 })

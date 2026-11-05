@@ -15,34 +15,56 @@ const execFileP = promisify(execFile)
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
-/** Honest-status rendering (DEV §2 铁律): each state gets distinct copy — never "safe" for unscanned. */
-const scanState = (c: Caps): { text: string; cls: string } => {
-  if (c.scannedAt === null) return { text: 'not scanned', cls: 'muted' }
-  if (c.redFlags.length > 0) return { text: `${c.redFlags.length} red flag(s)`, cls: 'bad' }
-  if (c.findings.length > 0) return { text: `${c.findings.length} finding(s)`, cls: 'warn' }
-  return { text: 'scanned, no findings', cls: 'ok' }
+/** Bilingual chrome string: English is the rendered default (no-JS safe);
+ *  data-en/data-zh let the footer toggle swap textContent. zh wording mirrors
+ *  the market client's ZH dict + AGENTS honest-status rules — keep in sync. */
+const bi = (en: string, zh: string): string =>
+  `<span data-en="${esc(en)}" data-zh="${esc(zh)}">${esc(en)}</span>`
+/** Same swap for an element that already carries a class (status labels). */
+const lbl = (s: { text: string; cls: string; zh: string }): string =>
+  `<span class="${s.cls}" data-en="${esc(s.text)}" data-zh="${esc(s.zh)}">${esc(s.text)}</span>`
+/** Only https URLs become links — index.json is untrusted data-plane input
+ *  and `javascript:`/`data:` hrefs must never render (esc() stops HTML
+ *  injection, not scheme injection). Unsafe values still display as text. */
+const safeHref = (u: string | undefined): string | null =>
+  u && /^https:\/\//i.test(u) ? u : null
+const linkOrText = (u: string | undefined, label: string): string => {
+  const h = safeHref(u)
+  return h ? `<a href="${esc(h)}">${label}</a>` : esc(u ?? '')
 }
-export function scanLabel(e: PluginEntry): { text: string; cls: string } {
+
+/** Footer language toggle — swaps [data-en]/[data-zh] textContent, persists
+ *  in localStorage, degrades to English without JS. */
+const LANG_JS = `<script>(function(){var K='ocm-lang';function A(l){document.documentElement.lang=l==='zh'?'zh':'en';document.querySelectorAll('[data-en][data-zh]').forEach(function(e){e.textContent=l==='zh'?e.getAttribute('data-zh'):e.getAttribute('data-en')});document.querySelectorAll('[data-en-ph][data-zh-ph]').forEach(function(e){e.placeholder=l==='zh'?e.getAttribute('data-zh-ph'):e.getAttribute('data-en-ph')});document.querySelectorAll('#langsw button').forEach(function(b){b.setAttribute('aria-pressed',b.getAttribute('data-l')===l?'true':'false')})}var l='en';try{l=localStorage.getItem(K)||'en'}catch(e){}A(l);document.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('#langsw button'):null;if(!b)return;l=b.getAttribute('data-l');try{localStorage.setItem(K,l)}catch(e){}A(l)})})()</script>`
+
+/** Honest-status rendering (DEV §2 铁律): each state gets distinct copy — never "safe" for unscanned. */
+const scanState = (c: Caps): { text: string; cls: string; zh: string } => {
+  if (c.scannedAt === null) return { text: 'not scanned', cls: 'muted', zh: '未扫描' }
+  if (c.redFlags.length > 0) return { text: `${c.redFlags.length} red flag(s)`, cls: 'bad', zh: `${c.redFlags.length} 个高危信号` }
+  if (c.findings.length > 0) return { text: `${c.findings.length} finding(s)`, cls: 'warn', zh: `${c.findings.length} 条扫描提示` }
+  return { text: 'scanned, no findings', cls: 'ok', zh: '已扫描·无发现' }
+}
+export function scanLabel(e: PluginEntry): { text: string; cls: string; zh: string } {
   return scanState(e.capabilities)
 }
-const verState = (v: Ver): { text: string; cls: string } => {
+const verState = (v: Ver): { text: string; cls: string; zh: string } => {
   switch (v.status) {
-    case 'verified': return { text: `verified (${v.level ?? 'install'})`, cls: 'ok' }
-    case 'failed': return { text: `verification failed${v.level ? ` (${v.level})` : ''}`, cls: 'bad' }
-    case 'skipped': return { text: 'skipped (high risk)', cls: 'warn' }
-    default: return { text: 'unverified', cls: 'muted' }
+    case 'verified': return { text: `verified (${v.level ?? 'install'})`, cls: 'ok', zh: `已实测可装可用（${v.level ?? 'install'}）` }
+    case 'failed': return { text: `verification failed${v.level ? ` (${v.level})` : ''}`, cls: 'bad', zh: `装不上或加载失败${v.level ? `（${v.level}）` : ''}` }
+    case 'skipped': return { text: 'skipped (high risk)', cls: 'warn', zh: '有高危信号没跑' }
+    default: return { text: 'unverified', cls: 'muted', zh: '还没验' }
   }
 }
-export function verifyLabel(e: PluginEntry): { text: string; cls: string } {
+export function verifyLabel(e: PluginEntry): { text: string; cls: string; zh: string } {
   // version-less entries (github-kind) are constructed as 'skipped' — there is
   // no npm artifact to run, not a high-risk short-circuit. Rendering them
   // "skipped (high risk)" would be a lie (AGENTS.md honest-label rule).
-  if (e.latestVersion === null) return { text: 'nothing to install', cls: 'muted' }
+  if (e.latestVersion === null) return { text: 'nothing to install', cls: 'muted', zh: '没有可安装的包' }
   return verState(e.verification)
 }
 /** approval badge — 'legacy' entries predate the review gate; 'approved' needs no badge. */
 export function approvalBadge(e: PluginEntry): string {
-  return e.approval === 'legacy' ? ' <span class=muted>legacy</span>' : ''
+  return e.approval === 'legacy' ? ` <span class=muted data-en="legacy" data-zh="门禁前收录">legacy</span>` : ''
 }
 /** user-visible entries — pending (under-review) entries never render on the site. */
 export const isVisible = (e: PluginEntry): boolean => e.approval !== 'pending'
@@ -73,12 +95,12 @@ export function installHint(e: PluginEntry, up = '../'): string {
   const parts = entryParts(e)
   const bits: string[] = []
   if (parts.includes('plugin') && !gh && e.latestVersion)
-    bits.push(`plugin: <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion)}</code>`)
+    bits.push(`${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion)}</code>`)
   if (parts.includes('skill') && (e.latestVersion || ghRepo))
-    bits.push(`skill: <a href="${up}skills.html">skills catalog</a>`)
+    bits.push(`${bi('skill:', '技能：')} <a href="${up}skills.html">${bi('skills catalog', '技能目录')}</a>`)
   return bits.length
     ? `<p class=meta>${bits.join(' · ')}</p>`
-    : '<p class=meta>no client install path yet — browse only</p>'
+    : `<p class=meta>${bi('no client install path yet — browse only', '暂无客户端安装路径——仅可浏览')}</p>`
 }
 
 const CSS = `body{font:14px/1.5 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#222}
@@ -122,8 +144,10 @@ function siteBasePath(): string {
   return memoBase
 }
 
-export function page(title: string, body: string): string {
-  return `<!doctype html><html lang="en"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="opencode plugin/skill catalog — scan and install-verify status per entry"><title>${esc(title)} · opencode market</title><style>${CSS}</style>${body}<footer class=meta><p>Not affiliated with opencode. "Scanned, no findings" does not mean safe. <a href="${esc(siteRepoUrl())}">source</a></p></footer></html>`
+/** `up` = relative prefix back to site root ('' on root pages, '../'×depth on
+ *  detail pages, absolute site base on 404.html) — footer's privacy link uses it. */
+export function page(title: string, body: string, up = ''): string {
+  return `<!doctype html><html lang="en"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="opencode plugin/skill catalog — scan and install-verify status per entry"><title>${esc(title)} · opencode market</title><style>${CSS}</style>${body}<footer class=meta><p><span id=langsw><button type=button data-l=en>EN</button> · <button type=button data-l=zh>中文</button></span> · <a href="${esc(up)}privacy.html" data-en="privacy" data-zh="隐私">privacy</a> · <a href="${esc(siteRepoUrl())}" data-en="source" data-zh="源码">source</a></p><p>${bi('Not affiliated with opencode. "Scanned, no findings" does not mean safe.', '与 opencode 无隶属关系。"已扫描·无发现"不等于安全。')}</p></footer>${LANG_JS}</html>`
 }
 
 export function listPage(index: CatalogIndex): string {
@@ -136,21 +160,21 @@ export function listPage(index: CatalogIndex): string {
   const cards = visible.map(e => {
     const s = scanLabel(e), v = verifyLabel(e)
     const badges = [
-      e.deprecated ? '<span class=bad>deprecated</span>' : '',
-      e.pendingUpdate ? '<span class=muted>update under review</span>' : '',
+      e.deprecated ? `<span class=bad data-en="deprecated" data-zh="已弃用">deprecated</span>` : '',
+      e.pendingUpdate ? `<span class=muted data-en="update under review" data-zh="有更新在审">update under review</span>` : '',
       approvalBadge(e).trim(),
     ].filter(Boolean).join(' · ')
-    const aka = e.aliases.length ? `<div class=meta>aka ${e.aliases.map(a => esc(a)).join(', ')}</div>` : ''
-    return `<div class=card data-cats="${esc(JSON.stringify(e.category))}"><a href="p/${esc(e.slug)}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${badges ? ` ${badges}` : ''}
+    const aka = e.aliases.length ? `<div class=meta>${bi('aka', '又名')} ${e.aliases.map(a => esc(a)).join(', ')}</div>` : ''
+    return `<div class=card data-cats="${esc(JSON.stringify(e.category))}"><a href="p/${esc(encodeURIComponent(e.slug))}.html"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${badges ? ` ${badges}` : ''}
       <div>${esc(e.description.en ?? '')}${e.description.zh ? `<div class=meta>${esc(e.description.zh)}</div>` : ''}</div>${aka}
-      <div class=meta><span class="${s.cls}">${s.text}</span> · <span class="${v.cls}">${v.text}</span>${e.latestVersion ? ` · v${esc(e.latestVersion)}` : ''}</div></div>`
+      <div class=meta>${lbl(s)} · ${lbl(v)}${e.latestVersion ? ` · v${esc(e.latestVersion)}` : ''}</div></div>`
   }).join('\n')
   // data-cats holds the raw JSON category array (entity-escaped); the filter
   // parses it back so exact matching can't be fooled by quote/backslash chars.
-  const filterJs = `function F(){const q=document.getElementById('q').value.toLowerCase(),c=document.getElementById('cat')?.value||'';document.querySelectorAll('.card').forEach(e=>{let ok=!q||e.textContent.toLowerCase().includes(q);if(ok&&c){try{ok=JSON.parse(e.dataset.cats).includes(c)}catch{ok=false}}e.style.display=ok?'':'none'})}`
-  const empty = visible.length ? '' : '<p class=muted>no entries yet — the catalog is empty or still syncing</p>'
-  return page('catalog', `<h1>opencode market</h1><p class=meta>${visible.length} entries · generated ${esc(index.generatedAt)} · <a href="skills.html">skills</a> · <a href="removed.html">removed</a> · <a href="${esc(siteRepoUrl())}/tree/catalog/digest">digest</a></p>
-    <input id=q placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="F()">${cats.length ? `<select id=cat onchange="F()" style="padding:8px;margin:8px 0"><option value="">all categories</option>${cats.map(c => `<option value="${esc(c)}">${esc(catName(c))}</option>`).join('')}</select>` : ''}<script>
+  const filterJs = `function F(){const q=document.getElementById('q').value.toLowerCase(),c=document.getElementById('cat')?.value||'';document.querySelectorAll('.card').forEach(e=>{let ok=!q||(e.textContent.toLowerCase().includes(q)||[...e.querySelectorAll('[data-en][data-zh]')].map(x=>x.getAttribute('data-en')+' '+x.getAttribute('data-zh')).join(' ').toLowerCase().includes(q));if(ok&&c){try{ok=JSON.parse(e.dataset.cats).includes(c)}catch{ok=false}}e.style.display=ok?'':'none'})}`
+  const empty = visible.length ? '' : `<p class=muted>${bi('no entries yet — the catalog is empty or still syncing', '暂无条目——目录为空或仍在同步')}</p>`
+  return page('catalog', `<h1>opencode market</h1><p class=meta>${bi(`${visible.length} entries`, `${visible.length} 个条目`)} · ${bi('generated', '生成于')} ${esc(index.generatedAt)} · <a href="skills.html" data-en="skills" data-zh="技能">skills</a> · <a href="removed.html" data-en="removed" data-zh="已移除">removed</a> · <a href="${esc(siteRepoUrl())}/tree/catalog/digest" data-en="digest" data-zh="日报">digest</a></p>
+    <input id=q data-en-ph="search" data-zh-ph="搜索名称/描述" placeholder=search style="width:100%;padding:8px;margin:8px 0" oninput="F()">${cats.length ? `<select id=cat onchange="F()" style="padding:8px;margin:8px 0"><option value="" data-en="all categories" data-zh="全部分类">all categories</option>${cats.map(c => `<option value="${esc(c)}">${esc(catName(c))}</option>`).join('')}</select>` : ''}<script>
     ${filterJs}
     </script>${empty}${cards}`)
 }
@@ -164,25 +188,32 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[]): string {
     Object.entries(o).filter(([, x]) => x !== undefined).map(([k, x]) => `<tr><td>${k}</td><td>${x}</td></tr>`).join('')
   // AGENTS: findings/redFlags 默认收起 — collapsed into <details> even on the
   // detail page; red-flag lines get a marker so they stand out when expanded
-  const findingsBlock = (caps: Caps, label: string): string => {
+  const findingsBlock = (caps: Caps, enLabel: string, zhLabel: string): string => {
     if (!caps.findings.length) return ''
     const rf = new Set(caps.redFlags)
-    return `<details><summary>${label} (${caps.findings.length}${caps.redFlags.length ? `, ${caps.redFlags.length} red flag` : ''})</summary><ul>${caps.findings.map(f => `<li><code>${esc(f)}</code>${rf.has(f) ? ' <span class=bad>red flag</span>' : ''}</li>`).join('')}</ul></details>`
+    const summary = caps.redFlags.length
+      ? `${enLabel} (${caps.findings.length}, ${caps.redFlags.length} red flag)`
+      : `${enLabel} (${caps.findings.length})`
+    const summaryZh = caps.redFlags.length
+      ? `${zhLabel}（${caps.findings.length} 条，其中 ${caps.redFlags.length} 个高危信号）`
+      : `${zhLabel}（${caps.findings.length} 条）`
+    return `<details><summary>${bi(summary, summaryZh)}</summary><ul>${caps.findings.map(f => `<li><code>${esc(f)}</code>${rf.has(f) ? ` <span class=bad data-en="red flag" data-zh="高危信号">red flag</span>` : ''}</li>`).join('')}</ul></details>`
   }
   const findings = e.capabilities.findings.length
-    ? findingsBlock(e.capabilities, 'findings')
-    : '<p class=muted>none</p>'
+    ? findingsBlock(e.capabilities, 'findings', '扫描发现')
+    : `<p class=muted>${bi('none', '无')}</p>`
   const pu = e.pendingUpdate
   const puScan = pu ? scanState(pu.capabilities) : null
   const puVer = pu ? verState(pu.verification) : null
+  const puReason = pu?.reason === 'awaiting-review' ? bi('awaiting review', '等待评审') : pu?.reason ? esc(pu.reason) : ''
   const underReview = pu
-    ? `<tr><td>next version</td><td><code>v${esc(pu.version)}</code> <span class=muted>under review — not installable yet</span>
-      <br><span class=meta>verify: <span class="${puVer!.cls}">${puVer!.text}</span> · scan: <span class="${puScan!.cls}">${puScan!.text}</span>${pu.publishedAt ? ` · published ${esc(pu.publishedAt.slice(0, 10))}` : ''} · held ${esc(pu.heldAt.slice(0, 10))}</span>
-      ${pu.reason ? `<br><span class=meta>${esc(pu.reason)}</span>` : ''}${pu.verification.runUrl ? ` <a href="${esc(pu.verification.runUrl)}">verify logs</a>` : ''}</td></tr>` : ''
+    ? `<tr><td>${bi('next version', '候选新版本')}</td><td><code>v${esc(pu.version)}</code> ${bi('under review — not installable yet', '在审——暂不可装')}
+      <br><span class=meta>${bi('verify:', '验证：')} ${lbl(puVer!)} · ${bi('scan:', '扫描：')} ${lbl(puScan!)}${pu.publishedAt ? ` · ${bi('published', '发布于')} ${esc(pu.publishedAt.slice(0, 10))}` : ''} · ${bi('held', '暂存于')} ${esc(pu.heldAt.slice(0, 10))}</span>
+      ${puReason ? `<br><span class=meta>${puReason}</span>` : ''}${pu.verification.runUrl ? ` ${linkOrText(pu.verification.runUrl, bi('verify logs', '验证日志'))}` : ''}</td></tr>` : ''
   const puFindings = pu && pu.capabilities.findings.length
-    ? `<h2>next version findings (v${esc(pu.version)})</h2>${findingsBlock(pu.capabilities, 'findings')}` : ''
+    ? `<h2>${bi(`next version findings (v${pu.version})`, `候选版本扫描发现（v${pu.version}）`)}</h2>${findingsBlock(pu.capabilities, 'findings', '扫描发现')}` : ''
   const puLog = pu?.verification.logExcerpt
-    ? `<details><summary><b>next version failure log</b></summary><pre>${esc(pu.verification.logExcerpt)}</pre></details>` : ''
+    ? `<details><summary><b>${bi('next version failure log', '候选版本失败日志')}</b></summary><pre>${esc(pu.verification.logExcerpt)}</pre></details>` : ''
   const reviewLink = `${siteRepoUrl()}/issues?q=${encodeURIComponent(`is:issue [review] ${e.name}`)}`
   // verdict audit surface (G1): the record itself lives on the catalog branch —
   // surface the recent lines so "why was this braked/released" doesn't require
@@ -190,50 +221,60 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[]): string {
   // audit detail is there when wanted, not in the main reading path.
   const mine = (verdicts ?? []).filter(x => x.name === e.name)
     .sort((a, b) => atCmp(b.at, a.at)).slice(0, 10)
+  const allMine = verdicts?.filter(x => x.name === e.name).length ?? 0
   const verdictBlock = mine.length
-    ? `<h2>verdicts</h2><details><summary>review record (${mine.length}${verdicts && verdicts.filter(x => x.name === e.name).length > mine.length ? ` of ${verdicts.filter(x => x.name === e.name).length}` : ''})</summary><table>` +
+    ? `<h2>${bi('verdicts', '裁决记录')}</h2><details><summary>${bi(`review record (${mine.length}${allMine > mine.length ? ` of ${allMine}` : ''})`, `评审记录（${mine.length}${allMine > mine.length ? `/${allMine}` : ''}）`)}</summary><table>` +
       mine.map(x => `<tr><td class=meta>${esc(x.at.slice(0, 10))}</td>` +
         `<td><b>${x.verdict}</b>${x.version ? ` <code>@${esc(x.version)}</code>` : ''}</td>` +
         `<td>${esc(x.source)}${x.by ? ` · ${esc(x.by)}` : ''}${x.issue ? ` · <a href="${siteRepoUrl()}/issues/${x.issue}">#${x.issue}</a>` : ''}</td>` +
         `<td>${esc([...(x.reason ?? '')].slice(0, 200).join(''))}</td></tr>`).join('') +
-      `</table><p class=meta>完整流水：<a href="${siteRepoUrl()}/blob/catalog/ai-verdicts.jsonl">ai-verdicts.jsonl</a> · 成熟度公告：<a href="${siteRepoUrl()}/tree/catalog/digest">digest</a></p></details>`
+      `</table><p class=meta>${bi('full log:', '完整流水：')}<a href="${siteRepoUrl()}/blob/catalog/ai-verdicts.jsonl">ai-verdicts.jsonl</a> · ${bi('maturity digest:', '成熟度公告：')}<a href="${siteRepoUrl()}/tree/catalog/digest">digest</a></p></details>`
     : ''
-  return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}${e.deprecated ? ' <span class=bad>deprecated</span>' : ''}</h1><p>${esc(e.description.en ?? '')}${e.description.zh ? `<br><span class=meta>${esc(e.description.zh)}</span>` : ''}</p>
+  return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}${e.deprecated ? ` <span class=bad data-en="deprecated" data-zh="已弃用">deprecated</span>` : ''}</h1><p>${esc(e.description.en ?? '')}${e.description.zh ? `<br><span class=meta>${esc(e.description.zh)}</span>` : ''}</p>
     <table>${rows({
-      type: esc(e.type), slug: `<code>${esc(e.slug)}</code>`,
-      aliases: e.aliases.length ? e.aliases.map(a => `<code>${esc(a)}</code>`).join(' ') : undefined,
-      contains: e.contains?.length ? esc(e.contains.join(', ')) : undefined,
-      features: e.features?.length ? esc(e.features.join(', ')) : undefined,
-      license: e.license ? esc(e.license) : 'unknown',
-      version: e.latestVersion ? esc(e.latestVersion) : undefined,
-      published: e.publishedAt ? esc(e.publishedAt.slice(0, 10)) : undefined,
-      created: e.createdAt ? esc(e.createdAt.slice(0, 10)) : undefined,
-      modified: e.modifiedAt ? esc(e.modifiedAt.slice(0, 10)) : undefined,
-      repo: e.source.repo ? `<a href="https://github.com/${esc(e.source.repo)}">${esc(e.source.repo)}</a>` : undefined,
-      maintainers: e.maintainers.length ? esc(e.maintainers.join(', ')) : undefined,
-      'discovered via': e.discoveredVia.length ? esc(e.discoveredVia.join(', ')) : undefined,
-      integrity: e.integrity ? `<code style="word-break:break-all">${esc(e.integrity)}</code>` : undefined,
-      'npm (30d)': e.metrics.npmDownloads30d?.toLocaleString(),
-      stars: e.metrics.stars?.toLocaleString(),
-      'first seen': esc(e.firstSeenAt.slice(0, 10)),
-      compat: (e.compat.engines || e.compat.peer) ? esc([e.compat.engines, e.compat.peer].filter(Boolean).join(' · ')) : undefined,
-      'scan status': `<span class="${s.cls}">${s.text}</span>`,
-      'verify status': `<span class="${v.cls}">${v.text}</span>`,
-      'verified at': e.verification.verifiedAt ? esc(e.verification.verifiedAt.slice(0, 10)) : undefined,
-      'opencode ver': e.verification.opencodeVersion ? esc(e.verification.opencodeVersion) : undefined,
-      'verify run': e.verification.runUrl ? `<a href="${esc(e.verification.runUrl)}">logs</a>` : undefined,
-      deprecated: e.deprecated ? '<span class=bad>deprecated</span>' : undefined,
-      'deprecated note': e.deprecatedMessage ? esc(e.deprecatedMessage) : undefined,
-      replacement: e.replacement ? `<code>${esc(e.replacement)}</code>` : undefined,
-      review: `<a href="${esc(reviewLink)}">audit trail</a>`,
+      [bi('type', '类型')]: esc(e.type), [bi('slug', '标识')]: `<code>${esc(e.slug)}</code>`,
+      [bi('aliases', '别名')]: e.aliases.length ? e.aliases.map(a => `<code>${esc(a)}</code>`).join(' ') : undefined,
+      [bi('contains', '包含部件')]: e.contains?.length ? esc(e.contains.join(', ')) : undefined,
+      [bi('features', '功能')]: e.features?.length ? esc(e.features.join(', ')) : undefined,
+      [bi('license', '许可证')]: e.license ? esc(e.license) : bi('unknown', '未知'),
+      [bi('version', '版本')]: e.latestVersion ? esc(e.latestVersion) : undefined,
+      [bi('published', '发布时间')]: e.publishedAt ? esc(e.publishedAt.slice(0, 10)) : undefined,
+      [bi('created', '创建于')]: e.createdAt ? esc(e.createdAt.slice(0, 10)) : undefined,
+      [bi('modified', '更新于')]: e.modifiedAt ? esc(e.modifiedAt.slice(0, 10)) : undefined,
+      [bi('repo', '仓库')]: e.source.repo ? `<a href="https://github.com/${esc(e.source.repo)}">${esc(e.source.repo)}</a>` : undefined,
+      [bi('npm', 'npm')]: e.source.kind === 'npm' ? `<a href="https://www.npmjs.com/package/${esc(e.name)}">${esc(e.name)}</a>` : undefined,
+      [bi('maintainers', '维护者')]: e.maintainers.length ? esc(e.maintainers.join(', ')) : undefined,
+      [bi('discovered via', '收录途径')]: e.discoveredVia.length ? esc(e.discoveredVia.join(', ')) : undefined,
+      [bi('integrity', '完整性校验')]: e.integrity ? `<code style="word-break:break-all">${esc(e.integrity)}</code>` : undefined,
+      [bi('npm (30d)', 'npm 周下载')]: e.metrics.npmDownloads30d?.toLocaleString(),
+      [bi('stars', '星标')]: e.metrics.stars?.toLocaleString(),
+      [bi('first seen', '首次收录')]: esc(e.firstSeenAt.slice(0, 10)),
+      [bi('compat', '兼容性')]: (e.compat.engines || e.compat.peer) ? esc([e.compat.engines, e.compat.peer].filter(Boolean).join(' · ')) : undefined,
+      [bi('scan status', '扫描状态')]: lbl(s),
+      [bi('verify status', '验证状态')]: lbl(v),
+      [bi('verified at', '实测时间')]: e.verification.verifiedAt ? esc(e.verification.verifiedAt.slice(0, 10)) : undefined,
+      [bi('opencode ver', 'opencode 版本')]: e.verification.opencodeVersion ? esc(e.verification.opencodeVersion) : undefined,
+      [bi('verify run', '验证记录')]: e.verification.runUrl ? linkOrText(e.verification.runUrl, bi('logs', '日志')) : undefined,
+      [bi('deprecated', '已弃用')]: e.deprecated ? `<span class=bad data-en="deprecated" data-zh="已弃用">deprecated</span>` : undefined,
+      [bi('deprecated note', '弃用说明')]: e.deprecatedMessage ? esc(e.deprecatedMessage) : undefined,
+      [bi('replacement', '替代品')]: e.replacement ? `<code>${esc(e.replacement)}</code>` : undefined,
+      [bi('review', '评审')]: `<a href="${esc(reviewLink)}">${bi('audit trail', '评审档案')}</a>`,
     })}${underReview}</table>
-    <h2>scan findings</h2>${findings}
+    <h2>${bi('scan findings', '扫描发现')}</h2>${findings}
     ${puFindings}
-    ${e.verification.logExcerpt ? `<details><summary><b>failure log</b></summary><pre>${esc(e.verification.logExcerpt)}</pre></details>` : ''}
+    ${e.verification.logExcerpt ? `<details><summary><b>${bi('failure log', '失败日志')}</b></summary><pre>${esc(e.verification.logExcerpt)}</pre></details>` : ''}
     ${puLog}
     ${verdictBlock}
-    <p class=meta><a href="${up}index.html">← all plugins</a></p>${installHint(e, up)}`)
+    <p class=meta><a href="${up}index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${installHint(e, up)}`, up)
 }
+
+/** Slug → filesystem path safety: detail pages write `p/<slug>.html`, so a
+ *  crafted index.json slug must never escape `p/` (`..`, empty/`.` segments,
+ *  backslashes, control chars). Real slugs are npm names / owner/repo —
+ *  this only rejects corrupt data; the entry still ships in index.json. */
+const slugSafe = (slug: string): boolean =>
+  slug.length <= 400 && slug.split('/').every(seg =>
+    seg !== '' && seg !== '.' && seg !== '..' && !/[\\\x00-\x1f\x7f]/.test(seg))
 
 export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string, verdictsPath?: string): Promise<void> {
   rmSync(outDir, { recursive: true, force: true })   // no stale files from a previous build
@@ -248,9 +289,36 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
   // served index.json bytes — clients fetch this manifest first and only pull
   // the multi-MB index when the hash moved, then verify the downloaded bytes
   // (CDN edge staleness can't pin a mismatched hash to old content).
-  writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
-  const skillStats = await buildSkillCatalog(visible, outDir, undefined, cacheDir)
-  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, skills: skillStats, generatedAt: index.generatedAt, sha256: createHash('sha256').update(indexJson).digest('hex'), bytes: Buffer.byteLength(indexJson) }))
+  writeFileSync(join(outDir, 'privacy.html'), page('privacy', `<h1>${bi('Privacy', '隐私')}</h1><p>${bi('opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.', 'opencode-market 不收集任何数据。目录是静态数据；安装插件时 opencode plugin add 在本机运行。收藏/分组/笔记等本地状态只保存在你机器的 localStorage 中。')}</p>`))
+  // SKIP_SKILLS=1 (site.yml dispatch input): publish the catalog without
+  // fetching skill tarballs — the escape hatch for a registry/CDN outage where
+  // a degraded skills catalog would otherwise hold the whole deploy hostage.
+  const skipSkills = process.env.SKIP_SKILLS === '1' || process.env.SKIP_SKILLS === 'true'
+  const skillStats = skipSkills
+    ? { candidates: 0, landed: 0, degraded: false, entries: [] as { name: string; version: string; files: string[] }[] }
+    : await buildSkillCatalog(visible, outDir, undefined, cacheDir)
+  if (skipSkills) {
+    mkdirSync(join(outDir, 'skills'), { recursive: true })
+    writeFileSync(join(outDir, 'skills', 'index.json'), '{"skills":[]}')
+  }
+  writeFileSync(join(outDir, 'health.json'), JSON.stringify({
+    ok: true,
+    // entries = VISIBLE count (info only); total = full catalog incl. pending —
+    // healthGate compares totals: a mass brake legitimately collapses visible
+    // while the data plane stays intact, and must not freeze the deploy.
+    entries: visible.plugins.length,
+    total: index.plugins.length,
+    // strip the per-skill file lists — health.json is the client's cheap
+    // manifest probe (1MB cap → fall back to full index fetch); embedding the
+    // catalog here made it ~130KB and growing. skills.html reads the in-memory
+    // stats directly, nothing consumes entries via health.json.
+    skills: { candidates: skillStats.candidates, landed: skillStats.landed, degraded: skillStats.degraded },
+    generatedAt: index.generatedAt,
+    builtAt: new Date().toISOString(),
+    commit: process.env.SITE_COMMIT || undefined,
+    sha256: createHash('sha256').update(indexJson).digest('hex'),
+    bytes: Buffer.byteLength(indexJson),
+  }))
   writeFileSync(join(outDir, 'index.html'), listPage(visible))
   writeFileSync(join(outDir, 'skills.html'), skillsPage(skillStats.entries))
   writeFileSync(join(outDir, 'removed.html'), removedPage(index))
@@ -258,8 +326,9 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
   // depth, so relative links would resolve under it. Absolute site-base links
   // ("/<repo>/…" on project Pages) survive any requested depth.
   const base = siteBasePath()
-  writeFileSync(join(outDir, '404.html'), page('not found', `<h1>not found</h1><p>The page or plugin you are looking for may have been removed from the catalog, or it is still under review and not published yet.</p><p><a href="${esc(base)}removed.html">recently removed entries</a> · <a href="${esc(base)}index.html">all plugins</a></p>`))
+  writeFileSync(join(outDir, '404.html'), page('not found', `<h1>${bi('not found', '页面不存在')}</h1><p>${bi('The page or plugin you are looking for may have been removed from the catalog, or it is still under review and not published yet.', '你要找的页面或插件可能已从目录移除，或仍在评审中未发布。')}</p><p><a href="${esc(base)}removed.html" data-en="recently removed entries" data-zh="最近移除的条目">recently removed entries</a> · <a href="${esc(base)}index.html" data-en="all plugins" data-zh="全部插件">all plugins</a></p>`, base))
   for (const e of visible.plugins) {
+    if (!slugSafe(e.slug)) { console.warn(`[site] skipping detail page — unsafe slug: ${JSON.stringify(e.slug)}`); continue }
     const p = join(outDir, 'p', `${e.slug}.html`)
     mkdirSync(dirname(p), { recursive: true })
     writeFileSync(p, detailPage(e, verdicts))
@@ -273,13 +342,20 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
  *  skill tarballs failed — that is an infrastructure problem, not a catalog
  *  state, and publishing would silently un-ship half the skills catalog.
  *  `floor` is SITE_FLOOR-overridable — a small curated catalog must be able
- *  to publish below the default. */
-export function healthGate(prev: { entries?: number } | null,
-  cur: { entries: number; skills?: { candidates?: number; landed?: number; degraded?: boolean } },
+ *  to publish below the default.
+ *  Ratio/floor compare TOTAL catalog size (incl. pending), not the visible
+ *  count: a mass brake or tombstone wave legitimately collapses `entries`
+ *  while index.json stays intact — gating on visible would freeze the brake
+ *  OFF the site (the dangerous packages keep serving). `entries` remains the
+ *  fallback for health.json snapshots written before `total` existed. */
+export function healthGate(prev: { entries?: number; total?: number } | null,
+  cur: { entries: number; total?: number; skills?: { candidates?: number; landed?: number; degraded?: boolean } },
   floor = 200): string | null {
-  if (cur.entries < floor) return `entries=${cur.entries} below floor ${floor}`
-  if (typeof prev?.entries === 'number' && prev.entries > 0 && cur.entries < prev.entries * 0.5)
-    return `entries ${cur.entries} < 50% of previous deploy ${prev.entries}`
+  const curN = cur.total ?? cur.entries
+  const prevN = prev ? (prev.total ?? prev.entries) : undefined
+  if (curN < floor) return `entries=${curN} below floor ${floor}`
+  if (typeof prevN === 'number' && prevN > 0 && curN < prevN * 0.5)
+    return `entries ${curN} < 50% of previous deploy ${prevN}`
   const sk = cur.skills
   if (sk?.degraded && (sk.candidates ?? 0) >= 10)
     return `skills degraded: ${sk.landed}/${sk.candidates} landed`
@@ -291,29 +367,34 @@ export function healthGate(prev: { entries?: number } | null,
 export function skillsPage(entries: { name: string; version: string; files: string[] }[]): string {
   const cards = entries.map(s => {
     const ver = s.version.length > 12 ? `${s.version.slice(0, 10)}…` : s.version
-    return `<div class=card><b>${esc(s.name)}</b> <code>v${esc(ver)}</code> <span class=muted>${s.files.length} file(s)</span><div class=meta>${s.files.map(f => `<a href="skills/${esc(encodeURI(s.name))}/${esc(encodeURI(f))}">${esc(f)}</a>`).join(' · ') || 'no files'}</div></div>`
+    return `<div class=card><b>${esc(s.name)}</b> <code>v${esc(ver)}</code> ${bi(`${s.files.length} file(s)`, `${s.files.length} 个文件`)}<div class=meta>${s.files.map(f => `<a href="skills/${esc(encodeURI(s.name))}/${esc(encodeURI(f))}">${esc(f)}</a>`).join(' · ') || bi('no files', '无文件')}</div></div>`
   }).join('\n')
-  const empty = entries.length ? '' : '<p class=muted>no skills published yet — skill files are fetched during the site build and may be temporarily unavailable</p>'
-  return page('skills', `<h1>skills</h1><p class=meta>${entries.length} skills · <a href="skills/index.json">index.json</a> · <a href="index.html">← all plugins</a></p>${empty}${cards}`)
+  const empty = entries.length ? '' : `<p class=muted>${bi('no skills published yet — skill files are fetched during the site build and may be temporarily unavailable', '暂无已发布技能——技能文件在站点构建时抓取，可能暂时不可用')}</p>`
+  return page('skills', `<h1>${bi('skills', '技能')}</h1><p class=meta>${bi(`${entries.length} skills`, `${entries.length} 个技能`)} · <a href="skills/index.json">index.json</a> · <a href="index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${empty}${cards}`)
 }
 
 /** Recently removed entries — explains the 404s for vanished plugins. */
-const REMOVED_REASON: Record<string, string> = {
-  'npm-404': 'unpublished from npm',
-  'repo-404': 'repository deleted',
-  filtered: 'filtered out by admission checks',
-  capped: 'dropped by catalog cap',
-  manual: 'removed by maintainer',
-  unknown: 'no longer seen (cause unknown)',
+const REMOVED_REASON: Record<string, { en: string; zh: string }> = {
+  'npm-404': { en: 'unpublished from npm', zh: 'npm 上已消失' },
+  'repo-404': { en: 'repository deleted', zh: '仓库已消失' },
+  filtered: { en: 'filtered out by admission checks', zh: '被入场过滤移除' },
+  capped: { en: 'dropped by catalog cap', zh: '超出目录上限' },
+  manual: { en: 'removed by maintainer', zh: '被人工移除' },
+  unknown: { en: 'no longer seen (cause unknown)', zh: '原因未知' },
 }
 export function removedPage(index: CatalogIndex): string {
   const rem = [...(index.removed ?? [])].sort((a, b) => b.disappearedAt.localeCompare(a.disappearedAt))
-  const cards = rem.slice(0, 300).map(r => {
+  const shown = rem.slice(0, 300)
+  const cards = shown.map(r => {
     const src = r.lastSource?.repo ? ` · <a href="https://github.com/${esc(r.lastSource.repo)}">${esc(r.lastSource.repo)}</a>`
       : r.lastSource?.id ? ` · <code>${esc(r.lastSource.id)}</code>` : ''
-    return `<div class=card><b>${esc(r.name)}</b> <code>${esc(r.slug)}</code><div class=meta>${esc(REMOVED_REASON[r.reason] ?? r.reason)} · removed ${esc(r.disappearedAt.slice(0, 10))}${src}</div></div>`
+    const reason = REMOVED_REASON[r.reason]
+    const reasonHtml = reason ? bi(reason.en, reason.zh) : esc(r.reason)
+    return `<div class=card><b>${esc(r.name)}</b> <code>${esc(r.slug)}</code><div class=meta>${reasonHtml} · ${bi('removed', '移除于')} ${esc(r.disappearedAt.slice(0, 10))}${src}</div></div>`
   }).join('\n')
-  return page('removed', `<h1>removed entries</h1><p class=meta>${rem.length} total · latest 300 shown · <a href="index.html">← all plugins</a></p>${cards || '<p class=muted>none</p>'}`)
+  const note = rem.length > shown.length
+    ? ` · ${bi('earlier records remain in index.json → removed[]', '更早记录见 index.json → removed[]')}` : ''
+  return page('removed', `<h1>${bi('removed entries', '已移除条目')}</h1><p class=meta>${bi(`${rem.length} total`, `共 ${rem.length} 条`)} · ${bi('latest 300 shown', '显示最新 300 条')}${note} · <a href="index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${cards || `<p class=muted>${bi('none', '无')}</p>`}`)
 }
 
 /* v8 ignore next 7 */
@@ -334,7 +415,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
  *  pulled from npm tarballs / codeload, so `skills: ["<site>/skills/"]` makes the
  *  whole catalog's skills loadable — files update whenever version bumps.
  *  Fetches run in a bounded worker pool (S-14): a cold cache otherwise costs
- *  N × (npm view + curl + tar) serially. */
+ *  N × (packument + curl + tar) serially. */
 const SKILL_POOL = 8
 const MAX_SKILL_TGZ = 48 * 1024 * 1024   // parity with the client's installSkillTar cap
 const MAX_SKILL_MEMBERS = 100            // bounded argv + publish surface
@@ -343,23 +424,69 @@ const MAX_SKILL_TOTAL_BYTES = 20 * 1024 * 1024
 /** Publishable skill-payload filenames — everything except control chars and
  *  URL-breaking characters (", ', `, #, %, ?, *, :, <, >, |, \). Unicode fine. */
 const SAFE_MEMBER = /^[^\x00-\x1f\x7f"'`#$%?*:<>\|]+$/
+/** Web-active payload types never publish to the market's own github.io
+ *  origin: Pages serves .html as text/html and .svg as image/svg+xml, so an
+ *  approved skill carrying either could host a phishing page or script on the
+ *  catalog domain. The client's own npm-tarball install path still delivers
+ *  them — only the HTTP mirror drops them (files[] + on-disk). */
+const ACTIVE_CONTENT = /\.(html?|xhtml|shtml|svg|js|mjs|cjs)$/i
+/** Subresource-Integrity check across the algos npm actually emits — the
+ *  client's integrityMatches only understands sha512 and treats anything else
+ *  as unverifiable; the site verifies whatever algo is announced and only
+ *  skips on a REAL mismatch (null = unverifiable → proceed, same contract). */
+const sriOk = (buf: Buffer, sri: string): boolean | null => {
+  const m = /^(sha256|sha384|sha512|sha1)-([A-Za-z0-9+/=]+)$/.exec(sri.trim())
+  if (!m?.[1]) return null
+  return `${m[1]}-${createHash(m[1]).update(buf).digest('base64')}` === sri.trim()
+}
+/** Default npm tarball resolver — ONE packument GET per package name carries
+ *  every version's dist.tarball; `npm view <spec>` per skill spawned a node
+ *  process each and dominated cold builds (~275 spawns). Cache is per-build. */
+function npmTarballResolver(): (spec: string) => Promise<string | null> {
+  const registry = (process.env.npm_config_registry ?? 'https://registry.npmjs.org/').replace(/\/?$/, '/')
+  const cache = new Map<string, Promise<Record<string, any> | null>>()
+  const packument = (name: string) => {
+    let p = cache.get(name)
+    if (!p) {
+      p = (async () => {
+        try {
+          const u = `${registry}${name.startsWith('@') ? name.replace('/', '%2F') : name}`
+          const r = await fetch(u, { signal: AbortSignal.timeout(20_000), headers: { accept: 'application/json' } })
+          return r.ok ? await r.json() : null
+        } catch { return null }
+      })()
+      cache.set(name, p)
+    }
+    return p
+  }
+  return async (spec) => {
+    const i = spec.lastIndexOf('@')
+    const name = i > 0 ? spec.slice(0, i) : spec
+    const ver = i > 0 ? spec.slice(i + 1) : ''
+    const pk = await packument(name)
+    const t = pk?.versions?.[ver]?.dist?.tarball
+    return typeof t === 'string' && /^https:\/\//i.test(t) ? t : null
+  }
+}
+/** skills/index.json `version` doubles as opencode's cache key — a same-version
+ *  re-tag (the exact case SRI pinning exists for) serves NEW bytes under an
+ *  unchanged version string, so npm skills bind the version to the approved
+ *  artifact's integrity tag. github entries already pin by commit sha. */
+const skillVersion = (c: { ver: string; ghRepo: string | null; s: PluginEntry }): string => {
+  if (c.ghRepo || !c.s.integrity) return c.ver
+  // hex digest of the announced SRI — base64 slices can carry +/= which are
+  // not semver-build-metadata chars; the hash is opaque to consumers anyway
+  const h = createHash('sha256').update(c.s.integrity).digest('hex').slice(0, 10)
+  return `${c.ver}+${h}`
+}
 export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
-  tarballOf: (spec: string) => string | null | Promise<string | null> =
-    // execFile argv, not a shell string — this job holds pages:write + id-token,
-    // so an index-derived spec/URL must never reach a shell (N-4)
-    async (spec) => {
-      try {
-        const { stdout } = await execFileP('npm', ['view', spec, 'dist.tarball'], { encoding: 'utf8', timeout: 20_000 })
-        const u = stdout.trim()
-        // packument-derived URL is registry-controlled in practice but treat as
-        // untrusted: https only. Injected tarballOf impls (tests) own their scheme.
-        return /^https:\/\//i.test(u) ? u : null
-      } catch { return null }
-    },
+  tarballOf?: (spec: string) => string | null | Promise<string | null>,
   cacheDir?: string,
   ghTarballOf: (repo: string, sha?: string | null) => string | null =
     (repo, sha) => `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`)
   : Promise<{ candidates: number; landed: number; degraded: boolean; entries: { name: string; version: string; files: string[] }[] }> {
+  // injected impls (tests) own their scheme; the default is https-validated above
+  const tbOf = tarballOf ?? npmTarballResolver()
   const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
@@ -375,15 +502,24 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   /** Collect publishable files under `root`: drops non-regular members
    *  (symlink/hardlink/fifo/dev — named extraction CAN create them, so the
    *  walk deletes them rather than publish a traversal/dead primitive),
-   *  drops over-sized single files, and bails ([]) on an over-budget total. */
-  const collectFiles = (root: string): { files: string[]; total: number } => {
+   *  drops web-active types (ACTIVE_CONTENT — a poisoned cache must not
+   *  resurrect them either), drops over-sized single files, and bails ([]) on
+   *  an over-budget total. */
+  const collectFiles = (root: string): { files: string[]; total: number; droppedActive: number } => {
     const out: string[] = []
-    let total = 0
+    let total = 0, droppedActive = 0
     const walk = (d: string) => {
       for (const ent of readdirSync(d, { withFileTypes: true })) {
         const p = join(d, ent.name)
-        if (ent.isDirectory() && ent.name !== 'node_modules') { walk(p); continue }
+        // node_modules is deleted, not just skipped — a poisoned cache copy
+        // must not leave unlisted files sitting in the published tree
+        if (ent.isDirectory()) {
+          if (ent.name === 'node_modules') rmSync(p, { recursive: true, force: true })
+          else walk(p)
+          continue
+        }
         if (!ent.isFile()) { rmSync(p, { force: true }); continue }
+        if (ACTIVE_CONTENT.test(ent.name)) { rmSync(p, { force: true }); droppedActive++; continue }
         const sz = statSync(p).size
         if (sz > MAX_SKILL_FILE_BYTES) { rmSync(p, { force: true }); continue }
         total += sz
@@ -391,7 +527,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       }
     }
     try { walk(root) } catch { /* unreadable dir → empty */ }
-    return { files: out, total }
+    return { files: out, total, droppedActive }
   }
   // plan phase (sync + deterministic): ids are assigned in catalog order so
   // the collision suffix can't shuffle between builds; fetch work is pooled.
@@ -425,30 +561,34 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     if (hit && existsSync(hit)) try {
       rmSync(c.dest, { recursive: true, force: true })
       cpSync(hit, c.dest, { recursive: true })
-      const { files: abs, total } = collectFiles(c.dest)
-      const files = abs.map((f) => relative(c.dest, f))
-      if (files.length && total <= MAX_SKILL_TOTAL_BYTES) { entries.push({ name: c.id, version: c.ver, files }); return }
+      const { files: abs, total, droppedActive } = collectFiles(c.dest)
+      if (droppedActive) console.warn(`[site] skill ${c.id}: ${droppedActive} web-active file(s) withheld from publish`)
+      const files = abs.map((f) => relative(c.dest, f)).sort()
+      if (files.length && total <= MAX_SKILL_TOTAL_BYTES) { entries.push({ name: c.id, version: skillVersion(c), files }); return }
       rmSync(hit, { recursive: true, force: true })   // poisoned cache → refetch
     } catch { rmSync(hit, { recursive: true, force: true }) }
     const tmp = `${c.dest}.tmp`
     try {
-      // pin to the approved version — `npm view <name>` resolves dist-tags.latest
-      // which is the pendingUpdate users must not receive (hold semantics).
+      // pin to the approved version — resolving dist-tags.latest would serve
+      // the pendingUpdate users must not receive (hold semantics).
       // github: codeload keyed by the resolved commit sha, not HEAD (version
       // marker = the pinned bytes); repo goes through execFile argv, not a shell.
-      const tb = c.ghRepo ? ghTarballOf(c.ghRepo, c.s.source?.version) : await tarballOf(`${c.s.name}@${c.ver}`)
+      const tb = c.ghRepo ? ghTarballOf(c.ghRepo, c.s.source?.version) : await tbOf(`${c.s.name}@${c.ver}`)
       if (!tb) return
       rmSync(tmp, { recursive: true, force: true })
       mkdirSync(tmp, { recursive: true })
       const tgz = join(tmp, 'pkg.tgz')
-      await execFileP('curl', ['-fsSL', '--max-time', '60', tb, '-o', tgz], { timeout: 70_000 })
+      // --proto-redir '=https': redirects (codeload→S3, registry mirrors) may
+      // never downgrade to http; --max-filesize bounds the download itself,
+      // not just the post-hoc statSync; --retry rides out transient blips.
+      await execFileP('curl', ['-fsSL', '--proto-redir', '=https', '--max-filesize', String(MAX_SKILL_TGZ), '--max-time', '60', '--retry', '2', '--retry-delay', '1', tb, '-o', tgz], { timeout: 90_000 })
       // drift check: when the index announces an SRI for this version, the
       // served bytes must equal the reviewed bytes — same fail-closed rule the
       // client applies on skill install (a re-tagged tarball never ships).
       if (statSync(tgz).size > MAX_SKILL_TGZ) { console.warn(`[site] skill ${c.id}: tgz over ${MAX_SKILL_TGZ >> 20}MB — skipped`); return }
       if (!c.ghRepo && c.s.integrity) {
-        const dg = createHash('sha512').update(readFileSync(tgz)).digest('base64')
-        if (`sha512-${dg}` !== c.s.integrity) { console.warn(`[site] skill ${c.id}: integrity mismatch (re-tag or corrupted artifact) — skipped`); return }
+        const ok = sriOk(readFileSync(tgz), c.s.integrity)
+        if (ok === false) { console.warn(`[site] skill ${c.id}: integrity mismatch (re-tag or corrupted artifact) — skipped`); return }
       }
       // two-pass extraction (S-4/S-5): only listed members are extracted, so
       // node_modules and non-skill noise never touch disk. Named members CAN
@@ -459,7 +599,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       const all = stdout.split('\n').filter((n) => {
         if (!n || n.endsWith('/')) return false
         const segs = n.split('/')
-        return !segs.includes('node_modules') && !segs.includes('..') && !segs.includes('.') && SAFE_MEMBER.test(n)
+        return !segs.includes('node_modules') && !segs.includes('..') && !segs.includes('.') && SAFE_MEMBER.test(n) && !ACTIVE_CONTENT.test(n)
       })
       const members = all.slice(0, MAX_SKILL_MEMBERS)
       if (all.length > MAX_SKILL_MEMBERS) console.warn(`[site] skill ${c.id}: ${all.length} members — capped at ${MAX_SKILL_MEMBERS}`)
@@ -467,14 +607,15 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
         await execFileP('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1', '--', ...members], { timeout: 30_000 })
       rmSync(tgz, { force: true })
       if (!members.length) return
-      const { files: abs, total } = collectFiles(tmp)
+      const { files: abs, total, droppedActive } = collectFiles(tmp)
+      if (droppedActive) console.warn(`[site] skill ${c.id}: ${droppedActive} web-active file(s) withheld from publish`)
       if (!abs.length) return
       if (total > MAX_SKILL_TOTAL_BYTES) { console.warn(`[site] skill ${c.id}: payload over ${MAX_SKILL_TOTAL_BYTES >> 20}MB — skipped`); return }
-      const files = abs.map((f) => relative(tmp, f))
+      const files = abs.map((f) => relative(tmp, f)).sort()
       rmSync(c.dest, { recursive: true, force: true })
       renameSync(tmp, c.dest)
       if (hit) { mkdirSync(cacheDir!, { recursive: true }); rmSync(hit, { recursive: true, force: true }); cpSync(c.dest, hit, { recursive: true }) }
-      entries.push({ name: c.id, version: c.ver, files })
+      entries.push({ name: c.id, version: skillVersion(c), files })
     } catch (err) {
       rmSync(tmp, { recursive: true, force: true })
       console.warn(`[site] skill ${c.id} skipped: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`)

@@ -135,6 +135,17 @@ jobs:
           # (含 false-green 吞掉的 commit 失败)——成熟锚静默冻结的最后兜底
           LAST_DS=$(git -C /tmp/cat log -1 --format=%ct -- digest-state.json 2>/dev/null || echo 0)
           DS_AGE_H=$(( ($(date +%s) - ${LAST_DS:-0}) / 3600 ))
+          # 第四条腿:线上 health.json 的 builtAt 超龄 = site.yml 部署停摆。
+          # catalog/verify 的 dispatch 失败只 echo 记日志、下个 run 才补——
+          # 没有这条腿,站点静默冻结(新裁决/刹车到不了公开面)无人发现。
+          # builtAt 是本次改动新增字段;旧版 health.json 回落 generatedAt。
+          SITE_JSON=$(curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" 2>/dev/null || true)
+          SITE_AGE_H=0
+          if [ -n "$SITE_JSON" ]; then
+            SITE_TS=$(echo "$SITE_JSON" | jq -r '.builtAt // .generatedAt // empty' 2>/dev/null || true)
+            SITE_EPOCH=$(date -d "$SITE_TS" +%s 2>/dev/null || echo 0)
+            if [ "${SITE_EPOCH:-0}" -gt 0 ]; then SITE_AGE_H=$(( ($(date +%s) - SITE_EPOCH) / 3600 )); fi
+          fi
           PENDING=$(npx tsx -e "
             import { CatalogIndex } from './src/schema.ts'
             import { loadVerdicts, latestVerdicts } from './pipeline/verdicts.ts'
@@ -144,7 +155,7 @@ jobs:
             const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
             console.log(unreviewedTargets(idx, seen).length)
           ")
-          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; unreviewed targets: ${PENDING}"
+          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
           REASONS=""
           # LAST*=0 → the file has NO git history (never written). That is
           # bootstrap, not staleness — without the >0 guard a fresh deployment
@@ -157,6 +168,12 @@ jobs:
           fi
           if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
+          fi
+          # 36h ≈ catalog 每天两次 dispatch 的 1.5 个周期——站点健康文件超龄
+          # 说明 dispatch 连败或 site job 挂了;health.json 拉不到(404/网络)
+          # 时 SITE_AGE_H=0 不误报(新站点/未启用 Pages 的仓库同样静默)。
+          if [ "${SITE_AGE_H:-0}" -gt 36 ]; then
+            REASONS="${REASONS}线上 health.json ${SITE_AGE_H}h 未更新——site.yml 部署疑似停摆，catalog/verify 的新数据到不了公开站。检查 Actions 里 site workflow 最近 run；紧急可手动 dispatch（force/skip_skills 参数见 workflow）。"
           fi
           if [ -n "$REASONS" ]; then
             # in:title 限定——正文中提到同样字样的无关 open issue 不能被当成

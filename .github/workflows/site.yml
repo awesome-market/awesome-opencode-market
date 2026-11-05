@@ -6,14 +6,26 @@ name: site
 # (GITHUB_TOKEN events never start workflows), so dispatch is the only channel.
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'bypass the deploy gate (shrink/skill-degraded checks) — emergency republish only'
+        type: boolean
+        default: false
+      skip_skills:
+        description: 'publish catalog without fetching skill tarballs (registry/CDN outage escape hatch)'
+        type: boolean
+        default: false
   workflow_call:      # other pipelines (re-features) reuse this instead of copying the deploy block — one publisher, one gate
+    inputs:
+      force: { type: boolean, default: false }
+      skip_skills: { type: boolean, default: false }
 concurrency: site-deploy
 permissions: {}
 jobs:
   site:
     runs-on: ubuntu-latest
     timeout-minutes: 30   # cold skill fetches are pooled but bounded — a hung npm/curl must not hold the 6h default
-    permissions: { pages: write, id-token: write, contents: read }
+    permissions: { pages: write, id-token: write, contents: read, actions: write }   # actions: prune stale skill-cache entries
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -26,10 +38,12 @@ jobs:
       - run: npm ci
       - run: |
           git fetch origin catalog
-          git show origin/catalog:index.json > index.json
+          # FETCH_HEAD = the ref we just fetched — immune to opportunistic
+          # remote-tracking updates (origin/catalog could lag a failed fetch)
+          git show FETCH_HEAD:index.json > index.json
           # verdict audit surface for detail pages — absent file just means
           # "no verdicts yet" (loadVerdicts tolerates missing paths)
-          git show origin/catalog:ai-verdicts.jsonl > ai-verdicts.jsonl 2>/dev/null || touch ai-verdicts.jsonl
+          git show FETCH_HEAD:ai-verdicts.jsonl > ai-verdicts.jsonl 2>/dev/null || touch ai-verdicts.jsonl
           # the redirection above creates the file even when git show fails —
           # check content like catalog.yml's WF-1 rule instead of letting a
           # bare JSON.parse error stand in for "fetch failed"
@@ -37,9 +51,10 @@ jobs:
             echo "::error::catalog index.json missing or empty — refusing to build"
             exit 1
           fi
-      # S-1: extracted skill docs are version-pinned — cache by <id>@<ver> so
+      # S-1: extracted skill docs are version-pinned — cache by <id>@<pin> so
       # unchanged skills cost zero network on redeploys (rolling cache key;
-      # the build prunes entries no longer referenced).
+      # the build prunes entries no longer referenced). Keys are per-run, so a
+      # final step trims the repo's 10GB cache back to the newest few.
       - uses: actions/cache@v4
         with:
           path: .skill-cache
@@ -48,30 +63,53 @@ jobs:
       - run: npx tsx pipeline/site/build.ts index.json /tmp/site ai-verdicts.jsonl
         env:
           SKILL_CACHE: .skill-cache
+          SKIP_SKILLS: ${{ inputs.skip_skills }}
+          SITE_COMMIT: ${{ github.sha }}
           # absolute base path for 404.html links — served at arbitrary depth
           SITE_BASE: /${{ github.event.repository.name }}/
       # S-3: deploy gate — an empty/broken catalog published is worse than a
       # stale one. Compare against the LIVE site's health.json; if that fetch
       # fails the absolute floor still applies (never gate on network flakiness).
       - name: deploy gate — refuse a catastrophically shrunken catalog
+        env:
+          SITE_FLOOR: ${{ vars.SITE_FLOOR }}
+          FORCE: ${{ inputs.force }}
         run: |
+          if [ "$FORCE" = "true" ]; then echo "deploy gate: skipped (force dispatch)"; exit 0; fi
           curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" -o /tmp/prev-health.json \
             || echo '{"entries":null}' > /tmp/prev-health.json
           npx tsx -e "
-            import {readFileSync} from 'node:fs';
+            import {readFileSync, appendFileSync} from 'node:fs';
             import {healthGate} from './pipeline/site/build.ts';
             let prev;
             try { prev = JSON.parse(readFileSync('/tmp/prev-health.json','utf8')) }
             catch { prev = { entries: null } }   // corrupt live health → degrade to floor-only, like a fetch failure
             const floor = Number(process.env.SITE_FLOOR) || 200;
             const msg = healthGate(prev, JSON.parse(readFileSync('/tmp/site/health.json','utf8')), floor);
-            if (msg) { console.error('deploy gate: '+msg); process.exit(1) }
+            if (msg) {
+              console.error('deploy gate: '+msg);
+              // the alert issue only links the run — put the actual reason in
+              // the step summary so triage doesn't require digging logs
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'deploy gate refused: ' + msg + '\n');
+              process.exit(1)
+            }
             console.log('deploy gate: ok')
           "
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
         id: deploy
+      # per-run cache keys accumulate one full snapshot per deploy — keep the
+      # newest 3, let the rest go (also runs on failure so a broken build
+      # doesn't strand its cache either)
+      - name: prune stale skill caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh cache list --key "skill-cache-" --limit 100 --json id,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[3:] | .[].id' \
+            | while read -r id; do gh cache delete "$id" >/dev/null 2>&1 || true; done
 
   alert:
     needs: site

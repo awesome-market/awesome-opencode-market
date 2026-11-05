@@ -43,5 +43,5 @@ jobs:
   # deploy gate and alert job for free; an inline copy drifted out of all three
   site:
     needs: recompute
-    permissions: { pages: write, id-token: write, contents: read }
+    permissions: { pages: write, id-token: write, contents: read, actions: write, issues: write }   # called workflow's perms are capped by this grant — site.yml needs actions (cache prune) + issues (failure alert) too
     uses: ./.github/workflows/site.yml

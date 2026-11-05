@@ -1060,32 +1060,55 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       npm 插件 pin 批准版 / skill 指 skills catalog /
                       github 插件 "no client install path"——不印装不上的命令）
       skills/index.json + skills/<id>/  HTTP skill catalog：
-                      npm 条目 = npm view "<name>@<latestVersion>" dist.tarball
-                      ——钉到批准版（绝不落 pendingUpdate 文件）；
+                      npm 条目 = packument GET $npm_config_registry/<name>
+                      （默认 registry.npmjs.org；@scope 名 %2F 编码）
+                      取 versions[<latestVersion>].dist.tarball——钉到批准版
+                      （绝不落 pendingUpdate 文件；每包名一次请求替代
+                      逐 spec 的 npm view 进程 spawn）；
                       github 条目 = codeload <repo>/tar.gz/<commit sha>——钉到
                       扫描过的 source.version（版本标记=字节标记；
                       无 sha 的遗产条目退回 HEAD+modifiedAt）；
                       两者都 latestVersion/modifiedAt/sha 为空 → 跳过；
-                      <id>@<ver> 缓存（actions/cache 滚动键）——未变技能零网络，
+                      <id>@<pin> 缓存（actions/cache 滚动键，pin=SRI 优先
+                      ——re-tag 同版本换字节必换键）——未变技能零网络，
                       失效键自动 prune；id 碰撞 → -x 确定性后缀；
                       拉取走 SKILL_POOL 限界 worker 池（S-14——冷缓存下
-                      串行 npm view+curl 会超时，pool 化才跑得完）
-                      解包走两段式：tzf 列表 → 仅按名提取 .md 成员
-                      （symlink 成员不创建=无穿越原语；node_modules 段滤除）
-      skills.html     技能浏览页（id+版本+文件链接）
-      removed.html    墓碑页（disappearedAt 倒序最新 300——消失的插件不是裸 404）
-      404.html        自定义 404——解释"可能已下架"，回链 removed/主目录
-      health.json     {ok, entries(可见数), skills:{candidates,landed,degraded},
-                      generatedAt, sha256, bytes}
+                      串行拉取会超时，pool 化才跑得完）；
+                      curl 加固：--proto-redir '=https'（重定向不降级 http）、
+                      --max-filesize 48MB（下载期截断）、--retry 2；
+                      SRI 按公告算法校验（sha1/256/384/512 都认；解析不了
+                      的 integrity 视为不可验证→放行，与客户端同契约）；
+                      解包走两段式：tzf 列表 → 按名提取全部 payload 成员
+                      （symlink 成员不创建=无穿越原语；node_modules 段滤除；
+                      .html/.htm/.xhtml/.shtml/.svg/.js/.mjs/.cjs 活性网页
+                      类型双闸滤除——市场自有 github.io 域不托管可执行内容，
+                      客户端 npm tarball 安装路径不受影响）；
+                      files[] 排序保证输出逐字节稳定
+      skills.html     技能浏览页（id+版本+文件链接；npm skill 的 version 串
+                      = <semver>+<integrity短哈希>——opencode 按 version
+                      缓存，同版本 re-tag 必须让缓存失效）
+      removed.html    墓碑页（disappearedAt 倒序最新 300，超出注明
+                      index.json removed[]——消失的插件不是裸 404）
+      404.html        自定义 404——绝对 site-base 链接（Pages 在任意深度
+                      服务它），解释"可能已下架"，回链 removed/主目录
+      privacy.html    通过 page() 渲染——页脚有入口（up 前缀随页面深度）
+      health.json     {ok, entries(可见数·仅信息), total(全量含 pending),
+                      skills:{candidates,landed,degraded},
+                      generatedAt, builtAt, commit, sha256, bytes}
                       ——sha256 覆盖 index.json 序列化字节，客户端先拉它再决定
                       要不要下全量 index（moved hash → 下载+逐字节验证）；
-                      degraded=有候选但落地不足一半（registry 抖动≠真空目录）
-      privacy.html
-  → deploy gate：healthGate(live prev, cur)——entries<200 绝对地板
-     或 <上次发布 50% → 失败不部署（拉不到 live health 只退绝对地板，
+                      degraded=有候选但落地不足一半（registry 抖动≠真空目录）；
+                      builtAt/commit 供 digest watchdog 判站点部署新鲜度
+  → deploy gate：healthGate(live prev, cur)——按 total（含 pending）比
+     绝对地板(SITE_FLOOR repo variable，默认 200)与 <上次发布 50%；
+     只卡数据面真实缩水——批量刹车把可见数拉低是合法状态必须放行，
+     否则刹车永远到不了公开站（拉不到 live health 只退绝对地板，
      网络抖动不拦发布）；
-     skills degraded 且 candidates≥10 → 拦（抓取故障不该发半空目录）
+     skills degraded 且 candidates≥10 → 拦（抓取故障不该发半空目录）；
+     workflow_dispatch inputs：force=绕过 gate 应急重发 /
+     skip_skills=跳过技能抓取发空技能目录（registry 大面积故障逃生门）
   → deploy-pages → github.io
+  → 收尾：prune skill-cache-* 只留最新 3 份（per-run 键累积，10GB 配额共享 npm）
 alert job：失败查重——已有 pipeline-alert open issue 则评论追加，不轰炸
 ```
 
@@ -1256,7 +1279,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | catalog publish 后 | catalog.yml notify+status | catalog-branch（共享） | 投稿评论/关单（含 dead 终态）、状态评论 edit-in-place |
 | issue [review]/[concern] opened/**edited**/labeled + 评论 | concern.yml | verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时）、review 标签、关单 |
 | hourly :40 + catalog/verify 非取消完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
-| catalog/verify push 后 dispatch | site.yml | site-deploy | Pages 站点（单发布者） |
+| catalog/verify push 后 dispatch（+ 手动 force/skip_skills） | site.yml | site-deploy | Pages 站点（单发布者） |
 | cron 21:15 UTC + dispatch | digest.yml | catalog-branch（共享） | digest/*.md、digest-state.json |
 | launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例；>2h 僵锁自动回收 D-11） | ai-verdicts.jsonl |
 | 手动兜底 | bin/publish-digest.sh | — | digest/*.md、digest-state.json |
