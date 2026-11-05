@@ -131,7 +131,9 @@ export function mergeEntries(
       // remote already RELEASED our held version between our fetch and this
       // merge (a verdict/remerge landed first). Resurrecting the hold would
       // re-pend a released version — adopt the remote's released display
-      // state instead (R-8).
+      // state instead (R-8). Runs before the pending gate below: ours may be
+      // in the transitional pending+pu shape (a brake fired mid-run) while
+      // remote legitimately released the same version.
       delete out.pendingUpdate
       out.latestVersion = prev.latestVersion
       out.publishedAt = prev.publishedAt
@@ -142,17 +144,29 @@ export function mergeEntries(
       out.integrity = prev.integrity
       out.approval = prev.approval
       out.approvalReason = prev.approvalReason
-    } else if (e.pendingUpdate) {
-      out.pendingUpdate = e.pendingUpdate
-      // same held version on both sides → keep the remote verification slot
-      // (a verify-merge may have written into it after ours was built)
-      if (prev?.pendingUpdate?.version === e.pendingUpdate.version) {
-        out.pendingUpdate = { ...e.pendingUpdate, verification: prev.pendingUpdate.verification }
+    } else if (out.approval !== 'pending') {
+      if (e.pendingUpdate) {
+        out.pendingUpdate = e.pendingUpdate
+        // same held version on both sides → keep the remote verification slot
+        // (a verify-merge may have written into it after ours was built)
+        if (prev?.pendingUpdate?.version === e.pendingUpdate.version) {
+          out.pendingUpdate = { ...e.pendingUpdate, verification: prev.pendingUpdate.verification }
+        }
+      } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion) {
+        // remote holds a version we never saw → keep the hold (unless ours just
+        // released that exact version — then the hold is resolved, don't resurrect)
+        out.pendingUpdate = prev.pendingUpdate
       }
-    } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion) {
-      // remote holds a version we never saw → keep the hold (unless ours just
-      // released that exact version — then the hold is resolved, don't resurrect)
-      out.pendingUpdate = prev.pendingUpdate
+    } else if (out.pendingUpdate) {
+      // a pendingUpdate only exists ON A DISPLAYED entry — for a pending
+      // entry latestVersion IS the candidate, so a leftover hold is always
+      // an older version that would shadow the real one on every review
+      // surface (the pending+pu inverted state: a brake on the displayed
+      // version left the hold behind, then upstream bumped past it and the
+      // stale hold starved the new candidate permanently). Dropping it
+      // demotes the version back to the normal pending path — its verdicts
+      // still apply via the displayed slot, nothing is lost (R-9).
+      delete out.pendingUpdate
     }
 
     // per-version layer (name@version+host-matched) — under hold semantics

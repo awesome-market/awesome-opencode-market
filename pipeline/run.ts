@@ -300,8 +300,10 @@ export async function run(opts: RunOptions = {}) {
       // or failed verification with retries exhausted) or when a HUMAN
       // verdict already exists for the newer upstream version. Pinned entries
       // refresh registry-level metadata only — the tarball fetch/scan and
-      // repo-evidence probes for the non-held version are skipped entirely;
-      // distTags.latest still records the true upstream version.
+      // repo-evidence probes for the non-held version are skipped entirely
+      // (a ruleset upgrade still re-scans the HELD tarball in place — a
+      // release must not be judged by retired rules); distTags.latest still
+      // records the true upstream version.
       const heldPrev = prev && prev.approval !== 'pending' && pk.latest !== prev.latestVersion && prev.pendingUpdate
         ? prev : null
       if (heldPrev) {
@@ -313,8 +315,34 @@ export async function run(opts: RunOptions = {}) {
           const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
           if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
           const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
+          // ruleset staleness on a pinned hold: the held version never
+          // re-enters the full scan path, so a ruleset upgrade would leave it
+          // permanently judged by retired rules — re-scan the HELD tarball in
+          // place. verification/heldAt/verdict annotations stay untouched
+          // (keyed to the version, not the ruleset); new redFlags surface via
+          // merge's skipIfFlagged → the release gate still holds.
+          let puCaps = heldPin.capabilities
+          if (puCaps.rulesetVersion !== RULESET_VERSION) {
+            const url = pk.tarballOf[heldPin.version]
+            if (url) {
+              try {
+                const r = await scanTarball(await fetchTarball(url, { fetchFn: f }))
+                puCaps = {
+                  scannedAt: now,
+                  rulesetVersion: RULESET_VERSION,
+                  findings: r.findings.map(x => `${x.rule}:${x.file}`),
+                  redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
+                }
+              } catch (e) {
+                console.warn(`hold re-scan failed ${cand.name}@${heldPin.version}:`, (e as Error).message)
+              }
+            }
+          }
           entries.push({
             ...heldPrev,
+            ...(puCaps !== heldPin.capabilities
+              ? { pendingUpdate: { ...heldPin, capabilities: puCaps } }
+              : {}),
             distTags: pk.distTags,
             modifiedAt: pk.modifiedAt,
             maintainers: pk.maintainers,

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { verifyPackage, coerceTarget, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
-import { planTargets, verifyTargetOf, verifyPartsOf, shard } from '../pipeline/verify/plan.ts'
+import { planTargets, verifyTargetOf, verifyPartsOf, verifyQueued, shard } from '../pipeline/verify/plan.ts'
 import { VerifyResultFile } from '../pipeline/verify/merge.ts'
 import { judgeTuiPane } from '../pipeline/verify/tui.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
@@ -144,6 +144,11 @@ describe('verify/plan', () => {
     expect(got.map(t => [t.name, t.parts])).toEqual([
       ['du', ['plugin', 'skill']], ['ls', ['skill']], ['sk', ['skill']],
     ])
+    // D-R: the shared predicate must reject no-plugin/no-skill entries too —
+    // digest §④ counts verifyQueued, and they must never drift apart
+    expect(verifyQueued(orphan)).toBe(false)
+    expect(verifyQueued(skill)).toBe(true)
+    expect(verifyQueued(dual)).toBe(true)
   })
   it('skips verified, flagged, and version-less entries', () => {
     const verified = entry({ name: 'a', verification: verf('verified') })

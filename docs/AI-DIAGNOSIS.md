@@ -19,7 +19,8 @@
 >
 > v3.2 复审二轮修正（修掉一个真实饿死 bug）：
 > - verdict 成熟判据从固定 24h 改为 **"已上最近一期日报"**
->   （`digest-state.json` 的 lastDigestAt）——固定 24h + 单槽
+>   （`digest-state.json` 的 `announced` 集合成员——上过日报的那一行
+>   才算；`lastDigestAt` 只作锚点记录）——固定 24h + 单槽
 >   pendingUpdate 会让高频发版条目永久饿死
 > - **应用顺序钉死**：run 开头先对 old index 应用成熟 verdict 再跑
 >   发现比对——否则新版顶替 pendingUpdate 会丢弃"已审未放"版本数据
@@ -89,7 +90,7 @@ verify run（钉装 pendingUpdate.version/latestVersion 测试）
 catalog run 读 verdicts（顺序钉死：run 开头先对 old index 应用
 成熟 verdict，再跑发现比对——否则新版顶替 pendingUpdate 会把
 "已审未放"的版本数据丢弃，高频发版条目永久饿死）
-   ├─ pass（verdict.at ≤ digest-state.json 的 lastDigestAt）
+   ├─ pass（akey(v) ∈ digest-state.json 的 announced——行上过日报）
    │     → approved / pendingUpdate 释放为展示版
    │     ※ "先上日报再上架"= 真实否决窗；日报不跑 = 自然 fail-closed
    │     ※ release gate：目标版 verification.status==='verified'
@@ -103,14 +104,19 @@ catalog run 读 verdicts（顺序钉死：run 开头先对 old index 应用
 
 人工通道
    ├─ 投稿 issue：/approve（owner）或勾 submission:approved（triage+）
-   └─ 非投稿条目：日报 issue 评论 /approve <name>，或直接推 verdicts 文件
+   └─ 非投稿条目：[review] 审核单打 verdict 标签或裸评论 /approve，或直接推 verdicts 文件
    → approve 写入时用 npm view 解析当下 latest 再落 verdict（防版本漂移）
 
-日报（本地 cron 21:00，固定 issue 盖楼；lastDigestAt=本期发布时间）
-   ① 明日上架（当前目标版已有 pass verdict 且 verification 过——
-      本期发布后这些 verdict 全部成熟，下趟 run 释放）
-   ② pending 中（等 AI 审 / 等 verify / pass 已成熟但 verify 未过）
-   ③ concern 挂起（等人工）
+日报（digest.yml 21:15 UTC，每日一文件 digest/YYYY-MM-DD.md；
+   lastDigestAt=锚点记录，成熟看 announced 集合）
+   ① 今日新放行（本期新公告的 pass verdicts——入 announced 集，
+      下趟 run 释放；不在 index 的名字标 ⚠️不在目录，被更新的
+      concern 刹车的标 ⛔）
+   ② 审核队列积压（held，最老优先，带相位标：待验证/验证失败/
+      待评审/已裁决·待日报公告/已公告·待放行闸/已打标 concern）
+   ③ Concerns（本期新公告的 concern verdicts）
+   ④ 验证积压（与 planTargets 共享 verifyQueued 谓词）
+   ⑤ 评审积压（与 diagnose/watchdog 共享 unreviewedTargets 谓词）
 ```
 
 ## 4. schema 变更（src/schema.ts）
@@ -145,8 +151,8 @@ per-version 数据，这是本设计在 merge.ts 里的手术核心。
   同 `name@version` 多 verdict 取 `at` 最新者生效
 - `sha` = 被审 tarball 的 sha——同 sha re-tag/重发时复用判词
   （同内容重审零收益；无 sha 字段无法证明"同内容"）
-- `pass` 需**已出现在最近一期日报**（`at ≤ digest-state.json 的
-  lastDigestAt`）才生效；`concern` 立即生效；**human pass 同样
+- `pass` 需**已出现在最近一期日报**（`akey(v) ∈ digest-state.json
+  的 announced`）才生效；`concern` 立即生效；**human pass 同样
   需上日报**——日报是所有放行的唯一完整预告面
 - `digest-state.json` 缺文件 → `lastDigestAt` 视为 -∞ → 全冻结
   （fail-closed；首期日报建立 bootstrap）
@@ -340,7 +346,7 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - 读 ai-verdicts.jsonl（**应用时机钉死：run 开头先对 old index 应用
   成熟 verdict，再跑发现比对**——反序会让"已审未放"版本数据被新
   pendingUpdate 顶替丢弃，高频发版条目永久饿死）
-  - `pass` 仅 `at ≤ lastDigestAt`（已上最近一期日报）生效；
+  - `pass` 仅 `akey(v) ∈ announced`（行已上过日报）生效；
     `concern` 立即生效；日报不跑 = fail-closed 冻结
   - verdict 按 `name@version` 键控：v1.3 的 pass 不会误放 v1.4；
     旧 verdict 自然失效，文件 append-only 无清理需求；
@@ -391,10 +397,11 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   需显式带 `HF_HOME` env 才找得到缓存（不继承 shell env）
 - 容量诚实账：Ornith 实测 ~21 tok/s，单件全量审约 1-3 min →
   每小时数十件上限；积压不丢——在日报 ② 排队显示深度，自然背压
-- `pipeline/publish-digest.ts`：日报三节（明日上架/pending 中/concern
-  挂起）+ 发布时写 `digest-state.json`（`lastDigestAt`）到 catalog
-  分支——run.ts 据此判 verdict 成熟度；digest 必须先于承担释放的
-  catalog run 发布（21:00 日报 → 03:17 跑批）
+- `pipeline/ai/digest.ts`：日报五节（新放行/held 积压/concerns/
+  验证积压/评审积压）+ 发布时写 `digest-state.json`（`announced`
+  集合 + `lastDigestAt` 锚点）到 catalog 分支——run.ts 据此判
+  verdict 成熟度；digest 必须先于承担释放的 catalog run 发布
+  （21:15 日报 → 03:17 跑批）
 - 主审 LLM endpoint：本机 omlx（OpenAI 兼容，`http://localhost:8001/v1`），
   模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（已实测可用，
   ~21 tok/s、262k 上下文）；`AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL`
@@ -473,6 +480,6 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
       `plugins` spec → reload；**列表/搜索/详情过滤 pending**
 - [x] 人批准按 npm view 解析当下版本落 verdict（含预批准）
-- [x] 日报三节齐全；非投稿条目可在日报 issue `/approve <name>`
+- [x] 日报五节齐全；非投稿条目在 [review] 审核单打标签裁决
 - [x] 存量条目 `approval: legacy` 正常展示
 - [x] 断网时段静默，恢复补跑

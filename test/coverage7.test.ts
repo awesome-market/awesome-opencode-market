@@ -39,7 +39,7 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
   version: '1', generatedAt: 'x', categories: {}, plugins, removed: [],
 })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
-  name: 'pkg', version: '1.0.0', verdict: 'pass', at: 't', source: 'ai', ...over,
+  name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 
 describe('l05Score', () => {

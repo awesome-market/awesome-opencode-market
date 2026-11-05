@@ -2,7 +2,7 @@
  *  inline node -e. Covers the label / bare-comment / arg-comment / form
  *  channels plus the divergence + sanitization rules. */
 import { describe, it, expect } from 'vitest'
-import { resolveVerdictEvent, titleTarget, splitSpec } from '../pipeline/human-verdict.ts'
+import { resolveVerdictEvent, titleTarget, splitSpec, isDupVerdict } from '../pipeline/human-verdict.ts'
 import type { VerdictEvent } from '../pipeline/human-verdict.ts'
 
 const ev = (over: Partial<VerdictEvent> = {}): VerdictEvent => ({
@@ -159,5 +159,48 @@ describe('form channel (issues opened/edited)', () => {
   })
   it('missing package → noresolve', () => {
     expect(resolveVerdictEvent(form('opened', '### 操作 / Action\n\n拦截 (concern)')).skip).toBe('noresolve')
+  })
+})
+
+describe('case-insensitive commands + isrepo output (HV-6/HV-7)', () => {
+  it('/Approve and /CONCERN parse — phone autocapitalize is a real channel', () => {
+    expect(resolveVerdictEvent(ev({ commentBody: '/Approve' }))).toMatchObject({ name: 'pkg', verdict: 'pass' })
+    const r = resolveVerdictEvent(ev({ commentBody: '/CONCERN looks evil' }))
+    expect(r.verdict).toBe('concern')
+    expect(r.reason).toBe('looks evil')
+  })
+  it('isrepo=1 emitted for owner/repo targets; absent for npm names', () => {
+    expect(resolveVerdictEvent(ev({ commentBody: '/concern o/r sus' })).isrepo).toBe('1')
+    expect(resolveVerdictEvent(ev({ commentBody: '/concern pkg sus' })).isrepo).toBeUndefined()
+    // labeled path on a repo-titled review also emits it
+    expect(resolveVerdictEvent(ev({ event: 'issues', action: 'labeled', label: 'verdict:pass', issueTitle: '[review] o/r' })).isrepo).toBe('1')
+  })
+})
+
+describe('isDupVerdict — semantic dedupe (HV-2)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  it('identical latest human line → dup', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'ok', source: 'human', at: 't1' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', 'ok')).toBe(true)
+  })
+  it('latest line is a DIFFERENT verdict → not dup (flip must record)', () => {
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'concern', reason: 'r', source: 'human' }),
+      L({ name: 'p', version: '1', verdict: 'pass', reason: 'ok', source: 'human' }),
+    ]
+    expect(isDupVerdict(lines, 'p', '1', 'concern', 'r')).toBe(false)
+  })
+  it('AI verdict on top does NOT dedupe a human write (source = stickiness signal)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', reason: 'r', source: 'ai' })]
+    expect(isDupVerdict(lines, 'p', '1', 'concern', 'r')).toBe(false)
+  })
+  it('different version key → not dup; malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'p', version: '2', verdict: 'pass', reason: '', source: 'human' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', '')).toBe(false)
+    expect(isDupVerdict(lines, 'p', '2', 'pass', '')).toBe(true)
+  })
+  it('reason-less records (undefined) match empty reason', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', '')).toBe(true)
   })
 })

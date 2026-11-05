@@ -40,6 +40,10 @@ export function retryable(v: PluginEntry['verification'] | undefined, now: Date)
 export function verifyQueued(e: PluginEntry, now = new Date()): boolean {
   const t = verifyTargetOf(e)
   if (!t.version || t.flagged) return false
+  // entries with no verifiable payload are never queued — the predicate must
+  // match planTargets' parts filter or the digest §④ backlog over-counts
+  const parts = verifyPartsOf(e)
+  if (!parts.includes('plugin') && !parts.includes('skill')) return false
   const ver = e.pendingUpdate ? e.pendingUpdate.verification : e.verification
   return t.unverified || retryable(ver, now)
 }

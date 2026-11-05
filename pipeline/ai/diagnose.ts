@@ -274,8 +274,6 @@ export function unreviewedTargets(
   opts: { now?: string; force?: boolean } = {},
 ): CatalogIndex['plugins'] {
   const now = Date.parse(opts.now ?? new Date().toISOString())
-  const heldAt = (e: CatalogIndex['plugins'][number]) =>
-    Date.parse(e.pendingUpdate?.heldAt ?? e.firstSeenAt)
   return index.plugins.filter(e => {
     if (names && !names.has(e.name)) return false
     const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
@@ -286,9 +284,36 @@ export function unreviewedTargets(
     // reviewing without install evidence wastes tokens and the release gate
     // requires verified anyway. Past 48h: degraded review proceeds.
     const vf = e.pendingUpdate?.verification ?? e.verification
-    if (vf.status === 'unverified' && now - heldAt(e) < VERIFY_WAIT_MS) return false
+    if (vf.status === 'unverified' && now - candidateHeldAt(e) < VERIFY_WAIT_MS) return false
     return true
-  }).sort((a, b) => (heldAt(a) || 0) - (heldAt(b) || 0))
+  }).sort((a, b) => (candidateHeldAt(a) || 0) - (candidateHeldAt(b) || 0))
+}
+
+/** "When did THIS version become a review target" — the defer/sort clock:
+ *  pu.heldAt for held versions; for a pending entry the candidate is
+ *  latestVersion itself, whose scan time is when we first processed it.
+ *  firstSeenAt is entry-level and stays fixed across version bumps, so it
+ *  must stay only the LAST fallback (an unparseable stamp falls through to
+ *  the next-best clock; all-NaN propagates as NaN = treated as old). */
+export function candidateHeldAt(e: CatalogIndex['plugins'][number]): number {
+  return Date.parse(e.pendingUpdate?.heldAt ?? '')
+    || Date.parse((e.pendingUpdate?.capabilities ?? e.capabilities).scannedAt ?? '')
+    || Date.parse(e.firstSeenAt)
+}
+
+/** Latest verdict per name\0sha — tarball-content reuse must apply the
+ *  NEWEST judgment on those bytes: scanning the file in order (`find`)
+ *  returns the OLDEST line, so a pass that was later overturned by a concern
+ *  on the same sha could silently resurrect via version reuse. */
+export function latestShaVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
+  const m = new Map<string, AiVerdict>()
+  for (const v of verdicts) {
+    if (!v.sha) continue
+    const k = `${v.name}\0${v.sha}`
+    const cur = m.get(k)
+    if (!cur || v.at >= cur.at) m.set(k, v)
+  }
+  return m
 }
 
 export async function main(
@@ -386,16 +411,17 @@ export async function main(
     flagged: boolean
     twin?: AiVerdict | undefined
   }
+  const bySha = latestShaVerdicts(allVerdicts)
   const works: Work[] = await mapPool(candidates, 8, async e => {
     const ver = verOf(e) ?? '?'
     const caps = e.pendingUpdate?.capabilities ?? e.capabilities
     const vf = e.pendingUpdate?.verification ?? e.verification
     const sha = await shaFor(e.name, verOf(e))
-    // same tarball under another version → reuse the existing judgment
-    // (a re-tag/re-publish of identical content carries zero new signal)
-    const twin = sha
-      ? allVerdicts.find(x => x.name === e.name && x.sha === sha && x.version !== verOf(e))
-      : undefined
+    // same tarball under another version → reuse the NEWEST judgment on
+    // those bytes (a re-tag/re-publish of identical content carries zero new
+    // signal — but a pass overturned since must not resurrect)
+    const t = sha ? bySha.get(`${e.name}\0${sha}`) : undefined
+    const twin = t && t.version !== verOf(e) ? t : undefined
     return { e, ver, material: reviewMaterial(e), sha, vf, flagged: caps.redFlags.length > 0, twin }
   })
 

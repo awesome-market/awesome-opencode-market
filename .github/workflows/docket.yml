@@ -1,7 +1,12 @@
 name: review-docket
 # scope: prod-only — review queue automation
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '只打印动作，不建/改/关 issue'
+        type: boolean
+        default: false
   workflow_run:
     workflows: [catalog, verify]
     types: [completed]
@@ -14,11 +19,15 @@ jobs:
   # here so the flow works on a fresh repo.
   docket:
     # a partially-failed verify still left valid catalog data — syncing the
-    # docket against it is safe; only a cancelled run means "nothing landed"
+    # docket against it is safe; only a cancelled run means "nothing landed".
+    # Scope guard: a fork's hourly cron would churn labels/issues against a
+    # catalog branch it doesn't have.
     if: >-
-      github.event_name != 'workflow_run'
-      || github.event.workflow_run.conclusion != 'cancelled'
+      (github.event_name != 'workflow_run'
+        || github.event.workflow_run.conclusion != 'cancelled')
+      && (github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —
     # two parallel runs both see an empty open-set and double-create issues
     concurrency: review-docket
@@ -52,4 +61,32 @@ jobs:
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next tick"; exit 0; }
           git show origin/catalog:index.json > /tmp/index.json
           git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || touch /tmp/ai-verdicts.jsonl
-          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl
+          git show origin/catalog:digest-state.json > /tmp/digest-state.json || touch /tmp/digest-state.json
+          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ github.event.inputs.dry == true && '--dry' || '' }} \
+            --digest-state /tmp/digest-state.json
+
+  # the ONLY failure surface for the review-issue sync — without it a broken
+  # docket silently leaves stale [review] issues open while the digest keeps
+  # linking maintainers to them
+  alert:
+    needs: [docket]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { issues: write }
+    steps:
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "docket workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create \
+              --title "docket workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the review-docket workflow failed. [review] issues may be stale."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

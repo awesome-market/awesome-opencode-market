@@ -817,6 +817,7 @@ describe('verdicts + merge + misc uncovered arms', () => {
   it('mergeEntries: flagged + verified → skipped demotion both layers', () => {
     const prev = e({ verification: { status: 'verified' } })
     const fresh = [e({
+      approval: 'approved',   // a pendingUpdate only lives on a displayed entry (R-9)
       verification: { status: 'verified' },
       capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] },
       pendingUpdate: {
@@ -1393,6 +1394,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
   it('sec-delta on a held entry attaches to pendingUpdate.capabilities', () => {
     const prev = e({ capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] } })
     const fresh = e({
+      approval: 'approved',   // a pendingUpdate only lives on a displayed entry (R-9)
       pendingUpdate: {
         version: '2.0.0', heldAt: 't',
         capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: ['prepare-script:p/package.json'], redFlags: [] },

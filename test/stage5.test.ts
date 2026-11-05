@@ -51,7 +51,7 @@ describe('renderDigest', () => {
       ]),
       verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md.indexOf('`older` v1.0 — ai:concern')).toBeLessThan(md.indexOf('`newer` v2.0 — ai:needs-human'))
+    expect(md.indexOf('`older` v1.0 · 待验证 — ai:concern')).toBeLessThan(md.indexOf('`newer` v2.0 · 待验证 — ai:needs-human'))
   })
   it('late-pushed verdict with old `at` still surfaces — seen-set, not timestamp window', () => {
     // the audit hole: a verdict dated BEFORE lastDigestAt but absent from the
@@ -62,7 +62,7 @@ describe('renderDigest', () => {
       prev: digestStateOf('2026-01-01T00:00:00Z', []),
       now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md).toContain('| late |')
+    expect(md).toContain('| late ⚠️不在目录 |')
   })
   it('same-day re-render stays cumulative (dayAnnounced)', () => {
     const morning = v({ name: 'morning', at: '2026-01-03T10:00:00Z' })
@@ -72,8 +72,8 @@ describe('renderDigest', () => {
       dayAnnounced: [akey(morning)], announced: [akey(morning)],
     }
     const md = renderDigest({ index: idx([]), verdicts: [morning, evening], prev, now: new Date('2026-01-03T21:00:00Z') })
-    expect(md).toContain('| morning |')   // re-appears: it was announced TODAY
-    expect(md).toContain('| evening |')
+    expect(md).toContain('| morning ⚠️不在目录 |')   // re-appears: it was announced TODAY
+    expect(md).toContain('| evening ⚠️不在目录 |')
   })
   it('future-dated verdict is reported, not silently frozen', () => {
     const md = renderDigest({
@@ -108,7 +108,74 @@ describe('renderDigest', () => {
   })
   it('missing digest-state = bootstrap announces everything seen', () => {
     const md = renderDigest({ index: idx([]), verdicts: [v({ at: '2001-01-01T00:00:00Z' })], prev: null, now: new Date('2026-01-03') })
-    expect(md).toContain('| pkg |')
+    expect(md).toContain('| pkg ⚠️不在目录 |')
+  })
+  it('D-E ghost verdict: a name absent from index is announced but marked', () => {
+    const md = renderDigest({
+      index: idx([]), verdicts: [v({ name: 'gone-pkg' })],
+      prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('gone-pkg ⚠️不在目录')
+  })
+  it('D-V a pass superseded by a newer concern is marked, not implied as releasing', () => {
+    const p = v({ name: 'flop', at: '2026-01-03T10:00:00Z' })
+    const c = v({ name: 'flop', verdict: 'concern', source: 'human', at: '2026-01-03T12:00:00Z', reason: 'changed mind' })
+    const md = renderDigest({ index: idx([]), verdicts: [p, c], prev: null, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).toContain('flop ⚠️不在目录 ⛔已被更新的 concern 刹车')
+    expect(md).toContain('| flop ⚠️不在目录 | 1.1.0 | human |')   // concern row still lists
+  })
+  it('D-F reason text cannot inject markdown links into the committed file', () => {
+    const md = renderDigest({
+      index: idx([]),
+      verdicts: [v({ verdict: 'concern', reason: 'see [click](https://evil.example/x)' })],
+      prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('\\[click\\]')
+    expect(md).not.toContain('[click](https://evil.example')
+  })
+  it('D-K a duplicated verdict line renders once', () => {
+    const ver = v({ name: 'dup' })
+    const md = renderDigest({ index: idx([]), verdicts: [ver, ver], prev: null, now: new Date('2026-01-03T21:00:00Z') })
+    expect((md.match(/\| dup /g) ?? []).length).toBe(1)
+  })
+  it('D-G held list caps at 50 oldest + truncation note', () => {
+    const many = Array.from({ length: 60 }, (_, i) => entry({
+      name: `h${String(i).padStart(3, '0')}`, approval: 'pending',
+      firstSeenAt: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+    }))
+    const md = renderDigest({ index: idx(many), verdicts: [], prev: null, now: new Date('2026-01-31T21:00:00Z') })
+    expect(md).toContain('审核队列积压（held — 60）')
+    expect(md).toContain('还有 10 条')
+  })
+  it('D-H held lines carry the phase tag (which lever applies)', () => {
+    const pu = (over: object = {}) => ({
+      version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'unverified' as const }, heldAt: '2026-01-01T00:00:00Z', ...over,
+    })
+    const ver = v({ name: 'passed', version: '2.0' })
+    const md = renderDigest({
+      index: idx([
+        entry({ name: 'waiting-verify', approval: 'approved', pendingUpdate: pu() }),
+        entry({ name: 'needs-review', approval: 'pending', verification: { status: 'verified' }, firstSeenAt: '2025-12-01T00:00:00Z' }),
+        entry({ name: 'passed', approval: 'approved', pendingUpdate: pu({ verification: { status: 'verified' } }) }),
+      ]),
+      verdicts: [ver],
+      prev: digestStateOf('2026-01-02T21:00:00Z', [ver]),  // already announced
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('`waiting-verify` v2.0 · 待验证')
+    expect(md).toContain('`needs-review` (未发布过) · 待评审')
+    expect(md).toContain('`passed` v2.0 · 已公告·待放行闸')
+  })
+  it('D-C pendingReview shares unreviewedTargets — unverified <48h held is deferred, not counted', () => {
+    // 'young' is held+unverified but held <48h → diagnose defers to verify;
+    // counting it as review backlog inflates §⑤ vs what diagnose picks up
+    const young = entry({ name: 'young', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-03T12:00:00Z' })
+    const reviewable = entry({ name: 'old', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-01T00:00:00Z' })
+    const md = renderDigest({
+      index: idx([young, reviewable]), verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('pending review — 1')
   })
 })
 

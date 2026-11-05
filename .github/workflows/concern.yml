@@ -27,13 +27,18 @@ jobs:
         && github.event.sender.login != 'github-actions[bot]')
       || (github.event_name == 'issue_comment' && github.event.action == 'created'
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        && (startsWith(github.event.comment.body, '/concern') || startsWith(github.event.comment.body, '/approve'))))
+        && (github.event.comment.body == '/concern' || startsWith(github.event.comment.body, '/concern ')
+          || github.event.comment.body == '/Concern' || startsWith(github.event.comment.body, '/Concern ')
+          || github.event.comment.body == '/approve' || startsWith(github.event.comment.body, '/approve ')
+          || github.event.comment.body == '/Approve' || startsWith(github.event.comment.body, '/Approve '))))
     runs-on: ubuntu-latest
     # NOT catalog-branch: every verdict event must land, so bursts queue
     # per-issue instead of cancelling each other; the retry loop in
     # bin/catalog-append.sh absorbs cross-issue write races.
-    concurrency: verdict-${{ github.event.issue.number }}
-    permissions: { issues: write, contents: write }
+    # namespaced per-workflow: submit.yml's verdict job shares the bare
+    # `verdict-N` group name otherwise and the two would needlessly serialize
+    concurrency: concern-verdict-${{ github.event.issue.number }}
+    permissions: { issues: write, contents: write, actions: write }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -90,6 +95,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
+          gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
+          gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
           gh issue comment "$ISSUE" --body "无法解析裁决目标——用法：① [review] 单上勾 \`verdict:pass\`/\`verdict:concern\` 标签，或裸评论 \`/approve\`、\`/concern 理由\`；② 任意 issue 评论 \`/concern <pkg>[@ver] [理由]\`；③ 开 [concern] 表单。" || true
       - name: target must exist in catalog index
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == ''
@@ -103,6 +110,8 @@ jobs:
           git show origin/catalog:index.json > /tmp/index.json
           if ! node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$NAME"; then
             echo "exists=0" >> "$GITHUB_OUTPUT"
+            gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
+            gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
             gh issue comment "$ISSUE" --body "⚠️ \`$NAME\` 不在 catalog 索引中——未写入 verdict。检查包名或先提交收录。" || true
             exit 0
           fi
@@ -115,6 +124,7 @@ jobs:
           VER: ${{ steps.v.outputs.ver }}
           VERDICT: ${{ steps.v.outputs.verdict }}
           REASON: ${{ steps.v.outputs.reason }}
+          ISREPO: ${{ steps.v.outputs.isrepo || '0' }}
           ACTOR: ${{ github.actor }}
           ISSUE: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -128,23 +138,28 @@ jobs:
           INFO=$(node -e '
             const i = JSON.parse(require("fs").readFileSync("/tmp/index.json", "utf8"))
             const e = i.plugins.find(p => p.name === process.argv[1])
-            const isRepo = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(process.argv[1]) && !process.argv[1].startsWith("@")
+            const isRepo = process.argv[3] === "1"
             let v = process.argv[2]
             if (isRepo) v = ""
             if (!v && !isRepo) v = (e?.pendingUpdate?.version ?? e?.latestVersion) || ""
+            // vstatus keyed to the RESOLVED slot (HV-4): a verdict on the
+            // displayed version while a hold exists must not report the held
+            // slot verification; a dead-slot version has no known status
+            const vstatus = v && e?.pendingUpdate?.version === v
+              ? (e?.pendingUpdate?.verification?.status ?? "")
+              : (v && e?.latestVersion === v ? (e?.verification?.status ?? "") : "")
             console.log(JSON.stringify({
-              v, isrepo: isRepo ? 1 : 0,
-              heldver: e?.pendingUpdate?.version ?? "",
-              displayed: e?.latestVersion ?? "",
-              vstatus: (e?.pendingUpdate?.verification ?? e?.verification)?.status ?? "",
+              v, heldver: e?.pendingUpdate?.version ?? "",
+              displayed: e?.latestVersion ?? "", vstatus,
             }))
-          ' "$NAME" "$VER")
+          ' "$NAME" "$VER" "${ISREPO:-0}")
           V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
-          ISREPO=$(node -pe 'JSON.parse(process.argv[1]).isrepo' "$INFO")
           HELDVER=$(node -pe 'JSON.parse(process.argv[1]).heldver' "$INFO")
           DISPLAYED=$(node -pe 'JSON.parse(process.argv[1]).displayed' "$INFO")
           VSTATUS=$(node -pe 'JSON.parse(process.argv[1]).vstatus' "$INFO")
-          if [ "$ISREPO" = "0" ] && [ -z "$V" ]; then
+          if [ "$ISREPO" != "1" ] && [ -z "$V" ]; then
+            gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
+            gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
             gh issue comment "$ISSUE" --body "⚠️ 无法确定 \`$NAME\` 的目标版本（索引里无 latestVersion/pendingUpdate）——未写入 verdict，请显式指定 \`name@version\`。" || true
             echo "unresolved=1" >> "$GITHUB_OUTPUT"
             exit 0
@@ -178,8 +193,14 @@ jobs:
             DEADSLOT=1
           fi
           echo "deadslot=$DEADSLOT" >> "$GITHUB_OUTPUT"
+          # Semantic dedupe (HV-2): an issue `edited` re-run that resolves to
+          # the SAME verdict as the latest human line is a no-op — appending a
+          # fresh `at` would restart a pass's digest-maturity window for a typo
+          # fix. Skip the append; the original timestamp stands.
+          git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
+          npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$NAME" "$V" "$VERDICT" "$REASON" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1' && steps.n.outputs.dup != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FILE: ai-verdicts.jsonl
@@ -187,6 +208,19 @@ jobs:
           MSG: "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.n.outputs.target }} (issue #${{ github.event.issue.number }})"
           APPLY_INDEX: "1"
         run: ./bin/catalog-append.sh
+      - name: dispatch site rebuild — a brake only counts once the public index shows it
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1' && steps.n.outputs.dup != '1' && steps.v.outputs.verdict == 'concern'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A human pass can't release until a digest announces it — index.json
+          # is unchanged by it, so no rebuild is needed. A concern brakes
+          # IMMEDIATELY via APPLY_INDEX; without this dispatch the public site
+          # would keep listing the braked entry as approved for up to ~16h
+          # (GITHUB_TOKEN pushes can't trigger on:push — dispatch is the only
+          # channel, HV-1). Retry once: a blip must not silently stale the site.
+          gh workflow run site.yml -R "$REPO" || { sleep 10; gh workflow run site.yml -R "$REPO" || echo "site dispatch failed twice — next catalog/verify run will rebuild"; }
       - name: acknowledge + mark decided
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
         uses: actions/github-script@v7
@@ -197,6 +231,8 @@ jobs:
           VSTATUS: ${{ steps.n.outputs.vstatus }}
           DEADSLOT: ${{ steps.n.outputs.deadslot }}
           MISMATCH: ${{ steps.v.outputs.mismatch }}
+          DUP: ${{ steps.n.outputs.dup }}
+          REASON: ${{ steps.v.outputs.reason }}
           EVENT: ${{ github.event_name }}
           TITLE: ${{ github.event.issue.title }}
         with:
@@ -225,14 +261,40 @@ jobs:
             // release — archived in jsonl but with NO live slot (K-4)
             if (process.env.DEADSLOT)
               msg += `\n\n⚠️ ${process.env.TARGET} 既不是当前在押候选也不是展示版本——裁决已存档（ai-verdicts.jsonl 可审计），但**没有生效槽位**：不会改变上架状态。要重判当前目标，请对相应版本重新裁决。`
+            // identical verdict already on file (edited-issue re-run / repeated
+            // comment) — the append was skipped so the original `at` stands;
+            // say so instead of implying a second line was written (HV-2)
+            if (process.env.DUP === '1')
+              msg += `\n\n相同裁决已在记录中——本次未重复追加（保留原裁决时间与成熟度窗口）。`
+            // echo the reason back so the maintainer sees what was recorded —
+            // skip the auto-generated label text which is noise (HV-11)
+            if (process.env.REASON && !process.env.REASON.startsWith('via label'))
+              msg += `\n\n理由：${process.env.REASON}`
             await github.rest.issues.createComment({ ...ref, body: msg })
             const isReview = process.env.TITLE.startsWith('[review]')
             if (isReview) {
               try { await github.rest.issues.removeLabel({ ...ref, name: 'review:pending' }) } catch {}
-              await github.rest.issues.addLabels({ ...ref, labels: ['review:decided'] })
+              // label is docket-bootstrapped — a first-ever verdict before the
+              // first docket tick would 422 and fail the step after the verdict
+              // already landed (HV-5). Swallow: the verdict is the truth.
+              try { await github.rest.issues.addLabels({ ...ref, labels: ['review:decided'] }) } catch {}
             }
+            // clear the blocked marker from any earlier unresolved attempt
+            try { await github.rest.issues.removeLabel({ ...ref, name: 'verdict:blocked' }) } catch {}
             if (isReview || process.env.EVENT === 'issues')
               await github.rest.issues.update({ ...ref, state: 'closed' })
+      - name: write-failure feedback
+        # The ONLY write-path workflow without failure alerting otherwise —
+        # a catalog-append 3×-retry failure leaves the issue silent while the
+        # maintainer believes a brake landed (HV-3). Comment with the run link
+        # so the gap is visible where the decision was made.
+        if: failure() && steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != 'submit' && steps.v.outputs.skip != 'noresolve'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE" --body "⚠️ 裁决流程失败——verdict **可能未落盘**（ai-verdicts.jsonl 无记录）。失败详情见 run：$RUN_URL ——修复后重新触发同一标签/命令即可重试。" || true
 
   # non-maintainer [concern] issue: the verdict job above deliberately skips
   # (form is maintainer-only) — without this job the issue would sit open

@@ -22,6 +22,9 @@ export interface Packument {
   readme: string | null
   /** per-version dist.integrity (SRI sha512) — install-time drift check */
   integrityOf: Record<string, string>
+  /** per-version dist.tarball — a pinned hold re-scan needs the HELD
+   *  version's tarball, which `tarballUrl` (latest only) can't give */
+  tarballOf: Record<string, string>
 }
 
 export type PackumentStatus = 'ok' | 'not-found' | 'error'
@@ -95,6 +98,10 @@ export async function fetchPackument(
       integrityOf: Object.fromEntries(
         Object.entries(doc.versions ?? {})
           .map(([v, x]) => [v, x?.dist?.integrity] as const)
+          .filter((x): x is readonly [string, string] => typeof x[1] === 'string')),
+      tarballOf: Object.fromEntries(
+        Object.entries(doc.versions ?? {})
+          .map(([v, x]) => [v, x?.dist?.tarball] as const)
           .filter((x): x is readonly [string, string] => typeof x[1] === 'string')),
     },
     status: 'ok',

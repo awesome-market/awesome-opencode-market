@@ -11,10 +11,25 @@ on:
 permissions: {}
 jobs:
   digest:
+    # scope guard: a fork's schedule would fail on the missing catalog branch
+    # and then alert-spam the fork's tracker. Manual dispatch stays open.
+    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency: catalog-branch        # same writer lock as catalog/verify/ingest (I-4)
     permissions: { contents: write }
     steps:
+      # renders data that originated as untrusted npm metadata — same egress
+      # posture as the verify plan job (git + npm registry only)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -27,22 +42,51 @@ jobs:
         run: |
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
-          # catalog branch is data-only — dedicated worktree, never the main checkout
-          git fetch origin catalog
-          git worktree add /tmp/cat origin/catalog
+          git fetch origin catalog 2>/dev/null || echo "fetch failed — probing the remote to distinguish missing-branch from transient failure"
+          # missing catalog branch = legitimately nothing to digest (fresh repo
+          # bootstrap); a fetch failure with the branch present must fail loud —
+          # a green skip would silently freeze pass verdicts for 24h. Local
+          # rev-parse alone can't tell the two apart, so probe the remote.
+          if ! git rev-parse --verify -q origin/catalog >/dev/null; then
+            if ! git ls-remote origin >/dev/null 2>&1; then
+              echo "origin unreachable — loud fail, not a silent skip"; exit 1
+            fi
+            if git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1; then
+              echo "catalog exists remotely but fetch failed — loud fail"; exit 1
+            fi
+            echo "no catalog branch — nothing to digest"
+            exit 0
+          fi
+          # catalog branch is data-only — dedicated worktree, never the main
+          # checkout; clear a stale one first (crashed runs can leave /tmp/cat)
+          git worktree remove /tmp/cat --force 2>/dev/null || true
+          git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
           ok=0
           for i in 1 2 3 4; do
-            git -C /tmp/cat fetch origin catalog 2>/dev/null || true
-            git -C /tmp/cat reset --hard origin/catalog
-            # re-render inside the retry loop so a raced push still publishes
-            # a digest computed against the newest remote state
+            # EVERY phase retries — the loop exists so a raced push re-renders
+            # against the newest remote; a tolerated fetch failure would render
+            # against the stale ref and publish that instead
+            git -C /tmp/cat fetch origin catalog || { echo "fetch attempt $i failed"; sleep 3; continue; }
+            git -C /tmp/cat reset --hard origin/catalog || { echo "reset attempt $i failed"; sleep 3; continue; }
+            # reset leaves untracked files — a prior failed render's leftovers
+            # would sneak into `git add digest/` below
+            git -C /tmp/cat clean -fd digest/ 2>/dev/null || true
             npx tsx pipeline/ai/digest.ts \
               --index /tmp/cat/index.json --verdicts /tmp/cat/ai-verdicts.jsonl \
-              --state /tmp/cat/digest-state.json --out-dir /tmp/cat
+              --state /tmp/cat/digest-state.json --out-dir /tmp/cat \
+              || { echo "render attempt $i failed"; sleep 3; continue; }
             git -C /tmp/cat add digest/ digest-state.json
-            git -C /tmp/cat commit -m "digest: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "nothing changed"; ok=1; break; }
+            # staged-diff precheck: a REAL commit failure must not pass as
+            # "nothing changed" — that's how a day's digest-state (the maturity
+            # anchor) silently vanishes while the run stays green (C-2/V-S)
+            if git -C /tmp/cat diff --cached --quiet; then
+              echo "nothing changed vs origin"; ok=1; break
+            fi
+            git -C /tmp/cat commit -m "digest: $(date -u +%F) run ${GITHUB_RUN_ID}" \
+              || { echo "commit attempt $i failed"; sleep 3; continue; }
             git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
             echo "push rejected (attempt $i) — re-rendering against fresh remote"
+            sleep 3
           done
           [ "$ok" = 1 ] || { echo "digest publish failed after retries"; exit 1; }
 
@@ -51,7 +95,9 @@ jobs:
   # targets plus a stale ai-verdicts.jsonl means the local job died silently
   # and submissions are rotting. Fires a pipeline-alert issue (deduped).
   watchdog:
+    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions: { issues: write }
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +109,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          git fetch origin catalog
+          git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next run"; exit 0; }
+          git worktree remove /tmp/cat --force 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog
           LAST=$(git -C /tmp/cat log -1 --format=%ct -- ai-verdicts.jsonl 2>/dev/null || echo 0)
           AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
@@ -71,6 +118,10 @@ jobs:
           # 在旧数据上"成功"渲染——光盯 verdicts 会漏掉上游停摆
           LAST_IDX=$(git -C /tmp/cat log -1 --format=%ct -- index.json 2>/dev/null || echo 0)
           IDX_AGE_H=$(( ($(date +%s) - ${LAST_IDX:-0}) / 3600 ))
+          # 第三条腿:digest-state.json 陈旧 = digest job 绿过但没落盘
+          # (含 false-green 吞掉的 commit 失败)——成熟锚静默冻结的最后兜底
+          LAST_DS=$(git -C /tmp/cat log -1 --format=%ct -- digest-state.json 2>/dev/null || echo 0)
+          DS_AGE_H=$(( ($(date +%s) - ${LAST_DS:-0}) / 3600 ))
           PENDING=$(npx tsx -e "
             import { CatalogIndex } from './src/schema.ts'
             import { loadVerdicts, latestVerdicts } from './pipeline/verdicts.ts'
@@ -80,7 +131,7 @@ jobs:
             const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
             console.log(unreviewedTargets(idx, seen).length)
           ")
-          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; unreviewed targets: ${PENDING}"
+          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; unreviewed targets: ${PENDING}"
           REASONS=""
           if [ "${PENDING:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
             REASONS="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
@@ -88,9 +139,14 @@ jobs:
           if [ "${IDX_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
           fi
+          if [ "${DS_AGE_H:-0}" -gt 36 ]; then
+            REASONS="${REASONS}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
+          fi
           if [ -n "$REASONS" ]; then
+            # in:title 限定——正文中提到同样字样的无关 open issue 不能被当成
+            # dedupe 目标而评论追加
             EXISTING=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open \
-              --search "pipeline stale" --json number --jq '.[0].number' 2>/dev/null || true)
+              --search "pipeline stale in:title" --json number --jq '.[0].number' 2>/dev/null || true)
             if [ -n "$EXISTING" ]; then
               gh issue comment "$EXISTING" -R "$GH_REPO" --body "$REASONS"
             else
@@ -107,6 +163,7 @@ jobs:
     needs: [digest, watchdog]
     if: failure()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: { issues: write }
     steps:
       - name: open failure issue
@@ -115,7 +172,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "digest workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the digest workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          # dedupe: a persistent failure (missing catalog branch, broken render)
+          # must not open a fresh issue every day — append to the open one
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "digest workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create \
+              --title "digest workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the digest workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

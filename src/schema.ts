@@ -148,7 +148,9 @@ export const AiVerdict = z.object({
   reason: z.string().optional(),
   /** English rendering for ai-sourced records (bilingual audit trail) */
   reasonEn: z.string().optional(),
-  at: z.string(),
+  /** ISO-8601 — a malformed timestamp would silently land in the digest's
+   *  "future-dated" bucket and never mature; validate at the boundary */
+  at: z.iso.datetime(),
   /** stamped by our writers, never by the model — AI can't forge 'human' */
   source: z.enum(['ai', 'human']),
   /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */

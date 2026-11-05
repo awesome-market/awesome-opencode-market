@@ -197,14 +197,17 @@ jobs:
         || (github.event_name == 'issue_comment' && github.event.action == 'created'
           && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
           && (github.event.comment.body == '/approve' || startsWith(github.event.comment.body, '/approve ')
-              || github.event.comment.body == '/concern' || startsWith(github.event.comment.body, '/concern ')))
+              || github.event.comment.body == '/Approve' || startsWith(github.event.comment.body, '/Approve ')
+              || github.event.comment.body == '/concern' || startsWith(github.event.comment.body, '/concern ')
+              || github.event.comment.body == '/Concern' || startsWith(github.event.comment.body, '/Concern ')))
       )
     runs-on: ubuntu-latest
     # per-issue group, NOT catalog-branch: every verdict event must land —
     # a shared writer lock drops pending runs in a burst; the rebase-push
-    # retry loop below absorbs cross-issue write races instead
-    concurrency: verdict-${{ github.event.issue.number }}
-    permissions: { issues: write, contents: write }
+    # retry loop below absorbs cross-issue write races instead. Namespaced per
+    # workflow: concern.yml shares the bare `verdict-N` name otherwise (HV-8).
+    concurrency: submit-verdict-${{ github.event.issue.number }}
+    permissions: { issues: write, contents: write, actions: write }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -256,12 +259,14 @@ jobs:
           REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
           KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
           VERDICT=pass; REASON=""
-          if [[ "$COMMENT_BODY" == "/concern" || "$COMMENT_BODY" == "/concern "* ]]; then
+          # case-insensitive — phone keyboards autocapitalize `/Concern`
+          LOW=${COMMENT_BODY,,}
+          if [[ "$LOW" == "/concern" || "$LOW" == "/concern "* ]]; then
             VERDICT=concern
-            REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/concern\s*||' | head -c 2000)
-          elif [[ "$COMMENT_BODY" == "/approve" || "$COMMENT_BODY" == "/approve "* ]]; then
+            REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^/concern\s*||I' | head -c 2000)
+          elif [[ "$LOW" == "/approve" || "$LOW" == "/approve "* ]]; then
             VERDICT=pass
-            REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/approve\s*||' | head -c 2000)
+            REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^/approve\s*||I' | head -c 2000)
           fi
           # repo-only submissions identify by repo as the entry name
           ENTRY="${NAME:-$REPO}"
@@ -312,8 +317,14 @@ jobs:
           echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
+          # Semantic dedupe (HV-2): re-tapping the label / re-commenting the
+          # same verdict is a no-op — a fresh `at` would restart a pass's
+          # digest-maturity window. Skip append; the original stands.
+          git fetch origin catalog --quiet 2>/dev/null || true
+          git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
+          npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$ENTRY" "$VER" "$VERDICT" "$REASON" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FILE: ai-verdicts.jsonl
@@ -321,6 +332,16 @@ jobs:
           MSG: "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.v.outputs.target }} (issue #${{ github.event.issue.number }})"
           APPLY_INDEX: "1"
         run: ./bin/catalog-append.sh
+      - name: dispatch site rebuild — a brake only counts once the public index shows it
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.verdict == 'concern'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A concern brakes immediately via APPLY_INDEX — but the PUBLIC site
+          # index only refreshes on dispatch/schedule; without this a braked
+          # submission stays listed as before for up to ~16h (HV-1).
+          gh workflow run site.yml -R "$REPO" || { sleep 10; gh workflow run site.yml -R "$REPO" || echo "site dispatch failed twice — next catalog/verify run will rebuild"; }
       - name: acknowledge on issue
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         uses: actions/github-script@v7
@@ -329,6 +350,7 @@ jobs:
           TARGET: ${{ steps.v.outputs.target }}
           ARGIGNORED: ${{ steps.v.outputs.argignored }}
           VERMISMATCH: ${{ steps.v.outputs.vermismatch }}
+          DUP: ${{ steps.v.outputs.dup }}
         with:
           script: |
             let msg = process.env.V === 'concern'
@@ -343,9 +365,23 @@ jobs:
             // keys to the REVIEWED version; the newer one needs its own review
             if (process.env.VERMISMATCH)
               msg += `\n\n注意：裁决钉在初审扫描的版本 ${process.env.VERMISMATCH.split('->')[0]}；npm 现已发布 ${process.env.VERMISMATCH.split('->')[1]}——新版本上架前需要自己的审查（初审评论里可查看当时扫描详情）。`
+            // identical verdict already on file — append skipped so the
+            // original `at` (and its maturity window) stands (HV-2)
+            if (process.env.DUP === '1')
+              msg += `\n\n相同裁决已在记录中——本次未重复追加（保留原裁决时间与成熟度窗口）。`
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number, body: msg })
+      - name: write-failure feedback
+        # a failed append otherwise leaves the issue silent while the
+        # maintainer believes the verdict landed (HV-3)
+        if: failure() && steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE" --body "⚠️ 裁决流程失败——verdict **可能未落盘**（ai-verdicts.jsonl 无记录）。失败详情见 run：$RUN_URL ——修复后重新触发同一标签/命令即可重试。" || true
 
   sweep:
     if: github.event_name == 'schedule'

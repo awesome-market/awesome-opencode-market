@@ -4,7 +4,7 @@
  *  package's reviewed-but-unreleased version gets a deterministic release
  *  window instead of being starved by the next version bump. */
 import { readFileSync } from 'node:fs'
-import { AiVerdict, DigestState, type CatalogIndex } from '../src/schema.ts'
+import { AiVerdict, DigestState, type CatalogIndex, type PluginEntry, type PendingUpdate } from '../src/schema.ts'
 
 export function loadVerdicts(path?: string): AiVerdict[] {
   if (!path) return []
@@ -102,7 +102,8 @@ export interface VerdictApplyResult {
 }
 
 /** Apply mature verdicts to an index. Semantics per AI-DIAGNOSIS §10:
- *  - `pass` matures only after appearing in the latest digest (at ≤ lastDigestAt)
+ *  - `pass` matures only when its exact verdict LINE appears in
+ *    `digest.announced` — set membership, not a timestamp check
  *  - `concern` applies immediately (conservative direction needs no window)
  *  - `source:ai` pass landing on a red-flagged entry is ignored (defense in
  *    depth — the model never reaches flagged content with a release);
@@ -187,4 +188,72 @@ export function applyMatureVerdicts(
     return e
   })
   return { index: { ...index, plugins }, releases, held }
+}
+
+export interface SlotExplain {
+  slot: 'displayed' | 'pendingUpdate'
+  version: string | null
+  verdict: 'pass' | 'concern' | null
+  source: 'ai' | 'human' | null
+  /** the winning line's `at` — what an announced/dedupe check keys on */
+  at: string | null
+  /** exact verdict line ∈ digest.announced — the maturity predicate */
+  announced: boolean
+  /** ai 'pass' outranked by a human 'concern' on the same key (R-4) */
+  stickyHuman: boolean
+  /** ai 'pass' landing on a red-flagged slot — ignored by the gate */
+  aiBlockedByFlags: boolean
+  verification: string
+  outcome: 'release' | 'brake' | 'concern' | 'wait' | 'none'
+  why: string
+}
+
+/** Decision-chain explainer for ops: per held/displayed slot, which verdict
+ *  won, whether it is announced, and why it did (or did not) apply — the same
+ *  gates applyMatureVerdicts evaluates, decomposed for `release.ts --explain`
+ *  instead of a bare releases/held count. */
+export function explainEntry(
+  e: Pick<PluginEntry, 'name' | 'latestVersion' | 'approval' | 'capabilities' | 'verification'>
+    & { pendingUpdate?: Pick<PendingUpdate, 'version' | 'capabilities' | 'verification'> | undefined },
+  verdicts: AiVerdict[],
+  digest: DigestState | null,
+): SlotExplain[] {
+  const latest = latestVerdicts(verdicts)
+  const latestHuman = latestHumanVerdicts(verdicts)
+  const announced = new Set(digest?.announced ?? [])
+  const slotOf = (
+    slot: SlotExplain['slot'], version: string | null,
+    redFlags: number, verification: string,
+  ): SlotExplain => {
+    const raw = latest.get(vkey(e.name, version))
+    const v = effectiveVerdict(raw, latestHuman)
+    const base = {
+      slot, version,
+      verdict: v?.verdict ?? null,
+      source: v?.source ?? null,
+      at: v?.at ?? null,
+      announced: v ? announced.has(akey(v)) : false,
+      stickyHuman: raw !== undefined && raw !== v,
+      aiBlockedByFlags: v?.verdict === 'pass' && v.source === 'ai' && redFlags > 0,
+      verification,
+    }
+    if (!v) return { ...base, outcome: 'none', why: '无裁决 — 等评审' }
+    if (v.verdict === 'concern') {
+      const braking = slot === 'displayed' && e.approval !== 'pending'
+      return { ...base, outcome: braking ? 'brake' : 'concern',
+        why: braking ? 'concern 命中展示版 → 回 pending（刹车）' : `concern → 保持 hold（${v.reason ?? ''}）` }
+    }
+    // pass: run the release gates in order and report the first blocker
+    if (!base.announced) return { ...base, outcome: 'wait', why: 'pass 未成熟 — verdict 行未进 digest 公示' }
+    if (base.aiBlockedByFlags) return { ...base, outcome: 'wait', why: 'ai pass 落在 redFlag 槽位 — 被忽略' }
+    if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `verification=${verification} 不可放行` }
+    return { ...base, outcome: 'release', why: 'pass 成熟 + 可放行 → 生效' }
+  }
+  const out: SlotExplain[] = []
+  if (e.pendingUpdate) {
+    out.push(slotOf('pendingUpdate', e.pendingUpdate.version,
+      e.pendingUpdate.capabilities.redFlags.length, e.pendingUpdate.verification.status))
+  }
+  out.push(slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length, e.verification.status))
+  return out
 }

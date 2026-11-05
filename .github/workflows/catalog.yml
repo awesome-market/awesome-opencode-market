@@ -96,6 +96,17 @@ jobs:
               npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json
               mv /tmp/index.merged.json /tmp/index.json
             fi
+            # catch-up verdict apply on the merged index: a human brake / new
+            # verdict / digest announcement that landed BETWEEN generate's
+            # fetch and this commit must not be clobbered by publishing our
+            # stale snapshot over it — re-derive state from the freshest
+            # remote jsonl + digest-state (idempotent; a brake that arrived
+            # mid-run stays a brake, our own mature release still releases).
+            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
+              mv /tmp/index.released.json /tmp/index.json
+            else
+              echo "verdict apply skipped (non-fatal — next catalog run re-derives it)"
+            fi
             cp /tmp/index.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
             # staged-diff precheck: distinguish "nothing to commit" (remote head

@@ -635,3 +635,95 @@ D-1~D-8 封住「死 omlx 烧预算」「重入」「无界 fan-out」之后，�
 | F-5 `reusedNames` 不计 github-kind 复用 | ✅ | gh 复用计入 ghStats.reused + reusedNames |
 
 **验证**：typecheck 0 错；615 tests 全过；分支覆盖 90.6% 过门槛；新回归用例覆盖：integrity 回填、远端放行不复活 hold、blocklist 损坏硬退/缺文件放行、seed 元数据截断、existing 条目 cap 豁免、live-undiscovered 保留、正向 filtered、gh tree 暂态/404/证据拒三分支、searchTopic fork:false、scan 成员数 cap、stale-metrics refreshMeta。
+
+## 附十三：人工裁决流重审（HV 系列，concern.yml + submit.yml verdict job）
+
+H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析 → gate/index 检查 → index-first 版本+sha → `catalog-append.sh`（dedupe+APPLY_INDEX）→ ack/关单 + triage。确认仍正确：注入面（env+引号+整行比对+字符集白名单）、index-first 版本语义、labeled actor gate 瞬断保标、mismatch 不关错单、deadslot/unresolved/noresolve 三档反馈、closed-issue 复裁通道、exists→append 竞态不丢裁决。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| HV-1 刹车不落站点：APPLY_INDEX 把 concern 分钟级写进 catalog index，但 site.yml 只有 workflow_dispatch（GTOKEN push 不触发 on:push）——公开站点最长 ~16h 仍列被刹车包为已上架，"分钟级刹车"在最后一里断掉 | ✅ | 两流 verdict job 在 concern 追加成功后 `gh workflow run site.yml`（重试一次）；pass 不改 index 不 dispatch；job 补 `actions: write` |
+| HV-2 `edited` 重跑产新 `at` → 新 akey ∉ announced → 刚预告的 pass 成熟窗口因错字编辑重启 ~24h | ✅ | 语义去重：解析结果与该键**最新 human 行**的 (verdict,reason) 全同 → 跳过 append 保留原 `at`；AI 行在顶部不去重（human source 是 R-4 黏性信号）；翻转正常追加；ack 明示去重原因。`human-verdict.ts::isDupVerdict` + `dedupe` CLI 子命令 |
+| HV-3 写盘失败无告警：append 3 连败 → job 红但 issue 无声——维护者手机点完以为裁决落了（全仓库唯一无失败告警的写盘流） | ✅ | `failure()` 步给 issue 留"verdict 可能未落盘"+run 链接（两流同款）；跳过 submit/noresolve 归属判断 |
+| HV-4 `vstatus` 槽位错配：`pendingUpdate?.verification ?? verification`——裁决展示版且 hold 存在时报了在押版的验证状态 | ✅ | 按键控槽取：`v===heldver→pendingUpdate.verification`、`v===displayed→entry.verification`、deadslot→空（ack 跳过验证行） |
+| HV-5 `addLabels review:decided` 裸奔——label 由 docket bootstrap 创建，首个裁决先于首次 docket → 422 红步（verdict 已落的噪音失败） | ✅ | addLabels 包 try/catch（verdict 才是真相，标签是装饰） |
+| HV-6 命令大小写敏感：`/Approve`、`/CONCERN` 不识别——手机自动首字母大写是真实场景 | ✅ | parser regex `i` flag + verdict 小写归一；两流 if 守卫补首字母大写变体（`/Concern`/`/Approve`）+ 词边界（`/concerned` 不再过闸）；submit bash 侧 `${BODY,,}` + sed `I` flag |
+| HV-7 isrepo 正则双份（parser `isRepoName` vs workflow 内联 regex）——漂移风险 | ✅ | parser 输出 `isrepo=1`，workflow 吃输出不再自算；env `|| '0'` 默认保证 deadslot/unresolved 检查语义不变 |
+| HV-8 `verdict-N` 并发组两流撞名——同 issue 号无谓互斥排队 | ✅ | `concern-verdict-N`/`submit-verdict-N` 命名空间化 |
+| HV-9 `/concerned` 前缀误判过 if 闸 → noresolve 用法评论噪音 | ✅ | if 改为整词匹配（`== '/concern'` 或 `'/concern '` 前缀） |
+| HV-10 npm ci ~40s/事件——为 human-verdict.ts+release.ts 装全套依赖 | 不改 | tsx 需要 deps，correctness > 成本 |
+| HV-11 ack 不回显 reason——维护者看不到记录里写了啥 | ✅ | ack 追加"理由：…"（跳过 `via label` 自动文本） |
+| HV-12 `verdict:` 标签裁决后残留 | 不改 | 有审计价值（记录当时点了什么），ack 已说明生效状态 |
+| HV-13 noresolve/exists=0/unresolved 单保持 open 无状态标记 | ✅ | 三条路径都打 `verdict:blocked` 标签（自动 create --force），落地即摘除（ack 步 removeLabel） |
+
+**验证**：typecheck 0 错；643 tests 全过（+10：大小写命令×2、isrepo 输出×3、isDupVerdict×5）；分支覆盖 90.4% 过门槛；两 workflow YAML 校验过；dedupe CLI 端到端验证（dup=1/0 三例符合预期）。
+
+**遗留观察**（不改）：表单 `edited` 里**改理由/改版本**会产生新行（内容变了不是 dup——正确）；dedupe 比对用 `reason` 全文精确相等——空白差异先经 oneLine 归一，语义等价判定不做模糊匹配（宁少去重不误删）。
+
+## 附十四：日报流深审（D 系列，digest.yml + docket.yml + 谓词共享面）
+
+两轮：首轮 D-A…D-O；补审轮覆盖用户并行改动引入的新漂移 + 未覆盖面（docket 联动、fork 面、schema 校验）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| D-A workflow 重试环只重试 push：fetch 容忍失败（`\|\| true`）、reset/render 裸跑中止、真 commit 失败被误报 "nothing changed" 绿过（digest-state 静默丢一天，pass 冻结 24h 无人知） | ✅ | 全相位 `continue` 语义对齐 publish-digest.sh：fetch/reset/render 失败各自重试；`git diff --cached --quiet` 显式判空退出；commit 失败重试不再吞噬 |
+| D-B workflow-failure alert 无 dedupe → 持久故障每天一单 | ✅ | 查 open `pipeline-alert` → 评论追加（watchdog/C-5 同款） |
+| D-C §⑤ 手写 `held ∧ !verdicted` 与 diagnose/watchdog 谓词漂移（缺 48h VERIFY_WAIT 递延，live 994 pending 下数字虚高） | ✅ | §⑤ 直接用 `unreviewedTargets`——三个消费面一个谓词；§⑤ 标注同口径说明 |
+| D-D `docs/AI-DIAGNOSIS.md` 大面积过时（时间锚/三节/issue 盖楼/旧文件路径） | ✅ | 全部改述 announced 成员制、五节结构、`pipeline/ai/digest.ts`、docket 标签裁决通道 |
+| D-E 幽灵 verdict——removed/未入库名字照样上 §①"新放行"（实测 opencode-poke 等） | ✅ | 行标 `⚠️不在目录`（公告照发——重新入库时该 verdict 已成熟，不静默丢） |
+| D-F verdict reason/name 未转义进 committed .md → 模型中介文本的 markdown 链接注入面 | ✅ | `[` `]` `\` 转义 + 表内 `|` 转义（escMd/escCell） |
+| D-G §② 无界平铺（live 已 331 条） | ✅ | cap 50 最老优先 + "还有 N 条"截断计数 |
+| D-H §② 不区分 held 原因相位——"待验证/待评审/已放行待生效"同一符号 | ✅ | `phaseOf` 六档：待验证/验证失败/待评审/已裁决·待日报公告/已公告·待放行闸/已打标 concern |
+| D-I digest/watchdog 两 job 无 `timeout-minutes` | ✅ | digest 20min、watchdog 10min |
+| D-J `worktree add` 无 fallback + 无预清——stale /tmp/cat 或缺 catalog 分支即红 | ✅ | `git worktree remove --force` 预清（verify merge 同款）；schedule 下缺 catalog 分支=合法 bootstrap no-op |
+| D-K 同 akey 重复 verdict 行 → §① 表格重复行 | ✅ | `seenAkey` 去重 |
+| D-L watchdog 漏 drifted-only 工作面 | 不改 | re-review 有 verdict 不进 PENDING，罕见且可接受 |
+| D-M `AiVerdict.at` 裸 `z.string()`——垃圾时间戳落 "future" 桶静默冻结 | ✅ | `z.iso.datetime()`——schema 边界拒收；实测分支 19 行全 ISO 兼容 |
+| D-N digest job 无 harden-runner | ✅ | egress 白名单（api.github.com + registry.npmjs.org） |
+| D-O `announced` 单调增长无界 | 不改 | 与 verdicts 文件同性质；当前规模无感，记一笔 |
+| D-P fork 守护缺失——fork cron 拉不到 catalog 分支 → digest 红 → fork 里开 spam issue | ✅ | digest+watchdog+docket schedule 加 `github.repository` 本仓闸（dispatch 手动仍可跑） |
+| D-R `verifyQueued` 缺 parts 检查——planTargets 加了"无 plugin 无 skill 不排队"，共享谓词没跟上 → §④ 虚计 | ✅ | parts 检查下沉进 `verifyQueued` 本体——谓词单一权威 |
+| D-S docket.yml 无 alert job——审核单流崩了无声（日报生态内唯一无告警维护面） | ✅ | failure() → pipeline-alert dedupe 同款 |
+| D-U 循环内 `fetch \|\| true` 破坏"按最新远端重渲染"承诺 | ✅ | 并入 D-A：fetch 失败 `continue`，绝不按旧 ref 渲染 |
+| D-V §① 显示已被刹车的 pass（pass 04:40 → concern 04:42，日报仍列"新放行"） | ✅ | `⛔已被更新的 concern 刹车` 行标 + 头部图例 |
+| D-W issueBody 无成熟相位——`ai:pass` 单不告诉维护者"在等日报公告" | ✅ | `maturity` 字段（announced/pending-announce）：已公告·待放行闸 / 已裁决·待日报公告；docket.yml 传 `--digest-state` |
+| D-X watchdog dedupe `--search` 全文匹配——正文提到 "pipeline stale" 的 issue 会被误当 dedupe 目标 | ✅ | scope `in:title` |
+| D-Y watchdog 缺第三腿：`digest-state.json` 陈旧（"workflow 绿过但 state 没落盘"的最终兜底） | ✅ | >36h → pipeline-alert 追加 |
+| D-Z digest/watchdog worktree 无 `remove --force` 预清 | ✅ | 与 verify merge 同款预清 |
+| D-T docket 无 timeout + fetch 失败红化（瞬断该等下轮不该报警） | ✅ | timeout 15min；fetch 失败按"下轮再试"defer 不红 |
+
+**验证**：typecheck 0 错；新回归覆盖：akey 去重单行渲染、幽灵/刹车行标、mdEsc 链接逃逸、§② cap50+截断、六档相位标、§⑤ 共享谓词（<48h unverified 不计）、`verifyQueued` parts 拒收、`loadVerdicts` 非 ISO `at` 丢弃、docket maturity 相位（announced/pending-announce）。
+
+**遗留观察**（不改）：`announced` 集合无界增长（同 verdicts append-only 性质）；§⑤ 最老待审日期从 pendingReview 里另取（与 unreviewedTargets 排序一致）。
+
+## 附十五：放行链二次审计（R-9…R-13，DATA-FLOWS ↔ 实现交叉核对后全量落地）
+
+对照 DATA-FLOWS 全文与放行链实现逐段复核后发现的边界缺陷，全部修复并补回归（`test/audit9.test.ts`，25 例）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| R-9 pending+pendingUpdate 倒挂：approved+pu 条目被人工刹车（`applyMatureVerdicts` 展示槽→pending 但 pu 保留）后上游再 bump——`mergeEntries` 把比候选**更旧**的 pu 保留到 pending 条目上，所有评审面（unreviewedTargets/docket/verifyTargetOf）锁死旧版，真实候选永久无槽 → 条目卡死 | ✅ | `mergeEntries`：合并结果为 pending → 一律丢弃 pu（候选就是 latestVersion 本身，残存 hold 只会更旧）；被丢版本回到正常 pending 路径自愈。R-8 采纳远程放行态的检查**先于**该门（ours 恰好处于过渡 pending+pu 时远程已放行同版仍正确采纳） |
+| R-10 publish 窗口裁决覆盖：generate 拉旧 index → 人工刹车落地 → publish remerge 的 approval 层 ours-wins → 被刹版本在窗口期（最长 ~12h）可见可装；R-8 只对称修了"remote 放行"方向 | ✅ | catalog.yml publish 重试环 remerge 后跑 `release.ts`——applyMatureVerdicts 幂等，按**最新** remote verdicts+digest-state 重推导：窗口内的刹车/新 pass/digest 公示当班生效，不等下一班（remerge 语义不变：state 以 verdicts 为准，不比较快照） |
+| R-11 diagnose sha-reuse 复活判词：twin 用 `find` 取文件序**最旧**同 sha verdict——v1 同 sha 被 concern 翻案后 v2 同字节会吃到旧 pass | ✅ | `latestShaVerdicts`：name\0sha → `at` 最新行，twin 复用最新判词 |
+| R-12 48h verify-wait 对 pending 条目失效：`heldAt` 兜底 `firstSeenAt` 是条目级——版本 bump 后时钟陈旧，新候选被跳过递延直接硬审 | ✅ | `candidateHeldAt`（diagnose 导出，digest §②/§⑤ 共用）：`pu.heldAt → 候选槽 capabilities.scannedAt → firstSeenAt` 逐级 NaN 安全兜底 |
+| R-13 announced 无界增长（D-O 遗留，本次顺手修）：superseded 行永不再胜，其 akey 槽位是死重 | ✅ | `nextDigestState` 按每键最新裁决行截断 announced——语义不变（被取代行不可能再成熟），状态文件随键数而非行数增长 |
+| R-14 已上架条目 trustFlags 无评审面：sec:name-reused/repo-recreated/version-rollback 打在 approved 无 pu 条目上时只是详情页 findings——docket/digest 都不收，repojack 信号静默 | ✅ | digest §⑥"已上架条目信任信号"standing list + docket `flag` 目标：`[review] name@latestVersion` 开单，人工 concern 落展示版键即刹车关单（弱信号 findings 级不上此面）。同期落地：docket `'none'` 层（在押超 48h 无裁决→standing issue）、严重度排序 pass→none→concern→flag、issueBody 证据面（扫描计数/在押日期/详情页链接/成熟相位/卡住标签警示）、同题重复单收敛+review:decided 终态、REST 列单 4000 上限告警、STEP_SUMMARY |
+| R-15 pin 路径 held 版永不重扫：ruleset 升级后在押版本永久吃旧规则扫描，与展示版不对称 | ✅ | pin 时 `pu.capabilities.rulesetVersion !== RULESET_VERSION` → `packument.tarballOf[held]` 重拉在押 tarball 重扫（capabilities 换新；verification/heldAt/verdict 标注不动；新红旗经 skipped 不变量降级）；tarball URL 缺失/抓取失败保留旧扫描下轮再试 |
+
+**连带落地**：`release.ts --explain`（槽位判定链：胜出 verdict/announced/redFlag 拦截/verify 闸——held 排障不再翻 jsonl）；docket 列单上限 500→4000+到界告警；DATA-FLOWS 漂移修正（announced 成员制注释、六板块、8 片加权分片、pu 不变量、pin 重扫、R-9/R-10 语义）；verdicts.ts 过期 docstring。
+
+**验证**：typecheck 0 错；677 tests 全过（+25 新回归：R-9 三态、R-10 追赶、R-11 twin、R-12 时钟、R-13 截断、R-14 flag/§⑥、R-15 pin 重扫、explainEntry 判定链）。
+
+## 附十六：审核单流专项审计（docket.yml 全流程，K-8…K-11 + 小项）
+
+对照 DATA-FLOWS 全文对审核单流独立走一轮后落地。与附十五 R-14 同批的 docket 面条目此处补记残余项。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| K-8 `gh issue list --limit 500` 截断 → 界外单双建+永不关 | ✅ | REST 列单上限提到 4000 且**到界大声告警**（`console.warn`）；前缀过滤仍在 TS 侧 |
+| K-9 `execFileSync` 默认 1MB `maxBuffer` → 列表响应超限即红且每轮红 | ✅ | `maxBuffer: 64MB`（`issue list --json body` ×数百单正处临界） |
+| K-10 人工面真空：无裁决 npm held 永不进 docket（诊断停摆期零入口） | ✅ | `NO_VERDICT_AGE_MS=48h` 超龄档 → `verdict:'none'` standing issue（与 diagnose 降级窗同阈值；repo-only none 机制复用） |
+| K-11 `verdict:*` 标签贴上但写盘失败 → 事件不重发、单面看似已决 | ✅ | docket 检测 wanted 单残留 `verdict:pass/concern` 标签而 jsonl 无人工判词 → 折进正文警示"请摘贴重试或评论命令"；与 concern.yml `verdict:blocked`/HV-3 失败评论互补（一个改不了就发提示，一个持久显示状态） |
+| 小项 | ✅ | `arg()` 缺 flag 时 `indexOf=-1` → 取 `args[0]` 而非 undefined（docket+digest 两处）；同题重单保留最新号关旧；关单注释按因区分（已决议/已放行/重复/出索引）；自动关单补齐 `review:decided`；标签+正文合并单次 `gh issue edit`；创建按严重度排序（flag 最后=最新最急）；`GITHUB_STEP_SUMMARY` 汇总；`--dry` dispatch input；`issueBody` 红旗 pass"只能人工放行"提示 |
+
+**验证**：typecheck 0 错；689 tests 全过（docket +13 新例：超龄档/年轻在押不归人工/flag 谓词与消除/严重度排序/成熟相位/红旗提示/stuck 警示/decided 终态/重复单关闭/关单原因）。

@@ -39,6 +39,9 @@ export interface VerdictResolved {
   verdict?: 'pass' | 'concern'
   reason?: string
   mismatch?: string
+  /** '1' when name is owner/repo — the workflow consumes this instead of
+   *  re-implementing the regex (single source of truth, HV-7) */
+  isrepo?: '1'
 }
 
 /** `[review] name[@ver]` — scoped names keep their leading '@' (the last '@'
@@ -93,9 +96,10 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     verdict = e.label === 'verdict:pass' ? 'pass' : 'concern'
     reason = `via label ${e.label} by ${e.actor} (issue #${e.issueNumber})`
   } else if (e.event === 'issue_comment') {
-    const m = e.commentBody.match(/^\/(concern|approve)(?:\s+([\s\S]*))?$/)
+    // case-insensitive: phone keyboards autocapitalize `/Approve`/`/Concern`
+    const m = e.commentBody.match(/^\/(concern|approve)(?:\s+([\s\S]*))?$/i)
     if (!m) return { skip: 'noresolve' }
-    verdict = m[1] === 'approve' ? 'pass' : 'concern'
+    verdict = m[1]!.toLowerCase() === 'approve' ? 'pass' : 'concern'
     const rest = (m[2] ?? '').trim()
     if (rest && !rest.startsWith('#')) {
       const sp = rest.split(/\s+/)
@@ -144,15 +148,45 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
   }
 
   ver = cleanVer(ver)
-  if (isRepoName(name)) ver = ''
+  const repo = isRepoName(name)
+  if (repo) ver = ''
   if (!name || !verdict) return { skip: 'noresolve' }
   const out: VerdictResolved = { name, ver, verdict, reason: oneLine(reason) }
   if (mismatch) out.mismatch = oneLine(mismatch)
+  if (repo) out.isrepo = '1'
   return out
 }
 
-/* v8 ignore next 8 — thin env→stdout adapter */
+/** True when the LATEST line for vkey(name,version) is already a human verdict
+ *  with identical verdict+reason. An edited-issue re-run is semantically a
+ *  no-op — writing a fresh line would give a pass verdict a new `at`, hence a
+ *  new akey ∉ digest-state.announced, restarting its maturity window for a
+ *  typo fix (HV-2). Source matters: an AI verdict on top must NOT dedupe a
+ *  human write — the human source itself is the R-4 stickiness signal. */
+export function isDupVerdict(lines: string[], name: string, version: string | null, verdict: string, reason: string): boolean {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.trim()
+    if (!l) continue
+    try {
+      const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string }
+      if (v.name !== name || (v.version ?? null) !== version) continue
+      return v.source === 'human' && v.verdict === verdict && (v.reason ?? '') === reason
+    } catch { continue }
+  }
+  return false
+}
+
+/* v8 ignore next 14 — thin env→stdout adapter */
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason>`
+  // → prints dup=1|0 for the workflow's append gate
+  if (process.argv[2] === 'dedupe') {
+    const { readFileSync } = await import('node:fs')
+    const [, , , file, name, ver, verdict, reason] = process.argv
+    const lines = readFileSync(file!, 'utf8').split('\n')
+    console.log(`dup=${isDupVerdict(lines, name!, ver || null, verdict!, reason ?? '') ? 1 : 0}`)
+    process.exit(0)
+  }
   const p = process.env
   const r = resolveVerdictEvent({
     event: p.EVENT ?? '', action: p.ACTION ?? '',

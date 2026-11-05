@@ -64,6 +64,17 @@ describe('verdicts loading', () => {
     expect(loadVerdicts(join(dir, 'nope'))).toEqual([])
     expect(loadVerdicts()).toEqual([])
   })
+  it('loadVerdicts drops verdicts with a malformed `at` (would freeze silently as future-dated)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'v-'))
+    const f = join(dir, 'ai-verdicts.jsonl')
+    writeFileSync(f, [
+      JSON.stringify(mkVerdict('a', '1', 'pass', 'not-a-timestamp')),
+      JSON.stringify(mkVerdict('b', '1', 'pass', BEFORE)),
+    ].join('\n'))
+    const vs = loadVerdicts(f)
+    expect(vs).toHaveLength(1)
+    expect(vs[0]!.name).toBe('b')
+  })
   it('loadLastDigestAt: missing/invalid → null (-∞), valid → timestamp', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ds-'))
     expect(loadLastDigestAt(join(dir, 'none.json'))).toBeNull()
