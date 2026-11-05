@@ -3,13 +3,15 @@ name: catalog
 on:
   schedule: [{ cron: '17 3 * * *' }, { cron: '0 11 * * *' }]
   workflow_dispatch:
-concurrency: catalog-branch   # shared with verify.yml — serializes all writers of the catalog branch
 permissions: {}               # job-level grants below
 jobs:
   generate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}             # processes untrusted npm metadata — no write token (WF-3)
+    # no concurrency lock: generate only READS the catalog branch — holding
+    # catalog-branch for ~30-60min would block every verify/digest/ingest
+    # merge behind a reader. Writers serialize on the publish job below (C-3).
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,13 +31,15 @@ jobs:
             fi
             npx tsx -e "import { CatalogIndex } from './src/schema.ts'; import { readFileSync } from 'node:fs'; CatalogIndex.parse(JSON.parse(readFileSync('/tmp/old-index.json','utf8'))); console.log('old index valid')"
             git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
-            git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || touch /tmp/blocklist.json
+            # absent blocklist → optional, run without it; PRESENT-but-corrupt
+            # must hard-fail inside run.ts (fail-open would silently unblock, C-4)
+            git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || rm -f /tmp/blocklist.json
             git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || touch /tmp/ai-verdicts.jsonl
             # missing digest-state = -∞: all pass verdicts stay frozen until the
             # first daily digest publishes (fail-closed bootstrap, AI-DIAGNOSIS §4)
             git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null || rm -f /tmp/digest-state.json
           else
-            touch /tmp/submissions.txt /tmp/blocklist.json /tmp/ai-verdicts.jsonl   # first run ever
+            touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl   # first run ever — no blocklist yet (absent = disabled, not corrupt)
           fi
       - name: run pipeline
         env:
@@ -52,6 +56,7 @@ jobs:
   publish:
     needs: generate
     runs-on: ubuntu-latest
+    concurrency: catalog-branch   # writer lock shared with verify/digest/ingest — only the write phase holds it (C-3)
     permissions: { contents: write, issues: write, actions: write }   # contents+issues: catalog writer + submission notify (WF-3); actions: dispatches site.yml (V-8)
     steps:
       - uses: actions/checkout@v4
@@ -93,30 +98,57 @@ jobs:
             fi
             cp /tmp/index.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
-            git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            # staged-diff precheck: distinguish "nothing to commit" (remote head
+            # already carries this content → success) from a real commit failure,
+            # which `commit || echo` would mask into a false-success push (C-2)
+            if git -C /tmp/cat diff --cached --quiet; then
+              echo "index unchanged vs remote head — nothing to publish"
+              ok=1; break
+            fi
+            git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
             git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
-          # notify+close submission issues whose package just landed (best-effort:
-          # the index is already published; a failed comment must not fail the run)
+          # notify+close submission issues whose package just landed. Flag the
+          # seeds BEFORE commenting (and retry the flag push): a lost flag push
+          # would re-notify the same issues next run (C-6). Comments themselves
+          # are best-effort — the index is already published.
           if [ -f /tmp/cat/submissions.txt ]; then
-            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt > /tmp/notify.list
+            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list > /tmp/notify.list
+            git -C /tmp/cat add submissions.txt
+            for i in 1 2 3; do
+              if git -C /tmp/cat diff --cached --quiet; then break; fi
+              git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || true
+              git -C /tmp/cat push origin HEAD:catalog && break
+              git fetch origin catalog 2>/dev/null || true
+              git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
+              npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list > /tmp/notify.list
+              git -C /tmp/cat add submissions.txt
+            done
             while read -r N; do
               [ -n "$N" ] || continue
               gh issue comment "$N" --body "✅ 已收录进插件目录（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
               gh issue close "$N" || true
               echo "notified + closed issue #$N"
             done < /tmp/notify.list
-            git -C /tmp/cat add submissions.txt
-            git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" 2>/dev/null && git -C /tmp/cat push origin HEAD:catalog || true
+            # approved-but-never-landed: seed aged 14d+ without becoming visible.
+            # Honest status comment, once per seed (staleWarned flag); the issue
+            # is NOT closed — a pipeline-side delay is not author abandonment.
+            touch /tmp/stale.list
+            while read -r N; do
+              [ -n "$N" ] || continue
+              gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || true
+              echo "stale-warned issue #$N"
+            done < /tmp/stale.list
           fi
       # V-8: site.yml is the single Pages publisher — dispatch it so this push's
       # index lands on the site now instead of at the next scheduled rebuild.
       - name: trigger site rebuild
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run site.yml || echo "site dispatch failed — the next catalog/verify run will refresh"
+        run: |
+          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || echo "site dispatch failed twice — the next catalog/verify run will refresh"; }
 
   alert:
     needs: [generate, publish]
@@ -130,7 +162,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "catalog workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the catalog workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          # dedupe (same S-6 pattern as site.yml): a failing streak comments on
+          # the one open alert issue instead of opening one per run
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "catalog workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the catalog workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi
