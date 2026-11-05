@@ -206,22 +206,23 @@ export default Plugin.define({
       })
 
       // resolves when the spawned `plugin add` (and any config rewrite) has
-      // fully settled — updateAll awaits it, so serialized sweeps can't race
-      const install = async (e: MarketEntry): Promise<void> => {
-        if (jobs.has(e.name)) { setStatus(t('installRunning')); return }
+      // fully settled — updateAll awaits it, so serialized sweeps can't race.
+      // Returns success so sweep counters report real failures, not just throws
+      const install = async (e: MarketEntry): Promise<boolean> => {
+        if (jobs.has(e.name)) { setStatus(t('installRunning')); return false }
         const plan = installPlan(e)
         log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
-        if (!plan.plugin) { if (plan.skill) await installSkill(e, plan); return }
+        if (!plan.plugin) { if (plan.skill) return installSkill(e, plan); return false }
         // dual-nature entries deliver BOTH parts — skill install runs async
         // alongside the plugin spawn (independent surfaces)
-        const skillDone = plan.skill ? installSkill(e, plan) : Promise.resolve()
+        const skillDone = plan.skill ? installSkill(e, plan) : Promise.resolve(true)
         setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
         // pin to the catalog-approved version — `plugin add` accepts name@ver
         // and never silently resolves past what review allowed
         const pin = pinSpec(e)
-        try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return }
+        try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
         const updating = !!(ver && hasUpdate(e, ver))
         const afterAdd = async () => {
           if (!updating) return
@@ -234,7 +235,7 @@ export default Plugin.define({
           await writeJsonAtomic(cfg, d)
         }
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
-        await new Promise<void>(resolve => {
+        const pluginOk = await new Promise<boolean>(resolve => {
           const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
           jobs.set(e.name, p)
           // 90s ceiling — a wedged `plugin add` must not hold the dialog status
@@ -247,20 +248,22 @@ export default Plugin.define({
           p.stdout?.on('data', push); p.stderr?.on('data', push)
           p.on('close', code => {
             clearTimeout(kill); jobs.delete(e.name)
-            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve() }
+            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve(false) }
             else if (code === 0) {
               void afterAdd().then(() => {
                 setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
-                void refreshInstalled(); resolve()
-              }).catch(x => { setStatus(tf('updateFail', { err: String(x) })); resolve() })
+                void refreshInstalled(); resolve(true)
+              }).catch(x => { setStatus(tf('updateFail', { err: String(x) })); resolve(false) })
             }
-            else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve() }
+            else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve(false) }
           })
-          p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve() })
+          p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
         })
-        await skillDone
+        // dual-nature success needs BOTH parts; a failed skill half must not
+        // let updateAll count the entry as updated
+        return pluginOk && await skillDone
       }
-      const installSkill = async (e: MarketEntry, plan: InstallPlan) => {
+      const installSkill = async (e: MarketEntry, plan: InstallPlan): Promise<boolean> => {
         try {
           setStatus(tf('installingN', { name: e.name }))
           let url: string
@@ -295,7 +298,8 @@ export default Plugin.define({
           await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
           setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
           setStatus(`${e.name} ${t('installed')} (${msg})`)
-        } catch (x) { setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`) }
+          return true
+        } catch (x) { setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return false }
       }
       const uninstall = (e: MarketEntry) =>
         openMenu(`${e.name} — ${t('confirmUninstall')}`, [
@@ -501,7 +505,7 @@ export default Plugin.define({
         void (async () => {
           let ok = 0, fail = 0
           for (const e of targets) {
-            try { await install(e); ok++ } catch { fail++ }
+            try { if (await install(e)) ok++; else fail++ } catch { fail++ }
             setStatus(tf('updatingN', { n: ok + fail, total: targets.length }))
           }
           setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
@@ -613,7 +617,7 @@ export default Plugin.define({
         if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
         if (k === 'f') { pickFilter(); return }
         if (k === 'c') { pickCategory(); return }
-        if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) { if (canInstall(e)) install(e); else setStatus(t('noInstallTarget')) } return }
+        if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) { if (canInstall(e)) void install(e); else setStatus(t('noInstallTarget')) } return }
         if (k === 'u') { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e); return }
         if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }
 
@@ -706,7 +710,7 @@ export default Plugin.define({
                         const ver = verOf(e)
                         if (ver) uninstall(e)
                         // no deliverable target → explain, don't dead-click
-                        else if (canInstall(e)) install(e)
+                        else if (canInstall(e)) void install(e)
                         else setStatus(t('noInstallTarget'))
                       }}>{actionLabel(e)}</text>
               </box>

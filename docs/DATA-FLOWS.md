@@ -904,7 +904,7 @@ flowchart TB
   AC -->|"更新"| UP["add 钉版 + dedupeToSpec<br/>技能 verMarker 参与"]
   AC -->|"卸载"| UN["removeSpec 重写 config<br/>+ __skill_ 键清技能目录"]
   AC -->|"装 skill(npm)"| SI["fetchPkgVersionMeta<br/>批准版tarball+SRI<br/>→ installSkillTar"]
-  AC -->|"装 skill(github)"| SG["codeload HEAD<br/>→ installSkillTar<br/>剥 wrapper 根"]
+  AC -->|"装 skill(github)"| SG["codeload tar.gz/tree-sha<br/>→ installSkillTar<br/>剥 wrapper 根"]
   AC -->|"双栖"| BOTH["插件+技能都装"]
   PI & UP & UN --> CFG[("opencode.json<br/>plugins[]")]
   SI & SG --> SKD[("~/.config/opencode/skills/")]
@@ -916,54 +916,91 @@ flowchart TB
 index URL 解析：ctx.options.indexUrl > OPENCODE_MARKET_INDEX > Pages 默认
        （https-only；healthUrl/skillsUrl 同目录推导——换源一处生效）
 fetchIndexCached（manifest-first 两段式）：
-  ① health.json {sha256} — ~100B；命中缓存 sha → fresh，0 下载
+  ① health.json {sha256} — ~100B（1MB 上限）；命中缓存 sha → fresh，0 下载
   ② sha 变了（moved）或 force → 拉 index.json **原始 text** 先算 sha256，
      与公告比对——不匹配=mismatch，保留旧缓存绝不钉存错对；
-     匹配才 JSON.parse → sanitizeIndex → isVisible 过滤 → 写缓存
+     匹配才 JSON.parse → sanitizeIndex → isVisible 过滤 → 写缓存；
+     content-length+实际字节双闸 32MB 上限（自定义 indexUrl 打不爆 webview）
   health 不可达 → 退回 1h TTL + 失败快照兜底；crypto 不可用 → 不 pin 不谎称验证
   缓存后端 storage()：webview=localStorage；Node 侧（TUI/main）无
   localStorage → 模块级槽位兜底——否则每次开 dialog 都整拉 index（N-9）
   fetchOutcome()：first|updated|fresh|stale|mismatch —— 刷新按钮如实区分
   "已是最新"/"已刷新 N 条"/"校验未通过"
 UI（gui.ts webview / tui.tsx 终端）：
-  列表 sortEntries（verified 优先）/ search(name>aliases>desc 加权) / 分类
+  列表 sortEntries（verified 优先·红旗沉底——有 redFlags 的条目沉到所有
+    无旗条目之下，含 verified/failed）/ search(name>aliases+slug>desc 加权)
+    / 分类（index.categories 双语字典优先，缺 id 退回本地分类表/分类器）
   TUI 渲染 cap 120 起步按选中位增长；uncataloged 已装 spec 进合成卡片
+    （本地 dir / git spec 安装也算已装；索引拉不到时 extras 降级不拖垮清单）
   状态标签：installed 优先；!canInstall(e) → noInstallTarget 惰性徽标
-    （github 插件仓无 npm 产物时）；否则四态同站点
+    （github 插件仓无 npm 产物时，双端点击都有提示不静默）；否则四态同站点，
+    verification.status 枚举钳位防 crafted 值出空白徽标；
+    deprecated+replacedBy/legacy/removedFrom（墓碑）徽章叠加
   安装路由 installPlan(e)：{plugin:有npm版∧contains:plugin, skill:npm|github|null}
-    双栖（contains 含 plugin+skill）→ 插件 pinSpec 装 + 技能装，一次点完
+    双栖（contains 含 plugin+skill）→ 插件 pinSpec 装 + 技能装，一次点完；
+    jobs map 防双击并发起两个 spawn
   插件安装：pinSpec(e) = name@latestVersion（钉到批准版；VER_SAFE 字符
        校验——crafted version 直接拒装，不让怪串进 spec）（N-8）
-       gui: api.install → host `plugin add <spec>`（restrictedEnv，90s kill）
-       tui: 同 spawn + 90s 超时
+       gui: api.install → host `plugin add <spec>`（restrictedEnv 放行
+       HTTP(S)_PROXY/NO_PROXY/XDG/OPENCODE_*，剥其余环境秘密；90s kill）
+       tui: 同 spawn + 90s 超时 + 子进程输出 sanitize 后上状态行 + 'C' 取消
   技能安装（npm）：fetchPkgVersionMeta(name,latestVersion) 取批准版
        tarball+integrity → fetch(15-30s timeout；content-length+字节双闸
        过 MAX_SKILL_TGZ) → integrityMatches SRI
-       sha512 校验（公告值不匹配=拒装 fail-closed）→ installSkillTar
-  技能安装（github）：codeload <repo>/tar.gz/HEAD → installSkillTar
-       两段式解包剥 `<repo>-<ref>/` wrapper 根；version 记账=modifiedAt
+       sha512 校验（公告值不匹配=拒装 fail-closed）→ installSkillTar；
+       gui 渲染端只传 name——URL/SRI 由主进程自己查缓存 index 决议
+       （renderer 传不了 integrity:null 旁路校验）
+  技能安装（github）：codeload <repo>/tar.gz/<tree sha> —— 钉到管线扫描过的
+       source.version（装的就是扫的），无 sha 遗产条目才退 HEAD；
+       → installSkillTar 两段式解包剥 `<repo>-<ref>/` wrapper 根；
+       version 记账=modifiedAt
   installSkillTar：assertEntryId(npm名∨owner/repo) → 路径逃逸双闸 →
        48/256MB 双顶 → 提升 .opencode|.claude|.agents skills 嵌套到根
        （包根有 SKILL.md 时连 `skills/` 目录一起提）、撞名 <id>- 前缀、
-       .market-skills.json 清单（卸载按清单精确删）、__skill_<base> 安装键
+       目标目录存在且无本包 .market-skills.json → 拒装（unscoped 撞名
+       不混入外来目录，卸载不会删用户文件；scoped 走 namespace 回退）、
+       提升失败的嵌套非空保留不静默删、.market-skills.json 清单
+       （卸载按清单精确删）、__skill_<base> 安装键
   更新：add 钉版 spec → dedupeToSpec 重写 config plugins[]
        （plugin add 不去重会留双 spec——E2E 实锤；从不调 `plugin update`——它走 latest=旁路）
-       技能更新走 verMarker（npm=latestVersion,github=modifiedAt）比较，
-       updateAll 双端都含技能
-  卸载：removeSpec 重写 config plugins[]；装了技能的面才清技能目录
-       （__skill_ 键探测——纯插件条目绝不扫技能根）
+       技能更新走 verMarker（npm=latestVersion,github=modifiedAt）比较；
+       versionCmp 语义化比较——已装>批准版显示「回退到批准版」不误称更新；
+       updateAll 双端都含技能且 TUI 串行 await（并发改配置曾丢 spec）
+  卸载：removeSpec(list,name,idByName) 重写 config plugins[]
+       （id≠spec 名时靠 list 的 id 映射找到真 spec）；
+       装了技能的面才清技能目录（__skill_ 键探测——纯插件条目绝不扫技能根）
+  配置/技能根路径：OPENCODE_CONFIG > XDG_CONFIG_HOME > ~/.config
+       （configPath()/skillsRoot() 共享—— spawn 的 plugin add 与直接写
+       的 opencode.json 永远同一文件）
   verifyActivation：隔离 HOME 起 serve → POST /api/session 触发懒加载
-       → 轮询日志 canary → activated/not-loaded（GET-only 永远不触发——已修）
-  skillSource：把 skillsUrl(indexUrl) 加进 opencode.json skills[]（远程 catalog 源）
-  skillPermission：写 permission 条目（action:skill, resource:id, effect:allow|deny|ask）
-  pendingUpdate 透出：详情页"有 vX 在审"；github 条目显示 tree sha
+       → 轮询日志 canary → activated/not-loaded/unknown 三态
+       （探针跑不起来=unknown，不谎称 not-loaded）
+  skillSource：skillsUrl(indexUrl) 双向开关 opencode.json skills[]
+       （enable:false 可关，其余 skills[] 条目不动）
+  skillPermission：写 permission 条目（action:skill, resource:id,
+       effect:allow|deny|ask；null=清除回默认）——GUI settings 与 TUI
+       权限菜单都有入口；hostx.writeSkillPermission 原子写、保留无关条目
+  removed[] 墓碑：已装名撞 removed[] → 「已从目录移除（原因）」徽章+
+       详情；不自动卸载
+  详情页增强：compat.engines/peer、license、maintainers、createdAt、
+       integrity、verification.level/verifiedAt/opencodeVersion/runUrl/
+       logExcerpt（failed 三件套：发生了啥→为啥→重试/导出日志/去详情）、
+       pendingUpdate.version+reason+heldAt、siteDetailUrl
+       （index 目录推导 p/<slug>.html 回链站点审计面）
+  pendingUpdate 透出：详情页"有 vX 在审"+原因；github 条目显示 tree sha
   版本号：__PKG_VERSION__ 由 build.ts 从 package.json 注入（gui/tui 头部）
   extras：uncataloged 已装 spec → buildExtras 卡片（不在目录里的本机插件）
+  features 过滤双端：contains:plugin/skill/server/tui/rpc chip 多选
+  端面统一：clearData 双端同范围（favorites+skillVers+devlog+lang）；
+       TUI CJK 双宽折行不溢出卡片
   TUI 本地状态：ctx.storage.store（favorites/lang/skillVers/devlog/界面态）；
        mySkills 标签页=contains:skill ∧ 本机已装；settings 页有
        备份/恢复 ~/opencode-market-backup.json（恢复走字段形状校验——
        构造的备份文件不能毁掉 state）
-  devlog：宿主写 market.log（clearDevlog 清它）；渲染端 localStorage ring 300
+  devlog：宿主写 market.log（clearDevlog 清它；marketLogPath 走 XDG）；
+       渲染端 localStorage ring 300
+  sanitizeIndex：顶层 generatedAt/removed[]/categories 字典也过消毒；
+       墓碑无 name/slug 的丢弃
 ```
 
 ---
@@ -1060,10 +1097,10 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 | 文件 | 关键导出 | 角色 |
 |---|---|---|
-| `catalog.ts` | `fetchIndex` `fetchIndexCached`/`fetchOutcome` `resolveIndexUrl`/`healthUrl`/`skillsUrl` `sha256Hex` `sanitizeIndex` `isVisible` `sortEntries` `search` `pinSpec` `approvedTarballUrl` `fetchPkgVersionMeta` `integrityMatches` `installPlan`/`canInstall` `verMarker`/`hasUpdate` `fmtN` `inDays` `scanSkillKeys` `skillInstalledVer` `t`/`tf`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` | 数据面+纯函数层（webview/tui 共用） |
+| `catalog.ts` | `fetchIndex` `fetchIndexCached`/`fetchOutcome` `resolveIndexUrl`/`healthUrl`/`skillsUrl` `sha256Hex` `sanitizeIndex` `isVisible` `sortEntries` `search` `pinSpec` `approvedTarballUrl` `fetchPkgVersionMeta` `integrityMatches` `installPlan`/`canInstall` `verMarker`/`hasUpdate` `versionCmp`/`isDowngrade` `siteDetailUrl` `removedReasonLabel` `setCatDict`/`catLabel` `fmtN` `inDays` `scanSkillKeys` `skillInstalledVer` `t`/`tf`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` `MAX_INDEX_BYTES` | 数据面+纯函数层（webview/tui 共用） |
 | `spec.ts` | `cleanSpec` `dedupeToSpec` `removeSpec` `featuresMap` `buildExtras` | opencode.json plugins[] spec 代数 |
-| `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` `safeTarRel` `MAX_SKILL_TGZ`/`MAX_SKILL_TAR` | tarball→skills 目录（两段式剥 wrapper/提升/清单/撞名） |
-| `hostx.ts` | `assertPkgName` `assertEntryId` `assertSpecForName` `skillId`/`assertSkillId` `readJson`/`strArrayField`/`writeJsonAtomic` `marketLogPath`/`appendBounded` `restrictedEnv` | 宿主侧校验+安全原语（npm 名∨owner/repo；原子写+限界日志） |
+| `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` `safeTarRel` `MAX_SKILL_TGZ`/`MAX_SKILL_TAR` | tarball→skills 目录（两段式剥 wrapper/提升/清单/撞名/外来目录拒装） |
+| `hostx.ts` | `assertPkgName` `assertEntryId` `assertSpecForName` `skillId`/`assertSkillId` `readJson`/`strArrayField`/`writeJsonAtomic` `marketLogPath`/`appendBounded` `restrictedEnv` `configPath` `skillsRoot` `writeSkillPermission` | 宿主侧校验+安全原语（npm 名∨owner/repo；原子写+限界日志；env 感知路径） |
 | `gui.ts` | default `Plugin.define` | webview UI + 全部 host IPC api |
 | `tui.tsx` | default `Plugin.define` | 终端 UI + 进程内宿主调用 |
 | `server.ts` | — | 插件入口装配（ctx.options.indexUrl 通道） |
@@ -1204,7 +1241,7 @@ opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方�
 | opencode 官方方式 | 市场支持 | 缺口 |
 |---|---|---|
 | npm `name@ver` | ✅ `pinSpec` 钉批准版装 | — |
-| **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ⚠️ 部分 | github **skill** 已可装（客户端 installPlan → codeload `tar.gz/HEAD` → `installSkillTar`）；github **plugin** 仍只展示（`installPlan` 明确拒绝，`installHint` 不印装不上的命令）——`opencode plugin add owner/repo` 本身可用但目录不提供该路径 |
+| **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ⚠️ 部分 | github **skill** 已可装（客户端 installPlan → codeload `tar.gz/<tree sha>` 钉扫过的树 → `installSkillTar`，无 sha 遗产退 HEAD）；github **plugin** 仍只展示（`installPlan` 明确拒绝，`installHint` 不印装不上的命令）——`opencode plugin add owner/repo` 本身可用但目录不提供该路径；本机 git-spec 已装插件进 extras 清单可见 |
 | git `owner/repo#commit` 钉版 | ⚠️ | `modifiedAt` 记 pushedAt（站点技能目录拿它当版本/缓存键）；github-kind 的 `source.version` 现在记 **tree sha**（fetchRepoTree 返回——内容身份审计用，但不是 git ref，`repo#sha` 钉版仍需 head commit sha） |
 | github 条目静态扫描 | ✅ | **已实现**：codeload `tar.gz/HEAD` 过同一套 `scanTarball`（§1 github-kind 补集），扫描失败才 `scannedAt:null` |
 | github 条目云验证 | ❌ | `planTargets` 要求 version；`opencode plugin add owner/repo` 可验但槽位模型（verification/pendingUpdate 按 version 索引）没留位置 |
@@ -1224,7 +1261,7 @@ opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方�
 |---|---|
 | 单装 `@a/test` | `test/` |
 | 再装 `@b/test` | `a--test/` + `b--test/`（原 `test/` 改名） |
-| 外来 `test/`（无 manifest） | 新包落 `b--test/`，外来目录不动 |
+| 外来 `test/`（无 manifest） | scoped 新包落 `b--test/`，外来目录不动；unscoped 无 namespace 回退 → 拒装不混入 |
 | `uninstall` | 先查 `a--test/`，回落 `test/` |
 
 站点 `skills/<id>/` 同源：`buildSkillCatalog` 对目录内 skill 包做 basename 计数，>1 才上全名 id。`skillInstalledVer` 同时认 `__skill_<ns>`、`__skill_<base>` 及 `<id>-*` lifted 兄弟键。
