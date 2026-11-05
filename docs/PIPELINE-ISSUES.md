@@ -544,3 +544,9 @@ Pipeline/CI 安全：
 | S-16 buildSite 不清理旧输出——残留文件会一起发出去 | ✅ | 开头 `rmSync(outDir)` 重建 |
 
 **验证**：typecheck 0 错；569 tests 全过；build.ts 覆盖率 97.6%；site.yml YAML 校验过；site.test.ts +14 用例（缓存命中/种子/清理、两段式提取含 node_modules+symlink 对抗包、id 碰撞、闸门、lite 索引、removed/skills 页、分类下拉、陈旧输出清理）。
+
+### 附十一补遗：categories 词表错配（遗留项修复）
+
+活 index 的 `categories` 字典键是中文标签（`主题与外观: {en: 主题与外观}`），而 `entry.category` 是英文 slug（`tools`/`sessions`）——设计本意是 slug 键 + `{en,zh}` 显示名（`src/categories.ts` 的 `CAT_NAMES`）。`buildIndex` 的 I-3 归一逻辑正确，但 `remerge`（发布重试路径）裸合并 `remote.categories`，catalog 分支上的旧中文键会被原样带回来、永不迁移。
+
+修复：`remerge` 对齐 `buildIndex`——remote/ours 两侧字典键经 `catId` 归一 + `CAT_NAMES` 回填、merged 条目的 `e.category` 值归一、按条目补齐字典项。活 index 无需手动修：下一次 catalog run 经 `buildIndex` 自愈，remerge 不再反向污染。测试：sec.test.ts +1（ours 中文值 + remote 中文键双侧归一）。

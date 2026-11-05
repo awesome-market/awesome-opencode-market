@@ -249,6 +249,18 @@ describe('remerge (WF-2 publish retry)', () => {
     expect(out.removed.map(r => r.name).sort()).toEqual(['x', 'y'])
     expect(out.categories).toMatchObject({ c1: { en: 'C1' }, c2: { en: 'C2' } })
   })
+  it('legacy zh categories normalize on the retry path (I-3 follow-through)', () => {
+    // ours-side entry carries a legacy zh value (old run.json / submission-supplied);
+    // remote dict carries a legacy zh key — both must land as english ids
+    const ours = mkIndex([mkEntry('a', '1.0.0', { category: ['主题与外观'] })])
+    const remote = mkIndex([mkEntry('a', '1.0.0')], {
+      categories: { '主题与外观': { en: '主题与外观' } },
+    })
+    const out = remerge(ours, remote)
+    expect(out.categories['主题与外观']).toBeUndefined()
+    expect(out.categories['appearance']).toEqual({ en: 'appearance', zh: '主题与外观' })
+    expect(out.plugins.find(e => e.name === 'a')!.category).toEqual(['appearance'])
+  })
   it('null remote → ours returned wholesale', () => {
     const ours = mkIndex([mkEntry('a')])
     expect(remerge(ours, null)).toBe(ours)
