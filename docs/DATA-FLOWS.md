@@ -392,6 +392,10 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
           apiPluginState 误判 failed
         L1 install: 隔离 HOME+XDG_CONFIG/DATA/CACHE → `opencode plugin add name@ver`（45s；
           失败摘录带一句"沙箱出站是白名单——拉取失败可能是网络策略而非包坏"）
+          沙箱 home 两级权属：父目录 runner-owned 0711（nobody 可穿越不可写，
+            护住 runner-owned 证据区），<home>/u 由 runner mkdir 后
+            `sudo -n chown` 移交 nobody——曾按 nobody mkdir 实现，真 runner
+            上 EACCES（0711 不可写正是设计），e2e 抓到
         L1.5 load: writeDummyProvider（合并写！不抹 plugin add 的 plugins[]）
                    → `opencode serve` 经 spawn 起后台（沙箱模式下唯一过
                      nobody wrapper 的部分）——stdout/stderr 管道直接回

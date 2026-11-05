@@ -476,8 +476,9 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 | V-R 无 plugin 也无 skill 的条目（mcp/command/agent）排队后无可验载荷 | ✅ | planTargets 直接跳过——schema 的 contains 枚举比当前结构检查覆盖面宽，无诚实判定口径的不进队列 |
 | V-S merge `commit \|\| echo "no changes"`——真提交失败被空 push 成功掩盖，验证结果静默丢失（catalog-append 的 C-2 同款洞，verify 漏修） | ✅ | staged-diff 预检：`diff --cached --quiet` → "无事可提"ok 跳出；否则 commit 失败 → continue 重试，绝不走到 push |
 | V-T 壳层批量：plan 端 catalog 分支存在但 index 读不出 → `{"plugins":[]}` 绿过空跑（fetch 故障静默饿一天）；merge worktree 残留 `/tmp/cat` 使裸 add 连 fallback 一起挂；readLog 全文件读可被插件日志顶 OOM；顺序切片把重目标挤进头部片；`--retest` 只在带 targets 时可用；fork 的 schedule 照跑白烧分片机时 | ✅ | 分支存在+index 读不出 → exit 1 硬失败（分支不存在才合法空计划）；worktree `remove --force` 先行；readLog 改尾部 256KB 读；shard 改加权贪心（1+features 估分钟摊最轻片，等权退化为轮转，确定性）；`retest` 独立 boolean input；plan job `if` 闸——schedule 只在 prod 仓跑，手动 dispatch 处处可跑 |
+| V-U e2e 连抓两雷：①空计划下游级联——`fromJSON(shards) != '[]'` 拿数组比字符串恒真 → 0 片也展开空矩阵（verify 失败）→ merge 跑且 `readdirSync /tmp/results` ENOENT → alert 误报；②nobody 沙箱建目录——`sudo -n -u nobody mkdir <home>/u` 在 0711 runner-owned home 里 EACCES（0711 不可写正是防 nobody 种证据的设计），mock 测的 fake 把 sudo mkdir 当真跑所以没暴露 | ✅ | ①三个下游 job `if` 改直接字符串比较（`!= '[]' && != '' && != 'null'`）+ merge `existsSync` 兜底空目录=空结果集；②uh 改 runner `mkdirSync` + `sudo -n chown nobody` 移交——父目录保持 0711，测试 fake 重挂到 chown 钩 |
 
-**验证**：typecheck 0 错；630 tests 全过；新回归：verifyPartsOf 归一化、skill-only 路由（plugin add/serve 不启动）、structure 判定三分支（无 SKILL.md/无 frontmatter name/pack 失败）、嵌套 skills/<x>/ 布局、双栖补验成败两向、加权分片均衡、VerifyResultFile 收 structure。
+**验证**：typecheck 0 错；636 tests 全过；新回归：verifyPartsOf 归一化、skill-only 路由（plugin add/serve 不启动）、structure 判定三分支（无 SKILL.md/无 frontmatter name/pack 失败）、嵌套 skills/<x>/ 布局、双栖补验成败两向、加权分片均衡、VerifyResultFile 收 structure、chown 移交断言（nobody 不在 home 里 mkdir）。**真机 e2e**（fork dispatch 42003883520）：纯技能 `structure` verified；双栖 plugin-load 过后技能半边缺 SKILL.md → failed/load+excerpt；普通插件真败因如实带出（"Plugin must export a default definition"→ failed/load）；空计划全链路 skipped 绿过。
 
 ## 附七：AI 诊断链审计（D-1…D-8）
 
