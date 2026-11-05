@@ -334,7 +334,7 @@ describe('notify-published.main', () => {
       expect(JSON.parse(out[0]!).notified).toBe(true)
       expect(JSON.parse(out[1]!).notified).toBe(false)
       expect(out[2]).toBe('not-json')
-      expect(log.mock.calls.flat().join('')).toBe('42')
+      expect(log.mock.calls.flat().join('')).toBe('42\to/pkg')
     } finally { log.mockRestore() }
   })
 })

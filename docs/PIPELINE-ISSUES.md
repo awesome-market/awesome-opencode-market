@@ -776,3 +776,26 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 **连带落地**：`monorepo .opencode/` 任意深度证据识别（证据门+skill 路径+type 判定同口径）；`parseSubmission` 认 `npm 包名或 owner/repo` 标签（concern 表单同标签互通）；submission repo 字段归一小写；`catalog-append.sh` KEY 大小写不敏感；coverage8/9/10 三个漂移测试文件与现签名调和补交（renderRepoReview/§findGuiBundle/liveAlarms sec: 前缀/buildIndex opts/planTargets cap 签名/parseSubmission/detectFeatures 形参/resolveVerdictEvent 字面量重键）。
 
 **验证**：typecheck 0 错；43 文件 943 tests 全过（audit10 +36 新例：cap 只限新候选、compat 填充与截断、github: shorthand、嵌套证据门、redirect 降级/缺 Location/>5 跳拒收、abbreviated packument Accept、obfuscation 文档免疫/代码命中、wasm medium/未知 high、mapPool 并发上限、seed-gh meta 回填/archived 拒收、gh 大小写复用名单条、declared-skill 保 plugin 部件、forceGate 拒发/放行、缺 seed 容错、blocklist 显示大小写拦截、截断树 sec:tree-truncated）；DATA-FLOWS §0/§1/§4/§13 同步。
+
+## 附十九：投稿流专项审计（submit.yml 全流程，S-1…S-13 + 优化落地）
+
+对照 DATA-FLOWS §2/§5 逐行核对 submit.yml + 投稿链实现（submission/review/human-verdict/notify-published/submission-status/catalog-append/withdraw/run.ts 种子消费段），并回归前序 agent 目录审计批次（小写仓库身份、compat、gh 种子回填、skill 声明不剥 plugin 部件、dead 种子晚落地补通知）——全部成立无回归。本轮发现 5 高 6 中 2 低缺陷，全部修复。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| S-1 ingest/withdraw 挂 `catalog-branch` → GitHub 每组只留 1 pending，共享锁静默丢入队/撤回（issue 自认知"已入队"却无种子行、无生命周期——HV-8 同型） | ✅ | 改 per-issue 组 `submit-ingest-N`/`submit-withdraw-N`；跨 issue 写竞争照旧由 catalog-append fetch→reset→push 重试吸收 |
+| S-2 同包二投 KEY+LIVE 去重静默跳过 → 第二单无种子行、无 status/notify/dead，approved 标签不被 sweep，永久孤儿 | ✅ | catalog-append.sh 去掉 KEY+LIVE 分支：同 issue 替换、**不同 issue 各自成行**——markNotified/statuses 按 issue 匹配，双单同包两单都获完整生命周期；成本仅多一行 JSONL |
+| S-3 review-alert "回复任意评论重审"承诺不可达：预标签崩溃单（仅基标签或 [submit] 标题）不在 comment 析取的三个子标签里 | ✅ | comment 重审门改 `(含基标签∨[submit]标题) && !submission:approved`；同时 `!startsWith(body,'/')`——/approve、/concern、/withdraw 不再触发全量重审烧 tarball 扫描 |
+| S-4 flagged 投稿人工推翻 catch-22：未入库无种子 → /approve noseed 拒；[concern] 表单不在 index 也拒 | ✅ | verdict job late-ingest：无种子+pass+最近 bot 初审 clean\|flagged 且有被审版本/resolvedSha → 先补种子行（钉被审版本，catalog 收录端仍重扫字节）再落裁决；invalid/error 初审无推翻目标仍 noseed，ack 按 lastreview 说清路径 |
+| S-5 freeform [submit] 单不挂基标签 `submission` → 防滥用门计数漏掉、sweep 孤儿扫描漏掉、评论重审门漏掉 | ✅ | report 同时 `--add-label submission`（label create 只是定义） |
+| S-6 `/withdraw` 只删种子行 → 已建 pending 条目继续占扫描/验证/AI 预算甚至后被放行 | ✅ | catalog-withdraw.sh 新增 ENTRY：approval=pending 且 discoveredVia⊆{submission} → 撤下并 tombstone(reason:manual)；已上架/有有机来源不动（maintainer 裁决域） |
+| S-7 收录端拒绝无回执：status 承诺"届时会在本 issue 说明原因"无机制兑现，作者干等 14 天 generic staleWarned | ✅ | run.ts `--seed-outcomes` 产出 per-seed 拒绝码（pkg-not-found/no-plugin-evidence/blocklisted/template-spam/archived/repo-not-found/no-opencode-evidence/fetch-error）→ catalog.yml publish 经 `pipeline/seed-outcome.ts` 回写种子行 `rejected` 字段 → submission-status 新增 `rejected` 相位渲染"发生了啥→为啥→咋办"；条目落地即清除 |
+| S-8 sweep 覆盖不全：基标签孤儿与 approved 停滞单永不被扫 | ✅ | sweep 增补 `submission:approved` 30d（与 dead 种子同视界）+ 基标签无 `submission:*` 子标签 30d 孤儿（预标签崩溃残留） |
+| S-9 submit verdict ack 缺槽位诚实：过审未验证版说"公示后进入上架"，无 vstatus/deadslot/幽灵条目口径（concern.yml 有 H-17/K-4） | ✅ | ack 新增：目标缺席→"裁决存档待条目落地"（repo 按名匹配）；VER 不在活动槽位→dead-slot 提示；pass 落 unverified/failed/skipped 槽→附验证状态说明 |
+| S-10 submission-status `'published'` 相位死代码：同轮 markNotified 先标 notified → statuses 跳过，永远不可达 | ✅ | 移除该相位；文档注明"notify 评论即是已上架信号" |
+| S-11 blocklist 只在目录端生效 → 名单包 clean 入库后 14 天才被拦 | ✅ | review job 加 blocklist 预检（`git show FETCH_HEAD:blocklist.json` 匿名 fetch+小写比对）→ 命中直接 invalid 报告"目录不收" |
+| S-12 防滥用门 fail-open：`gh issue list \|\| echo 0` API 瞬断即绕过 5 单上限 | ✅ | 重试一次，仍败 → 放行但 `::warning::` 日志留痕（fail-open 为刻意权衡，不再静默） |
+| S-13 非 collaborator `/approve|/concern` 外层 if 卡死静默无回执 | ✅ | 关联校验移入 job 内 `perm` 步（先于 checkout/npm ci，廉价短路）：真命令非 maintainer → 回"仅 maintainer"；形似非命令 → 照旧静默 skip=1 |
+| 小项 | ✅ | `submission:approved` 标签打给不可解析 issue → skipmsg=unparseable 回执评论；notify 评论附详情页 `p/<slug>.html` 链接（notify-published 输出 `issue\tslug`）；投稿表单 repo 字段改 optional（npm-only 包此前无法走表单）；flagged 页脚明示 maintainer /approve 放行路径；DATA-FLOWS §0/§1/§2/§5/§12 同步 |
+
+**验证**：typecheck 0 错；新增 seed-outcome/submission-status rejected/markNotified slug 测试随套件全绿；vitest.config 别名 fileURLToPath（非 ASCII checkout 路径修复）。

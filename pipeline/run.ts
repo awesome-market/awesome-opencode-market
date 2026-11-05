@@ -33,6 +33,11 @@ export interface RunOptions {
   /** workflow_dispatch escape hatch: publish despite a red corruption gate
    *  (legitimate mass-deprecation/removal events otherwise dead-lock every run) */
   forceGate?: boolean | undefined
+  /** optional output: {submissionKey: rejectionCode} for seed rows the
+   *  admission path rejected this run — the publish job stamps them onto
+   *  submissions.txt so the issue's status comment can explain WHY the
+   *  package isn't queueing instead of leaving it 'queued' for 14 days */
+  seedOutcomesPath?: string | undefined
 }
 
 export function loadOldIndex(path?: string): CatalogIndex | null {
@@ -150,6 +155,9 @@ export async function run(opts: RunOptions = {}) {
   // repo-only submissions (name:null) keep declared metadata too — keyed by repo
   const seedRepoMeta = new Map<string, SeedMeta>()
   const seedNames = new Set<string>()
+  // per-seed rejection reasons — the status comment contract promises "届时会
+  // 在本 issue 说明原因"; this map is what makes that promise true
+  const seedOutcomes = new Map<string, string>()
   if (opts.seedPath && !existsSync(opts.seedPath)) {
     // consistent with every other optional input (old index, blocklist):
     // warn and continue rather than hard-fail — a mistyped local path must
@@ -233,7 +241,10 @@ export async function run(opts: RunOptions = {}) {
   const rejectedGh = new Set<string>()
   const ghList = [...ghCands.values()].filter(c => {
     const ok = preAdmit({ name: c.fullName, repoUrl: c.fullName, archived: c.archived, fork: c.fork }).admit
-    if (!ok) rejectedGh.add(c.fullName.toLowerCase())
+    if (!ok) {
+      rejectedGh.add(c.fullName.toLowerCase())
+      if (c.discoveredVia.includes('submission')) seedOutcomes.set(c.fullName.toLowerCase(), 'archived-or-fork')
+    }
     return ok
   })
   const byOwner = new Map<string, string[]>()
@@ -245,7 +256,11 @@ export async function run(opts: RunOptions = {}) {
   const rejectedNpm = new Set<string>()
   const admitted = npmList.filter(c => {
     const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0]?.toLowerCase() ?? c.name.split('/')[0]!
-    if (spamOwners.has(owner)) { rejectedNpm.add(c.name); return false }
+    if (spamOwners.has(owner)) {
+      rejectedNpm.add(c.name)
+      if (seedNames.has(c.name)) seedOutcomes.set(c.name, 'template-spam')
+      return false
+    }
     return true
   })
   // same template-spam heuristic on the gh side — a burst of near-identical
@@ -259,7 +274,11 @@ export async function run(opts: RunOptions = {}) {
   const ghSpamOwners = new Set([...byGhOwner.entries()].filter(([, ns]) => looksLikeTemplateSpam(ns)).map(([o]) => o))
   const ghAdmitted = ghList.filter(c => {
     const owner = c.fullName.split('/')[0]!.toLowerCase()
-    if (ghSpamOwners.has(owner)) { rejectedGh.add(c.fullName.toLowerCase()); return false }
+    if (ghSpamOwners.has(owner)) {
+      rejectedGh.add(c.fullName.toLowerCase())
+      if (c.discoveredVia.includes('submission')) seedOutcomes.set(c.fullName.toLowerCase(), 'template-spam')
+      return false
+    }
     return true
   })
   console.log(`admitted: ${admitted.length} npm + ${ghAdmitted.length} github (spam owners: ${[...spamOwners, ...ghSpamOwners].join(', ') || 'none'})`)
@@ -414,6 +433,7 @@ export async function run(opts: RunOptions = {}) {
           // a submitted package that 404s is dead on arrival — the issue gets
           // no notify-published comment, so at least make it visible (R-5)
           console.warn(`submission ${cand.name}: packument ${pkStatus} — submission not admitted`)
+          seedOutcomes.set(cand.name, pkStatus === 'error' ? 'fetch-error' : 'pkg-not-found')
         }
         return
       }
@@ -434,6 +454,7 @@ export async function run(opts: RunOptions = {}) {
           reusedNames.add(cand.name)
         } else {
           rejectedNpm.add(cand.name)
+          if (seedNames.has(cand.name)) seedOutcomes.set(cand.name, 'no-plugin-evidence')
         }
         return
       }
@@ -445,7 +466,10 @@ export async function run(opts: RunOptions = {}) {
       const declaredRepo = cand.discoveredVia.includes('submission') ? normalizeRepoUrl(cand.repoUrl) : null
       const repo = normalizeRepoUrl(pk.repository) ?? declaredRepo
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
-      if (isBlocked(cand.name, slug)) return
+      if (isBlocked(cand.name, slug)) {
+        if (seedNames.has(cand.name)) seedOutcomes.set(cand.name, 'blocklisted')
+        return
+      }
 
       // R-1 pin-until-terminal: a live hold keeps its version across upstream
       // bumps — verification, in-flight review state and heldAt are all keyed
@@ -808,9 +832,14 @@ export async function run(opts: RunOptions = {}) {
   // it is the canonical record for its repo and keeps being processed for
   // metrics/scan freshness (slug-dedup merges the two views at publish).
   const coveredRepos = new Set(entries.map(e => e.source.repo?.toLowerCase()).filter(Boolean))
-  const ghMissing = ghQueue.filter(c =>
-    !coveredRepos.has(c.fullName.toLowerCase())
-    && !isBlockedAnyCase(c.fullName, c.fullName.toLowerCase()))
+  const ghMissing = ghQueue.filter(c => {
+    if (coveredRepos.has(c.fullName.toLowerCase())) return false
+    if (isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())) {
+      if (c.discoveredVia.includes('submission')) seedOutcomes.set(c.fullName.toLowerCase(), 'blocklisted')
+      return false
+    }
+    return true
+  })
   // admission audit counters — gate outcomes must be countable, not just silent
   // nulls. 'covered' counts only npm-covered candidates; blocklist drops get
   // their own counter (the old math lumped them into covered).
@@ -839,7 +868,12 @@ export async function run(opts: RunOptions = {}) {
         if (metaRes.status === 'rate-limited') rateLimitedCalls++
         if (metaRes.meta) {
           const m = metaRes.meta
-          if (m.archived) { ghStats.archived++; rejectedGh.add(lower); return null }
+          if (m.archived) {
+            ghStats.archived++
+            rejectedGh.add(lower)
+            if (isSeedRepo(cand)) seedOutcomes.set(lower, 'archived')
+            return null
+          }
           canonicalName = m.fullName
           cand = {
             ...cand,
@@ -878,14 +912,24 @@ export async function run(opts: RunOptions = {}) {
         ghStats.treeTransient++
         return ghPrev ?? null
       }
-      if (!treeRes.paths) { ghStats.treeEmpty++; rejectedGh.add(lower); return null }   // gone/empty — gone-check decides
+      if (!treeRes.paths) {
+        ghStats.treeEmpty++
+        rejectedGh.add(lower)
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-not-found')
+        return null
+      }   // gone/empty — gone-check decides
       // a truncated tree is INCOMPLETE data, not a verdict — the API cut the
       // deep paths, so evidence judged on the front of the tree alone gets a
       // visible counter (and a finding on the admitted entry), instead of a
       // silent 'evidence-rejected' against partial information
       if (treeRes.truncated) ghStats.truncated++
       const ev = hasRepoEvidence(treeRes.paths, cand.topics)
-      if (!ev.ok) { ghStats.evidenceRejected++; rejectedGh.add(lower); return null }
+      if (!ev.ok) {
+        ghStats.evidenceRejected++
+        rejectedGh.add(lower)
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'no-opencode-evidence')
+        return null
+      }
       // the tree already told us whether a package.json exists — a 404 fetch
       // would only burn a raw.githubusercontent round-trip to learn the same
       const [marketMeta, repoPkg] = await Promise.all([
@@ -1165,6 +1209,13 @@ export async function run(opts: RunOptions = {}) {
   if (!gate.ok && !opts.forceGate) throw new Error(`publish gate: ${gate.reason}`)
   if (!gate.ok) console.error(`publish gate: ${gate.reason} — overridden by --force-gate`)
 
+  // seed rejection receipts — the publish job stamps these onto submissions.txt
+  // rows so a rejected submission's status comment says why, not '排队中'
+  if (opts.seedOutcomesPath) {
+    writeFileSync(opts.seedOutcomesPath, JSON.stringify(Object.fromEntries(seedOutcomes)))
+    if (seedOutcomes.size) console.log(`seed outcomes: ${[...seedOutcomes].map(([k, v]) => `${k}→${v}`).join(', ')}`)
+  }
+
   // 6. write
   const out = opts.outPath ?? 'dist/index.json'
   mkdirSync(dirname(out), { recursive: true })
@@ -1191,6 +1242,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ...(max !== undefined ? { maxEntries: max } : {}),
     verdictsPath: arg('--verdicts'),
     digestStatePath: arg('--digest-state'),
+    seedOutcomesPath: arg('--seed-outcomes'),
     ...(process.argv.includes('--force-gate') ? { forceGate: true } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }

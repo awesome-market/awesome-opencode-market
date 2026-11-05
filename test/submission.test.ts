@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { parseSubmission, seedLine } from '../pipeline/submission.ts'
 import { markNotified } from '../pipeline/notify-published.ts'
 import { submissionStatuses } from '../pipeline/submission-status.ts'
+import { applySeedOutcomes } from '../pipeline/seed-outcome.ts'
 import { run } from '../pipeline/run.ts'
 import { CatalogIndex } from '../src/schema.ts'
 
@@ -310,7 +311,7 @@ describe('submissionStatuses', () => {
   const basePlugin = { name: 'p1', slug: 'p1', aliases: [], type: 'plugin' as const, discoveredVia: [], source: { kind: 'npm' as const, id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' as const }, compat: {} }
   const mkIdx = (plugins: unknown[]) => CatalogIndex.parse({ version: '1', generatedAt: 't', categories: {}, plugins, removed: [] })
 
-  it('phases: queued (no entry) / review (pending) / published (visible)', () => {
+  it('phases: queued (no entry) / review (pending); landed is skipped (notified already covers it)', () => {
     const idx = mkIdx([
       { ...basePlugin, name: 'pend-pkg', approval: 'pending' },
       { ...basePlugin, name: 'live-pkg', approval: 'approved' },
@@ -324,9 +325,25 @@ describe('submissionStatuses', () => {
       '{"name":"noissue","notified":false}',               // no issue — skipped
     ])
     expect(rows.map(r => [r.issue, r.phase])).toEqual([
-      [1, 'queued'], [2, 'review'], [3, 'published'],
+      [1, 'queued'], [2, 'review'],
     ])
     expect(rows[0]!.phaseLabel).toBe('排队中')
+  })
+
+  it('rejected phase renders the stamped reason (S-7: the "届时会说明原因" promise)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending' }])
+    const rows = submissionStatuses(idx, [
+      '{"name":"blocked-pkg","issue":7,"notified":false,"rejected":"blocklisted"}',
+      '{"name":"gone-pkg","issue":8,"notified":false,"rejected":"pkg-not-found"}',
+      // entry exists → 'review' wins over a stale rejected stamp
+      '{"name":"pend-pkg","issue":9,"notified":false,"rejected":"no-plugin-evidence"}',
+    ])
+    expect(rows.map(r => [r.issue, r.phase])).toEqual([
+      [7, 'rejected'], [8, 'rejected'], [9, 'review'],
+    ])
+    expect(rows[0]!.phaseLabel).toBe('未通过收录规则')
+    expect(rows[0]!.detail).toContain('黑名单')
+    expect(rows[1]!.detail).toContain('找不到')
   })
 
   it('one row per issue — newest seed wins; repo seeds match by repo', () => {
@@ -358,7 +375,41 @@ describe('notify-published main', () => {
     const orig = console.log
     console.log = (...a: unknown[]) => { logs.push(String(a[0])) }
     try { main(['x', 'y', idxPath, seedPath]) } finally { console.log = orig }
-    expect(logs).toEqual(['3'])
+    expect(logs).toEqual(['3\tp1'])
     expect(readFileSync(seedPath, 'utf8')).toContain('"notified":true')
+  })
+})
+
+describe('applySeedOutcomes', () => {
+  const idx = {
+    plugins: [
+      { name: 'landed-pkg', source: { repo: 'o/landed' } },
+      { name: 'npm-twin', source: { kind: 'npm', id: 'npm-twin', repo: 'o/twin' } },
+    ],
+  }
+
+  it('stamps the rejection code; a landed entry clears the stamp; repo seeds match source.repo', () => {
+    const out = applySeedOutcomes([
+      '{"name":"rejected-pkg","issue":1}',
+      '{"name":"landed-pkg","issue":2,"rejected":"no-plugin-evidence"}',
+      '{"repo":"o/twin","issue":3,"rejected":"repo-not-found"}',   // covered by the npm twin entry
+      '{"repo":"o/stuck","issue":4,"rejected":"repo-not-found"}', // no entry, no outcome → stamp stays
+      'plain-name-legacy-line',
+    ], {
+      'rejected-pkg': 'no-plugin-evidence',
+    }, idx)
+    expect(JSON.parse(out[0]!).rejected).toBe('no-plugin-evidence')
+    expect(JSON.parse(out[1]!).rejected).toBeUndefined()
+    expect(JSON.parse(out[2]!).rejected).toBeUndefined()
+    expect(JSON.parse(out[3]!).rejected).toBe('repo-not-found')
+    expect(out[4]).toBe('plain-name-legacy-line')
+  })
+
+  it('re-stamp with a new code replaces the old one; identical stamp is a no-op', () => {
+    const line = '{"name":"p","issue":1,"rejected":"fetch-error"}'
+    const [a] = applySeedOutcomes([line], { p: 'pkg-not-found' }, { plugins: [] })
+    expect(JSON.parse(a!).rejected).toBe('pkg-not-found')
+    const [b] = applySeedOutcomes([line], { p: 'fetch-error' }, { plugins: [] })
+    expect(b).toBe(line)
   })
 })

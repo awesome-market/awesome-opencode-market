@@ -70,7 +70,7 @@ flowchart TB
 |---|---|---|---|
 | `index.json` | catalog.yml publish / verify.yml merge | 站点构建、客户端、diagnose、docket、verify plan、applyMatureVerdicts | 完整目录（含 pending——数据面全量，展示面各自过滤） |
 | `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml；digest.yml 班内 `verdicts-compact.ts` 压实 | run.ts、diagnose（判重）、docket、digest、site 详情页（裁决记录区块） | **append-only** 裁决流水；同 name@version 最新 `at` 胜出；详情页折叠透出最近 10 条 + 全量链接。压实只丢「被同键更新行取代且超保留窗（默认 180d）的 AI 行」——畸形行、human 行、每键最新行、窗口内行全保留，最新行集合不变 → 全消费端语义不变 |
-| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入但**仍可在迟到上架时补发落地通知**（关单≠聋）；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
+| `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?,rejected?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入但**仍可在迟到上架时补发落地通知**（关单≠聋）；`rejected`=本轮目录收录门给出的拒绝原因代码（seed-outcome 回写，条目落地即清除），status 评论渲染成人类可读原因；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
 | `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟看 `announced` 集合成员（上过日报的那行才算）；`announced` 按「每键最新裁决行 ∩ 公告候选（held 槽位/不在 index 的幽灵键/concern）」截断——已放行/永不需成熟的 pass 键也裁掉，不无限膨胀；**缺失/损坏**：消费端 announced=∅ 全冻结，生产端若已有日报历史则拒绝重渲（fail-closed，不全量公告） |
 | `digest/YYYY-MM-DD.md` | digest.yml（publish-digest.sh 兜底） | 人（手机/网页） | 日报：新放行表 + held 积压 + concerns + 审核单链接。入口：[review] 审核单正文"预告面"链接、站点列表页 `digest` 链接、README——异议窗口必须找得到日报才有意义 |
 | `blocklist.json` | 手工 | run.ts | `{names[],slugs[]}` 硬封禁 |
@@ -348,7 +348,8 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
        窗口内落地的人工刹车/新裁决/digest 公示按**最新 verdicts+digest-state**
        重新推导，不被本班 stale 快照覆盖（R-10 窗口闭合））
   → notify-published：approval!=='pending' 的投稿 issue 评论+关闭（issues 按
-     issue 号去重——一单一评），submissions.txt 回写 notified:true——
+     issue 号去重——一单一评，评论附详情页链接 `p/<slug>.html`），
+     submissions.txt 回写 notified:true——
      **先重试推送标记（3 次）再发评论**；workflow 侧以 flagPushed 门控
      整个通知块——推送失败即跳过评论/关闭（宁可下轮重发，不丢
      "已通知"事实，也不留"标了没评论"的僵尸）；终态行（dead/notified）
@@ -359,8 +360,13 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
      run.ts 跳过 dead 种子不再消耗扫描预算）；**dead 行不豁免落地通知**——
      关单≠聋：条目之后经别条路放行上架时仍补发一次落地评论并标
      notified（投稿人不再被告知"失败了"实则已上架）
+  → seed-outcome：generate 产出的 per-seed 收录拒绝码（not-found/证据门/
+     blocklist/spam/archived 等）写回种子行 `rejected` 字段——被收录门
+     拦截的投稿不再挂"排队中"装死，条目落地即清除标记
   → submission-status：为每个仍有活种子的投稿 issue 维护一条
-     edit-in-place 状态评论（排队中/评审中/已上架）——进度可见
+     edit-in-place 状态评论（排队中/评审中/**未通过收录规则**——
+     rejected 相位渲染拒绝码对应的人类可读原因与下一步）；已落地种子
+     同轮必被 notified 标记跳过，故无"已上架"相位（notify 评论即是）
 ```
 
 **前置步骤（顺序负载）**：`generate` 开头先把 catalog 分支取下来，跑 `applyMatureVerdicts(old, verdicts, digestState)`——成熟裁决先作用于旧 index，再做发现比对（否则高频包的 pendingUpdate 会被下一班 npm bump 覆盖，永远饥饿）。旧 index 缺失/损坏 → 直接拒跑（WF-1，不盲跑）。
@@ -390,13 +396,13 @@ flowchart TB
   K -->|"npm"| RV["reviewPackage<br/>npm 存在性+证据+扫描"]
   K -->|"repo"| RR["reviewRepo<br/>存在性+树证据门+codeload 扫描"]
   K -->|"none"| INV["submission:invalid"]
-  RV -->|"clean"| ING["ingest job<br/>防滥用门→KEY+ISSUE 去重→append/替换"]
+  RV -->|"clean"| ING["ingest job<br/>防滥用门→同 issue 替换/追加"]
   RR --> ING
-  RV -->|"flagged"| NW["submission:needs-work<br/>+评论报告"]
+  RV -->|"flagged"| NW["submission:needs-work<br/>+评论报告<br/>（人工 /approve 可补入队）"]
   RV -->|"error"| ER["submission:error<br/>可重试"]
   ING --> SL[("submissions.txt")]
   SL --> CAT["下一班 catalog run<br/>--seed 消费"]
-  NW & INV & ER --> SW["sweep: 30d 无更新自动关"]
+  NW & INV & ER --> SW["sweep: 30d 无更新自动关<br/>（+approved 停滞单+基标签孤儿）"]
   CMT["/withdraw 评论"] --> WD["withdraw job<br/>catalog-withdraw.sh 删种子+关单"]
 ```
 
@@ -404,7 +410,9 @@ flowchart TB
 
 ```
 issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
-  或 issue_comment(created) 且 issue 有 submission:{needs-work,invalid,error} 标签
+  或 issue_comment(created) 且非 '/' 开头且 issue 未标 submission:approved
+    ——任何普通评论触发重审（含只有基标签/[submit] 标题的预标签崩溃孤儿，
+    "回复评论即可重审"的告警承诺由此兑现；'/' 命令走各自 job 不再烧重审）
   或 issue_comment(created) /withdraw（作者或 collaborator）→ withdraw job
   → review job（permissions:{} 零权限——跑攻击者可控的 tarball；
       concurrency: sub-review-N，cancel-in-progress——重审幂等可丢弃）
@@ -412,6 +420,8 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
         descEn 取整段折叠空白不截断；descOther 的 en: 行不覆盖专用字段；
         种子行带 author=issue 作者）
       KIND: npm→reviewPackage；repo→reviewRepo；none→invalid
+      blocklist 预检（git show FETCH_HEAD:blocklist.json，匿名 fetch；
+        命中 → 直接 invalid 报告"目录不收"——不再排队 14 天静默死）
       机械审查：npm=存在性/插件证据/静态扫描；repo=仓库存在性+树证据门
         （与目录收录同一 hasRepoEvidence）+codeload tarball 扫描
         → verdict 四态：clean|flagged|invalid|**error**
@@ -429,19 +439,26 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
       产出 review.md artifact + verdict output（不直接写 issue——N-6 拆权）
   → report job（permissions: issues:write，needs review）：
       评论报告（含 verdict 对应的下一步指引页脚）+
-      打 submission:{approved|needs-work|invalid|error} 标签
+      打 submission:{approved|needs-work|invalid|error} 标签 **+基标签 submission**
+      （基标签承重：防滥用门按它计数、sweep 按它收孤儿、评论重审门按它匹配——
+      freeform [submit] 单没有它会同时绕开三者）
       ⚠️ 机械通过只是"入场"，不是上架
-  → ingest job（clean 时，concurrency: catalog-branch）：
+  → ingest job（clean 时，concurrency: submit-ingest-N per-issue——
+      共享 catalog-branch 锁会被 GitHub"每组只留 1 pending"静默丢入队）：
       防滥用门：作者 open 投稿数 ≥5 → 撤 approved 标签改 needs-work + 说明评论，不入队
-      catalog-append.sh KEY+ISSUE 模式→ 同 issue 重审**替换**旧种子行
-      （一单一行，新 reviewedVersion 生效；不同 issue 同包装仍走 KEY+LIVE 去重——
-      **KEY 比较大小写不敏感**（`Owner/Repo` 投稿与 `owner/repo` 候选是同一
-      身份）；墓碑/未落地条目可重新投稿，removed[] 不算 in-flight）
+      （gh 计数失败重试一次，仍败 → 放行但日志告警——fail-open 是刻意权衡）
+      catalog-append.sh ISSUE 模式→ 同 issue 重审**替换**旧种子行；
+      **不同 issue 同包各自成行**——第二单需要自己的生命周期行
+      （status 评论/notify/dead 都按 issue 匹配），markNotified 两个 issue 都通知；
+      键比对大小写不敏感（`Owner/Repo` 与 `owner/repo` 同一身份），
+      落地去重交给目录端 run.ts，种子行只载投稿生命周期
   → verdict job（人工通道，见 §5）
   → review-alert job（needs review/report/ingest，failure()）：
       审查/入库基础设施失败时在 issue 留"可能未完成"评论+run 链接——
-      失败不再静默挂起（sweep 只管裁决标签单）
-  → sweep job（每日 UTC 05:23）：invalid/needs-work/error 30 天无更新自动关
+      失败不再静默挂起
+  → sweep job（每日 UTC 05:23）：invalid/needs-work/error/**approved 停滞单**
+      30 天无更新自动关 + **基标签孤儿**（submission 标签但无 submission:* 
+      子标签且 30 天未动——预标签崩溃残留，其它路径都不看它）
       （--limit 1000，队列再大最老单也扫得到）
 ```
 
@@ -804,7 +821,10 @@ flowchart TB
 - 非 bot 打 `submission:approved` 标签 或 collaborator 评论 `/approve`/`/concern [理由]`（整词匹配+大小写不敏感，`/approved`/`/approveanything` 不触发）；外层不再有"标签名任意 issue"的冗余析取
 - 目标=投稿包名（issue body 解析）；**评论带异目标 spec → argignored 告警**（spec 判定排除文件路径 `src/x.js`、URL、裸 `@mention`——理由文本不再误报）
 - **npm 版本钉审过的版本**：从 submissions.txt 种子行取 `version`（=reviewedVersion），**取最后一条匹配行**（重审追加的新行才是当前意图）；错位 → `vermismatch` 提示——新版本走自己的审查
-- **无种子行时 `/approve` 拒绝落盘**（noseed）：人工 pass 不能放行从未扫描过的字节——ack 说明"等初审完成或走 [concern] 表单"；`/concern` 无种子则钉当前 latest（刹车方向安全），版本仍解析不出 → 同样拒绝（`name\0` 死信裁决不写）
+- **flagged 人工推翻通道（late-ingest）**：无种子行 + `/approve` + 最近一条 bot 初审标记为 clean|flagged 且有被审版本/resolvedSha → 先补写种子行（钉在被审版本，catalog 收录端仍会重扫字节）再落裁决——红旗包的人工放行不再 catch-22；`invalid`/`error` 初审无推翻目标，仍按 noseed 拒绝（ack 按 lastreview 说清原因路径）
+- **非 maintainer 的裁决命令有回执**：job-if 不再挡关联校验——`perm` 步内做命令形+关联检查，非 collaborator 的 `/approve|/concern` 回"仅 maintainer"，形如命令但拼错的评论照旧静默
+- **ack 槽位诚实化**：目标条目缺席 → 说明"裁决存档待条目落地"（repo 投稿按名匹配生效）；npm 钉版不在活动槽位 → dead-slot 提示；pass 落在 unverified/failed/skipped 槽位 → 附当前验证状态说明（与 concern.yml 同套 H-17/K-4 口径）
+- **无种子行且无推翻目标时 `/approve` 拒绝落盘**（noseed）：人工 pass 不能放行从未扫描过的字节；`/concern` 无种子则钉当前 latest（刹车方向安全），版本仍解析不出 → 同样拒绝（`name\0` 死信裁决不写）
 - `/concern` 落地后**关闭本单**——人工关切是本轮终态，issue 常开会让作者误以为还在审
 - 同样接语义去重 + concern dispatch site.yml + 写盘失败评论（与 concern.yml 同一套 HV 保护）
 - bot 打的标签不算（机械审永不自行发布）
@@ -1325,10 +1345,10 @@ UI（gui.ts webview / tui.tsx 终端）：
 | cron 04:47/16:47 UTC + dispatch(targets, cap) | verify.yml | catalog-branch（共享） | index.json（verification 槽）、站点 |
 | issue [submit] opened/edited/labeled/comment | submit.yml review | sub-review-N（cancel 幂等） | 评论、submission 标签 |
 | review/report/ingest 任一失败 | submit.yml review-alert | — | issue 失败反馈评论（不再静默挂起） |
-| 同上 clean 后 | submit.yml ingest | catalog-branch（共享） | submissions.txt（防滥用门：作者 open≥5 拒入队） |
+| 同上 clean 后 | submit.yml ingest | submit-ingest-N per-issue | submissions.txt（防滥用门：作者 open≥5 拒入队） |
 | submission:approved 标签 / 投稿 issue 命令 | submit.yml verdict | submit-verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时） |
-| 投稿 issue 评论 /withdraw | submit.yml withdraw | catalog-branch（共享） | submissions.txt 删种子、关单 |
-| cron 05:23 UTC | submit.yml sweep | — | 关 30d 僵尸投稿（invalid/needs-work/error，limit 1000） |
+| 投稿 issue 评论 /withdraw | submit.yml withdraw | submit-withdraw-N per-issue | submissions.txt 删种子+pending 撤回、关单 |
+| cron 05:23 UTC | submit.yml sweep | — | 关 30d 僵尸投稿（invalid/needs-work/error/approved 停滞单/基标签孤儿，limit 1000） |
 | catalog publish 后 | catalog.yml notify+status | catalog-branch（共享） | 投稿评论/关单（含 dead 终态）、状态评论 edit-in-place |
 | issue [review]/[concern] opened/**edited**/labeled + 评论 | concern.yml | verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时）、review 标签、关单 |
 | hourly :40 + catalog/verify 非取消完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
@@ -1340,7 +1360,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | workflow_dispatch（手动） | spike.yml | — | dev 演练（非数据面；曾 on:push 白烧 runner+模型，N-17） |
 | 用户 plugin add | 客户端 | — | 本机 opencode.json（不在本仓库数据面） |
 
-**并发组语义**：`catalog-branch` 是分支写锁（catalog+verify+ingest+digest 串行——数据完整性）；`verdict-N` 按 issue 分（事件必须全落盘）；`sub-review-N` cancel-in-progress（重审幂等，burst 只留最新合理）；`review-docket` 串行化三触发源（cron/workflow_run/dispatch 可重叠，K-1）；`site-deploy` 串行化 Pages 发布（最后一个赢且拿最新数据）。
+**并发组语义**：`catalog-branch` 是分支写锁（catalog+verify+digest 写段串行——数据完整性）；`verdict-N`/`submit-ingest-N`/`submit-withdraw-N` 按 issue 分（事件必须全落盘——共享锁会把 pending run 静默丢掉，HV-8 实锤过，跨 issue 写竞争由 catalog-append 重试吸收）；`sub-review-N` cancel-in-progress（重审幂等，burst 只留最新合理）；`review-docket` 串行化三触发源（cron/workflow_run/dispatch 可重叠，K-1）；`site-deploy` 串行化 Pages 发布（最后一个赢且拿最新数据）。
 
 时序约定：digest(21:15 UTC CI) → catalog(03:17/11:00 UTC) → verify(04:47/16:47 UTC) → docket(每小时 :40)。launchd 迁移期暂停；恢复时需系统盘路径或 TCC 授权（外置卷会 `Operation not permitted`）。
 
@@ -1406,11 +1426,12 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `pipeline/discover/seed.ts` | awesome-list README → 高星 repo → npm 候选——一次性冷启动种子生成 |
 | `pipeline/backfill.ts` | 给老条目补身份字段——一次性修补 |
 | `pipeline/remerge.ts` | publish 重试时 ours vs remote 再合并——保护 remote 已写状态+categories 归一 |
-| `pipeline/notify-published.ts` | 投稿落地标记 notified:true、14d staleWarned、30d dead:true，输出待通知/ stale/ dead issue 号（均按 issue 去重） |
-| `pipeline/submission-status.ts` | 投稿进度状态评论 upsert（排队中/评审中/已上架） |
+| `pipeline/notify-published.ts` | 投稿落地标记 notified:true、14d staleWarned、30d dead:true，输出待通知/stale/dead issue 号+slug（按 issue 去重；dead 种子晚落地仍补通知） |
+| `pipeline/seed-outcome.ts` | run.ts per-seed 拒绝码写回种子行 `rejected` 字段（条目落地即清除） |
+| `pipeline/submission-status.ts` | 投稿进度状态评论 upsert（排队中/评审中/未通过收录规则） |
 | `pipeline/verify/{tui,gui}.ts` | L2 tmux / L3a jsdom 检查器（verifyPackage 按 features 调用） |
-| `bin/catalog-append.sh` | 共享 catalog 写盘循环（worktree+整行去重+KEY+ISSUE 种子行替换+staged-diff+APPLY_INDEX）——concern/submit 裁决与 ingest 三处复用 |
-| `bin/catalog-withdraw.sh` | 投稿撤回：按 issue 号删除 submissions.txt 种子行（worktree+重试，同 catalog-append 模式） |
+| `bin/catalog-append.sh` | 共享 catalog 写盘循环（worktree+整行去重+ISSUE 种子行替换+staged-diff+APPLY_INDEX）——concern/submit 裁决与 ingest 三处复用；同包不同 issue 各自成行（每单生命周期独立） |
+| `bin/catalog-withdraw.sh` | 投稿撤回：按 issue 号删 submissions.txt 种子行；ENTRY 给定且条目仍 pending+纯 submission 来源时一并墓碑撤回（已上架/有有机来源的不动）（worktree+重试，同 catalog-append 模式） |
 | `bin/ai-diagnose.sh` | launchd 诊断壳（env 检查→fetch/reset→diagnose→mktemp 重放推送；推送失败落 pending-verdicts.jsonl spool，下轮回放+并入 --verdicts 判重——不重烧 LLM） |
 | `bin/publish-digest.sh` | 日报手动兜底壳（重试循环内重渲染） |
 

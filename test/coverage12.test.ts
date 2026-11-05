@@ -85,8 +85,8 @@ describe('notify-published markNotified row arms', () => {
 describe('submission-status row arms', () => {
   it('repo-only row matches by repo; neither → skipped; GH env absent → prints rows', async () => {
     const idx = mkIdx([
-      mkEntry('pkg-a'),
-      mkEntry('o/r', { source: { kind: 'github', id: 'o/r', repo: 'o/r' } as never }),
+      mkEntry('pkg-a', { approval: 'pending' }),             // pending → still tracked (landed entries are skipped now)
+      mkEntry('o/r', { approval: 'pending', source: { kind: 'github', id: 'o/r', repo: 'o/r' } as never }),
     ])
     const lines = [
       '{"name":"pkg-a","issue":11}',
@@ -128,7 +128,7 @@ describe('submission-status row arms', () => {
     env.GH_REPO = 'o/r'; env.GH_TOKEN = 't'; env.GITHUB_RUN_ID = 'run9'
     const dir = mkdtempSync(join(tmpdir(), 'ss12b-'))
     const ip = join(dir, 'i.json'), sp = join(dir, 's.txt')
-    writeFileSync(ip, JSON.stringify(mkIdx([mkEntry('p1')])))
+    writeFileSync(ip, JSON.stringify(mkIdx([mkEntry('p1', { approval: 'pending' })])))   // pending → row produced → upsertStatusComment reached
     writeFileSync(sp, '{"name":"p1","issue":5,"notified":false}\n')
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try { mod.main(['node', 'x', ip, sp]) } finally {
