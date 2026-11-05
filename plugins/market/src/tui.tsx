@@ -9,10 +9,11 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, indexAge, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, type MarketEntry, type MarketIndex, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
+import { PKG_VERSION } from './version.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
 // labels go through t() — must be functions, not module consts, or they'd
@@ -23,7 +24,7 @@ const TABS = (): readonly (readonly [Tab, string])[] => [
 ]
 const SORTS = () => [['downloads', t('sortDownloads')], ['stars', t('sortStars')], ['name', t('sortName')], ['verified', t('sortVerified')]] as const
 const RANGES = () => [[0, t('rangeAll')], [1, t('range1d')], [7, t('range7d')], [30, t('range30d')], [90, t('range90d')], [365, t('range1y')]] as const
-const CATALOG_URL = 'https://terry2010.github.io/awesome-opencode-market/skills/'
+// catalog endpoints resolve inside setup() — plugin options > env > default
 // per-user debug log (not a predictable world-writable /tmp path) — resolved
 // lazily; the label falls back to the display form until the real path is in
 let LOG_FILE = '~/.config/opencode/market.log'
@@ -53,6 +54,9 @@ export default Plugin.define({
     function MarketDialog(): JSX.Element {
       const theme = ctx.theme
       const dims = useTerminalDimensions()
+      // catalog endpoint — plugin options (opencode.json) > env > default
+      const INDEX_URL = resolveIndexUrl((ctx as { options?: { indexUrl?: unknown } }).options)
+      const CATALOG_URL = skillsUrl(INDEX_URL)
       const [store, mutate] = ctx.storage.store<MarketState>('opencode-market', { initial: EMPTY_STATE as MarketState })
       const [idx, setIdx] = createSignal<MarketIndex | null>(null)
       const [idxErr, setIdxErr] = createSignal('')
@@ -102,19 +106,26 @@ export default Plugin.define({
       }
       onMount(() => {
         setLangMode(store.lang ?? 'auto')
-        fetchIndexCached().then(setIdx, e => setIdxErr(String(e)))
+        fetchIndexCached(INDEX_URL).then(setIdx, e => setIdxErr(String(e)))
         void refreshInstalled()
         if (searchOn()) setTimeout(() => searchInput?.focus(), 50)
       })
       ctx.data.on('plugin.updated', () => void refreshInstalled())
 
+      // installed-but-uncataloged plugins get synthetic cards (GUI parity)
+      const extras = createMemo<MarketEntry[]>(() => {
+        const names = new Set((idx()?.plugins ?? []).map(p => p.name))
+        return Object.keys(installed())
+          .filter(k => !k.startsWith('__skill_') && !names.has(k))
+          .map(k => ({ name: k, slug: k, latestVersion: installed()[k], type: 'plugin', category: [], uncataloged: true, contains: ['plugin'] }) as MarketEntry)
+      })
       const pool = createMemo(() => {
         let list = idx()?.plugins ?? []
         switch (tab()) {
           case 'plugins': list = list.filter(p => !p.contains?.includes('skill')); break
           case 'skills': list = list.filter(p => p.contains?.includes('skill')); break
           case 'favorites': list = list.filter(p => store.favorites[p.name]); break
-          case 'installed': list = list.filter(p => installed()[p.name]); break
+          case 'installed': list = [...list.filter(p => installed()[p.name]), ...extras()]; break
           case 'mySkills': list = list.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name)); break
           case 'discover': case 'settings': default: break
         }
@@ -124,6 +135,10 @@ export default Plugin.define({
         const s = sortEntries(list, sortKey())
         return asc() ? s.reverse() : s
       })
+      // render cap — thousands of cards mount lazily; selection growth pages in more
+      const [cap, setCap] = createSignal(120)
+      createEffect(() => { pool(); setCap(120) })
+      const shown = () => pool().slice(0, cap())
       const cats = createMemo(() => {
         let list = idx()?.plugins ?? []
         if (tab() === 'plugins' || tab() === 'installed') list = list.filter(p => !p.contains?.includes('skill'))
@@ -136,7 +151,7 @@ export default Plugin.define({
       const descW = () => cols() === 2 ? 42 : Math.max(20, (dims().width ?? 120) - 14)
       const grid = createMemo(() => {
         const out: MarketEntry[][] = []
-        const l = pool()
+        const l = shown()
         const c = cols()
         for (let i = 0; i < l.length; i += c) out.push(l.slice(i, i + c))
         return out
@@ -147,6 +162,8 @@ export default Plugin.define({
       }
       const pick = () => pool()[sel()]
       let listScroll: { scrollTop: number; scrollTo(y: number): void } | undefined
+      // selection near the render edge pulls the next page in
+      const growCap = (i: number) => { if (i >= cap() - cols() * 2) setCap(c => Math.min(pool().length, c + 120)) }
       createEffect(() => {
         sel()
         setTimeout(() => {
@@ -160,9 +177,12 @@ export default Plugin.define({
       })
 
       const install = async (e: MarketEntry) => {
-        const isSkill = e.contains?.includes('skill')
-        log(`install start ${e.name} skill=${isSkill}`)
-        if (isSkill) { void installSkill(e); return }
+        const plan = installPlan(e)
+        log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
+        if (!plan.plugin) { if (plan.skill) void installSkill(e, plan); return }
+        // dual-nature entries deliver BOTH parts — skill install runs async
+        // alongside the plugin spawn (independent surfaces)
+        if (plan.skill) void installSkill(e, plan)
         setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
@@ -186,11 +206,16 @@ export default Plugin.define({
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
         jobs.set(e.name, p)
+        // 90s ceiling — a wedged `plugin add` must not hold the dialog status
+        // forever (GUI main already kills at 90s; the TUI had none)
+        let timedOut = false
+        const kill = setTimeout(() => { timedOut = true; p.kill('SIGTERM') }, 90_000)
         const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
         p.stdout?.on('data', push); p.stderr?.on('data', push)
         p.on('close', code => {
-          jobs.delete(e.name)
-          if (code === 0) {
+          clearTimeout(kill); jobs.delete(e.name)
+          if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`) }
+          else if (code === 0) {
             void afterAdd().then(() => {
               setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
               void refreshInstalled()
@@ -198,25 +223,39 @@ export default Plugin.define({
           }
           else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`) }
         })
-        p.on('error', x => { jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`) })
+        p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`) })
       }
-      const installSkill = async (e: MarketEntry) => {
+      const installSkill = async (e: MarketEntry, plan: InstallPlan) => {
         try {
           setStatus(tf('installingN', { name: e.name }))
-          // pin to the catalog-approved version — dist-tags.latest is the
-          // pendingUpdate users are NOT allowed to get yet (hold semantics)
-          if (!e.latestVersion) throw new Error('no approved version to install')
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`)).json() as { versions: Record<string, { dist: { tarball: string } }> }
-          const url = approvedTarballUrl(pk, e)
-          if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
+          let url: string
+          let integrity: string | null = null
+          if (plan.skill === 'github') {
+            // repo skills ship via codeload at HEAD — pushedAt (modifiedAt) is
+            // the version marker; no SRI exists for git archives
+            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/HEAD`
+          } else {
+            // pin to the catalog-approved version — dist-tags.latest is the
+            // pendingUpdate users are NOT allowed to get yet (hold semantics)
+            if (!e.latestVersion) throw new Error('no approved version to install')
+            const meta = await fetchPkgVersionMeta(e.name, e.latestVersion)
+            if (!meta.tarball) throw new Error(`no tarball for approved v${e.latestVersion}`)
+            url = meta.tarball
+            integrity = e.integrity ?? meta.integrity
+          }
           // zip-bomb guard: refuse before buffering the whole body; the
           // decompressed ceiling inside installSkillTar is the second wall
-          const tgz = await fetch(url)
+          const tgz = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+          if (!tgz.ok) throw new Error(`tarball fetch failed: ${tgz.status}`)
           const cl = Number(tgz.headers.get('content-length') ?? 0)
           if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
           const buf = new Uint8Array(await tgz.arrayBuffer())
+          // fail closed on a KNOWN mismatch — bytes must equal the artifact
+          // the pipeline scanned (null = unverifiable, proceed honestly)
+          const okI = await integrityMatches(buf, integrity)
+          if (okI === false) throw new Error(t('integrityFail'))
           const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
-          const v = e.latestVersion ?? 'local'
+          const v = verMarker(e) ?? 'local'
           await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
           setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
           setStatus(`${e.name} ${t('installed')} (${msg})`)
@@ -228,16 +267,26 @@ export default Plugin.define({
           { label: t('cancel'), run: noop },
         ])
       const doUninstall = async (e: MarketEntry) => {
-        const isSkill = e.contains?.includes('skill')
         log(`uninstall ${e.name}`)
-        if (isSkill) {
+        // uninstall what is actually installed — a dual-nature entry can own
+        // both a plugin spec and skill dirs. Check __skill_ keys directly:
+        // skillInstalledVer also matches the PLUGIN key and would fire the
+        // skill-dir sweep on every pure plugin uninstall (deletes <name>-* dirs)
+        const sBase = `__skill_${skillId(e.name)}`
+        const sBare = `__skill_${e.name.split('/').pop() ?? e.name}`
+        const hasSkillDir = Object.keys(installed()).some(k => k === sBase || k === sBare || k.startsWith(`${sBase}-`) || k.startsWith(`${sBare}-`))
+        const hasPlugin = !!installed()[e.name]
+        const doSkill = hasSkillDir || (!hasPlugin && !!e.contains?.includes('skill'))
+        const doPlugin = hasPlugin || (!hasSkillDir && !e.contains?.includes('skill'))
+        if (doSkill) {
           try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
           const base = `__skill_${skillId(e.name)}`
           const next = { ...installed() }
-          for (const k of Object.keys(next)) if (k === e.name || k === base || k.startsWith(`${base}-`)) delete next[k]
+          for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
           await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
           setInstalled(next); setStatus(tf('removedN', { name: e.name }))
-        } else {
+        }
+        if (doPlugin) {
           // rewrite config plugins[] directly — CLI `plugin remove` takes a
           // spec, not the catalog name, and silently misses pinned specs
           // (same fix as the GUI host uninstall)
@@ -336,23 +385,25 @@ export default Plugin.define({
         })() },
       ])
 
+      // github-kind entries carry no npm version — their marker is pushedAt
+      const dispVer = (e: MarketEntry) => e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)
       const actionLabel = (e: MarketEntry) => {
         const ver = verOf(e)
         if (ver && !hasUpdate(e, ver)) return `✓ ${t('installed')}`
-        if (ver) return `${t('update')} → v${e.latestVersion}`
+        if (ver) return `${t('update')} → ${dispVer(e)}`
         return t('add')
       }
       const badge = (e: MarketEntry) => {
         if (installed()[e.name] || skillInstalledVer(installed(), e.name)) return `[${t('installed')}]`
-        // github-kind entries have no npm version — 'skipped' means nothing to
-        // run, not "有高危信号没跑" (honest-label rule, AGENTS.md)
-        if (e.latestVersion == null) return `[${t('noInstallTarget')}]`
+        // nothing this client can deliver gets the honest "no target" label —
+        // not a fake verification status (honest-label rule, AGENTS.md)
+        if (!canInstall(e)) return `[${t('noInstallTarget')}]`
         const s = e.verification?.status
         return s ? `[${s === 'verified' ? t('verified') : s === 'failed' ? t('failed') : s === 'skipped' ? t('skipped') : t('unverified')}]` : ''
       }
       const openDetail = (e: MarketEntry) => { setFindingsOpen(false); setDetail(e) }
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
-      const move = (d: number) => setSel(i => Math.max(0, Math.min(pool().length - 1, i + d)))
+      const move = (d: number) => setSel(i => { const n = Math.max(0, Math.min(pool().length - 1, i + d)); growCap(n); return n })
       const updateAll = () => {
         const targets = (idx()?.plugins ?? []).filter(e => { const v = verOf(e); return v && hasUpdate(e, v) })
         if (!targets.length) { setStatus(t('allLatest')); return }
@@ -464,12 +515,14 @@ export default Plugin.define({
         if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
         if (k === 'f') { pickFilter(); return }
         if (k === 'c') { pickCategory(); return }
-        if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) install(e); return }
+        if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) { if (canInstall(e)) install(e); else setStatus(t('noInstallTarget')) } return }
         if (k === 'u') { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e); return }
         if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }
 
         if (k === 'x') { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()); return }
-        if (k === 'r') { setIdxErr(''); fetchIndexCached().then(setIdx, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        // r = force refresh — TTL must not swallow a user-initiated reload;
+        // the outcome label distinguishes "still fresh" from "actually pulled"
+        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); setStatus(fetchOutcome() === 'fresh' ? t('dataFresh') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
         if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
         if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }
@@ -533,7 +586,7 @@ export default Plugin.define({
                       }}>{actionLabel(e)}</text>
               </box>
             </box>
-            <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : ''].filter(Boolean).join(' · ')}</text>
+            <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(descOf(e), descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
             <text fg={theme.text.faint}>{categoriesOf(e).map(catLabel).join('  ')}</text>
           </box>
@@ -546,7 +599,7 @@ export default Plugin.define({
           <box flexDirection="column" flexShrink={0}>
             <box flexDirection="row" paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>opencode market</b></text>
-              <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v0.0.3 · {indexAge(idx())}</text>
+              <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v{PKG_VERSION} · {indexAge(idx())}</text>
               <box flexGrow={1} />
               <box backgroundColor={chromeFocused(0, 0) ? theme.background.action.primary.focused : undefined}>
                 <text fg={chromeFocused(0, 0) ? theme.text.action.primary.focused : theme.text.muted}
@@ -650,7 +703,9 @@ export default Plugin.define({
                       <box flexGrow={1} />
                       <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
                     </box>
-                    <text fg={theme.text.muted}>{[`v${e.latestVersion ?? '?'}`, e.metrics?.npmDownloads30d ? `↓${e.metrics.npmDownloads30d}` : '', e.metrics?.stars ? `★${e.metrics.stars}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
+                    <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
+                    <Show when={e.pendingUpdate?.version}><text fg={theme.text.muted}>{tf('heldReview', { v: e.pendingUpdate!.version! })}</text></Show>
+                    <Show when={e.source?.version}><text fg={theme.text.muted}>tree: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
                     <box height={1} />
                     <text fg={theme.text.base}>{e.description?.en ?? ''}</text>
                     <Show when={e.description?.zh}><text fg={theme.text.muted}>{e.description?.zh}</text></Show>

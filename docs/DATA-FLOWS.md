@@ -585,9 +585,9 @@ flowchart TB
   IDX --> BSK["buildSkillCatalog"]
   BS --> P1["index.html 列表页<br/>isVisible 过滤 pending"]
   BS --> P2["p/slug.html 详情页"]
-  BS --> P3["health.json"]
+  BS --> P3["health.json<br/>含 index.json sha256"]
   BS --> P4["privacy.html"]
-  BSK -->|"contains:skill<br/>∧ latestVersion"| SK["skills/index.json<br/>+ skills/id/ 文件树<br/>(批准版 tarball 解出)"]
+  BSK -->|"contains:skill<br/>∧(latestVersion∨modifiedAt)"| SK["skills/index.json<br/>+ skills/id/ 文件树<br/>(npm批准版∨gh codeload解出)"]
   IDX --> CP["index.json 原样发布<br/>全量含 pending=审计面"]
   P1 & P2 & P3 & P4 & SK & CP --> PG["deploy-pages"]
 ```
@@ -603,10 +603,14 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5）
                       findings 全列、logExcerpt、runUrl 回链、
                       install 行 opencode plugin add source.id@latestVersion）
       skills/index.json + skills/<id>/  HTTP skill catalog：
-                      只处理 contains:['skill'] 且 latestVersion 非空的条目，
-                      tarball = npm view "<name>@<latestVersion>" dist.tarball
-                      ——钉到批准版；latestVersion:null → 跳过（绝不落 pendingUpdate 文件）
-      health.json     {ok, entries(可见数), generatedAt}
+                      npm 条目 = npm view "<name>@<latestVersion>" dist.tarball
+                      ——钉到批准版（绝不落 pendingUpdate 文件）；
+                      github 条目 = codeload <repo>/tar.gz/HEAD，version=modifiedAt
+                      （缓存键随 pushedAt 走——新 push 才重拉）；
+                      两者都 latestVersion/modifiedAt 为空 → 跳过
+      health.json     {ok, entries(可见数), generatedAt, sha256, bytes}
+                      ——sha256 覆盖 index.json 序列化字节，客户端先拉它再决定
+                      要不要下全量 index（moved hash → 下载+逐字节验证）
       privacy.html
   → deploy-pages
 ```
@@ -621,52 +625,72 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5）
 
 ```mermaid
 flowchart TB
-  IDX[("Pages index.json")] --> FE["fetchIndexCached<br/>1h TTL+快照兜底"]
-  FE --> SA["sanitizeIndex<br/>剥 ANSI/C0"]
-  SA --> VI{"isVisible"}
+  HL[("Pages health.json<br/>sha256 公告")] --> MF{"sha==cached?"}
+  MF -->|"同"| FR["fresh — 0 下载"]
+  MF -->|"变/无缓存"| IDX[("Pages index.json<br/>原始字节 sha256 验证")]
+  IDX --> FE["sanitizeIndex<br/>剥 ANSI/C0"]
+  MF -.->|"health 不可达"| TTL["1h TTL+快照兜底"]
+  TTL --> IDX
+  FE --> VI{"isVisible"}
   VI -->|"pending"| NO["永不进 UI/安装"]
   VI -->|"approved/legacy"| UI["列表<br/>verified 优先·红旗沉底"]
-  UI --> AC{"用户操作"}
+  UI --> AC{"用户操作 · installPlan 路由"}
   AC -->|"装插件"| PI["plugin add name@ver<br/>pinSpec 钉版"]
-  AC -->|"更新"| UP["add 钉版 + dedupeToSpec"]
-  AC -->|"卸载"| UN["removeSpec 重写 config"]
-  AC -->|"装 skill"| SI["approvedTarballUrl<br/>→ installSkillTar<br/>提升+清单+记账"]
+  AC -->|"更新"| UP["add 钉版 + dedupeToSpec<br/>技能 verMarker 参与"]
+  AC -->|"卸载"| UN["removeSpec 重写 config<br/>+ __skill_ 键清技能目录"]
+  AC -->|"装 skill(npm)"| SI["fetchPkgVersionMeta<br/>批准版tarball+SRI<br/>→ installSkillTar"]
+  AC -->|"装 skill(github)"| SG["codeload HEAD<br/>→ installSkillTar<br/>剥 wrapper 根"]
+  AC -->|"双栖"| BOTH["插件+技能都装"]
   PI & UP & UN --> CFG[("opencode.json<br/>plugins[]")]
-  SI --> SKD[("~/.config/opencode/skills/")]
+  SI & SG --> SKD[("~/.config/opencode/skills/")]
 ```
 
 逐步细节：
 
 ```
-fetchIndex(Pages index.json, 10s AbortController)
-  → sanitizeIndex（剥 ANSI/C0 + name/slug/desc/category 逐字段——untrusted 输入）
-  → filter isVisible（pending 永不进 UI/安装路径）
-  → fetchIndexCached：localStorage 1h TTL + 失败快照兜底
+index URL 解析：ctx.options.indexUrl > OPENCODE_MARKET_INDEX > Pages 默认
+       （https-only；healthUrl/skillsUrl 同目录推导——换源一处生效）
+fetchIndexCached（manifest-first 两段式）：
+  ① health.json {sha256} — ~100B；命中缓存 sha → fresh，0 下载
+  ② sha 变了（moved）或 force → 拉 index.json **原始 text** 先算 sha256，
+     与公告比对——不匹配=mismatch，保留旧缓存绝不钉存错对；
+     匹配才 JSON.parse → sanitizeIndex → isVisible 过滤 → 写缓存
+  health 不可达 → 退回 1h TTL + 失败快照兜底；crypto 不可用 → 不 pin 不谎称验证
+  fetchOutcome()：first|updated|fresh|stale|mismatch —— 刷新按钮如实区分
+  "已是最新"/"已刷新 N 条"/"校验未通过"
 UI（gui.ts webview / tui.tsx 终端）：
-  列表 rows()（verified 优先，redFlag 沉底）/ search(name+description.en) / 分类
-  状态标签：installed 优先；latestVersion==null → noInstallTarget
-    （github-kind"无可安装对象"为主因；带红旗时同"高危没跑"）；否则四态同站点
-  安装：pinSpec(e) = name@latestVersion（钉到批准版，隐式 latest=绕过通道）
-       gui: api.install({name,spec}) → host `plugin add <spec>`
-       tui: 直接 spawn `plugin add <pin>`
+  列表 sortEntries（verified 优先）/ search(name>aliases>desc 加权) / 分类
+  TUI 渲染 cap 120 起步按选中位增长；uncataloged 已装 spec 进合成卡片
+  状态标签：installed 优先；!canInstall(e) → noInstallTarget 惰性徽标
+    （github 插件仓无 npm 产物时）；否则四态同站点
+  安装路由 installPlan(e)：{plugin:有npm版∧contains:plugin, skill:npm|github|null}
+    双栖（contains 含 plugin+skill）→ 插件 pinSpec 装 + 技能装，一次点完
+  插件安装：pinSpec(e) = name@latestVersion（钉到批准版）
+       gui: api.install → host `plugin add <spec>`（restrictedEnv，90s kill）
+       tui: 同 spawn + 90s 超时
+  技能安装（npm）：fetchPkgVersionMeta(name,latestVersion) 取批准版
+       tarball+integrity → fetch(15-30s timeout) → integrityMatches SRI
+       sha512 校验（公告值不匹配=拒装 fail-closed）→ installSkillTar
+  技能安装（github）：codeload <repo>/tar.gz/HEAD → installSkillTar
+       两段式解包剥 `<repo>-<ref>/` wrapper 根；version 记账=modifiedAt
+  installSkillTar：assertEntryId(npm名∨owner/repo) → 路径逃逸双闸 →
+       48/256MB 双顶 → 提升 .opencode|.claude|.agents skills 嵌套到根
+       （包根有 SKILL.md 时连 `skills/` 目录一起提）、撞名 <id>- 前缀、
+       .market-skills.json 清单（卸载按清单精确删）、__skill_<base> 安装键
   更新：add 钉版 spec → dedupeToSpec 重写 config plugins[]
        （plugin add 不去重会留双 spec——E2E 实锤；从不调 `plugin update`——它走 latest=旁路）
-  卸载：removeSpec 重写 config plugins[]
-       （CLI `plugin remove` 吃 spec 不吃目录名，钉版 spec 会静默 miss——gui/tui 都已改）
-  skill 安装：approvedTarballUrl(pk,e) → 只取批准版 tarball
-       （dist-tags.latest 就是 pendingUpdate——三处都钉：tui.installSkill、
-        gui.installSkillNet、site buildSkillCatalog）
-       → installSkillTar 解到 ~/.config/opencode/skills/<id>，
-        提升 .opencode/skills|.claude/skills|.agents/skills 嵌套到根
-        （包根有 SKILL.md 时连 `skills/` 目录一起提）、
-        撞名加 <id>- 前缀、写 .market-skills.json 清单（供精确卸载）、
-        skillVers 记账 + __skill_<base> 安装键 → 真 update 检测
+       技能更新走 verMarker（npm=latestVersion,github=modifiedAt）比较，
+       updateAll 双端都含技能
+  卸载：removeSpec 重写 config plugins[]；装了技能的面才清技能目录
+       （__skill_ 键探测——纯插件条目绝不扫技能根）
   verifyActivation：隔离 HOME 起 serve → POST /api/session 触发懒加载
        → 轮询日志 canary → activated/not-loaded（GET-only 永远不触发——已修）
-  skillSource：把 https://…/skills/ 加进 opencode.json skills[]（远程 catalog 源）
+  skillSource：把 skillsUrl(indexUrl) 加进 opencode.json skills[]（远程 catalog 源）
   skillPermission：写 permission 条目（action:skill, resource:id, effect:allow|deny|ask）
+  pendingUpdate 透出：详情页"有 vX 在审"；github 条目显示 tree sha
+  版本号：__PKG_VERSION__ 由 build.ts 从 package.json 注入（gui/tui 头部）
   extras：uncataloged 已装 spec → buildExtras 卡片（不在目录里的本机插件）
-  devlog：宿主写 /tmp/opencode-market.log；渲染端 localStorage ring 300
+  devlog：宿主写 market.log（clearDevlog 清它）；渲染端 localStorage ring 300
 ```
 
 ---
@@ -755,12 +779,14 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 | 文件 | 关键导出 | 角色 |
 |---|---|---|
-| `catalog.ts` | `fetchIndex` `fetchIndexCached` `sanitizeIndex` `isVisible` `rows` `search` `pinSpec` `approvedTarballUrl` `hasUpdate` `scanSkillKeys` `skillInstalledVer` `t`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` | 数据面+纯函数层（webview/tui 共用） |
+| `catalog.ts` | `fetchIndex` `fetchIndexCached`/`fetchOutcome` `resolveIndexUrl`/`healthUrl`/`skillsUrl` `sha256Hex` `sanitizeIndex` `isVisible` `sortEntries` `search` `pinSpec` `approvedTarballUrl` `fetchPkgVersionMeta` `integrityMatches` `installPlan`/`canInstall` `verMarker`/`hasUpdate` `fmtN` `inDays` `scanSkillKeys` `skillInstalledVer` `t`/`tf`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` | 数据面+纯函数层（webview/tui 共用） |
 | `spec.ts` | `cleanSpec` `dedupeToSpec` `removeSpec` `featuresMap` `buildExtras` | opencode.json plugins[] spec 代数 |
-| `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` | tarball→skills 目录（提升/清单/撞名） |
+| `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` `safeTarRel` `MAX_SKILL_TGZ`/`MAX_SKILL_TAR` | tarball→skills 目录（两段式剥 wrapper/提升/清单/撞名） |
+| `hostx.ts` | `assertPkgName` `assertEntryId` `assertSpecForName` `skillId`/`assertSkillId` `readJson`/`writeJsonAtomic` `restrictedEnv` `spawnCapture` | 宿主侧校验+安全原语（npm 名∨owner/repo） |
 | `gui.ts` | default `Plugin.define` | webview UI + 全部 host IPC api |
 | `tui.tsx` | default `Plugin.define` | 终端 UI + 进程内宿主调用 |
-| `server.ts` | — | 插件入口装配 |
+| `server.ts` | — | 插件入口装配（ctx.options.indexUrl 通道） |
+| `version.ts` | `PKG_VERSION` | `__PKG_VERSION__` build 注入版本号 |
 
 ### 辅助工具（不在主数据流周期里）
 
@@ -786,6 +812,8 @@ UI（gui.ts webview / tui.tsx 终端）：
  "discoveredVia": ["npm-keyword"],
  "source": {"kind":"npm","id":"opencode-hush","repo":"federicobordon09-dev/opencode-Hush","repoId":1426242744,"version":"0.3.0"},
  "latestVersion": "0.3.0",          ← 展示版：钉在批准版
+ "integrity": "sha512-AAA…",        ← latestVersion 对应 dist.integrity（装包逐字节校验）
+ "contains": ["plugin"],            ← 部件清单（双栖包=plugin+skill）
  "distTags": {"latest":"0.4.1"},    ← npm 已到 0.4.1
  "capabilities": {"scannedAt":"2026-11-03T14:29:15Z","rulesetVersion":"r2","findings":[],"redFlags":[]},
  "verification": {"status":"verified","level":"load","opencodeVersion":"2.2.5","verifiedAt":"2026-11-02T00:02:51Z"},

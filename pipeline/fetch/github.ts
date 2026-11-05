@@ -63,7 +63,7 @@ export async function fetchRepoMeta(
   }
 }
 
-export interface RepoTreeResult { paths: Set<string> | null; status: RepoMetaStatus; truncated: boolean }
+export interface RepoTreeResult { paths: Set<string> | null; status: RepoMetaStatus; truncated: boolean; sha?: string | null }
 
 /** One git-trees call returns every path — replaces per-file contents probes. */
 export async function fetchRepoTree(
@@ -82,15 +82,18 @@ export async function fetchRepoTree(
   if (res.status === 404 || res.status === 409) return { paths: null, status: 'not-found', truncated: false }
   if (rateLimited(res)) return { paths: null, status: 'rate-limited', truncated: false }
   if (!res.ok) return { paths: null, status: 'error', truncated: false }
-  let b: { tree?: Array<{ path?: string }>; truncated?: boolean }
+  let b: { tree?: Array<{ path?: string }>; truncated?: boolean; sha?: string }
   try {
     b = (await res.json()) as typeof b
   } catch {
     return { paths: null, status: 'error', truncated: false }
   }
   // truncated responses still contain the front of the tree — usable for root
-  // probes, but deep SKILL.md paths may be missed (surfaced via `truncated`)
-  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false }
+  // probes, but deep SKILL.md paths may be missed (surfaced via `truncated`).
+  // sha is the resolved tree hash — recorded on source.version as the content
+  // identity of what was scanned (audit: codeload bytes can't be re-verified
+  // by hash since archives aren't byte-deterministic).
+  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false, sha: b.sha ?? null }
 }
 
 /** Cross-check npm↔repo correspondence: the repo's own package.json should name

@@ -96,6 +96,10 @@ export const PluginEntry = z.object({
   firstSeenAt: z.string(),
   latestVersion: z.string().nullable().default(null),
   publishedAt: z.string().nullable().default(null),
+  /** SRI (sha512-…) of the registry artifact for `latestVersion` — install-time
+   *  drift check: the bytes a client fetches must equal what review approved.
+   *  null for github-kind entries (codeload archives have no registry integrity). */
+  integrity: z.string().nullable().optional(),
   metrics: z.object({
     stars: z.number().int().nonnegative().nullable().default(null),
     npmDownloads30d: z.number().int().nonnegative().nullable().default(null),

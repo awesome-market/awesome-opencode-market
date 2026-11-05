@@ -71,6 +71,10 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     }
     return null
   }
+  // pass 1 — collect safe entries. Two passes let us detect a wrapper root:
+  // github codeload archives ship every path under `<repo>-<ref>/`, which must
+  // be stripped like npm's `package/` or the skill nests stay one level deep.
+  const items: { type: string; rel: string; body: number; size: number }[] = []
   while (off + 512 <= tar.length) {
     let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
     if (!f) break
@@ -85,14 +89,25 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     else if (prefix) f = `${prefix}/${f}`
     const rel = safeTarRel(f)
     if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
+    items.push({ type, rel, body, size })
+    off = next
+  }
+  // shared leading segment that is not a real skill-nest name = archive wrapper
+  const STRUCT = new Set(['.opencode', '.claude', '.agents', 'skills', 'package'])
+  const first = items[0]?.rel.split('/')[0]
+  const wrap = first && !STRUCT.has(first) && items.every(i => { const s = i.rel.split('/'); return s.length > 1 && s[0] === first })
+    ? `${first}/` : ''
+  // pass 2 — extract
+  for (const { type, rel: r0, body, size } of items) {
+    const rel = wrap ? r0.slice(wrap.length) : r0
+    if (!rel) continue
     if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
     if (type === '0' || type === '' || type === ' ') {
       const fp = join(dest, rel)
-      if (!resolve(fp).startsWith(resolve(dest) + sep)) { off = next; continue }
+      if (!resolve(fp).startsWith(resolve(dest) + sep)) continue
       mkdirSync(dirname(fp), { recursive: true })
       writeFileSync(fp, tar.subarray(body, body + size)); wrote++
     }
-    off = next
   }
   if (!wrote) throw new Error('empty tarball')
   const root = dirname(dest)

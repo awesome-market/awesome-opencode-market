@@ -1,6 +1,7 @@
 /** Thin static site generator — renders index.json to plain HTML. Astro can replace this later without changing data. */
 import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync, cpSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { join, dirname, relative } from 'node:path'
 import { CatalogIndex } from '../../src/schema.ts'
 import type { PluginEntry } from '../../src/schema.ts'
@@ -97,15 +98,19 @@ export function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string
   mkdirSync(join(outDir, 'p'), { recursive: true })
   // index.json ships the FULL catalog (pending included) — it is the auditable
   // data plane; every UI/install surface filters pending itself.
-  writeFileSync(join(outDir, 'index.json'), JSON.stringify(index))
+  const indexJson = JSON.stringify(index)
+  writeFileSync(join(outDir, 'index.json'), indexJson)
   const visible = { ...index, plugins: index.plugins.filter(isVisible) }
   // index.lite.json — visible-only, hold internals stripped (pendingUpdate is
   // pipeline bookkeeping, not catalog data). Smaller fetch for thin UIs.
   writeFileSync(join(outDir, 'index.lite.json'), JSON.stringify({ ...visible, plugins: visible.plugins.map(({ pendingUpdate: _p, ...e }) => e) }))
-  // privacy note + health endpoint (dsh parity)
+  // privacy note + health endpoint (dsh parity). sha256 = content hash of the
+  // served index.json bytes — clients fetch this manifest first and only pull
+  // the multi-MB index when the hash moved, then verify the downloaded bytes
+  // (CDN edge staleness can't pin a mismatched hash to old content).
   writeFileSync(join(outDir, 'privacy.html'), '<html><body><h1>Privacy</h1><p>opencode-market collects nothing. The catalog is static data; installing a plugin runs opencode plugin add locally. Local state (favorites/groups/notes) stays in localStorage on your machine.</p></body></html>')
   const skillStats = buildSkillCatalog(visible, outDir, undefined, cacheDir)
-  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, skills: skillStats, generatedAt: index.generatedAt }))
+  writeFileSync(join(outDir, 'health.json'), JSON.stringify({ ok: true, entries: visible.plugins.length, skills: skillStats, generatedAt: index.generatedAt, sha256: createHash('sha256').update(indexJson).digest('hex'), bytes: Buffer.byteLength(indexJson) }))
   writeFileSync(join(outDir, 'index.html'), listPage(visible))
   writeFileSync(join(outDir, 'skills.html'), skillsPage(skillStats.entries))
   writeFileSync(join(outDir, 'removed.html'), removedPage(index))
@@ -166,7 +171,9 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
         return /^https:\/\//i.test(u) ? u : null
       } catch { return null }
     },
-  cacheDir?: string): { candidates: number; landed: number; degraded: boolean; entries: { name: string; version: string; files: string[] }[] } {
+  cacheDir?: string,
+  ghTarballOf: (repo: string) => string | null = (repo) => `https://codeload.github.com/${repo}/tar.gz/HEAD`)
+  : { candidates: number; landed: number; degraded: boolean; entries: { name: string; version: string; files: string[] }[] } {
   const skills = index.plugins.filter((p) => p.contains?.includes('skill'))
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
@@ -196,13 +203,18 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
   }
   let candidates = 0
   for (const s of skills) {
-    if (!s.latestVersion) continue                    // repo-only skill: no npm artifact
+    // github-kind skills ship via codeload at HEAD — version marker is pushedAt
+    // (cache key component: a new push refetches, an unchanged one is free)
+    const isGh = s.source?.kind === 'github'
+    const ghRepo = isGh && /^[\w.-]+\/[\w.-]+$/.test(s.source?.repo ?? '') ? s.source!.repo! : null
+    const ver = isGh ? s.modifiedAt : s.latestVersion
+    if (isGh && !ghRepo) continue                     // malformed repo id
+    if (!ver) continue                                // npm entry without a version — nothing to serve
     candidates++
     const base = baseOf(s.name)
     let id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     while (usedIds.has(id)) id += '-x'                // S-12 deterministic suffix
     usedIds.add(id)
-    const ver = s.latestVersion
     const dest = join(dir, id)
     const key = cacheKey(id, ver)
     const hit = cacheDir ? join(cacheDir, key) : null
@@ -217,8 +229,10 @@ export function buildSkillCatalog(index: CatalogIndex, outDir: string,
     const tmp = `${dest}.tmp`
     try {
       // pin to the approved version — `npm view <name>` resolves dist-tags.latest
-      // which is the pendingUpdate users must not receive (hold semantics)
-      const tb = tarballOf(`${s.name}@${ver}`)
+      // which is the pendingUpdate users must not receive (hold semantics).
+      // github repos have no approved tarball — HEAD is what the evidence gate
+      // + scan saw (pushedAt-keyed); repo goes through execFile argv, not a shell.
+      const tb = ghRepo ? ghTarballOf(ghRepo) : tarballOf(`${s.name}@${ver}`)
       if (!tb) continue
       rmSync(tmp, { recursive: true, force: true })
       mkdirSync(tmp, { recursive: true })

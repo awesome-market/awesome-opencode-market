@@ -327,9 +327,12 @@ export async function run(opts: RunOptions = {}) {
         ? await fetchRepoTree(repo, repoMeta.defaultBranch, { token: opts.ghToken, fetchFn: f })
         : null
       if (treeRes?.status === 'rate-limited') rateLimitedCalls++
-      const hasSkill = !!treeRes?.paths && hasSkillPath(treeRes.paths)
       if (treeRes?.paths && treeRes.truncated)
         console.warn(`repo tree truncated for ${repo} — deep .opencode/skills probes may miss`)
+      // skills can ship in the published tarball without being in the repo tree
+      // (generated/export-subset artifacts) — scan files are the fuller signal
+      const hasSkill = (!!treeRes?.paths && hasSkillPath(treeRes.paths))
+        || hasSkillPath(new Set(scanFiles.map(f => f.replace(/^package\//, ''))))
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
       // npm↔repo correspondence: the repo's own package.json should name this
       // package. A positive mismatch (claiming an unrelated popular repo to
@@ -350,12 +353,19 @@ export async function run(opts: RunOptions = {}) {
       // author-claimed fields precedence: repo .opencode-market.json > issue submission > auto-derived
       const sub = seedMeta.get(cand.name)
 
+      // contains = the full parts list: npm-admitted entries always carry a
+      // plugin part (evidence gate required it), plus 'skill' when skill
+      // artifacts were found — dual-nature packages advertise both.
+      const parts: NonNullable<PluginEntry['contains']> = [
+        ...(sub?.type === 'skill' ? [] : ['plugin' as const]),
+        ...(hasSkill ? ['skill' as const] : []),
+      ]
       const entry: PluginEntry = {
         name: cand.name,
         slug,
         aliases: [],
         type: (sub?.type === 'skill' ? 'skill' : 'plugin'),
-        ...(hasSkill ? { contains: ['skill' as const] } : {}),
+        ...(parts.length ? { contains: parts } : {}),
         discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
         source: { kind: 'npm', id: cand.name, ...(repo ? { repo } : {}), ...(repoMeta?.id ? { repoId: repoMeta.id } : {}), ...(pk.latest ? { version: pk.latest } : {}) },
         description: {
@@ -375,6 +385,7 @@ export async function run(opts: RunOptions = {}) {
         firstSeenAt: now,
         latestVersion: pk.latest,
         publishedAt: pk.latestPublishedAt,
+        integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
         metrics: { stars: repoMeta?.stars ?? null, npmDownloads30d: downloads, checkedAt: now },
         capabilities: scan,
         verification: scan.redFlags.length > 0
@@ -432,6 +443,9 @@ export async function run(opts: RunOptions = {}) {
           entry.approvalReason = pk.latest !== prev.latestVersion ? 'awaiting-review' : prev.approvalReason
         }
       }
+      // integrity follows the DISPLAYED version — a held entry pins the approved
+      // tarball's SRI, not the pending one (packument carries every version)
+      entry.integrity = (entry.latestVersion ? pk.integrityOf[entry.latestVersion] : null) ?? null
       entries.push(entry)
       console.log(`  [${entries.length}] ${cand.name}`)
     } catch (e) {
@@ -505,7 +519,7 @@ export async function run(opts: RunOptions = {}) {
         if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++ }
       }
       ghStats.admitted++
-      const hasSkill = hasSkillPath(treeRes.paths)
+      const hasSkill = hasSkillPath(treeRes.paths) || hasSkillPath(new Set(scanFiles))
       const sub = seedRepoMeta.get(c.fullName)
       // type drives the site badge: declared wins; otherwise a repo whose only
       // artifact is skills (no root package.json, no .opencode plugin path)
@@ -513,19 +527,27 @@ export async function run(opts: RunOptions = {}) {
       const pluginArtifact = [...treeRes.paths].some(p => /^\.opencode\/(plugin|plugins)\//.test(p))
       const type: PluginEntry['type'] = sub?.type === 'skill' ? 'skill'
         : (hasSkill && !treeRes.paths.has('package.json') && !pluginArtifact ? 'skill' : 'plugin')
+      const feats = detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles })
+      // contains = parts list: 'plugin' when plugin code/artifact evidence
+      // exists (a plugin repo needs a host install path, npm or manual), plus
+      // 'skill' for skill artifacts — drives client install routing
+      const ghParts: NonNullable<PluginEntry['contains']> = [
+        ...(pluginArtifact || feats.length ? ['plugin' as const] : []),
+        ...(hasSkill ? ['skill' as const] : []),
+      ]
       const entry: PluginEntry = {
         name: c.fullName,
         slug: c.fullName.toLowerCase(),
         aliases: [],
         type,
-        ...(hasSkill ? { contains: ['skill' as const] } : {}),
+        ...(ghParts.length ? { contains: ghParts } : {}),
         discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
-        source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}) },
+        source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}), ...(treeRes.sha ? { version: treeRes.sha } : {}) },
         description: {
           en: marketMeta?.description?.en ?? sub?.desc?.en ?? c.description,
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
-        features: detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles }),
+        features: feats,
         category: marketMeta?.category ?? sub?.category ?? classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
         license: c.license,
         deprecated: false,
@@ -538,6 +560,7 @@ export async function run(opts: RunOptions = {}) {
         firstSeenAt: ghPrev?.firstSeenAt ?? now,
         latestVersion: null,
         publishedAt: null,
+        integrity: null,
         metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
         capabilities: scan,
         // 'skipped' is load-bearing: verdicts.ts RELEASABLE admits it as the

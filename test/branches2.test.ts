@@ -114,6 +114,8 @@ describe('branches round 2', () => {
     const e = idx.plugins[0]!
     expect(e.verification.status).toBe('skipped')
     expect(e.capabilities.redFlags.length).toBeGreaterThan(0)
-    expect(e.contains).toEqual(['skill'])
+    // dual-nature: an npm package IS a plugin artifact, and its SKILL.md adds
+    // the skill part — contains now lists both, not just 'skill'
+    expect(e.contains).toEqual(['plugin', 'skill'])
   })
 })

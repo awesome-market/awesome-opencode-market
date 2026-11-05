@@ -5,7 +5,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { fetchIndex, rows, DEFAULT_INDEX_URL } from '../src/catalog.ts'
+import { fetchIndex, sortEntries, DEFAULT_INDEX_URL } from '../src/catalog.ts'
 import type { MarketEntry, MarketIndex } from '../src/catalog.ts'
 
 const dir = dirname(fileURLToPath(import.meta.url))
@@ -54,12 +54,12 @@ describe('market plugin', () => {
     } finally { s.close() }
     expect(DEFAULT_INDEX_URL).toContain('index.json')
   })
-  it('rows: verified first, redFlag last, name order within', () => {
-    const r = rows([
+  it('sortEntries verified: verified first, skipped before failed, name order within', () => {
+    const r = sortEntries([
       mkEntry('b-unver', 'unverified'),
       mkEntry('a-ver', 'verified'),
       mkEntry('c-flag', 'skipped', 1),
-    ])
+    ], 'verified')
     expect(r.map(e => e.name)).toEqual(['a-ver', 'b-unver', 'c-flag'])
   })
 })
@@ -104,12 +104,12 @@ describe('catalog helpers', () => {
     expect(search(es, '')).toHaveLength(3)
   })
 })
-  it('rows orders verified first, redFlag last', async () => {
-    const { rows } = await import('../src/catalog.ts')
+  it('sortEntries verified: verified first even with redFlags, failed last', async () => {
+    const { sortEntries } = await import('../src/catalog.ts')
     const mk = (n: string, st: string, rf = 0): MarketEntry => ({ name: n, slug: n, type: 'p', category: [], verification: { status: st }, capabilities: { scannedAt: '', findings: [], redFlags: Array(rf).fill('x') } })
-    const r = rows([mk('z', 'failed'), mk('a', 'verified'), mk('m', 'verified', 2), mk('q', 'unverified', 1)])
+    const r = sortEntries([mk('z', 'failed'), mk('a', 'verified'), mk('m', 'verified', 2), mk('q', 'unverified', 1)], 'verified')
     expect(r.slice(0, 2).map(e => e.name)).toEqual(['a', 'm'])   // verified first even with redFlags
-    expect(r[r.length - 1]!.name).toBe('q')                     // redFlagged non-verified last
+    expect(r[r.length - 1]!.name).toBe('z')                     // failed sinks below unverified
   })
   it('search matches description too', async () => {
     const { search } = await import('../src/catalog.ts')
@@ -373,5 +373,232 @@ describe('skill-install', () => {
     expect(existsSync(join(out, 'suite'))).toBe(false)
     expect(existsSync(join(out, 'suite-alpha'))).toBe(false)
     expect(existsSync(join(out, 'other'))).toBe(true)
+  })
+})
+
+describe('install routing + contract', () => {
+  const gh = (over: Record<string, unknown> = {}): MarketEntry => ({
+    name: 'o/repo', slug: 'o/repo', type: 'plugin', category: [],
+    source: { kind: 'github', id: 'o/repo', repo: 'o/repo' },
+    modifiedAt: '2026-03-01T00:00:00Z', ...over,
+  } as MarketEntry)
+  const npm = (over: Record<string, unknown> = {}): MarketEntry => ({
+    name: 'pkg', slug: 'pkg', type: 'plugin', category: [],
+    source: { kind: 'npm', id: 'pkg' }, latestVersion: '1.0.0', ...over,
+  } as MarketEntry)
+
+  it('installPlan: npm plugin / npm skill / dual / github skill / no-target', async () => {
+    const { installPlan } = await import('../src/catalog.ts')
+    expect(installPlan(npm({ contains: ['plugin'] }))).toEqual({ plugin: true, skill: null })
+    expect(installPlan(npm({ type: 'skill', contains: ['skill'] }))).toEqual({ plugin: false, skill: 'npm' })
+    // dual-nature npm package — both halves installable
+    expect(installPlan(npm({ contains: ['plugin', 'skill'] }))).toEqual({ plugin: true, skill: 'npm' })
+    // github skill repo — no npm version, still installable via codeload
+    expect(installPlan(gh({ type: 'skill', contains: ['skill'], latestVersion: null }))).toEqual({ plugin: false, skill: 'github' })
+    // github plugin repo — nothing deliverable (no npm artifact)
+    expect(installPlan(gh({ contains: ['plugin'], latestVersion: null }))).toEqual({ plugin: false, skill: null })
+    // npm entry missing a version
+    expect(installPlan(npm({ latestVersion: null }))).toEqual({ plugin: false, skill: null })
+    // malformed repo id → not installable as github
+    expect(installPlan(gh({ contains: ['skill'], latestVersion: null, source: { kind: 'github', id: 'x', repo: 'bad repo!' } }))).toEqual({ plugin: false, skill: null })
+  })
+  it('canInstall mirrors deliverable parts — github skill repo is installable', async () => {
+    const { canInstall } = await import('../src/catalog.ts')
+    expect(canInstall(gh({ type: 'skill', contains: ['skill'], latestVersion: null }))).toBe(true)
+    expect(canInstall(gh({ contains: ['plugin'], latestVersion: null }))).toBe(false)
+    expect(canInstall(npm({ contains: ['plugin'] }))).toBe(true)
+  })
+  it('verMarker + hasUpdate: github pushedAt is the version marker', async () => {
+    const { verMarker, hasUpdate } = await import('../src/catalog.ts')
+    const g = gh({ modifiedAt: '2026-03-01T00:00:00Z' })
+    expect(verMarker(g)).toBe('2026-03-01T00:00:00Z')
+    expect(verMarker(npm())).toBe('1.0.0')
+    expect(hasUpdate(g, '2026-02-01T00:00:00Z')).toBe(true)
+    expect(hasUpdate(g, '2026-03-01T00:00:00Z')).toBe(false)
+    expect(hasUpdate(g, 'local')).toBe(false)          // dir installs can't compare
+    expect(hasUpdate(g)).toBe(false)
+  })
+  it('inDays: github modifiedAt feeds the publish window', async () => {
+    const { inDays } = await import('../src/catalog.ts')
+    const recent = new Date(Date.now() - 3600_000).toISOString()
+    expect(inDays(gh({ modifiedAt: recent }), 7)).toBe(true)
+    expect(inDays(gh({ modifiedAt: '2001-01-01T00:00:00Z' }), 7)).toBe(false)
+  })
+  it('resolveIndexUrl: options > env > default, https-only', async () => {
+    const { resolveIndexUrl } = await import('../src/catalog.ts')
+    expect(resolveIndexUrl({ indexUrl: 'https://x.example/idx.json' })).toBe('https://x.example/idx.json')
+    expect(resolveIndexUrl({ indexUrl: 'http://insecure/x' })).toBe(DEFAULT_INDEX_URL)   // non-https rejected
+    expect(resolveIndexUrl({ indexUrl: 42 })).toBe(DEFAULT_INDEX_URL)
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    env.OPENCODE_MARKET_INDEX = 'https://env.example/i.json'
+    expect(resolveIndexUrl(null)).toBe('https://env.example/i.json')
+    expect(resolveIndexUrl({ indexUrl: 'https://opt.example/o.json' })).toBe('https://opt.example/o.json')   // options beat env
+    delete env.OPENCODE_MARKET_INDEX
+    expect(resolveIndexUrl(null)).toBe(DEFAULT_INDEX_URL)
+  })
+  it('healthUrl/skillsUrl derive sibling endpoints', async () => {
+    const { healthUrl, skillsUrl } = await import('../src/catalog.ts')
+    expect(healthUrl('https://x.example/i/index.json')).toBe('https://x.example/i/health.json')
+    expect(skillsUrl('https://x.example/i/index.json')).toBe('https://x.example/i/skills/')
+  })
+})
+
+describe('integrityMatches — sha512 SRI', () => {
+  it('match / mismatch / unverifiable', async () => {
+    const { integrityMatches } = await import('../src/catalog.ts')
+    const { createHash } = await import('node:crypto')
+    const buf = new TextEncoder().encode('artifact-bytes')
+    const sri = `sha512-${createHash('sha512').update(buf).digest('base64')}`
+    expect(await integrityMatches(buf, sri)).toBe(true)
+    expect(await integrityMatches(new TextEncoder().encode('other'), sri)).toBe(false)
+    expect(await integrityMatches(buf, null)).toBeNull()            // no announced integrity → unverifiable
+    expect(await integrityMatches(buf, 'md5-zzz')).toBeNull()       // unsupported scheme → unverifiable, never auto-pass
+  })
+})
+
+describe('manifest-first fetch (health.json sha256)', () => {
+  const { createHash } = require('node:crypto') as typeof import('node:crypto')
+  const IDX_TEXT = JSON.stringify({ version: '1', generatedAt: 'g', categories: {}, removed: [],
+    plugins: [{ name: 'p', slug: 'p', verification: { status: 'unverified' } }] })
+  const servePair = async () => {
+    const counts = { index: 0, health: 0 }
+    let indexBody = IDX_TEXT
+    let health: unknown = null
+    let indexStatus = 200
+    const srv = createServer((req, res) => {
+      if (req.url === '/health.json') {
+        counts.health++
+        if (health === null) { res.statusCode = 404; return res.end() }
+        res.end(JSON.stringify(health))
+      } else {
+        counts.index++
+        res.statusCode = indexStatus
+        res.end(indexStatus === 200 ? indexBody : 'err')
+      }
+    })
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r))
+    return {
+      counts, close: () => srv.close(),
+      url: `http://127.0.0.1:${(srv.address() as AddressInfo).port}/index.json`,
+      setIndex: (body: string) => { indexBody = body },
+      setHealth: (h: unknown) => { health = h },
+      setIndexStatus: (s: number) => { indexStatus = s },
+    }
+  }
+  const shaOf = (text: string) => createHash('sha256').update(text).digest('hex')
+  const mkStore = () => {
+    const store: Record<string, string> = {}
+    globalThis.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    } as unknown as Storage
+    return store
+  }
+  const dropLs = () => { delete (globalThis as Record<string, unknown>).localStorage }
+
+  it('sha hit → no index download; moved sha → refetch + updated outcome', async () => {
+    const { fetchIndexCached, fetchOutcome } = await import('../src/catalog.ts')
+    mkStore()
+    const s = await servePair()
+    s.setHealth({ sha256: shaOf(IDX_TEXT), generatedAt: 'g' })
+    const a = await fetchIndexCached(s.url)
+    expect(fetchOutcome()).toBe('first')
+    expect(s.counts).toEqual({ index: 1, health: 1 })
+    // warm + sha unchanged → manifest check only, index NOT re-downloaded
+    const b = await fetchIndexCached(s.url)
+    expect(fetchOutcome()).toBe('fresh')
+    expect(s.counts).toEqual({ index: 1, health: 2 })
+    expect(b).toEqual(a)
+    // publish moved → health sha differs → refetch even inside TTL
+    const IDX2 = JSON.stringify({ version: '2', generatedAt: 'g2', categories: {}, removed: [], plugins: [{ name: 'p2', slug: 'p2' }] })
+    s.setIndex(IDX2); s.setHealth({ sha256: shaOf(IDX2) })
+    const c = await fetchIndexCached(s.url)
+    expect(fetchOutcome()).toBe('updated')
+    expect(s.counts).toEqual({ index: 2, health: 3 })
+    expect(c.plugins[0]!.name).toBe('p2')
+    s.close(); dropLs()
+  }, 20000)
+  it('hash mismatch → outcome mismatch + old cache kept, never pinned', async () => {
+    const { fetchIndexCached, fetchOutcome } = await import('../src/catalog.ts')
+    const store = mkStore()
+    const s = await servePair()
+    s.setHealth({ sha256: shaOf(IDX_TEXT) })
+    await fetchIndexCached(s.url)                                    // seed cache
+    s.setHealth({ sha256: '0'.repeat(64) })                          // manifest lies
+    const kept = await fetchIndexCached(s.url, true)
+    expect(fetchOutcome()).toBe('mismatch')
+    expect(kept.plugins[0]!.name).toBe('p')                          // old cache served
+    const c = JSON.parse(store['opencode-market.index.v1']!) as { sha: string }
+    expect(c.sha).toBe(shaOf(IDX_TEXT))                              // mismatched pair not stored
+    s.close(); dropLs()
+  }, 20000)
+  it('mismatch with no cache → throws (fail closed)', async () => {
+    const { fetchIndexCached, fetchOutcome } = await import('../src/catalog.ts')
+    mkStore()
+    const s = await servePair()
+    s.setHealth({ sha256: 'f'.repeat(64) })
+    await expect(fetchIndexCached(s.url)).rejects.toThrow('mismatch')
+    expect(fetchOutcome()).toBe('mismatch')
+    s.close(); dropLs()
+  }, 20000)
+  it('health endpoint down → plain TTL behavior, no hash pin', async () => {
+    const { fetchIndexCached, fetchOutcome } = await import('../src/catalog.ts')
+    const store = mkStore()
+    const s = await servePair()
+    const a = await fetchIndexCached(s.url)                          // health 404s
+    expect(fetchOutcome()).toBe('first')
+    const b = await fetchIndexCached(s.url)
+    expect(fetchOutcome()).toBe('fresh')
+    expect(s.counts).toEqual({ index: 1, health: 2 })                // TTL served, no re-download
+    expect(b).toEqual(a)
+    const c = JSON.parse(store['opencode-market.index.v1']!) as { sha?: string }
+    expect(c.sha).toBeUndefined()                                    // unpinned without manifest
+    s.close(); dropLs()
+  }, 20000)
+})
+
+describe('fetchPkgVersionMeta', () => {
+  it('approved-version tarball + integrity; https-only; packument cached', async () => {
+    const { fetchPkgVersionMeta } = await import('../src/catalog.ts')
+    const orig = globalThis.fetch
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(JSON.stringify({ versions: {
+        '1.0.0': { dist: { tarball: 'https://r/approved.tgz', integrity: 'sha512-AAA=' } },
+        '9.9.9': { dist: { tarball: 'https://r/held.tgz' } },
+        '0.5.0': { dist: { tarball: 'http://insecure/x.tgz' } },
+      } }))
+    }) as typeof fetch
+    try {
+      const m = await fetchPkgVersionMeta('meta-pkg-zz1', '1.0.0')
+      expect(m).toEqual({ tarball: 'https://r/approved.tgz', integrity: 'sha512-AAA=' })
+      // held pending version is reachable ONLY by explicit pin, never latest —
+      // and a second lookup hits the cache (one packument fetch total)
+      const held = await fetchPkgVersionMeta('meta-pkg-zz1', '9.9.9')
+      expect(held.tarball).toBe('https://r/held.tgz')
+      expect(calls).toBe(1)
+      // insecure tarball rejected
+      expect((await fetchPkgVersionMeta('meta-pkg-zz1', '0.5.0')).tarball).toBeNull()
+      // unknown version → nulls, never invents a URL
+      expect(await fetchPkgVersionMeta('meta-pkg-zz1', '3.3.3')).toEqual({ tarball: null, integrity: null })
+    } finally { globalThis.fetch = orig }
+  })
+})
+
+describe('hostx id guards', () => {
+  it('assertEntryId: npm names + owner/repo; rejects traversal + junk', async () => {
+    const { assertEntryId } = await import('../src/hostx.ts')
+    for (const ok of ['pkg', '@scope/pkg', 'owner/repo', 'o.r/r_e-p.o'])
+      expect(() => assertEntryId(ok)).not.toThrow()
+    for (const bad of ['', 'a b', '../x', 'a/../b', 'x//y', 'o/repo/extra', 42, null])
+      expect(() => assertEntryId(bad)).toThrow('invalid entry id')
+  })
+  it('assertSkillId: repo basename derives the dir; skillId namespaces', async () => {
+    const { assertSkillId, skillId } = await import('../src/hostx.ts')
+    expect(assertSkillId('o/myrepo')).toBe('myrepo')
+    expect(skillId('o/myrepo')).toBe('o--myrepo')
+    expect(assertSkillId('@scope/pkg')).toBe('pkg')
   })
 })

@@ -13,6 +13,19 @@ export function assertPkgName(name: unknown): asserts name is string {
     throw new Error(`invalid package name: ${String(name).slice(0, 80)}`)
 }
 
+/** github repo id — `owner/repo`, same single-segment charset as npm names. */
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/
+
+/** Catalog entry id accepted by the skill install path — an npm package name
+ *  OR a github `owner/repo` (repo skills ship via codeload). `..` rejected up
+ *  front; the basename check in assertSkillId does the rest. */
+export function assertEntryId(name: unknown): asserts name is string {
+  if (typeof name !== 'string' || name.includes('..'))
+    throw new Error(`invalid entry id: ${String(name).slice(0, 80)}`)
+  if (!NAME_RE.test(name) && !REPO_RE.test(name))
+    throw new Error(`invalid entry id: ${name.slice(0, 80)}`)
+}
+
 /** install/update spec must be exactly `name` or `name@version` for THIS
  *  package — blocks spec/name mismatch (acting on another plugin), flag
  *  injection (`--registry=`), and non-semver versions. Absent spec = name. */
@@ -33,9 +46,10 @@ export function skillId(name: string): string {
   return name.replace(/^@/, '').replace(/\//g, '--')
 }
 
-/** Skill dir basename — single safe path segment, validated. */
+/** Skill dir basename — single safe path segment, validated. Accepts github
+ *  `owner/repo` ids too (basename `repo`; namespaced `owner--repo` on collision). */
 export function assertSkillId(name: string): string {
-  assertPkgName(name)
+  assertEntryId(name)
   const id = name.split('/').pop() ?? ''
   if (!id || id === '.' || id === '..' || /[\\/]/.test(id)) throw new Error(`invalid skill id from ${name}`)
   return id

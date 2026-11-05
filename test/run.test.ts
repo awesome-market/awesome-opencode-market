@@ -169,7 +169,8 @@ describe('github-kind hardening', () => {
       () => new Response(new Uint8Array(mkTgz())),
     )
     const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'sk-')), 'i.json'), fetchFn: f, now: 't' })
-    expect(idx.plugins.find(p => p.name === 'o/r')?.contains).toEqual(['skill'])
+    // 'plugin' too — the repo ships a root package.json alongside the skill
+    expect(idx.plugins.find(p => p.name === 'o/r')?.contains).toEqual(['plugin', 'skill'])
   })
 
   it('skill-only evidence derives type:skill; package.json present stays plugin', async () => {

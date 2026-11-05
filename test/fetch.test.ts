@@ -20,6 +20,15 @@ describe('fetch/npm', () => {
   it('returns null on 404', async () => {
     expect((await fetchPackument('x', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
   })
+  it('integrityOf maps per-version dist.integrity, missing → absent', async () => {
+    const d = { 'dist-tags': { latest: '2' }, versions: {
+      '1': { dist: { tarball: 't', integrity: 'sha512-AAA=' } },
+      '2': { dist: { tarball: 't' } },
+    }, time: {} }
+    const { pk: p } = await fetchPackument('x', { fetchFn: (async () => mkRes(d)) as typeof fetch })
+    expect(p!.integrityOf['1']).toBe('sha512-AAA=')
+    expect(p!.integrityOf['2']).toBeUndefined()
+  })
   it('handles string repository + license object', async () => {
     const d = { 'dist-tags': { latest: '1' },
       versions: { '1': { repository: 'https://github.com/o/r', license: { type: 'Apache-2.0' }, dist: {} } },

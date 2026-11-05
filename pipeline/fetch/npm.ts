@@ -20,6 +20,8 @@ export interface Packument {
   distTags: Record<string, string>
   /** package readme (capped) — readme-install evidence check */
   readme: string | null
+  /** per-version dist.integrity (SRI sha512) — install-time drift check */
+  integrityOf: Record<string, string>
 }
 
 export type PackumentStatus = 'ok' | 'not-found' | 'error'
@@ -51,7 +53,7 @@ export async function fetchPackument(
     versions?: Record<string, {
       repository?: string | { url?: string; directory?: string }
       license?: string | { type?: string }
-      dist?: { tarball?: string }
+      dist?: { tarball?: string; integrity?: string }
       keywords?: string[]
       main?: string
       exports?: unknown
@@ -90,6 +92,10 @@ export async function fetchPackument(
       maintainers: (doc.maintainers ?? []).map(m => typeof m === 'string' ? m : m.name ?? '').filter(Boolean),
       distTags,
       readme: typeof doc.readme === 'string' ? doc.readme.slice(0, 200_000) : null,
+      integrityOf: Object.fromEntries(
+        Object.entries(doc.versions ?? {})
+          .map(([v, x]) => [v, x?.dist?.integrity] as const)
+          .filter((x): x is readonly [string, string] => typeof x[1] === 'string')),
     },
     status: 'ok',
   }

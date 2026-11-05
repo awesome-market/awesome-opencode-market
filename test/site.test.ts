@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -128,6 +129,55 @@ describe('site honest labels', () => {
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 
+describe('buildSkillCatalog github-kind entries', () => {
+  const mkGhTgz = () => {
+    const src = mkdtempSync(join(tmpdir(), 'gh-'))
+    // codeload archives wrap content in <repo>-<ref>/ — --strip-components=1 peels it
+    mkdirSync(join(src, 'repo-abc123', 'skills', 'demo'), { recursive: true })
+    writeFileSync(join(src, 'repo-abc123', 'skills', 'demo', 'SKILL.md'), '# gh skill')
+    execSync(`cd "${src}" && tar czf s.tgz repo-abc123`)
+    return { src, tgz: join(src, 's.tgz') }
+  }
+  const ghEntry = (over: Partial<PluginEntry> = {}): PluginEntry => mk({
+    name: 'gh-skill', contains: ['skill'], latestVersion: null,
+    source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill' },
+    modifiedAt: '2026-03-01T00:00:00Z', ...over,
+  })
+
+  it('github skill → codeload path, version = modifiedAt, md extracted', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { src, tgz } = mkGhTgz()
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [ghEntry()], removed: [] }
+    const npmSpecs: string[] = []; const ghRepos: string[] = []
+    buildSkillCatalog(idx, out,
+      (spec) => { npmSpecs.push(spec); return null },
+      undefined,
+      (repo) => { ghRepos.push(repo); return `file://${tgz}` })
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(npmSpecs).toHaveLength(0)                        // github never hits npm tarballOf
+    expect(ghRepos).toEqual(['o/gh-skill'])
+    expect(cat.skills).toHaveLength(1)
+    expect(cat.skills[0].version).toBe('2026-03-01T00:00:00Z')   // pushedAt marker
+    expect(cat.skills[0].files).toContain('skills/demo/SKILL.md')
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('github entry without modifiedAt or with malformed repo is skipped', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      ghEntry({ name: 'g1', modifiedAt: null }),
+      ghEntry({ name: 'g2', source: { kind: 'github', id: 'g2', repo: 'not a repo' } }),
+    ], removed: [] }
+    const ghRepos: string[] = []
+    const r = buildSkillCatalog(idx, out, () => null, undefined, (repo) => { ghRepos.push(repo); return null })
+    expect(ghRepos).toHaveLength(0)
+    expect(r.candidates).toBe(0)
+    rmSync(out, { recursive: true, force: true })
+  })
+})
+
 describe('buildSkillCatalog failure paths', () => {
   it('tarball fetch failure → skill skipped, tmp dir cleaned', async () => {
     const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
@@ -233,6 +283,12 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     const h = JSON.parse(readFileSync(join(out, 'health.json'), 'utf8'))
     expect(h.entries).toBe(3)
     expect(h.skills).toMatchObject({ candidates: 2, landed: 0, degraded: true })
+    // sha256 covers the exact serialized index.json bytes — manifest-first fetch
+    // pins on this; a drifted/truncated index must never match
+    const indexBytes = readFileSync(join(out, 'index.json'))
+    expect(h.sha256).toBe(createHash('sha256').update(indexBytes).digest('hex'))
+    expect(h.bytes).toBe(indexBytes.length)
+    expect(h.generatedAt).toBe('t')
     rmSync(out, { recursive: true, force: true })
   }, 60000)
 

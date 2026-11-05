@@ -1057,7 +1057,7 @@ describe('run.ts remaining arms', () => {
     }) as typeof fetch
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
     expect(out.removed.find(r => r.name === 'filtered-out')!.reason).toBe('filtered')
-    expect(out.plugins[0]!.contains).toBeUndefined()
+    expect(out.plugins[0]!.contains).toEqual(['plugin'])   // parts list is explicit now
   })
   it('publish gate: mass disappearance → run() throws', async () => {
     const tgz = mkTgz()

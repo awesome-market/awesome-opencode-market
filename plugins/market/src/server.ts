@@ -4,7 +4,8 @@
  */
 export default {
   id: 'opencode-market',
-  setup() {
-    // Options channel is ctx.options when needed (index URL override etc.)
+  setup(_ctx: { options?: { indexUrl?: string } }) {
+    // ctx.options.indexUrl is the catalog endpoint override — resolved by the
+    // GUI/TUI surfaces via resolveIndexUrl() (options > env > published default)
   },
 }

@@ -115,6 +115,12 @@ describe('F-8 fetchRepoTree: truncated flag surfaced', () => {
     expect(r.truncated).toBe(true)
     expect(r.paths!.has('a')).toBe(true)
   })
+  it('sha surfaces the resolved tree hash; absent when API omits it', async () => {
+    const withSha = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes({ sha: 'abc123', tree: [{ path: 'x' }] })) as typeof fetch })
+    expect(withSha.sha).toBe('abc123')
+    const noSha = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes({ tree: [] })) as typeof fetch })
+    expect(noSha.sha).toBeNull()
+  })
 })
 
 describe('F-9 fetchMarketMeta: size caps', () => {

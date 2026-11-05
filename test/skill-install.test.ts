@@ -59,6 +59,36 @@ describe('installSkillTar', () => {
     expect(m.paths).toContain('alpha')
   })
 
+  it('github codeload wrapper root is stripped — repo id installs + uninstalls clean', async () => {
+    // codeload archives ship every path under `<repo>-<ref>/`; it must be
+    // peeled like npm's package/ or skill nests stay one level too deep
+    const gz = makeGz(
+      ['myrepo-abc1234/README.md', 'hi'],
+      ['myrepo-abc1234/.opencode/skills/alpha/SKILL.md', '# a'],
+      ['myrepo-abc1234/.opencode/skills/beta/SKILL.md', '# b'],
+    )
+    const msg = await installSkillTar({ name: 'o/myrepo', gzipped: gz, root })
+    expect(msg).toMatch(/lifted 2/)
+    expect(existsSync(join(root, 'myrepo', 'README.md'))).toBe(true)
+    expect(existsSync(join(root, 'alpha', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(root, 'beta', 'SKILL.md'))).toBe(true)
+    // no wrapper dir may remain inside the package dir
+    expect(existsSync(join(root, 'myrepo', 'myrepo-abc1234'))).toBe(false)
+    await uninstallSkillDir('o/myrepo', root)
+    expect(existsSync(join(root, 'myrepo'))).toBe(false)
+    expect(existsSync(join(root, 'alpha'))).toBe(false)
+    expect(existsSync(join(root, 'beta'))).toBe(false)
+  })
+
+  it('single-segment first path is not mistaken for a wrapper (root-level files)', async () => {
+    // an npm tarball whose package/ strip leaves root-level files must NOT be
+    // treated as wrapped — the 'every item shares segment' rule prevents this
+    const gz = makeGz(['package/SKILL.md', '# s'], ['package/README.md', 'r'])
+    await installSkillTar({ name: 'solo', gzipped: gz, root })
+    expect(existsSync(join(root, 'solo', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(root, 'solo', 'README.md'))).toBe(true)
+  })
+
   it('throws on empty tarball', async () => {
     await expect(installSkillTar({ name: 'x', gzipped: gzipSync(Buffer.alloc(1024)), root })).rejects.toThrow('empty')
   })

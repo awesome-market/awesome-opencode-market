@@ -9,15 +9,17 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndex, fetchIndexCached, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, readLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, indexAge, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, approvedTarballUrl, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
+import { PKG_VERSION } from './version.js'
 
 const Market = Ipc.define({
   id: 'opencode-market',
   methods: {
-    index: { output: Schema.Unknown },
-    refreshIndex: { output: Schema.Unknown },
+    index: { input: Schema.Unknown, output: Schema.Unknown },
+    refreshIndex: { input: Schema.Unknown, output: Schema.Unknown },
+    indexOutcome: { output: Schema.String },
     installed: { output: Schema.Unknown },
     install: { input: Schema.Unknown, output: Schema.String },
     update: { input: Schema.Unknown, output: Schema.String },
@@ -26,32 +28,35 @@ const Market = Ipc.define({
     uninstall: { input: Schema.String, output: Schema.String },
     writeSkill: { input: Schema.Unknown, output: Schema.String },
     uninstallSkill: { input: Schema.String, output: Schema.String },
-    skillSource: { output: Schema.Unknown },
+    skillSource: { input: Schema.Unknown, output: Schema.Unknown },
     skillPermission: { input: Schema.Unknown, output: Schema.Unknown },
     devlog: { input: Schema.String, output: Schema.String },
     setDevlog: { input: Schema.Boolean, output: Schema.String },
     readDevlog: { output: Schema.Unknown },
+    clearDevlog: { output: Schema.String },
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok }
   },
 })
 type Api = {
-  index(): Promise<MarketIndex>
-  refreshIndex(): Promise<MarketIndex>
+  index(p?: { url?: string }): Promise<MarketIndex>
+  refreshIndex(p?: { url?: string }): Promise<MarketIndex>
+  indexOutcome(): Promise<string>
   installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
   install(p: { name: string; spec?: string }): Promise<string>
   update(p: { name: string; spec?: string }): Promise<string>
   cancelInstall(name: string): Promise<string>
   verifyActivation(spec: string): Promise<string>
   uninstall(name: string): Promise<string>
-  writeSkill(p: { name: string; b64: string }): Promise<string>
+  writeSkill(p: { name: string; b64?: string; url?: string; integrity?: string | null }): Promise<string>
   uninstallSkill(name: string): Promise<string>
-  skillSource(): Promise<{ url: string; enabled: boolean }>
+  skillSource(p?: { url?: string; enable?: boolean }): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
   devlog(line: string): Promise<string>
   setDevlog(on: boolean): Promise<string>
   readDevlog(): Promise<string>
+  clearDevlog(): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
 }
 
@@ -64,6 +69,10 @@ export default Plugin.define({
     try { api = ctx.main(Market) as Api } catch { /* diagnosed below */ }
     if (!api?.index) return {}
     const safe = api as Api
+    // catalog endpoint — plugin options (opencode.json) > OPENCODE_MARKET_INDEX
+    // env > published default. Every index-facing IPC call passes it through.
+    const INDEX_URL = resolveIndexUrl(ctx?.options)
+    const SKILLS_URL = skillsUrl(INDEX_URL)
     // single document listener slot — chrome() rebuilds once per mount, so each
     // new build replaces the previous handler instead of accumulating listeners
     let docClick: ((ev: Event) => void) | null = null
@@ -133,7 +142,7 @@ export default Plugin.define({
       })
     } catch { /* older host: no events */ }
 
-    safe.index().then(i => setData(i), e => setErr(String(e)))
+    safe.index({ url: INDEX_URL }).then(i => setData(i), e => setErr(String(e)))
     safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
 
     // tab scope — shared by filtered() and the 全部(N) category chips so the
@@ -148,7 +157,7 @@ export default Plugin.define({
             ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [], uncataloged: true } as unknown as MarketEntry))]
         case 'mySkills': return all.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name))
         case 'favorites': return all.filter(p => state().favorites[p.name])
-        case 'advanced': return all.filter(p => (p.capabilities?.redFlags?.length ?? 0) > 0 || p.verification?.status === 'failed')
+        case 'advanced': return []   // settings panel renders controls, not cards
         case 'discover': default: return all
       }
     }
@@ -161,12 +170,21 @@ export default Plugin.define({
       const srt = sortEntries(search(list, query()), sort())
       return sortDir() === 'asc' ? [...srt].reverse() : srt
     }
-    const statusOf = (e: MarketEntry) =>
-      installed()[e.name] ? `${t('installed')} v${installed()[e.name]}`
-      // github-kind entries have no npm version — 'skipped' here means there is
-      // nothing to run, not "有高危信号没跑" (honest-label rule, AGENTS.md)
-      : e.latestVersion == null ? t('noInstallTarget')
+    // installed marker: plugin key wins; skill dirs resolve through
+    // skillInstalledVer, preferring the manifest-recorded version over 'local'
+    const installedVer = (e: MarketEntry): string | undefined => {
+      if (installed()[e.name]) return installed()[e.name]
+      const disk = skillInstalledVer(installed(), e.name)
+      return disk ? (state().skillVers?.[e.name] ?? disk) : undefined
+    }
+    const statusOf = (e: MarketEntry) => {
+      const iv = installedVer(e)
+      return iv ? `${t('installed')} v${iv}`
+      // nothing this client can deliver (github plugin parts, malformed repos)
+      // gets the honest "no target" label — not a fake verification status
+      : !canInstall(e) ? t('noInstallTarget')
       : t((e.verification?.status ?? 'unverified') as 'verified')
+    }
 
     // ---- dom helpers -------------------------------------------------------
     const el = (tag: string, css = '', text = '') => {
@@ -181,13 +199,30 @@ export default Plugin.define({
       b.style.color = '#fff'
       // color comes from the raw status, not the localized label — comparing
       // translated text to English literals silently breaks in zh mode
-      const st = installed()[e.name] ? 'installed' : e.verification?.status ?? 'unverified'
+      const st = installed()[e.name] || skillInstalledVer(installed(), e.name) ? 'installed' : e.verification?.status ?? 'unverified'
       b.style.background = st === 'installed' || st === 'verified' ? '#1a7' : st === 'failed' ? '#c33' : st === 'skipped' ? '#885' : '#666'
       return b
     }
+    // tarball fetch + SRI check happen host-side (writeSkill url-mode): the
+    // webview has no CORS grant for codeload.github.com, and enforcing the
+    // digest in main means a renderer can't skip it. npm entries verify
+    // against the index-recorded SRI (reviewed artifact); github repo
+    // tarballs carry no SRI — their identity is source.version's tree sha.
+    const installSkillNet = async (e: MarketEntry): Promise<string> => {
+      const plan = installPlan(e)
+      if (plan.skill === 'github')
+        return safe.writeSkill({ name: e.name, url: `https://codeload.github.com/${e.source!.repo}/tar.gz/HEAD` })
+      if (plan.skill === 'npm') {
+        if (!e.latestVersion) throw new Error('no approved version to install')
+        const meta = await fetchPkgVersionMeta(e.name, e.latestVersion)
+        if (!meta.tarball) throw new Error(`no tarball for approved v${e.latestVersion}`)
+        return safe.writeSkill({ name: e.name, url: meta.tarball, integrity: e.integrity ?? meta.integrity })
+      }
+      throw new Error('no skill part to install')
+    }
     // two-step confirm: first click arms (3s window), second click executes
     const uninstallBtn = (e: MarketEntry) => {
-      const isSkill = e.contains?.includes('skill')
+      const isSkill = e.contains?.includes('skill') && !installed()[e.name]
       const b = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', t('uninstall')) as HTMLButtonElement
       let armed = false
       let timer = 0
@@ -200,14 +235,27 @@ export default Plugin.define({
         }
         window.clearTimeout(timer)
         b.disabled = true; b.textContent = '…'
-        ;(isSkill ? safe.uninstallSkill(e.name) : safe.uninstall(e.name)).then(
+        // uninstall what is actually installed, not what the type says — a
+        // dual-nature entry may have both a plugin spec and skill dirs.
+        // __skill_ keys directly: skillInstalledVer also matches the plugin
+        // key, which would fire the skill sweep on every plugin uninstall
+        const sBase = `__skill_${skillId(e.name)}`
+        const sBare = `__skill_${e.name.split('/').pop() ?? e.name}`
+        const hasSkillDir = Object.keys(installed()).some(k => k === sBase || k === sBare || k.startsWith(`${sBase}-`) || k.startsWith(`${sBare}-`))
+        const ops: Promise<string>[] = []
+        if (installed()[e.name]) ops.push(safe.uninstall(e.name))
+        if (hasSkillDir || isSkill) ops.push(safe.uninstallSkill(e.name))
+        if (!ops.length) ops.push(safe.uninstall(e.name))
+        Promise.all(ops).then(
           async () => {
             log(`uninstall ${e.name}`)
-            // drop every key this entry could own: plugin id, skill dir, <base>-* lifts
+            // drop every key this entry could own: plugin id, namespaced dir,
+            // BARE basename dir (non-colliding installs land there), *-lifts
             const base = `__skill_${skillId(e.name)}`
+            const bare = `__skill_${e.name.split('/').pop() ?? e.name}`
             const next = { ...installed() }
             delete next[e.name]
-            for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
+            for (const k of Object.keys(next)) if (k === base || k === bare || k.startsWith(`${base}-`) || k.startsWith(`${bare}-`)) delete next[k]
             const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
             put({ skillVers: sv }); setInstalled(next)
             setInstalledExtra(installedExtra().filter(x => x.name !== e.name))
@@ -228,9 +276,9 @@ export default Plugin.define({
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const disk = skillInstalledVer(installed(), e.name)
-      const ver = disk ? (state().skillVers?.[e.name] ?? disk) : undefined
-      const isSkill = e.contains?.includes('skill')
+      const ver = installedVer(e)
+      const plan = installPlan(e)
+      const isSkill = plan.skill !== null
       // progress-driven busy/failed states — a re-render during install must
       // keep showing … instead of resetting the button back to add
       const pr = prog()[e.name]
@@ -257,7 +305,11 @@ export default Plugin.define({
         return tab() === 'installed' || tab() === 'mySkills'
           ? uninstallBtn(e)
           : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
-      const label = ver ? `${t('update')} → v${e.latestVersion}` : t('add')
+      // entries with no deliverable part get an inert label — a button that
+      // only errors on click is a trap, not an affordance
+      if (!canInstall(e))
+        return el('span', 'font-size:11px;opacity:.55;white-space:nowrap;flex-shrink:0', t('noInstallTarget'))
+      const label = ver ? `${t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}` : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
@@ -268,31 +320,27 @@ export default Plugin.define({
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
         }
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
-        log(`install start ${e.name} skill=${isSkill}`)
-        const installSkillNet = async (): Promise<string> => {
-          // pin to the catalog-approved version — dist-tags.latest is the
-          // pendingUpdate users are NOT allowed to get yet (hold semantics)
-          if (!e.latestVersion) throw new Error('no approved version to install')
-          const pk = await (await fetch(`https://registry.npmjs.org/${encodeURIComponent(e.name)}`, { signal: AbortSignal.timeout(15_000) })).json() as { versions: Record<string, { dist: { tarball: string } }> }
-          const url = approvedTarballUrl(pk, e)
-          if (!url) throw new Error(`no tarball for approved v${e.latestVersion}`)
-          const buf = await (await fetch(url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer()
-          if (buf.byteLength > MAX_SKILL_TGZ) throw new Error('tarball too large')
-          const u8 = new Uint8Array(buf)
-          let bin = ''
-          for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768))
-          const b64 = btoa(bin)
-          return safe.writeSkill({ name: e.name, b64 })
+        log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
+        // dual-nature entries deliver BOTH parts — installing only the skill
+        // side silently drops the plugin half the package ships
+        const doInstall = async (): Promise<string> => {
+          const outs: string[] = []
+          if (plan.plugin)
+            outs.push(await (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) })))
+          if (plan.skill) outs.push(await installSkillNet(e))
+          return outs.join(' + ') || 'installed'
         }
-        const doInstall: () => Promise<string> = isSkill ? installSkillNet : () => (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) }))
         try { doInstall().then(
           async () => {
             setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
             if (isSkill) {
-              // optimistic + version bookkeeping → real update detection later
-              const v = e.latestVersion ?? 'local'
+              // optimistic + version bookkeeping → real update detection later;
+              // github skills record the pushedAt marker they shipped at
+              const v = verMarker(e) ?? 'local'
               setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
               put({ skillVers: { ...state().skillVers, [e.name]: v } })
+            }
+            if (!plan.plugin) {
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
               // optimistic mark — daemon rescans config async; refresh after a
@@ -353,7 +401,8 @@ export default Plugin.define({
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
       const dl = e.metrics?.npmDownloads30d, st = e.metrics?.stars
-      meta.textContent = [`v${e.latestVersion ?? '?'}`,
+      // github-kind entries carry no npm version — their marker is pushedAt
+      meta.textContent = [e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10),
         dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
         .filter(Boolean).join(' · ')
       // desc clamps at 2 lines; ⌄ sits at the end of the last visible line and flips to ⌃ once expanded
@@ -409,8 +458,6 @@ export default Plugin.define({
       }
       return d
     }
-    const fmtN = (n: number | null | undefined) =>
-      n == null ? '—' : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 
     const listView = () => {
       const root = el('div', '')
@@ -453,18 +500,30 @@ export default Plugin.define({
       // header: title + pkg version + far-right 全部更新 (hardcoded placeholder)
       const head = el('div', 'display:flex;align-items:baseline;margin-bottom:10px')
       head.appendChild(el('h3', 'margin:0;font-size:15px;font-weight:600', 'opencode market'))
-      head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', 'opencode-market v0.0.3'))
+      head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', `opencode-market v${PKG_VERSION}`))
       const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', t('updateAll')) as HTMLButtonElement
       updAll.dataset.act = 'updateAll'   // dispatch marker — text changes per state/lang, this doesn't
       const runUpdateAll = async () => {
         if (typeof safe.update !== 'function') { updAll.textContent = t('needRestartDesk'); return }
-        const outdated = (data()?.plugins ?? []).filter(e => { const v = installed()[e.name]; return !!v && hasUpdate(e, v) })
+        // skills join the sweep — the GUI used to only chase plugin specs and
+        // silently left stale skill dirs behind (TUI already covered both)
+        const outdated = (data()?.plugins ?? []).filter(e => { const v = installedVer(e); return !!v && hasUpdate(e, v) })
         if (!outdated.length) { updAll.textContent = t('allLatest'); setTimeout(() => { updAll.textContent = t('updateAll') }, 3000); return }
         updAll.disabled = true
         let ok = 0, fail = 0
         for (const e of outdated) {
           updAll.textContent = tf('updatingN', { n: ok + fail + 1, total: outdated.length })
-          try { await safe.update({ name: e.name, spec: pinSpec(e) }); ok++ } catch { fail++ }
+          try {
+            const plan = installPlan(e)
+            if (plan.plugin && installed()[e.name]) await safe.update({ name: e.name, spec: pinSpec(e) })
+            if (plan.skill && skillInstalledVer(installed(), e.name)) {
+              await installSkillNet(e)
+              const v = verMarker(e) ?? 'local'
+              setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
+              put({ skillVers: { ...state().skillVers, [e.name]: v } })
+            }
+            ok++
+          } catch { fail++ }
         }
         await new Promise(r => setTimeout(r, 2000))
         const fresh = await safe.installed?.().catch(() => null)
@@ -637,6 +696,11 @@ export default Plugin.define({
       const caps = e.capabilities
       for (const line of [
         `version: ${e.latestVersion ?? '?'}`,
+        // held-back newer version — the index knows it exists; review hasn't
+        // cleared it, so the client must never install it (hold semantics)
+        ...(e.pendingUpdate?.version ? [tf('heldReview', { v: e.pendingUpdate.version })] : []),
+        // github-kind identity: the tree sha the evidence gate + scan saw
+        ...(e.source?.version ? [`tree: ${e.source.version.slice(0, 12)}`] : []),
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
         `findings: ${caps?.findings?.length ?? 0} · redFlags: ${caps?.redFlags?.length ?? 0}`,
         `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
@@ -707,11 +771,15 @@ export default Plugin.define({
         refBtn.disabled = true; refBtn.textContent = t('refreshing'); setRefText(''); refStatus.textContent = ''
         const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('timeout25'))), 25_000))])
         try {
-          const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex() : safe.index())
+          const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
           if (idx) setData(idx)
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-          setRefText(`${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${new Date().toLocaleTimeString()}`)
+          // honest refresh result — a manifest-same hit isn't "refreshed N"
+          const oc = await safe.indexOutcome?.().catch(() => '') as string
+          setRefText(oc === 'fresh'
+            ? `${t('dataFresh')}，${new Date().toLocaleTimeString()}`
+            : `${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${new Date().toLocaleTimeString()}`)
         } catch (x) { setRefText(tf('refreshFailed', { err: String(x) })) } finally {
           refBtn.disabled = false; refBtn.textContent = t('refreshData')
         }
@@ -752,8 +820,23 @@ export default Plugin.define({
       const refresh = () => { void safe.readDevlog?.().then(txt => { logBox.textContent = txt || t('noLogs') }).catch(() => {}) }
       refresh()
       const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', t('clearLogs')) as HTMLButtonElement
-      clrL.onclick = () => { clearLog(); refresh() }
+      // logBox renders the HOST file (readDevlog) — clearing only the renderer
+      // localStorage buffer made the button a no-op (P0 bug)
+      clrL.onclick = () => { clearLog(); void safe.clearDevlog?.().then(refresh).catch(() => {}) }
       root.append(dv, cbL, logBox, clrL)
+      // HTTP skill catalog — lets opencode itself discover/refresh repo skills
+      // from the same site root the index came from (skills/ namespace)
+      root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
+      const ssStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:6px')
+      const ssBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('useHttpCatalog')) as HTMLButtonElement
+      const ssRefresh = () => void safe.skillSource?.().then(r => {
+        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : SKILLS_URL
+        ssBtn.textContent = r.enabled ? t('catalogAlready') : t('useHttpCatalog')
+        ssBtn.disabled = !!r.enabled
+      }).catch(() => { ssStatus.textContent = SKILLS_URL })
+      ssRefresh()
+      ssBtn.onclick = () => void safe.skillSource?.({ url: SKILLS_URL, enable: true }).then(ssRefresh).catch(() => {})
+      root.append(ssStatus, ssBtn)
       return root
     }
 
@@ -825,9 +908,16 @@ export default Plugin.define({
       const { join } = require('node:path') as typeof import('node:path')
       return join(homedir(), '.config', 'opencode', 'opencode.json')
     }
+    // renderer-supplied catalog URL (plugin options) validated + env fallback;
+    // lastIndexUrl keeps installed()'s extras lookup on the SAME catalog the
+    // renderer asked for — a second fetch at the default would double-pull
+    let lastIndexUrl = resolveIndexUrl(null)
+    const urlOrDefault = (u: unknown) =>
+      typeof u === 'string' && /^https:\/\//.test(u) ? u : lastIndexUrl
     m.provide(Market, {
-        index: () => fetchIndexCached() as Promise<MarketIndex>,
-        refreshIndex: () => fetchIndexCached(undefined, true) as Promise<MarketIndex>,
+        index: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl) as Promise<MarketIndex> },
+        refreshIndex: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl, true) as Promise<MarketIndex> },
+        indexOutcome: () => fetchOutcome(),
         installed: async () => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
           const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
@@ -874,7 +964,7 @@ export default Plugin.define({
             [join(homedir(), '.config', 'opencode', 'skills'), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
             d => readdirSync(d), p => existsSync(p)))
           // installed plugins with no catalog entry still get a card
-          const idxNames = new Set(((await fetchIndexCached())?.plugins ?? []).map(p => p.name))
+          const idxNames = new Set(((await fetchIndexCached(lastIndexUrl))?.plugins ?? []).map(p => p.name))
           const extras = buildExtras(specByName, idByName, map, idxNames)
           for (const x of extras) map[x.name] = x.version
           return { versions: map, extras, features: featByName }
@@ -952,22 +1042,44 @@ export default Plugin.define({
           lg(`uninstall ${name}: removed ${list.length - keep.length} spec(s)`)
           return 'removed'
         },
-        // skills are file-system installs: fetch tarball → extract into config/skills/<name>
-        writeSkill: async (p: { name: string; b64: string }) => {
+        // skills are file-system installs: extract tarball → config/skills/<name>.
+        // url-mode is preferred — downloads + the index-announced sha512 SRI
+        // check stay in the host process (webview has no codeload CORS, and a
+        // renderer can't bypass integrity enforcement it never sees). b64 is
+        // the legacy renderer-buffered path.
+        writeSkill: async (p: { name: string; b64?: string; url?: string; integrity?: string }) => {
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join } = require('node:path') as typeof import('node:path')
           assertSkillId(p.name)
-          if (typeof p.b64 !== 'string' || p.b64.length > 64 * 1024 * 1024) throw new Error('invalid skill payload')
-          return installSkillTar({ name: p.name, gzipped: Buffer.from(p.b64, 'base64'),
+          let bytes: Uint8Array
+          if (typeof p.url === 'string' && p.url) {
+            if (!/^https:\/\//.test(p.url)) throw new Error('skill url must be https')
+            const res = await fetch(p.url, { signal: AbortSignal.timeout(30_000) })
+            if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
+            const cl = Number(res.headers.get('content-length') ?? 0)
+            if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
+            bytes = new Uint8Array(await res.arrayBuffer())
+          } else {
+            if (typeof p.b64 !== 'string' || p.b64.length > 64 * 1024 * 1024) throw new Error('invalid skill payload')
+            bytes = Buffer.from(p.b64, 'base64')
+          }
+          if (bytes.byteLength > MAX_SKILL_TGZ) throw new Error('skill tarball too large')
+          // fail closed on a KNOWN mismatch; null = unverifiable (no SRI /
+          // no subtle crypto) and proceeds — github repo tarballs carry none
+          const ok = await integrityMatches(bytes, typeof p.integrity === 'string' ? p.integrity : null)
+          if (ok === false) throw new Error('integrity mismatch — downloaded bytes do not match the reviewed artifact')
+          return installSkillTar({ name: p.name, gzipped: bytes,
             root: join(homedir(), '.config', 'opencode', 'skills') })
         },
-        skillSource: async () => {
-          const url = 'https://terry2010.github.io/awesome-opencode-market/skills/'
+        // read when no input; {url, enable:true} writes opencode.json skills[]
+        skillSource: async (p: { url?: unknown; enable?: unknown } = {}) => {
+          const url = typeof p?.url === 'string' && /^https:\/\/\S+\/$/.test(p.url) ? p.url : skillsUrl(urlOrDefault(null))
           const cfg = await cfgPath()
           const d = await readJson(cfg)
           const list = strArrayField(d, 'skills')
-          if (!list.includes(url)) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
-          return { url, enabled: true }
+          const wasEnabled = list.includes(url)
+          if (p?.enable === true && !wasEnabled) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
+          return { url, enabled: p?.enable === true ? true : wasEnabled }
         },
         skillPermission: async (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) => {
           if (typeof p.id !== 'string' || !p.id || p.id.length > 200 || /[\\/]/.test(p.id))
@@ -990,6 +1102,12 @@ export default Plugin.define({
           try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
             return readFileSync(await marketLogPath(), 'utf8').split('\n').filter(Boolean).slice(-100).join('\n')
           } catch { return '' }
+        },
+        clearDevlog: async () => {
+          try { const { writeFileSync } = require('node:fs') as typeof import('node:fs')
+            writeFileSync(await marketLogPath(), '')
+          } catch { /* nothing to clear */ }
+          return 'ok'
         },
         devlog: async (line: string) => {
           if (!devlogOn) return 'off'
