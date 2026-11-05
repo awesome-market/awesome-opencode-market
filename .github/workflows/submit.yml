@@ -161,27 +161,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LINE: ${{ needs.review.outputs.subline }}
         run: |
-          git config user.email "market-bot@users.noreply.github.com"
-          git config user.name "market-bot"
           KEY=$(node -e "const s=JSON.parse(process.env.LINE);console.log(s.name||s.repo||'')")
           [ -n "$KEY" ] || { echo "empty submission key — skipping"; exit 0; }
-          PUSHED=
-          for i in 1 2 3; do
-            # catalog branch MUST come from origin — never fabricate it from the
-            # main checkout (would push the whole source tree into the data branch)
-            git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
-            git checkout -B catalog origin/catalog || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
-            touch submissions.txt
-            # exact-match dedupe: serialized lines are {"name":"x","repo":...} — the
-            # comma anchor prevents substring false-positives (o/repo vs o/repo-x)
-            grep -qF "\"name\":\"$KEY\"," submissions.txt || grep -qF "\"repo\":\"$KEY\"," submissions.txt || echo "$LINE" >> submissions.txt
-            git add submissions.txt
-            git commit -m "submission: $KEY (issue #${{ github.event.issue.number }})" || { echo "no changes"; PUSHED=1; break; }
-            git push origin catalog && { PUSHED=1; break; }
-            echo "push rejected (attempt $i) — retrying"
-            sleep 3
-          done
-          [ -n "$PUSHED" ] || { echo "failed to land submission after 3 attempts"; exit 1; }
+          FILE=submissions.txt MSG="submission: $KEY (issue #${{ github.event.issue.number }})" KEY="$KEY" \
+            ./bin/catalog-append.sh
 
   # dual-channel verdict writeback — a HUMAN applying submission:approved or a
   # collaborator commenting `/approve` / `/concern [reason]` records a
@@ -223,14 +206,27 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           LABEL: ${{ github.event.label.name }}
         run: |
-          PERM=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || echo none)
-          echo "actor=$ACTOR permission=$PERM"
+          # Retry once: a transient API failure must not masquerade as a
+          # permission denial — a definitive answer (404 = not a collaborator,
+          # or an explicit low permission) removes the label; a still-failing
+          # check keeps it so the maintainer can re-tap.
+          PERM=""
+          for t in 1 2; do
+            OUT=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>&1) \
+              && { PERM="$OUT"; break; }
+            case "$OUT" in *"HTTP 404"*) PERM="none"; break ;; esac
+            [ "$t" = 1 ] && sleep 2
+          done
+          echo "actor=$ACTOR permission=${PERM:-unknown}"
           case "$PERM" in
             admin|maintain|write) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
-            *) gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
-               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（$PERM）——标签已移除。仅 maintainer 可用 verdict 标签。"
-               echo "allowed=0" >> "$GITHUB_OUTPUT"
-               exit 0 ;;
+            none|read|triage)
+               gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
+               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅 maintainer 可用 verdict 标签。" || true
+               echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
+            *)
+               gh issue comment "$ISSUE" -R "$REPO" --body "⚠️ 无法确认 @$ACTOR 的仓库权限（API 暂时不可用）——标签已保留，请稍后重试。" || true
+               echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
           esac
       - name: parse submission + resolve verdict record
         if: steps.gate.outputs.allowed != '0'
@@ -239,6 +235,7 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           ISSUE_NUM: ${{ github.event.issue.number }}
+          ACTOR: ${{ github.actor }}
         run: |
           npx tsx pipeline/submission.ts > /tmp/sub.json
           NAME=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
@@ -252,6 +249,18 @@ jobs:
             VERDICT=pass
             REASON=$(printf '%s' "$COMMENT_BODY" | sed 's|^/approve\s*||' | head -c 2000)
           fi
+          # repo-only submissions identify by repo as the entry name
+          ENTRY="${NAME:-$REPO}"
+          [ -n "$ENTRY" ] || { echo "no parseable submission — skip"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; }
+          # H-18: on a [submit] issue the verdict always lands on THE SUBMITTED
+          # package — command args are never a retarget. An arg token that
+          # looks like a DIFFERENT spec (foo@ver or owner/repo) means the
+          # maintainer probably meant to judge that package — flag it so the
+          # ack can warn instead of silently writing to the wrong target.
+          TOK=$(printf '%s' "$REASON" | awk '{print $1}')
+          case "$TOK" in
+            *@*|*/*) [ "$TOK" != "$ENTRY" ] && echo "argignored=$TOK" >> "$GITHUB_OUTPUT" ;;
+          esac
           # version+sha: latest npm version at approve-time for npm submissions;
           # null for repo-only (github-kind) entries. sha is best-effort so a
           # registry blip doesn't block a human decision.
@@ -260,9 +269,6 @@ jobs:
             VER=$(npm view "$NAME" version 2>/dev/null || true)
             [ -n "$VER" ] && SHA=$(npm view "$NAME@$VER" dist.integrity 2>/dev/null || true)
           fi
-          # repo-only submissions identify by repo as the entry name
-          ENTRY="${NAME:-$REPO}"
-          [ -n "$ENTRY" ] || { echo "no parseable submission — skip"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; }
           node -e '
             const rec = {
               name: process.argv[1],
@@ -272,48 +278,41 @@ jobs:
               at: new Date().toISOString(),
               source: "human",
               ...(process.argv[5] ? { sha: process.argv[5] } : {}),
+              by: process.argv[6],
+              issue: Number(process.argv[7]),
             }
             console.log(JSON.stringify(rec))
-          ' "$ENTRY" "$VER" "$VERDICT" "$REASON" "$SHA" > /tmp/verdict.line
+          ' "$ENTRY" "$VER" "$VERDICT" "$REASON" "$SHA" "$ACTOR" "$ISSUE_NUM" > /tmp/verdict.line
           cat /tmp/verdict.line
           echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
-      - name: append to ai-verdicts.jsonl on catalog branch
+      - name: append verdict + apply to index.json on catalog branch
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILE: ai-verdicts.jsonl
           LINE: ${{ steps.v.outputs.line }}
-          VERDICT: ${{ steps.v.outputs.verdict }}
-          TARGET: ${{ steps.v.outputs.target }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          git config user.email "market-bot@users.noreply.github.com"
-          git config user.name "market-bot"
-          PUSHED=
-          for i in 1 2 3; do
-            git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
-            git checkout -B catalog origin/catalog || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
-            touch ai-verdicts.jsonl
-            echo "$LINE" >> ai-verdicts.jsonl
-            git add ai-verdicts.jsonl
-            git commit -m "verdict: human $VERDICT $TARGET (issue #$ISSUE)" || { echo "no changes"; PUSHED=1; break; }
-            git push origin catalog && { PUSHED=1; break; }
-            echo "push rejected (attempt $i) — retrying"
-            sleep 3
-          done
-          [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
+          MSG: "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.v.outputs.target }} (issue #${{ github.event.issue.number }})"
+          APPLY_INDEX: "1"
+        run: ./bin/catalog-append.sh
       - name: acknowledge on issue
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         uses: actions/github-script@v7
         env:
           V: ${{ steps.v.outputs.verdict }}
           TARGET: ${{ steps.v.outputs.target }}
+          ARGIGNORED: ${{ steps.v.outputs.argignored }}
         with:
           script: |
-            const msg = process.env.V === 'concern'
+            let msg = process.env.V === 'concern'
               ? `⚠️ 已记录人工 concern（${process.env.TARGET}）——该版本的发布已被阻断，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
               : `✅ 已记录人工 pass（${process.env.TARGET}）——将在下次日报公示后进入上架流程，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
+            // the comment carried a spec for a DIFFERENT package — on a submit
+            // issue the verdict always lands on the submission itself; say so
+            // instead of silently writing to the wrong-looking target (H-18)
+            if (process.env.ARGIGNORED)
+              msg += `\n\n注意：评论里的 \`${process.env.ARGIGNORED}\` 被忽略——本单裁决只作用于投稿包。要裁决其他包，请在对应 [review] 单操作或开 [concern] 表单。`
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number, body: msg })

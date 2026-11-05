@@ -17,7 +17,7 @@ import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, repoFileExists, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
 import { run } from '../pipeline/run.ts'
-import { latestVerdicts, applyMatureVerdicts, vkey } from '../pipeline/verdicts.ts'
+import { latestVerdicts, applyMatureVerdicts, vkey, akey } from '../pipeline/verdicts.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import { mergeEntries, versionCmp } from '../pipeline/publish/merge.ts'
 import { ornithReview } from '../pipeline/ai/diagnose.ts'
@@ -242,9 +242,11 @@ describe('ai/digest.main', () => {
     const md = readFileSync(join(d, 'digest', '2026-02-02.md'), 'utf8')
     expect(md).toContain('marketplace digest 2026-02-02')
     expect(md).toContain('pkg')
-    // anchor = max seen verdict.at (not render-time now): a verdict pushed to
-    // the branch after our fetch must never mature unannounced
-    expect(JSON.parse(readFileSync(sp, 'utf8')).lastDigestAt).toBe('2026-02-01T00:00:00Z')
+    // anchor = max seen verdict.at (not render-time now) AND the seen verdict
+    // line lands in `announced` — maturity is membership, not the timestamp
+    const st = JSON.parse(readFileSync(sp, 'utf8'))
+    expect(st.lastDigestAt).toBe('2026-02-01T00:00:00Z')
+    expect(st.announced).toEqual([akey(v({ at: '2026-02-01T00:00:00Z' }))])
   })
   it('existing state anchors the window; --dry prints without writing', async () => {
     const d = tmp('dig2-')

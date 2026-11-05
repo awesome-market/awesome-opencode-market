@@ -154,12 +154,29 @@ export const AiVerdict = z.object({
   model: z.string().optional(),
   /** L0.5 classifier evidence: which model + its max score over the material */
   l05: z.object({ model: z.string(), score: z.number() }).optional(),
+  /** human verdicts: which maintainer decided (audit — a free-text reason can
+   *  omit or spoof this; stamped by the writer from github.actor) */
+  by: z.string().optional(),
+  /** human verdicts: the issue the decision came from (audit trail back to
+   *  the [review]/[concern]/[submit] thread) */
+  issue: z.number().optional(),
 })
 export type AiVerdict = z.infer<typeof AiVerdict>
 
 /** catalog-branch digest-state.json — pass verdicts mature only after they have
- *  appeared in a daily digest (verdict.at ≤ lastDigestAt). Missing file → -∞. */
+ *  appeared in a daily digest. Membership in `announced` is the maturity test,
+ *  NOT at ≤ lastDigestAt: a verdict pushed to the branch after a digest render
+ *  but carrying an older `at` must not mature unseen. Absent → empty → every
+ *  pass stays frozen until the next digest republishes (fail-closed). */
 export const DigestState = z.object({
   lastDigestAt: z.string(),
+  /** verdict-line keys ("name\0version\0at") announced across digests so far —
+   *  cumulative; a NEW judgment on the same name@version is a new key and must
+   *  be announced again. */
+  announced: z.array(z.string()).default([]),
+  /** UTC day of the last render + keys first announced on that day — a same-day
+   *  re-render stays cumulative instead of overwriting with a narrower view. */
+  day: z.string().optional(),
+  dayAnnounced: z.array(z.string()).default([]),
 })
 export type DigestState = z.infer<typeof DigestState>

@@ -139,7 +139,7 @@ describe('D-7 digest review backlog', () => {
     const md = renderDigest({
       index: idx([held, reviewed]),
       verdicts: [v({ name: 'done', version: '1.0.0', at: '2026-06-01T10:00:00Z' })],
-      lastDigestAt: '2026-05-31T21:00:00Z',
+      prev: { lastDigestAt: '2026-05-31T21:00:00Z', announced: [], dayAnnounced: [] },
       now,
     })
     expect(md).toContain('评审积压（pending review — 1）')

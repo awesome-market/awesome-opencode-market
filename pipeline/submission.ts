@@ -11,9 +11,9 @@ export interface Submission {
   category: string[] | null       // author-claimed; null = let pipeline classify
 }
 
-const NO_RESPONSE = /^\s*_?no response_?\s*$/i
+export const NO_RESPONSE = /^\s*_?no response_?\s*$/i
 
-function sections(body: string): Map<string, string> {
+export function sections(body: string): Map<string, string> {
   const map = new Map<string, string>()
   const parts = body.split(/^###\s+/m).slice(1)
   for (const p of parts) {

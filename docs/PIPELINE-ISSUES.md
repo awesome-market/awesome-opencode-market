@@ -459,3 +459,47 @@ Pipeline/CI 安全：
 | ⚠️ 审计中差点误报：`verify` 块跳 L0.5 看似漏掉攻击者文本 | 非问题 | logExcerpt 只在 verification failed 时有值，而 failed 走短路不到 LLM；真正含自由文本的块（manifest/finding/flag/prev-findings）全部打分 |
 
 **验证**：typecheck 0 错；508 tests 全过；branches 90.43%；新增 `test/diagnose-ops.test.ts` 8 用例。
+
+## 附八：放行链审计（R 系列，applyMatureVerdicts 全流程）
+
+`run.ts` 前置 `applyMatureVerdicts`（旧索引 → verdict 应用 → discovery 对比）→ worker hold-by-default → `buildIndex`/`mergeEntries` → publish `remerge` → `site.yml` dispatch；`concern.yml` 人工 verdict 写 `ai-verdicts.jsonl`。
+
+已确认正确：promotion 在 rebase race 下不丢（`prev.pendingUpdate.version === out.latestVersion` → hold 不复活）；verify-merge 的更新鲜 verification 在 remerge 盖陈旧值；`skipIfFlagged` 兜底诚实标签；concern 双向幂等（reason 不变不重注）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| R-1 pendingUpdate 追新 = 热点包评审饥饿 | ✅ | pin-until-terminal（`run.ts` worker 前置）：held 版本未终态就钉住不追新——终态=held 版 verdict 为 concern 或 verification failed 且 `retryable` 耗尽；`pk.latest` 上有 human verdict 时人工跳车重定向。pin 路径只刷新 registry 元数据（distTags/repoId/metrics，repojack 检测保留），tarball 拉取+扫描+repo 证据探针全跳过。顺带修复：ruleset 升级曾团灭所有在飞 hold（短路失配→整槽重建→verification/heldAt 清零），现整体带过。上游最新版由 `distTags.latest` 承载，schema 零改动。放行节奏：每 catalog run 至少前进一版（原语义下可能永远不动） |
+| R-2 concern「立即生效」实为下个 catalog run（~16h 窗口） | ✅ | `concern.yml` append 步骤改 worktree 模式（保 main pipeline 代码），新增 `npm ci` + `pipeline/release.ts`（remerge.ts 同款薄 CLI，复用 `applyMatureVerdicts`）——verdict 行与 index.json 应用同 commit 落地，人工刹车真实生效；apply 失败时降级只落 verdict 行（审计日志优先） |
+| R-3 pending 重建无条件洗 concern reason 为 `awaiting-review` | ✅ | `run.ts` 收窄到 `pk.latest !== prev.latestVersion` 才重置——同版本重建（ruleset 升级）保留人工注解，消除 index diff 抖动 |
+| R-4 verdict 时序只按 `at` 排序，时钟漂移可让 ai pass 顶掉 human concern | ✅ | `applyMatureVerdicts` 新增 human-stickiness：`effective()`——ai 'pass' 遇同 key 最新 human 'concern' 时以 human 判词为准，只有更新的 human verdict 能解刹；ai 'concern' 仍可压过 human pass（保守方向保持开放）。digest 侧已由并行 WIP 升级为 `announced` 集合成员制（晚推的旧 `at` verdict 不再偷渡成熟） |
+| R-5 displayed-concern 每次 run 都推 held | 非问题 | approval 翻 pending 后下一 run 走 pending 分支，reason 不变不重推——只计状态迁移一次 |
+| R-6 pass 最小延迟 ≈1-3 天（verify→48h defer→digest→catalog） | 确认 | digest 公示窗的设计代价，非缺陷 |
+
+**验证**：typecheck 0 错；530 tests 全过；branches 90.31%；concern.yml YAML 校验过；approval.test.ts +10 用例（stickiness 三态、人工解刹、held 槽位、pin 五态、repojack 存活）。
+
+## 附九：人工裁决流审计（H 系列，concern.yml 全流程）
+
+通道：`[review]` 标签 / 裸评论、任意 issue ARG 评论、`[concern]` 表单 → `ai-verdicts.jsonl`（catalog 分支）→ `applyMatureVerdicts`（human concern 立即、human pass 过 digest 公示 + verify 闸）→ docket 关单。确认正确：actor gate 补 `labeled` 无 labeler association 的洞、per-issue 并发组不丢突发、表单 dropdown 默认 concern、非 maintainer 有 triage 回音、`[submit]` 标题分诊无双写。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| H-1 留空 ver 解析 registry-latest ≠ 评审目标（热点包漂移） | ✅ | 版本解析改 index-first：`pendingUpdate.version ?? latestVersion`（在押/展示版才是裁决对象）；显式 `name@ver` 参数仍可用 |
+| H-2 npm 条目 ver 解析失败 → `name\0` 死 verdict 假成功 | ✅ | index-first 兜底后仍无版本（且非 repo 名）→ 评论说明 + 不写 verdict |
+| H-3 `git commit \|\| PUSHED=1` 假成功 + 假失败重推产生重复行 | ✅ | 新 `bin/catalog-append.sh`：`git diff --cached --quiet` 预判区分「真无变更」与 commit 失败；`grep -qxF` 整行去重防假失败双写。concern verdict、submit verdict、submit ingest 三处循环全部收编 |
+| H-4 ARG 参数覆盖标题目标且关错单 | ✅ | 有标题目标时，跨目标裁决需 `@`/`/` 显式 spec 形态（裸词一律按理由，修掉 `/concern steals data` 误当包名）；spec 与标题不一致 → verdict 落参数目标 + 评论说明 + **不关单** |
+| H-5 bot 打的 verdict 标签当真人工 | ✅ | `if` 补 `github.event.sender.login != 'github-actions[bot]'`（与 submit.yml 对齐） |
+| H-6 gate 瞬断假拒绝（撤 maintainer 标签+发拒绝评论） | ✅ | gh api 重试一次；404/明确低权限才撤标签，仍失败则保留标签+提示重试（两处 gate 同修） |
+| H-7 多行 reason 写坏 `$GITHUB_OUTPUT` | ✅ | 解析层 `oneLine` 折叠全部空白 |
+| H-8 表单字段 `[^#]+` 遇 `#` 截断（C#、issue 引用） | ✅ | 解析改用 `submission.ts` 导出的 `sections()`（`###` 标题切分，`#` 值内字符保留） |
+| H-9 无 `pull_request` 守卫 | ✅ | `if` 顶层补 `!github.event.issue.pull_request` |
+| H-10 静默 skip：裸命令落空无任何回执 | ✅ | `skip=noresolve` → 用法提示评论；`[concern]` 表单 issue 的裸命令改从表单体取包名（原来标题自由文本必落空） |
+| H-11 exists 步 fetch 失败拿陈旧索引判存在性 | ✅ | fetch 失败直接退出，不在陈旧状态上下结论 |
+| H-12 `issues.edited` 不触发——表单 typo 无法补救 | ✅ | `opened`/`edited` 都收（重跑以当前 body 为准；同目标同结论只是再落一条新 `at` 行，幂等无害） |
+| H-13 已关 [review] issue 贴 verdict 标签仍生效 | 确认 | 保留为显式复裁通道（YAML 注释已写明），每次都要新的人工动作 |
+| H-14 60 行内联解析 JS 零测试 | ✅ | 抽 `pipeline/human-verdict.ts`（`resolveVerdictEvent` 纯函数 + env→stdout CLI），25 用例覆盖三通道+歧义规则 |
+| H-15 verdict 记录缺裁决人/来源单号 | ✅ | schema 加可选 `by`/`issue` 字段，两处 writer 盖 `github.actor`+issue 号 |
+| H-16 push-retry 循环四份拷贝 | ✅ | `bin/catalog-append.sh` 单点实现（worktree + dedupe + APPLY_INDEX）；ai-diagnose.sh 的 TMPV 重放循环语义不同，保留专用 |
+| H-17 ack 暗示 pass 即上架，实际 unverified 闸不放 | ✅ | ack 追加「当前验证：X」提示（verified/skipped 才略过）；verdict 版本 ≠ 在押 pendingUpdate 时也提示 |
+| H-18 `[submit]` 单上 ARG 参数被静默忽略 | ✅ | 首词为异目标 spec（`@`/`/` 形态）→ `argignored` 输出 → ack 明示忽略原因 |
+
+**验证**：typecheck 0 错；555 tests 全过；YAML 校验过；`test/human-verdict.test.ts` 25 用例。

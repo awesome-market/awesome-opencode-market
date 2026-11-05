@@ -1,8 +1,8 @@
 /** Stage-5 tests: digest rendering + maturity window + diagnose candidate pick. */
 import { describe, it, expect } from 'vitest'
-import { renderDigest } from '../pipeline/ai/digest.ts'
+import { renderDigest, nextDigestState } from '../pipeline/ai/digest.ts'
 import { verdictRecord, reviewMaterial, unreviewedTargets } from '../pipeline/ai/diagnose.ts'
-import { applyMatureVerdicts, latestVerdicts } from '../pipeline/verdicts.ts'
+import { applyMatureVerdicts, latestVerdicts, digestStateOf, akey } from '../pipeline/verdicts.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -25,18 +25,63 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
 })
 
 describe('renderDigest', () => {
-  it('lists pass verdicts in window, held queue, concerns', () => {
+  it('lists unannounced verdicts, held queue, concerns', () => {
+    const old = v({ name: 'old', at: '2025-12-01T00:00:00Z' })
     const md = renderDigest({
       index: idx([entry(), entry({ name: 'held', pendingUpdate: { version: '9.9', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' } })]),
-      verdicts: [v(), v({ name: 'old', at: '2025-12-01T00:00:00Z' }), v({ name: 'flagged', verdict: 'concern', reason: 'inject|ed' })],
-      lastDigestAt: '2026-01-01T00:00:00Z',
+      verdicts: [v(), old, v({ name: 'flagged', verdict: 'concern', reason: 'inject|ed' })],
+      prev: digestStateOf('2026-01-01T00:00:00Z', [old]),  // `old` already announced in a past digest
       now: new Date('2026-01-03T21:00:00Z'),
     })
     expect(md).toContain('| pkg | 1.1.0 | ai |')
-    expect(md).not.toContain('| old |')           // outside window
+    expect(md).not.toContain('| old |')           // announced earlier — not re-shown
     expect(md).toContain('`held` v9.9')            // queue backlog
     expect(md).toContain('inject\\|ed')            // pipe escaped for table
     expect(md).toContain('# marketplace digest 2026-01-03')
+  })
+  it('held section shows the hold reason and sorts oldest-first', () => {
+    const pu = (version: string, heldAt: string, reason?: string) => ({
+      version, capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'unverified' as const }, heldAt, ...(reason ? { reason } : {}),
+    })
+    const md = renderDigest({
+      index: idx([
+        entry({ name: 'newer', pendingUpdate: pu('2.0', '2026-01-02T00:00:00Z', 'ai:needs-human') }),
+        entry({ name: 'older', pendingUpdate: pu('1.0', '2026-01-01T00:00:00Z', 'ai:concern') }),
+      ]),
+      verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md.indexOf('`older` v1.0 — ai:concern')).toBeLessThan(md.indexOf('`newer` v2.0 — ai:needs-human'))
+  })
+  it('late-pushed verdict with old `at` still surfaces — seen-set, not timestamp window', () => {
+    // the audit hole: a verdict dated BEFORE lastDigestAt but absent from the
+    // file at render time must appear now (it was never actually announced).
+    const late = v({ name: 'late', version: '2.0.0', at: '2025-12-01T00:00:00Z' })
+    const md = renderDigest({
+      index: idx([]), verdicts: [late],
+      prev: digestStateOf('2026-01-01T00:00:00Z', []),
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('| late |')
+  })
+  it('same-day re-render stays cumulative (dayAnnounced)', () => {
+    const morning = v({ name: 'morning', at: '2026-01-03T10:00:00Z' })
+    const evening = v({ name: 'evening', at: '2026-01-03T20:00:00Z' })
+    const prev = {
+      lastDigestAt: '2026-01-03T12:00:00Z', day: '2026-01-03',
+      dayAnnounced: [akey(morning)], announced: [akey(morning)],
+    }
+    const md = renderDigest({ index: idx([]), verdicts: [morning, evening], prev, now: new Date('2026-01-03T21:00:00Z') })
+    expect(md).toContain('| morning |')   // re-appears: it was announced TODAY
+    expect(md).toContain('| evening |')
+  })
+  it('future-dated verdict is reported, not silently frozen', () => {
+    const md = renderDigest({
+      index: idx([]), verdicts: [v({ name: 'future', at: '2099-01-01T00:00:00Z' })],
+      prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('1 条 verdict 时间戳在未来')
+    expect(md).not.toContain('| future |')
   })
   it('verify backlog section reports queue/submissions/recent-failures/oldest', () => {
     const md = renderDigest({
@@ -46,16 +91,52 @@ describe('renderDigest', () => {
         entry({ name: 'f7d', verification: { status: 'failed', verifiedAt: '2026-01-02T00:00:00Z' } }),
         entry({ name: 'flagged', verification: { status: 'unverified' }, capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] } }),
       ]),
-      verdicts: [], lastDigestAt: null, now: new Date('2026-01-03T21:00:00Z'),
+      verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md).toContain('验证积压（queue — 2）')
+    expect(md).toContain('验证积压（queue — 3）')
     expect(md).toContain('投稿优先 1')
     expect(md).toContain('近 7 天验证失败 1')
     expect(md).toContain('最老等待 2025-12-20')
   })
-  it('missing digest-state = -∞ window catches everything', () => {
-    const md = renderDigest({ index: idx([]), verdicts: [v({ at: '2001-01-01T00:00:00Z' })], lastDigestAt: null, now: new Date('2026-01-03') })
+  it('verify queue matches planTargets — retryable recent failures count', () => {
+    // failed <7d with retries<3 is retried by planTargets → must count here
+    const md = renderDigest({
+      index: idx([entry({ name: 'retry', verification: { status: 'failed', verifiedAt: '2026-01-02T00:00:00Z', retries: 1 } })]),
+      verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('验证积压（queue — 1）')
+  })
+  it('missing digest-state = bootstrap announces everything seen', () => {
+    const md = renderDigest({ index: idx([]), verdicts: [v({ at: '2001-01-01T00:00:00Z' })], prev: null, now: new Date('2026-01-03') })
     expect(md).toContain('| pkg |')
+  })
+})
+
+describe('nextDigestState', () => {
+  it('announced accumulates across days; dayAnnounced resets each day', () => {
+    const k1 = v({ name: 'a', at: '2026-01-03T10:00:00Z' })
+    const s1 = nextDigestState([k1], null, new Date('2026-01-03T21:00:00Z'))
+    expect(s1.announced).toEqual([akey(k1)])
+    expect(s1.dayAnnounced).toEqual([akey(k1)])
+    expect(s1.lastDigestAt).toBe('2026-01-03T10:00:00Z')
+    const k2 = v({ name: 'b', at: '2026-01-04T10:00:00Z' })
+    const s2 = nextDigestState([k1, k2], s1, new Date('2026-01-04T21:00:00Z'))
+    expect(s2.announced).toEqual([akey(k1), akey(k2)])
+    expect(s2.dayAnnounced).toEqual([akey(k2)])
+  })
+  it('same-day re-run accumulates dayAnnounced instead of overwriting', () => {
+    const k1 = v({ name: 'a', at: '2026-01-03T10:00:00Z' })
+    const k2 = v({ name: 'b', at: '2026-01-03T20:00:00Z' })
+    const s1 = nextDigestState([k1], null, new Date('2026-01-03T12:00:00Z'))
+    const s2 = nextDigestState([k1, k2], s1, new Date('2026-01-03T21:00:00Z'))
+    expect(s2.dayAnnounced).toEqual([akey(k1), akey(k2)])
+    expect(s2.lastDigestAt).toBe('2026-01-03T20:00:00Z')
+  })
+  it('future-dated verdicts never enter announced', () => {
+    const fut = v({ name: 'f', at: '2099-01-01T00:00:00Z' })
+    const s = nextDigestState([fut], null, new Date('2026-01-03T21:00:00Z'))
+    expect(s.announced).toEqual([])
+    expect(s.dayAnnounced).toEqual([])
   })
 })
 
@@ -64,18 +145,18 @@ describe('verdictRecord + digest maturity interplay', () => {
     const rec = { ...verdictRecord(entry(), 'pass', '中文理由', { reasonEn: 'english reason' }), at: '2026-01-02T00:00:00Z' }
     expect(rec.reason).toBe('中文理由')
     expect(rec.reasonEn).toBe('english reason')
-    const md = renderDigest({ index: idx([]), verdicts: [rec], lastDigestAt: null, now: new Date('2026-01-03') })
+    const md = renderDigest({ index: idx([]), verdicts: [rec], prev: null, now: new Date('2026-01-03') })
     expect(md).toContain('中文理由 / english reason')
   })
-  it('pass verdict before digest → held; after digest-state → released', () => {
+  it('pass verdict announced in a digest → released; unannounced → held', () => {
     const pu = { version: '1.1.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' as const }, heldAt: 't' }
     const e = entry({ pendingUpdate: pu })
     const ver = v({ name: 'pkg', version: '1.1.0' })
-    // before digest: not mature (verdict.at > lastDigestAt)
-    const held = applyMatureVerdicts(idx([e]), [ver], '2026-01-01T00:00:00Z')
+    // digest exists but this verdict line was never announced → frozen
+    const held = applyMatureVerdicts(idx([e]), [ver], digestStateOf('2026-01-01T00:00:00Z', []))
     expect(held.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
-    // after digest published at 2026-01-02T21:00 → mature → released
-    const rel = applyMatureVerdicts(idx([e]), [ver], '2026-01-02T21:00:00Z')
+    // a digest that rendered this verdict line → mature → released
+    const rel = applyMatureVerdicts(idx([e]), [ver], digestStateOf('2026-01-02T21:00:00Z', [ver]))
     expect(rel.index.plugins[0]!.latestVersion).toBe('1.1.0')
     expect(rel.index.plugins[0]!.pendingUpdate).toBeUndefined()
   })
@@ -83,7 +164,7 @@ describe('verdictRecord + digest maturity interplay', () => {
     const pu = { version: '1.1.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' as const }, heldAt: 't' }
     const e = entry({ pendingUpdate: pu })
     const hv = v({ source: 'human' })
-    const held = applyMatureVerdicts(idx([e]), [hv], '2026-01-01T00:00:00Z')
+    const held = applyMatureVerdicts(idx([e]), [hv], digestStateOf('2026-01-01T00:00:00Z', []))
     expect(held.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
   })
 })

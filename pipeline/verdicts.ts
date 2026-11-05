@@ -21,19 +21,35 @@ export function loadVerdicts(path?: string): AiVerdict[] {
   } catch { return [] }
 }
 
-/** Missing/unreadable digest-state → null = -∞: every pass verdict stays frozen
- *  (fail-closed bootstrap — publication resumes once the first digest exists). */
-export function loadLastDigestAt(path?: string): string | null {
+/** Full digest-state.json — null on missing/unreadable (fail-closed: every
+ *  pass verdict stays frozen until the first digest exists). */
+export function loadDigestState(path?: string): DigestState | null {
   if (!path) return null
   try {
-    return DigestState.parse(JSON.parse(readFileSync(path, 'utf8'))).lastDigestAt
+    return DigestState.parse(JSON.parse(readFileSync(path, 'utf8')))
   } catch { return null }
+}
+
+export function loadLastDigestAt(path?: string): string | null {
+  return loadDigestState(path)?.lastDigestAt ?? null
 }
 
 /** verdict lookup key — NUL separator (a '@' join collides with scoped names
  *  like @kyan-plugins/x@1.0 and silently broke diagnose's seen-check: every
  *  entry always looked unreviewed → re-reviewed every tick) */
 export const vkey = (name: string, version: string | null | undefined) => `${name}\0${version ?? ''}`
+
+/** announcement key — identifies a verdict LINE, not just the target: a new
+ *  judgment on the same name@version must be announced again before it can
+ *  mature. Stored in DigestState.announced. */
+export const akey = (v: Pick<AiVerdict, 'name' | 'version' | 'at'>) => `${vkey(v.name, v.version)}\0${v.at}`
+
+/** Test/tooling helper: build the DigestState a digest render would write for
+ *  `verdicts` at anchor `lastDigestAt` (all of them announced). */
+export function digestStateOf(lastDigestAt: string, verdicts: AiVerdict[]): DigestState {
+  const keys = verdicts.map(akey)
+  return { lastDigestAt, announced: keys, day: lastDigestAt.slice(0, 10), dayAnnounced: keys }
+}
 
 /** Newest verdict per name@version — the file is append-only, `at` wins. */
 export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
@@ -70,17 +86,37 @@ export interface VerdictApplyResult {
  *    depth — the model never reaches flagged content with a release);
  *    `source:human` pass is allowed (stamped by our writers, audited)
  *  - concern on the DISPLAYED version → approval back to pending (human brake;
- *    the AI only audits pending targets, so this can only be a human verdict) */
+ *    the AI only audits pending targets, so this can only be a human verdict)
+ *  - human stickiness: `latest` ranks by `at` alone, so an ai 'pass' stamped
+ *    after a human 'concern' (skewed writer clock, or just a later re-review)
+ *    would otherwise outrank the brake and release over it. Only a newer
+ *    HUMAN verdict lifts a human concern; an ai 'concern' may still override
+ *    a human 'pass' — the conservative direction stays open. */
 export function applyMatureVerdicts(
   index: CatalogIndex,
   verdicts: AiVerdict[],
-  lastDigestAt: string | null,
+  digest: DigestState | null,
 ): VerdictApplyResult {
   const latest = latestVerdicts(verdicts)
   const releases: string[] = []
   const held: string[] = []
   if (latest.size === 0) return { index, releases, held }
-  const mature = (v: AiVerdict) => lastDigestAt !== null && v.at <= lastDigestAt
+  const latestHuman = new Map<string, AiVerdict>()
+  for (const v of verdicts) {
+    if (v.source !== 'human') continue
+    const k = vkey(v.name, v.version)
+    const cur = latestHuman.get(k)
+    if (!cur || v.at >= cur.at) latestHuman.set(k, v)
+  }
+  const effective = (v: AiVerdict | undefined): AiVerdict | undefined => {
+    const h = v ? latestHuman.get(vkey(v.name, v.version)) : undefined
+    return v?.verdict === 'pass' && v.source === 'ai' && h?.verdict === 'concern' ? h : v
+  }
+  // Maturity = the verdict LINE was announced in a digest — membership, not a
+  // timestamp comparison. A verdict pushed late with an old `at` can never
+  // slip under the anchor; it must appear in a future digest first.
+  const announced = new Set(digest?.announced ?? [])
+  const mature = (v: AiVerdict) => announced.has(akey(v))
   const concernOf = (v: AiVerdict) => v.reason ?? 'concern'
 
   const plugins = index.plugins.map(entry => {
@@ -88,7 +124,7 @@ export function applyMatureVerdicts(
     // 1. held-version slot — pendingUpdate releases only via its own keyed verdict
     if (e.pendingUpdate) {
       const pu = e.pendingUpdate
-      const v = latest.get(vkey(e.name, pu.version))
+      const v = effective(latest.get(vkey(e.name, pu.version)))
       if (v?.verdict === 'concern') {
         const reason = concernOf(v)
         if (pu.reason !== reason) {
@@ -115,7 +151,7 @@ export function applyMatureVerdicts(
     }
     // 2. displayed-version slot — pending entries approve here; displayed
     //    entries get pulled back to pending by a human concern
-    const v = latest.get(vkey(e.name, e.latestVersion))
+    const v = effective(latest.get(vkey(e.name, e.latestVersion)))
     if (v) {
       if (e.approval === 'pending') {
         if (v.verdict === 'concern') {

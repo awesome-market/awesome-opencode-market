@@ -35,15 +35,19 @@ set -a; . "$ENVF"; set +a
 export HF_HOME=/Volumes/2t/huggingface_tmp
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# clone/push 只用远端 URL —— 本地路径 clone 的 origin 指向本地 repo,
+# push 退出码 0 但远端永远收不到(假成功);worktree origin 漂移时自愈
+URL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
 if [ ! -d "$CAT/.git" ]; then
-  git clone --single-branch --branch catalog "$REPO" "$CAT" 2>/dev/null \
-    || git clone --single-branch --branch catalog "$(git -C "$REPO" remote get-url origin)" "$CAT" \
+  [ -n "$URL" ] && git clone --single-branch --branch catalog "$URL" "$CAT" 2>/dev/null \
     || { echo "[diagnose] catalog branch not found — nothing to review"; exit 0; }
 fi
+[ -n "$URL" ] && [ "$(git -C "$CAT" remote get-url origin 2>/dev/null)" != "$URL" ] && git -C "$CAT" remote set-url origin "$URL"
 cd "$CAT"
 # 拿不到远端状态就不审:离线跑完 push 必败,verdict 只会被下一轮 reset 丢弃
 git fetch origin catalog || { echo "[diagnose] fetch failed (offline?) — silent, retry next tick"; exit 0; }
-git reset --hard origin/catalog -q
+# reset 失败必须退出——没有 -e,失败会拿陈旧 index 审一遍,产出错配 verdict
+git reset --hard origin/catalog -q || { echo "[diagnose] reset failed — refusing to review stale state"; exit 1; }
 touch ai-verdicts.jsonl
 
 cd "$REPO"
@@ -66,7 +70,7 @@ npx tsx pipeline/ai/diagnose.ts \
 cd "$CAT"
 for i in 1 2 3 4; do
   git fetch origin catalog -q || { echo "[diagnose] fetch attempt $i failed"; sleep 3; continue; }
-  git reset --hard origin/catalog -q
+  git reset --hard origin/catalog -q || { echo "[diagnose] reset attempt $i failed"; sleep 3; continue; }
   touch ai-verdicts.jsonl
   # append only lines not already on the branch — a push that succeeded but
   # reported failure must not produce duplicate verdict lines next attempt

@@ -1,38 +1,44 @@
 name: concern-verdict
-# scope: prod-only — concern verdict processing
 on:
-  issues: { types: [opened, labeled] }
+  issues: { types: [opened, edited, labeled] }
   issue_comment: { types: [created] }
 permissions: {}
 jobs:
   # Maintainer-only manual verdict channel — phone-friendly paths:
   #   1. LABEL: tap `verdict:pass` / `verdict:concern` on a [review] issue
-  #   2. BARE COMMENT: `/approve` or `/concern [reason]` on a [review] issue
+  #   2. BARE COMMENT: `/approve` or `/concern [reason]` on a [review]/[concern] issue
   #   3. ARG COMMENT: `/concern <pkg>[@ver] [reason]` on ANY issue
-  #   4. FORM: open a [concern] issue from the concern.yml template
+  #   4. FORM: open a [concern] issue from the concern.yml template (edits re-run)
   # All append a source:human verdict to ai-verdicts.jsonl on the catalog
-  # branch — concern blocks immediately, pass matures after digest appearance.
+  # branch AND apply mature verdicts to index.json in the same commit — a
+  # human brake lands in minutes instead of at the next scheduled catalog
+  # generate. concern blocks immediately; pass matures after digest announce.
+  # Labels on closed [review] issues still write — a deliberate re-verdict
+  # channel (re-deciding requires a fresh human action either way).
   verdict:
     if: >-
-      (github.event_name == 'issues' && github.event.action == 'opened'
+      !github.event.issue.pull_request
+      && ((github.event_name == 'issues' && contains(fromJSON('["opened","edited"]'), github.event.action)
         && startsWith(github.event.issue.title, '[concern]')
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association))
       || (github.event_name == 'issues' && github.event.action == 'labeled'
         && startsWith(github.event.issue.title, '[review]')
-        && (github.event.label.name == 'verdict:pass' || github.event.label.name == 'verdict:concern'))
+        && (github.event.label.name == 'verdict:pass' || github.event.label.name == 'verdict:concern')
+        && github.event.sender.login != 'github-actions[bot]')
       || (github.event_name == 'issue_comment' && github.event.action == 'created'
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        && (startsWith(github.event.comment.body, '/concern') || startsWith(github.event.comment.body, '/approve')))
+        && (startsWith(github.event.comment.body, '/concern') || startsWith(github.event.comment.body, '/approve'))))
     runs-on: ubuntu-latest
     # NOT catalog-branch: every verdict event must land, so bursts queue
-    # per-issue instead of cancelling each other; the rebase-push retry loop
-    # absorbs cross-issue write races on ai-verdicts.jsonl
+    # per-issue instead of cancelling each other; the retry loop in
+    # bin/catalog-append.sh absorbs cross-issue write races.
     concurrency: verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { node-version: 22, cache: npm }
+      - run: npm ci   # tsx (parser + release.ts) needs deps before the resolve step
       - name: actor gate — labeled events carry no author_association for the labeler
         if: github.event_name == 'issues' && github.event.action == 'labeled'
         id: gate
@@ -43,14 +49,27 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           LABEL: ${{ github.event.label.name }}
         run: |
-          PERM=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || echo none)
-          echo "actor=$ACTOR permission=$PERM"
+          # Retry once: a transient API failure must not masquerade as a
+          # permission denial (H-6). A definitive answer (404 = not a
+          # collaborator, or an explicit low permission) removes the label;
+          # a still-failing check keeps it so the maintainer can re-tap.
+          PERM=""; TRANSIENT=1
+          for t in 1 2; do
+            OUT=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>&1) \
+              && { PERM="$OUT"; TRANSIENT=""; break; }
+            case "$OUT" in *"HTTP 404"*) PERM="none"; TRANSIENT=""; break ;; esac
+            [ "$t" = 1 ] && sleep 2
+          done
+          echo "actor=$ACTOR permission=${PERM:-unknown}"
           case "$PERM" in
             admin|maintain|write) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
-            *) gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
-               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（$PERM）——标签已移除。仅 maintainer 可用 verdict 标签。"
-               echo "allowed=0" >> "$GITHUB_OUTPUT"
-               exit 0 ;;
+            none|read|triage)
+              gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
+              gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅 maintainer 可用 verdict 标签。" || true
+              echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
+            *)
+              gh issue comment "$ISSUE" -R "$REPO" --body "⚠️ 无法确认 @$ACTOR 的仓库权限（API 暂时不可用）——标签已保留，请稍后重试。" || true
+              echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
           esac
       - name: resolve verdict record
         if: steps.gate.outputs.allowed != '0'
@@ -64,77 +83,23 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
           LABEL: ${{ github.event.label.name }}
           ACTOR: ${{ github.actor }}
+        run: npx tsx pipeline/human-verdict.ts >> "$GITHUB_OUTPUT"
+      - name: feedback — command didn't resolve to a target
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == 'noresolve'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
         run: |
-          node -e '(() => {
-            const out = (k, v) => require("fs").appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`)
-            const field = (body, ...labels) => {
-              for (const l of labels) {
-                const m = body.match(new RegExp(`### ${l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^\\n]*\\n+([^#]+)`))
-                if (m && m[1].trim() && !/^\s*_?no response_?\s*$/i.test(m[1].trim())) return m[1].trim()
-              }
-              return ""
-            }
-            // [review] name@ver | [review] @scope/name@ver | [review] name | [review] owner/repo
-            const titleTarget = (t) => {
-              const m = t.match(/^\[review\]\s+(.+)$/)
-              if (!m) return null
-              const spec = m[1].trim()
-              const at = spec.lastIndexOf("@")
-              return at > 0 ? { name: spec.slice(0, at), ver: spec.slice(at + 1) } : { name: spec, ver: "" }
-            }
-            const splitSpec = (spec) => {
-              const at = spec.lastIndexOf("@")
-              return at > 0 ? { name: spec.slice(0, at), ver: spec.slice(at + 1) } : { name: spec, ver: "" }
-            }
-            let name = "", ver = "", verdict = "", reason = ""
-            if (process.env.ISSUE_TITLE.startsWith("[submit]")) {
-              // submission issues are handled by submit.yml — /approve /concern
-              // there resolve the package from the issue body, not command args
-              out("skip", "1"); return
-            }
-            if (process.env.EVENT === "issues" && process.env.ACTION === "labeled") {
-              const t = titleTarget(process.env.ISSUE_TITLE)
-              if (!t) { out("skip", "1"); return }
-              name = t.name; ver = t.ver
-              verdict = process.env.LABEL === "verdict:pass" ? "pass" : "concern"
-              reason = `via label ${process.env.LABEL} by ${process.env.ACTOR} (issue #${process.env.ISSUE_NUMBER})`
-            } else if (process.env.EVENT === "issue_comment") {
-              const m = process.env.COMMENT_BODY.match(/^\/(concern|approve)(?:\s+([\s\S]*))?$/)
-              if (!m) { out("skip", "1"); return }
-              verdict = m[1] === "approve" ? "pass" : "concern"
-              const rest = (m[2] ?? "").trim()
-              if (rest && !rest.startsWith("#")) {
-                const sp = rest.split(/\s+/)
-                const t = splitSpec(sp[0])
-                if (t.name.includes("/") || t.name.includes("@") || !rest.includes(" ") || /^[a-z0-9@_./-]+$/i.test(sp[0])) {
-                  name = t.name; ver = t.ver; reason = sp.slice(1).join(" ").slice(0, 2000)
-                } else { name = ""; }
-              }
-              if (!name) { // bare /approve|/concern → resolve target from [review]/[concern]/[submit] title
-                const t = titleTarget(process.env.ISSUE_TITLE)
-                if (t) { name = t.name; ver = t.ver || ver; reason = reason || rest }
-                else { console.log("bare command on non-review issue — submit.yml handles submissions"); out("skip", "1"); return }
-              }
-            } else {
-              name = field(process.env.ISSUE_BODY, "npm 包名或 owner/repo")
-              ver = field(process.env.ISSUE_BODY, "版本（可留空）", "版本")
-              const act = field(process.env.ISSUE_BODY, "操作 / Action", "操作")
-              verdict = /pass|放行/.test(act) ? "pass" : "concern"
-              reason = field(process.env.ISSUE_BODY, "理由 / Reason", "理由").slice(0, 2000)
-            }
-            if (!name || !verdict) { console.log("nothing to do"); out("skip", "1"); return }
-            out("name", name); out("ver", ver); out("verdict", verdict); out("reason", reason)
-            console.log(JSON.stringify({ name, ver, verdict, reason }))
-          })()'
+          gh issue comment "$ISSUE" --body "无法解析裁决目标——用法：① [review] 单上勾 \`verdict:pass\`/\`verdict:concern\` 标签，或裸评论 \`/approve\`、\`/concern 理由\`；② 任意 issue 评论 \`/concern <pkg>[@ver] [理由]\`；③ 开 [concern] 表单。" || true
       - name: target must exist in catalog index
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == ''
         id: exists
         env:
           NAME: ${{ steps.v.outputs.name }}
           ISSUE: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch origin catalog -q
+          git fetch origin catalog -q || { echo "catalog fetch failed — refusing to judge on a stale index"; exit 1; }
           git show origin/catalog:index.json > /tmp/index.json
           if ! node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$NAME"; then
             echo "exists=0" >> "$GITHUB_OUTPUT"
@@ -142,26 +107,48 @@ jobs:
             exit 0
           fi
           echo "exists=1" >> "$GITHUB_OUTPUT"
-      - name: resolve version + tarball sha (npm names; blank ver → latest)
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+      - name: resolve version (index-first) + tarball sha + slot status
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1'
         id: n
         env:
           NAME: ${{ steps.v.outputs.name }}
           VER: ${{ steps.v.outputs.ver }}
           VERDICT: ${{ steps.v.outputs.verdict }}
           REASON: ${{ steps.v.outputs.reason }}
+          ACTOR: ${{ github.actor }}
+          ISSUE: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          V="$VER"; SHA=""
-          # owner/repo (no @scope, contains /) → github-kind, version null
-          if [[ "$NAME" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$NAME" != @*/* ]]; then
-            V=""
-          else
-            [ -z "$V" ] && V=$(npm view "$NAME" version 2>/dev/null || true)
-            [ -n "$V" ] && SHA=$(npm view "$NAME@$V" dist.integrity 2>/dev/null || true)
+          # Index-first (H-1): the held pendingUpdate / displayed latestVersion
+          # is what a verdict is about — registry `latest` can have moved past
+          # it since the review issue was opened, and blessing an unseen newer
+          # version defeats the pin. owner/repo → null version (no install
+          # concept). sha is best-effort: a registry blip must not block a
+          # human decision.
+          INFO=$(node -e '
+            const i = JSON.parse(require("fs").readFileSync("/tmp/index.json", "utf8"))
+            const e = i.plugins.find(p => p.name === process.argv[1])
+            const isRepo = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(process.argv[1]) && !process.argv[1].startsWith("@")
+            let v = process.argv[2]
+            if (isRepo) v = ""
+            if (!v && !isRepo) v = (e?.pendingUpdate?.version ?? e?.latestVersion) || ""
+            console.log(JSON.stringify({
+              v, isrepo: isRepo ? 1 : 0,
+              heldver: e?.pendingUpdate?.version ?? "",
+              vstatus: (e?.pendingUpdate?.verification ?? e?.verification)?.status ?? "",
+            }))
+          ' "$NAME" "$VER")
+          V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
+          ISREPO=$(node -pe 'JSON.parse(process.argv[1]).isrepo' "$INFO")
+          HELDVER=$(node -pe 'JSON.parse(process.argv[1]).heldver' "$INFO")
+          VSTATUS=$(node -pe 'JSON.parse(process.argv[1]).vstatus' "$INFO")
+          if [ "$ISREPO" = "0" ] && [ -z "$V" ]; then
+            gh issue comment "$ISSUE" --body "⚠️ 无法确定 \`$NAME\` 的目标版本（索引里无 latestVersion/pendingUpdate）——未写入 verdict，请显式指定 \`name@version\`。" || true
+            echo "unresolved=1" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          # defense-in-depth: a version is only ever semver-ish chars — anything
-          # else (e.g. a crafted [review] title like "pkg@$(cmd)") is discarded
-          [ -n "$V" ] && [[ ! "$V" =~ ^[A-Za-z0-9._+~-]+$ ]] && V=""
+          SHA=""
+          [ -n "$V" ] && SHA=$(npm view "$NAME@$V" dist.integrity 2>/dev/null || true)
           node -e '
             const rec = {
               name: process.argv[1],
@@ -171,51 +158,58 @@ jobs:
               at: new Date().toISOString(),
               source: "human",
               ...(process.argv[5] ? { sha: process.argv[5] } : {}),
+              by: process.argv[6],
+              issue: Number(process.argv[7]),
             }
             console.log(JSON.stringify(rec))
-          ' "$NAME" "$V" "$VERDICT" "$REASON" "$SHA" > /tmp/verdict.line
+          ' "$NAME" "$V" "$VERDICT" "$REASON" "$SHA" "$ACTOR" "$ISSUE" > /tmp/verdict.line
           cat /tmp/verdict.line
           echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "target=$NAME${V:+@$V}" >> "$GITHUB_OUTPUT"
-      - name: append to ai-verdicts.jsonl on catalog branch
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+          echo "heldver=$HELDVER" >> "$GITHUB_OUTPUT"
+          echo "vstatus=$VSTATUS" >> "$GITHUB_OUTPUT"
+      - name: append verdict + apply to index.json on catalog branch
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILE: ai-verdicts.jsonl
           LINE: ${{ steps.n.outputs.line }}
-          VERDICT: ${{ steps.v.outputs.verdict }}
-          TARGET: ${{ steps.n.outputs.target }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          git config user.email "market-bot@users.noreply.github.com"
-          git config user.name "market-bot"
-          PUSHED=
-          for i in 1 2 3; do
-            git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
-            git checkout -B catalog origin/catalog || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
-            touch ai-verdicts.jsonl
-            echo "$LINE" >> ai-verdicts.jsonl
-            git add ai-verdicts.jsonl
-            git commit -m "verdict: human $VERDICT $TARGET (issue #$ISSUE)" || { echo "no changes"; PUSHED=1; break; }
-            git push origin catalog && { PUSHED=1; break; }
-            echo "push rejected (attempt $i) — retrying"
-            sleep 3
-          done
-          [ -n "$PUSHED" ] || { echo "failed to land verdict after 3 attempts"; exit 1; }
+          MSG: "verdict: human ${{ steps.v.outputs.verdict }} ${{ steps.n.outputs.target }} (issue #${{ github.event.issue.number }})"
+          APPLY_INDEX: "1"
+        run: ./bin/catalog-append.sh
       - name: acknowledge + mark decided
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.exists.outputs.exists == '1'
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
         uses: actions/github-script@v7
         env:
           V: ${{ steps.v.outputs.verdict }}
           TARGET: ${{ steps.n.outputs.target }}
+          HELDVER: ${{ steps.n.outputs.heldver }}
+          VSTATUS: ${{ steps.n.outputs.vstatus }}
+          MISMATCH: ${{ steps.v.outputs.mismatch }}
           EVENT: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
           TITLE: ${{ github.event.issue.title }}
         with:
           script: |
-            const msg = process.env.V === 'concern'
+            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number }
+            // arg-spec pointed at a different target than this issue's — the
+            // verdict landed on the arg; closing THIS issue would mark the
+            // wrong target decided (H-4). Leave it open with a pointer.
+            if (process.env.MISMATCH) {
+              await github.rest.issues.createComment({ ...ref,
+                body: `⚠️ verdict 已记录（${process.env.TARGET}），但 ${process.env.MISMATCH} ——本单保持打开。要对本单目标裁决：裸 \`/approve\`、\`/concern 理由\`，或勾选 verdict 标签。` })
+              return
+            }
+            let msg = process.env.V === 'concern'
               ? `⚠️ 已记录人工 concern（${process.env.TARGET}）——该版本的发布/更新已被阻断；若已上架将被拉回 pending。记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
               : `✅ 已记录人工 pass（${process.env.TARGET}）——将在下次日报公示后进入上架流程。记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
-            const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number }
+            // pass on an unverified target can't release — say so instead of
+            // implying it's on its way (H-17)
+            if (process.env.V === 'pass' && process.env.VSTATUS && !['verified', 'skipped'].includes(process.env.VSTATUS))
+              msg += `\n\n当前验证：${process.env.VSTATUS}——该版本还需通过装测验证才会真正上架。`
+            // verdict landed on a version that isn't the current hold — the
+            // maintainer probably saw a stale review issue (H-stale)
+            if (process.env.HELDVER && !process.env.TARGET.endsWith(`@${process.env.HELDVER}`))
+              msg += `\n\n注意：当前在押版本是 v${process.env.HELDVER}——此裁决针对的是另一个版本，不会改变在押目标。`
             await github.rest.issues.createComment({ ...ref, body: msg })
             const isReview = process.env.TITLE.startsWith('[review]')
             if (isReview) {
@@ -231,6 +225,7 @@ jobs:
   triage:
     if: >-
       github.event_name == 'issues' && github.event.action == 'opened'
+      && !github.event.issue.pull_request
       && startsWith(github.event.issue.title, '[concern]')
       && !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
     runs-on: ubuntu-latest

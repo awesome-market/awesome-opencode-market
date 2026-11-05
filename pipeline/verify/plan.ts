@@ -34,16 +34,25 @@ export function retryable(v: PluginEntry['verification'] | undefined, now: Date)
   return Number.isFinite(at) && now.getTime() - at < FAILED_RETRY_WINDOW_MS
 }
 
+/** Shared queue membership (planTargets + digest backlog §④): a versioned,
+ *  unflagged slot that is unverified or a retryable recent failure. Keeping one
+ *  predicate stops the digest from under-reporting the queue the worker sees. */
+export function verifyQueued(e: PluginEntry, now = new Date()): boolean {
+  const t = verifyTargetOf(e)
+  if (!t.version || t.flagged) return false
+  const ver = e.pendingUpdate ? e.pendingUpdate.verification : e.verification
+  return t.unverified || retryable(ver, now)
+}
+
 export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date()): VerifyTarget[] {
   const subs: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
   for (const p of index.plugins) {
     const t = verifyTargetOf(p)
-    const ver = p.pendingUpdate ? p.pendingUpdate.verification : p.verification
     // retest (manual `targets` dispatch) may re-run failed/verified versions;
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
     // Flagged stays excluded in every mode: red-flagged code never executes here.
-    if (!t.version || t.flagged || (!t.unverified && !retest && !retryable(ver, now))) continue
+    if (!t.version || t.flagged || (!retest && !verifyQueued(p, now))) continue
     const target: VerifyTarget = { name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) }
     // submission-originated entries verify first — a human asked for them.
     // index.plugins is name-asc, so each tier stays alphabetical; backlog

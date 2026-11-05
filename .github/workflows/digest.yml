@@ -67,6 +67,10 @@ jobs:
           git worktree add /tmp/cat origin/catalog
           LAST=$(git -C /tmp/cat log -1 --format=%ct -- ai-verdicts.jsonl 2>/dev/null || echo 0)
           AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
+          # digest 的输入也要看:index.json 陈旧 = catalog.yml 挂了,digest 照样
+          # 在旧数据上"成功"渲染——光盯 verdicts 会漏掉上游停摆
+          LAST_IDX=$(git -C /tmp/cat log -1 --format=%ct -- index.json 2>/dev/null || echo 0)
+          IDX_AGE_H=$(( ($(date +%s) - ${LAST_IDX:-0}) / 3600 ))
           PENDING=$(npx tsx -e "
             import { CatalogIndex } from './src/schema.ts'
             import { loadVerdicts, latestVerdicts } from './pipeline/verdicts.ts'
@@ -76,17 +80,23 @@ jobs:
             const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
             console.log(unreviewedTargets(idx, seen).length)
           ")
-          echo "ai-verdicts.jsonl age: ${AGE_H}h; unreviewed targets: ${PENDING}"
+          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; unreviewed targets: ${PENDING}"
+          REASONS=""
           if [ "${PENDING:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+            REASONS="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+          fi
+          if [ "${IDX_AGE_H:-0}" -gt 36 ]; then
+            REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
+          fi
+          if [ -n "$REASONS" ]; then
             EXISTING=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open \
-              --search "ai-diagnose stale" --json number --jq '.[0].number' 2>/dev/null || true)
-            MSG="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+              --search "pipeline stale" --json number --jq '.[0].number' 2>/dev/null || true)
             if [ -n "$EXISTING" ]; then
-              gh issue comment "$EXISTING" -R "$GH_REPO" --body "$MSG"
+              gh issue comment "$EXISTING" -R "$GH_REPO" --body "$REASONS"
             else
               gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-              gh issue create -R "$GH_REPO" --title "ai-diagnose stale: ${PENDING} unreviewed targets" \
-                --body "$MSG" --label pipeline-alert
+              gh issue create -R "$GH_REPO" --title "pipeline stale" \
+                --body "$REASONS" --label pipeline-alert
             fi
             echo "watchdog: alert raised (existing=${EXISTING:-none})"
           else

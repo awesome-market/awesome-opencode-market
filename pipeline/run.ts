@@ -9,9 +9,10 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadLastDigestAt, applyMatureVerdicts } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, vkey } from './verdicts.ts'
+import { retryable } from './verify/plan.ts'
 import { slugOf } from './publish/slug.ts'
-import { CatalogIndex, type PluginEntry, type RemovedEntry } from '../src/schema.ts'
+import { CatalogIndex, type PluginEntry, type RemovedEntry, type AiVerdict } from '../src/schema.ts'
 import { classify } from '../src/categories.ts'
 import { detectFeatures } from '../src/features.ts'
 
@@ -71,13 +72,16 @@ export async function run(opts: RunOptions = {}) {
   // its release window here, otherwise the next npm bump would overwrite the
   // pendingUpdate slot and high-frequency packages would starve forever.
   let old = loadOldIndex(opts.oldIndexPath)
+  // verdict lookup is also used by the worker for R-1 pin decisions — hoisted
+  const latestByKey = new Map<string, AiVerdict>()
   if (old) {
     const verdicts = loadVerdicts(opts.verdictsPath)
-    const lastDigestAt = loadLastDigestAt(opts.digestStatePath)
-    if (verdicts.length || lastDigestAt !== null) {
-      const applied = applyMatureVerdicts(old, verdicts, lastDigestAt)
+    for (const [k, v] of latestVerdicts(verdicts)) latestByKey.set(k, v)
+    const digest = loadDigestState(opts.digestStatePath)
+    if (verdicts.length || digest !== null) {
+      const applied = applyMatureVerdicts(old, verdicts, digest)
       old = applied.index
-      console.log(`verdicts: ${verdicts.length} loaded, lastDigestAt=${lastDigestAt ?? '-inf'} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
+      console.log(`verdicts: ${verdicts.length} loaded, lastDigestAt=${digest?.lastDigestAt ?? '-inf'} announced=${digest?.announced.length ?? 0} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
     }
   }
   const oldByName = new Map((old?.plugins ?? []).map(e => [e.name, e]))
@@ -257,6 +261,45 @@ export async function run(opts: RunOptions = {}) {
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
       if (isBlocked(cand.name, slug)) return
 
+      // R-1 pin-until-terminal: a live hold keeps its version across upstream
+      // bumps — verification, in-flight review state and heldAt are all keyed
+      // to that version, so retargeting on every npm bump would starve
+      // fast-publishing packages forever (each retarget wiped verify results,
+      // reset the 48h review defer, and orphaned the keyed verdict). The hold
+      // re-targets only when terminal (concern verdict on the held version,
+      // or failed verification with retries exhausted) or when a HUMAN
+      // verdict already exists for the newer upstream version. Pinned entries
+      // refresh registry-level metadata only — the tarball fetch/scan and
+      // repo-evidence probes for the non-held version are skipped entirely;
+      // distTags.latest still records the true upstream version.
+      const heldPrev = prev && prev.approval !== 'pending' && pk.latest !== prev.latestVersion && prev.pendingUpdate
+        ? prev : null
+      if (heldPrev) {
+        const heldPin = heldPrev.pendingUpdate!
+        const terminal = latestByKey.get(vkey(cand.name, heldPin.version))?.verdict === 'concern'
+          || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification, new Date(now)))
+        const humanOnLatest = pk.latest !== null && latestByKey.get(vkey(cand.name, pk.latest))?.source === 'human'
+        if (!terminal && !humanOnLatest) {
+          const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+          if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
+          const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
+          entries.push({
+            ...heldPrev,
+            distTags: pk.distTags,
+            modifiedAt: pk.modifiedAt,
+            maintainers: pk.maintainers,
+            deprecated: pk.deprecated,
+            deprecatedMessage: pk.deprecatedMessage,
+            replacement: replacementOf(pk.deprecatedMessage),
+            source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
+            metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads, checkedAt: now },
+          })
+          reusedNames.add(cand.name)
+          console.log(`  [${entries.length}] ${cand.name} (hold pinned at v${heldPin.version}; upstream ${pk.latest})`)
+          return
+        }
+      }
+
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
       if (pk.tarballUrl) {
@@ -384,8 +427,9 @@ export async function run(opts: RunOptions = {}) {
           entry.approvalReason = prev.approvalReason
         } else {
           // pending candidate updated in place — the old concern reason
-          // described the previous candidate version, so reset it
-          entry.approvalReason = 'awaiting-review'
+          // described the previous candidate version, so reset it. A rebuild
+          // at the SAME version (e.g. ruleset upgrade) keeps the annotation.
+          entry.approvalReason = pk.latest !== prev.latestVersion ? 'awaiting-review' : prev.approvalReason
         }
       }
       entries.push(entry)
