@@ -109,29 +109,52 @@ export function effectiveVerdict(v: AiVerdict | undefined, human: Map<string, Ai
   return v?.verdict === 'pass' && v.source === 'ai' && h?.verdict === 'concern' ? h : v
 }
 
-/** Package-level human brake — a 'concern' on name\0null brakes EVERY slot of
- *  the package ("this package", not "this version"). Returns the brake LINE
- *  when it applies to (name, version), else undefined. A newer human 'pass'
- *  on the exact slot key lifts it for that slot only; a newer human verdict
- *  on name\0null flips the map entry and dissolves it entirely. Human-only
- *  by construction: AI never writes the null key for npm packages, and
- *  version===null slots (github-kind) own the null key themselves — it is
- *  their slot verdict, not a package brake.
- *
- *  THE shared predicate: applyMatureVerdicts (release gate), explainEntry,
- *  docketTargets, unreviewedTargets and the digest phase/brake marks must
- *  never drift apart — a surface that misses the brake shows a release the
- *  gate can never grant (and diagnose would burn LLM tokens on a verdict
- *  the brake overrides forever). */
-export function pkgBrakeFor(
-  name: string, version: string | null, latestHuman: Map<string, AiVerdict>,
+/** Package-level brake: a HUMAN verdict on name@null brakes every slot of
+ *  the package — version-less concern means "this package", not "this
+ *  version". Lifting needs a newer human verdict on the exact slot key, or a
+ *  newer human verdict on name@null itself (which flips latestHuman back to
+ *  non-concern and dissolves the brake). Human-only by construction: AI
+ *  never writes the null key for npm packages.
+ *  NOTE: for github-kind entries the null key IS the slot's own verdict —
+ *  callers must not ask packageBrake about a null-VERSION slot. */
+export function packageBrake(human: Map<string, AiVerdict>, name: string): AiVerdict | undefined {
+  const h = human.get(vkey(name, null))
+  return h?.verdict === 'concern' ? h : undefined
+}
+
+/** Lift-aware slot brake — the package brake LINE when it applies to
+ *  (name, version), else undefined: a newer human 'pass' on the exact slot
+ *  key lifts it for that slot only. version===null slots (github-kind) own
+ *  the null key — it is their slot verdict, never a package brake.
+ *  THE shared "is this slot under the standing package decision" check:
+ *  unreviewedTargets / the drift sweep skip braked slots so AI never burns
+ *  tokens on a verdict the gate overrides forever, and §⑤/digest/docket
+ *  report the brake instead of an impossible release phase. */
+export function brakeFor(
+  human: Map<string, AiVerdict>, name: string, version: string | null,
 ): AiVerdict | undefined {
   if (version === null) return undefined
-  const h = latestHuman.get(vkey(name, null))
-  if (h?.verdict !== 'concern') return undefined
-  const slotHuman = latestHuman.get(vkey(name, version))
-  if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, h.at) > 0) return undefined
-  return h
+  const brake = packageBrake(human, name)
+  if (!brake) return undefined
+  const slotHuman = human.get(vkey(name, version))
+  if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0) return undefined
+  return brake
+}
+
+/** The verdict that actually governs one (name, version) slot — the single
+ *  semantic every consumer must share (release gate, run.ts pin checks,
+ *  digest phases, docket):
+ *    1. a standing package-level human brake overrides the slot UNLESS a
+ *       newer human pass landed on the exact slot key;
+ *    2. otherwise R-4 human stickiness applies to the slot's own latest.
+ *  Returns undefined when nothing governs the slot. For version===null
+ *  (github-kind) the null key is the slot's own verdict — no brake lookup. */
+export function slotVerdict(
+  latest: Map<string, AiVerdict>, human: Map<string, AiVerdict>,
+  name: string, version: string | null,
+): AiVerdict | undefined {
+  const v = effectiveVerdict(latest.get(vkey(name, version)), human)
+  return brakeFor(human, name, version) ?? v
 }
 
 /** Release gate (AI-DIAGNOSIS §10): the target version's own verification must
@@ -175,7 +198,6 @@ export function applyMatureVerdicts(
   const held: string[] = []
   if (latest.size === 0) return { index, releases, held }
   const latestHuman = latestHumanVerdicts(verdicts)
-  const effective = (v: AiVerdict | undefined): AiVerdict | undefined => effectiveVerdict(v, latestHuman)
   // Maturity = the verdict LINE was announced in a digest — membership, not a
   // timestamp comparison. A verdict pushed late with an old `at` can never
   // slip under the anchor; it must appear in a future digest first.
@@ -198,15 +220,11 @@ export function applyMatureVerdicts(
   // is the scheduled backstop for those.
   const shaOk = (v: AiVerdict, integrity: string | null | undefined) =>
     !v.sha || !integrity || v.sha === integrity
-  // package-level brake: a HUMAN verdict on name@null brakes every slot of
-  // the package — version-less concern means "this package", not "this
-  // version" (previously a dead key for npm entries: it matched no slot and
-  // silently did nothing). Lifting needs a newer human verdict on the exact
-  // slot key, or a newer human verdict on name@null itself — which flips
-  // latestHuman back to non-concern and dissolves the brake. Shared
-  // predicate: pkgBrakeFor.
+  // package-level brake + R-4 stickiness: shared with every other surface
+  // (run.ts pin checks, digest phases, docket) via slotVerdict so "which
+  // verdict governs this key" cannot drift into per-callsite semantics
   const verdictFor = (name: string, version: string | null): AiVerdict | undefined =>
-    pkgBrakeFor(name, version, latestHuman) ?? effective(latest.get(vkey(name, version)))
+    slotVerdict(latest, latestHuman, name, version)
 
   const plugins = index.plugins.map(entry => {
     let e = entry
@@ -250,11 +268,16 @@ export function applyMatureVerdicts(
           // previously displayed release while the hold was in place
           contains: pu.contains ?? e.contains,
           // the released version's own SRI — e.integrity pins the DISPLAYED
-          // tarball while held; leaving it would pin the new version's bytes
-          // against the old tarball's hash (site skill-build skips, client
-          // install fails integrity). Legacy holds lack the field → falls
-          // back to the old SRI and heals at the next metrics refresh
-          integrity: pu.integrity ?? e.integrity,
+          // tarball while held, so it can NEVER describe the new version's
+          // bytes. Legacy holds lack pu.integrity → publish the honest null:
+          // shaOk already passed (missing side = unverifiable), and the
+          // next metrics refresh backfills the real SRI via anchorIntegrity
+          // (null old-anchor is a backfill, not a drift). Falling back to
+          // e.integrity would pin the NEW version against the OLD tarball's
+          // hash — installs fail closed, and the next anchorIntegrity
+          // "heals" it as a false sec:integrity-drift flag that freezes the
+          // wrong anchor forever
+          integrity: pu.integrity ?? null,
           source: { ...e.source, version: pu.version },
           pendingUpdate: undefined,
         }
@@ -348,13 +371,17 @@ export function explainEntry(
   const latestHuman = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
   const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
+  // mirror applyMatureVerdicts' package brake (shared helpers): a human
+  // concern on name@null overrides every slot unless a newer human pass
+  // exists on that slot key
+  const brake = packageBrake(latestHuman, e.name)
   const verdictFor = (version: string | null): { v: AiVerdict | undefined; packageBrake: boolean } => {
-    // shared predicate: a human concern on name@null overrides every slot
-    // unless a newer human pass exists on that slot key (version===null is
-    // the slot's own key, not a package override — pkgBrakeFor skips it)
-    const brake = pkgBrakeFor(e.name, version, latestHuman)
-    if (brake) return { v: brake, packageBrake: true }
-    return { v: effectiveVerdict(latest.get(vkey(e.name, version)), latestHuman), packageBrake: false }
+    // version===null (github-kind): the null key IS this slot's own verdict,
+    // not a package-level override — don't mislabel it as a brake
+    if (!brake || version === null)
+      return { v: effectiveVerdict(latest.get(vkey(e.name, version)), latestHuman), packageBrake: false }
+    const v = slotVerdict(latest, latestHuman, e.name, version)
+    return v === brake ? { v, packageBrake: true } : { v, packageBrake: false }
   }
   const slotOf = (
     slot: SlotExplain['slot'], version: string | null,

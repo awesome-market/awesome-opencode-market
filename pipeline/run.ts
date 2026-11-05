@@ -9,7 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, vkey } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict } from './verdicts.ts'
 import { retryable } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
@@ -105,11 +105,15 @@ export async function run(opts: RunOptions = {}) {
   // its release window here, otherwise the next npm bump would overwrite the
   // pendingUpdate slot and high-frequency packages would starve forever.
   let old = loadOldIndex(opts.oldIndexPath)
-  // verdict lookup is also used by the worker for R-1 pin decisions — hoisted
+  // verdict lookups are also used by the worker for R-1 pin decisions — hoisted.
+  // The raw-latest map alone can't express "which verdict governs this key"
+  // (R-4 human stickiness + package brake) — slotVerdict needs both layers
   const latestByKey = new Map<string, AiVerdict>()
+  const latestHumanByKey = new Map<string, AiVerdict>()
   if (old) {
     const verdicts = loadVerdicts(opts.verdictsPath)
     for (const [k, v] of latestVerdicts(verdicts)) latestByKey.set(k, v)
+    for (const [k, v] of latestHumanVerdicts(verdicts)) latestHumanByKey.set(k, v)
     const digest = loadDigestState(opts.digestStatePath)
     if (verdicts.length || digest !== null) {
       const applied = applyMatureVerdicts(old, verdicts, digest)
@@ -488,9 +492,15 @@ export async function run(opts: RunOptions = {}) {
         ? prev : null
       if (heldPrev) {
         const heldPin = heldPrev.pendingUpdate!
-        const terminal = latestByKey.get(vkey(cand.name, heldPin.version))?.verdict === 'concern'
+        // "the held version is decided" must evaluate through the SAME lens
+        // applyMatureVerdicts uses: raw latestByKey ranks by `at` alone, so an
+        // ai pass stamped after a human concern (drift re-review, --force,
+        // clock skew) would read "not terminal" and pin the hold forever
+        // while the release gate still treats the slot as braked (R-4).
+        const terminal = slotVerdict(latestByKey, latestHumanByKey, cand.name, heldPin.version)?.verdict === 'concern'
           || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification, new Date(now)))
-        const humanOnLatest = pk.latest !== null && latestByKey.get(vkey(cand.name, pk.latest))?.source === 'human'
+        const humanOnLatest = pk.latest !== null
+          && slotVerdict(latestByKey, latestHumanByKey, cand.name, pk.latest)?.source === 'human'
         if (!terminal && !humanOnLatest) {
           // the pin path used to skip every repo/metadata probe — a held
           // entry's description/category/license froze for as long as the

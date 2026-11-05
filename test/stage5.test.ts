@@ -517,12 +517,12 @@ describe('package brake + 24h window + display surfaces (post-audit batch)', () 
     expect(unreviewedTargets(idx([heldEntry(), other]), [brake()]).map(e => e.name)).toEqual(['other'])
   })
 
-  it('§② shows 已打标 concern（包级） for a braked hold and §⑤ excludes it', () => {
+  it('§② shows 包级刹车 phase for a braked hold and §⑤ excludes it', () => {
     const md = renderDigest({
       index: idx([heldEntry()]), verdicts: [brake()],
       prev: digestStateOf('2026-01-01T00:00:00Z', []), now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md).toContain('`pkg` v1.0.0（未上架） · 已打标 concern（包级）')
+    expect(md).toContain('`pkg` v1.0.0（未上架） · 包级刹车·需人工解除')
     expect(md).toContain('## ⑤ 评审积压（pending review — 0）')
   })
 

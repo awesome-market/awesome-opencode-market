@@ -50,7 +50,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, pkgBrakeFor } from '../verdicts.ts'
+import { latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
@@ -411,7 +411,7 @@ export function unreviewedTargets(
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
     // actionable backlog. Same predicate the release gate uses.
-    if (pkgBrakeFor(e.name, ver, human)) return false
+    if (brakeFor(human, e.name, ver)) return false
     // §10 ordering: an 'unverified' target defers to the verify run for 48h —
     // reviewing without install evidence wastes tokens and the release gate
     // requires verified anyway. Past 48h: degraded review proceeds.
@@ -545,7 +545,7 @@ export async function main(
     // package-braked slots can't apply any AI verdict — drift or not; skip
     // the sweep's packument fetch too (unreviewedTargets skips them as
     // well). --force is the explicit human override and bypasses both.
-    if (!force && pkgBrakeFor(e.name, ver, human)) return
+    if (!force && brakeFor(human, e.name, ver)) return
     const rec = seen.get(vkey(e.name, ver))
     if (!rec?.sha) return
     const cur = await shaFor(e.name, ver)

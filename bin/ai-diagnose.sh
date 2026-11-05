@@ -43,6 +43,43 @@ writeFileSync(process.env.HF!, JSON.stringify(h) + "\n")
 ' 2>/dev/null) || true
 }
 
+# pause|resume —— 先处理开关再进正常流程:翻转"声明暂停"只需要 git,不该
+# 等正在跑的诊断锁(最长 45min),也不需要 ai.env/LLM(恰恰是 LLM 挂了才
+# 要声明暂停)。标志是 catalog 分支的 diagnose.paused——数据面开关,一次
+# push 全局生效。消费端:watchdog 停摆腿跳过、docket 'none' 目标聚合成
+# 积压总单、digest §⑤ 标注、本脚本每轮自跳过(见下)。
+# 提交前缀故意用 'diagnose:' 而非 'ai-diagnose:'——watchdog 拿
+# '--grep=^ai-diagnose:' 量"上次真实诊断落地",开关翻转不算 worker 活动。
+case "${1:-}" in
+  pause|resume)
+    URL=${MARKET_GIT_URL:-$(git -C "$REPO" remote get-url origin 2>/dev/null || true)}
+    [ -n "$URL" ] || { log "no remote URL — set MARKET_GIT_URL"; exit 1; }
+    git -C "$CAT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+      || git clone --single-branch --branch catalog "$URL" "$CAT" \
+      || { log "catalog clone failed ($URL) — check auth/network"; exit 1; }
+    git -C "$CAT" config user.name "market-bot"
+    git -C "$CAT" config user.email "market-bot@users.noreply.github.com"
+    FLAG=diagnose.paused
+    for i in 1 2 3 4; do
+      (cd "$CAT" && git fetch origin catalog -q && git reset --hard origin/catalog -q) \
+        || { log "sync attempt $i failed"; sleep 3; continue; }
+      if [ "$1" = pause ]; then
+        [ -f "$CAT/$FLAG" ] && { log "already paused"; exit 0; }
+        printf 'diagnose paused at %s%s\n' "$(date -u +%FT%TZ)" "${2:+ — $2}" > "$CAT/$FLAG"
+      else
+        [ -f "$CAT/$FLAG" ] || { log "not paused"; exit 0; }
+        rm -f "$CAT/$FLAG"
+      fi
+      (cd "$CAT" && git add -A "$FLAG" && ! git diff --cached --quiet) \
+        || { log "flag already in desired state"; exit 0; }
+      (cd "$CAT" && git commit -qm "diagnose: $1 ($(date -u +%FT%TZ))" && git push -q origin catalog) \
+        && { log "$1 recorded on catalog branch"; exit 0; }
+      log "push attempt $i failed"; sleep 3
+    done
+    log "$1 push failed after retries"; exit 1
+    ;;
+esac
+
 # single-instance guard — launchd stacks runs when a slow tick overruns the
 # hour; two runners double-burn the LLM and rebase-race on push. mkdir is
 # atomic on macOS (no flock shipped). A SIGKILL'd/wedged run leaves the dir —
@@ -135,6 +172,10 @@ cd "$CAT"
 git fetch origin catalog || { log "fetch failed (offline?) — silent, retry next tick"; exit 0; }
 # reset 失败必须退出——没有 -e,失败会拿陈旧 index 审一遍,产出错配 verdict
 git reset --hard origin/catalog -q || { log "reset failed — refusing to review stale state"; exit 1; }
+# 声明暂停在数据面生效——本机也认它(防止"pause 了但忘了 launchd 还在跑"
+# 继续空烧 LLM)。翻转开关:`$0 pause|resume`(在脚本开头处理,不等诊断锁、
+# 不需要 ai.env)。手动想强制跑:直接跑 pipeline/ai/diagnose.ts。
+[ -f diagnose.paused ] && { log "declared pause (catalog:diagnose.paused) — skipping; resume: $0 resume"; exit 0; }
 touch ai-verdicts.jsonl
 
 cd "$CODE"

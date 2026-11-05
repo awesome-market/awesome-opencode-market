@@ -15,13 +15,13 @@
  *  Usage:
  *    tsx pipeline/ai/digest.ts --index index.json --verdicts ai-verdicts.jsonl \
  *      --state digest-state.json --out-dir . [--date YYYY-MM-DD] [--dry] */
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
-  effectiveVerdict, pkgBrakeFor, vkey, akey } from '../verdicts.ts'
+  effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
@@ -32,6 +32,9 @@ export interface DigestInput {
    *  BOOTSTRAP_WINDOW announce — see below) */
   prev: DigestState | null
   now: Date
+  /** catalog-branch diagnose.paused — the local AI queue is stopped on
+   *  PURPOSE; surfaces say "declared pause", not "looks dead" */
+  paused?: boolean
   /** malformed jsonl lines dropped at load (loadVerdicts sink) — surfaced in
    *  the header so a truncated/merge-artifact line is visible to the reader,
    *  not only in a CI warn log nobody watches */
@@ -133,7 +136,7 @@ function repoUrl(): string {
   }
 }
 
-export function renderDigest({ index, verdicts, prev, now, badLines = 0 }: DigestInput): string {
+export function renderDigest({ index, verdicts, prev, now, paused = false, badLines = 0 }: DigestInput): string {
   const day = now.toISOString().slice(0, 10)
   const nowIso = now.toISOString()
 
@@ -288,14 +291,18 @@ export function renderDigest({ index, verdicts, prev, now, badLines = 0 }: Diges
   const phaseOf = (e: PluginEntry): string => {
     const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
     const vf = e.pendingUpdate?.verification ?? e.verification
-    // package brake outranks every slot phase: the standing human decision
-    // already covers this version — '待评审/待放行' would promise action the
-    // gate can't take (same predicate as the release gate + docket)
-    if (pkgBrakeFor(e.name, ver, latestHuman)) return '已打标 concern（包级）'
+    // mirror the release gate's shared slot semantics (slotVerdict): a
+    // package-level human brake governs every VERSIONED slot — the slot's
+    // own verify/verdict state is moot while the brake stands. (version=null
+    // = github-kind slot whose null key is the slot's own verdict, never a
+    // package brake.)
+    const governing = ver === undefined ? undefined : slotVerdict(latest, latestHuman, e.name, ver)
+    if (ver !== null && governing && governing === packageBrake(latestHuman, e.name))
+      return '包级刹车·需人工解除'
     // ver === null (repo-only/github-kind): the null key IS a real slot key
     // — a human verdict there can mature and release, so look it up instead
     // of falling through to '待评审'
-    const rec = latest.get(vkey(e.name, ver))
+    const rec = ver === undefined ? undefined : latest.get(vkey(e.name, ver))
     if (rec && eff(rec)?.verdict === 'concern') return '已打标 concern'
     // failed outranks the pass phases: a mature pass whose slot then failed
     // verification can NEVER release (release gate excludes failed) — showing
@@ -340,7 +347,7 @@ export function renderDigest({ index, verdicts, prev, now, badLines = 0 }: Diges
   // though it lives on a different key — same predicate as the release gate.
   const brakeMark = (v: AiVerdict) => {
     if (v.verdict !== 'pass') return ''
-    if (pkgBrakeFor(v.name, v.version, latestHuman)) return ' ⛔已被包级 concern 刹车'
+    if (brakeFor(latestHuman, v.name, v.version)) return ' ⛔已被包级 concern 刹车'
     return eff(latest.get(vkey(v.name, v.version)))?.verdict === 'concern'
       ? ' ⛔已被更新的 concern 刹车' : ''
   }
@@ -422,7 +429,7 @@ ${concerns.length || resolved.length ? table([...concerns, ...resolved]) : '_无
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
-- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}
+- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${paused ? ' ⏸️ 本地诊断已声明暂停（catalog 分支 `diagnose.paused`，恢复：`bin/ai-diagnose.sh resume`）' : pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}
 
 ## ⑥ 已上架条目信任信号（identity-level sec flags — ${liveAlarms.length}）
 
@@ -456,6 +463,9 @@ export async function main(args: string[] = process.argv): Promise<void> {
   const sink = { bad: 0 }
   const verdicts = loadVerdicts(verdictsPath, sink)
   const prev = loadDigestState(statePath)
+  // diagnose.paused = the local AI queue is declared stopped — say so in §⑤
+  // instead of letting the backlog read like an undiagnosed stall
+  const paused = existsSync(join(outDir, 'diagnose.paused'))
 
   // state LOSS ≠ bootstrap: prev=null with digests already published means
   // digest-state.json vanished or went corrupt. Rendering on would announce
@@ -471,7 +481,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
       throw new Error(`digest-state.json missing/corrupt but digest/*.md exists — refusing to re-announce everything. Restore digest-state.json (or rebuild it from ai-verdicts.jsonl) and rerun.`)
   }
 
-  const md = renderDigest({ index, verdicts, prev, now, badLines: sink.bad })
+  const md = renderDigest({ index, verdicts, prev, now, paused, badLines: sink.bad })
   const day = now.toISOString().slice(0, 10)
   const digestPath = join(outDir, 'digest', `${day}.md`)
   const next = nextDigestState(verdicts, prev, now, index)

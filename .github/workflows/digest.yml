@@ -133,10 +133,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          # repo variable: set DIAGNOSE_PAUSED=1 while the local diagnose
-          # worker is deliberately off (pre-launch / maintenance window) —
-          # leg 1 then skips instead of alerting on a KNOWN pause
-          DIAGNOSE_PAUSED: ${{ vars.DIAGNOSE_PAUSED }}
         run: |
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next run"; exit 0; }
           git worktree remove /tmp/cat --force 2>/dev/null || true
@@ -176,7 +172,11 @@ jobs:
             const idx = CatalogIndex.parse(JSON.parse(readFileSync('/tmp/cat/index.json','utf8')))
             console.log(unreviewedTargets(idx, loadVerdicts('/tmp/cat/ai-verdicts.jsonl')).length)
           ")
-          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
+          # diagnose.paused = 本地 AI 队列是“声明暂停”而不是“疑似停摆”——
+          # launchd 手动期/上线前的有意停机不该每班都报 pipeline-alert；
+          # 其余三条腿（index/digest-state/site）与本地诊断无关，照常检查。
+          PAUSED=$([ -f /tmp/cat/diagnose.paused ] && echo 1 || echo 0)
+          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}; diagnose paused: ${PAUSED}"
           REASONS=""
           # leg fingerprint — REASONS embed changing counters (age grows every
           # day), so dedupe compares WHICH legs fired instead of the text:
@@ -186,10 +186,11 @@ jobs:
           # LAST*=0 → the file has NO git history (never written). That is
           # bootstrap, not staleness — without the >0 guard a fresh deployment
           # false-alerts on every leg within its first day.
-          if [ "${DIAGNOSE_PAUSED:-}" = "1" ]; then
-            echo "leg1 paused via DIAGNOSE_PAUSED repo var — skipping diagnose staleness check"
-          elif [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
-            REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。（本地 worker 若属有意暂停：repo variable \`DIAGNOSE_PAUSED=1\` 可让本腿静默）"
+          # diagnose.paused on the catalog branch = declared stop, not a
+          # dead worker — leg 1 skips a KNOWN pause (bin/ai-diagnose.sh
+          # pause|resume flips it); the other legs still check normally
+          if [ "$PAUSED" != 1 ] && [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+            REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
             LEGS="${LEGS}1"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
