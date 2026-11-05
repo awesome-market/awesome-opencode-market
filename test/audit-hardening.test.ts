@@ -93,7 +93,7 @@ describe('retryable vs terminal verify-failed (shared V-3 predicate)', () => {
       failed(old, 1, 'old'),                   // OLD but attempts left → still defers
       failed(recent, 3, 'exhausted'),          // retries spent → terminal
       held({ verification: { status: 'verified' } }, 'clean'),
-    ]), new Map())
+    ]), [])
     const names = targets.map(x => x.name)
     expect(names).not.toContain('retryable')
     expect(names).not.toContain('old')

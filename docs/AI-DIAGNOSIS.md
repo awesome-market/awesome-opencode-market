@@ -22,6 +22,9 @@
 >   （`digest-state.json` 的 `announced` 集合成员——上过日报的那一行
 >   才算；`lastDigestAt` 只作锚点记录）——固定 24h + 单槽
 >   pendingUpdate 会让高频发版条目永久饿死
+>   （落地修订：当期 `dayAnnounced` 成员本期不熟——公告后必须再活
+>   过一整期日报，≥24h 真异议窗回归 v3.1 原意，且不饿死：任何已
+>   公告行下期自动熟）
 > - **应用顺序钉死**：run 开头先对 old index 应用成熟 verdict 再跑
 >   发现比对——否则新版顶替 pendingUpdate 会丢弃"已审未放"版本数据
 > - pendingUpdate 的 AI 审**等 verify 结果**再跑（48h 降级硬审）

@@ -29,8 +29,11 @@ const verdict = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   source: 'ai', ...over,
 })
 
+// dayAnnounced defaults to [] — announced keys were in an EARLIER digest
+// (mature under the dayAnnounced objection-window rule); a same-day test
+// passes { dayAnnounced: keys } via `over`
 const dg = (announced: string[], over: Partial<DigestState> = {}): DigestState =>
-  ({ lastDigestAt: '2026-01-10T00:00:00Z', announced, day: '2026-01-10', dayAnnounced: announced, ...over })
+  ({ lastDigestAt: '2026-01-10T00:00:00Z', announced, day: '2026-01-10', dayAnnounced: [], ...over })
 
 describe('verdicts applyMatureVerdicts matrix', () => {
   it('concern on legacy→pending, pending reason update, approved+concern→pending, pass release gates', async () => {
