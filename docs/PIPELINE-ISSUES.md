@@ -485,7 +485,7 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 
 |---|---|---|
 | D-1 omlx 死透烧满 45min 预算（每候选 5min 超时串行） | ✅ | `omlxAlive` 探活：main 在 LLM 候选存在时先 `GET /models`（任何 HTTP 响应算活，连接失败才算死）；死 → 免费 verdict（sha复用/verify短路）照写、LLM 候选留 held、flagged/L0.5 兜底 concern 照出 |
-| D-2 drift 检查每条 pending 已判条目一次 `npm view` 且 works 重复查 | ✅ 部分 | `shaFor` 缓存：drift sweep 与 works 共享 `name\0ver` 单查（消除重复）；保留同步 `integrityOf` 实现（并行 WIP 已定其 API+测试契约），批量 fetch 留作后续 |
+| D-2 drift 检查每条 pending 已判条目一次 `npm view` 且 works 重复查 | ✅ | `shaFor` 缓存：drift sweep 与 works 共享 `name\0ver` 单查（消除重复）；批量 fetch 由 D-10 的 `makeIntegrityOf` 闭环（packument 每 name 一次取全版本 integrity） |
 | D-3 恒败候选每小时白烧一次 LLM 无上限 | ✅ | `--state` 持久化连续失败计数（本地文件，不进共享 schema）；真实 LLM 失败才计数（探活跳过不算）；≥5 次 → 写「工具故障非安全结论」concern（停止烧 token + 人类可见 + `--force` 可重审）；成功清零 |
 | D-4 launchd 不防重入 + 日志无轮转 | ✅ | `mkdir` 原子锁（macOS 无 flock）+ 拿锁后立即挂 EXIT trap（早退不死锁）；日志 >5MB 截尾 1MB |
 | D-5 `integrityOf` 失败 → verdict 裸奔无 drift 保护 | 部分 | registry 抖动概率低且 npm 重发本就罕见——维持「降级不阻塞」，D-2 的 dedup 顺带降了失败面 |
@@ -495,6 +495,24 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 | ⚠️ 审计中差点误报：`verify` 块跳 L0.5 看似漏掉攻击者文本 | 非问题 | logExcerpt 只在 verification failed 时有值，而 failed 走短路不到 LLM；真正含自由文本的块（manifest/finding/flag/prev-findings）全部打分 |
 
 **验证**：typecheck 0 错；508 tests 全过；branches 90.43%；新增 `test/diagnose-ops.test.ts` 8 用例。
+
+### 附七·二轮：诊断流深审（D-9…D-17，2026-11）
+
+D-1~D-8 封住「死 omlx 烧预算」「重入」「无界 fan-out」之后，二轮扫的是排序公平性、真实并发与停摆形态。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| D-9 drifted 追加在 FIFO 积压**之后**——积压 >limit 时 re-tag（同版本换字节=最强可疑信号）永远饿死在队尾 | ✅ | `[...new Set([...drifted, ...targets])]`——drifted 插队队首，Set 顺带去掉 --force 重叠 |
+| D-10 drift sweep 伪并发：`execFileSync` 在 `Promise.all` 里串行阻塞事件循环，全体带 sha 判词的在押条目逐个 `npm view`（数百 × ~300ms，且不受 --limit 约束） | ✅ | `makeIntegrityOf` 工厂：每 **name** 一次 `fetchPackument` 拿全版本 `integrityOf` 表（真异步 + 名字级缓存）；drift sweep / works build 过 `mapPool(8)` 限流 |
+| D-11 mkdir 锁无过期自愈——SIGKILL/断电 → 锁目录永存 → 每小时 tick 静默 skip 到人工 rmdir | ✅ | 锁龄 >7200s（`stat -f%m`）→ rmdir+mkdir 回收；run 有 ~45min 预算上界，>2h 必是僵死 |
+| D-12 无运行内熔断——探活过后 omlx 中途死 → 每个候选真烧 300s 超时直到 45min 预算 | ✅ | `CIRCUIT_MAX=3` 连续真实失败开断：剩余 LLM 候选留 held（skipped 不计 streak——停机不是中毒），flagged/L0.5 兜底照写；成功即清零，间歇失败不误触 |
+| D-13 `l05Score` 的 `execFileSync` 无 timeout——python 卡死（模型加载/交换）→ runner 永久阻塞 + 锁被占 → 同 D-11 停摆形态 | ✅ | `timeout: 300_000` |
+| D-14 `--dry` 仍写 `--state`——探查性 dry run 会把失败记进 attempts，可能提前触发工具熔断 | ✅ | state 写入门到 `!dry` |
+| D-15 reviewMaterial 无总上限——500 findings × ≤4KB ≈ 2MB prompt → 上下文溢出被误记"工具故障" | ✅ | `materialPrompt` 总预算 32KB：块按序装入，溢出折成 `[material truncated: N block(s) omitted]` |
+| D-16 `omlxAlive` 过宽——任意 HTTP 响应都算活（连得通但推理挂死的服务通过探活） | ✅ 由 D-12 覆盖 | 熔断就是更便宜的答案：推理探针每 tick 多一次调用，覆盖面不如熔断 |
+| D-17 `--name` 不带 `--force` 仍受 48h 推迟——定向插队语义正确但文档没写 | ✅ | 文件头 Usage 注记（要插队用 --force） |
+
+**验证**：typecheck 0 错；636 tests 全过；新回归：drifted 插队次序、熔断开断+间歇重置、--dry 不写 state、materialPrompt 截断、makeIntegrityOf 名字级缓存双版本命中+404。
 
 ## 附八：放行链审计（R 系列，applyMatureVerdicts 全流程）
 

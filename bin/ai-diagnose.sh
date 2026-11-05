@@ -14,9 +14,18 @@ mkdir -p "$LOGD" "$(dirname "$CAT")" "$(dirname "$STATEF")"
 
 # single-instance guard — launchd stacks runs when a slow tick overruns the
 # hour; two runners double-burn the LLM and rebase-race on push. mkdir is
-# atomic on macOS (no flock shipped). Stale lock = run died; clear it manually.
+# atomic on macOS (no flock shipped). A SIGKILL'd/wedged run leaves the dir —
+# without an age check every future tick skips forever (D-11). Runs are
+# bounded (~45min budget + sweep), so a lock older than 2h is reclaimed.
 LOCK=$HOME/.local/share/opencode-market/diagnose.lock
-mkdir "$LOCK" 2>/dev/null || { echo "[diagnose] another run in progress — skipping"; exit 0; }
+if ! mkdir "$LOCK" 2>/dev/null; then
+  AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
+  if [ "$AGE" -gt 7200 ] && rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+    echo "[diagnose] reclaimed stale lock (${AGE}s old)"
+  else
+    echo "[diagnose] another run in progress — skipping"; exit 0
+  fi
+fi
 # release on EVERY exit — early exits (missing ai.env, offline fetch) must not
 # leave a stale lock that skips every future tick
 trap 'rm -f "${TMPV:-}"; rmdir "$LOCK" 2>/dev/null' EXIT

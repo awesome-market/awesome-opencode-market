@@ -82,13 +82,13 @@ const deadSpawn = (() => ({
 })) as unknown as SpawnFn
 
 describe('verifyPackage sandboxed (sandboxUser)', () => {
-  /** Fake exec that plays the OS: mkdir actually mkdirs, the runner-side curl
-   *  writes plugins.json to the -o target (a runner-owned path under home),
-   *  everything else succeeds. */
+  /** Fake exec that plays the OS: the runner-side curl writes plugins.json
+   *  to the -o target (a runner-owned path under home), everything else
+   *  succeeds. uh itself is mkdir'd by the runner + chown'd via sudo — the
+   *  sandbox uid never creates entries in home (real-runner EACCES fix). */
   const fakeOs = (calls: Rec[], opts: { api?: string } = {}) =>
     (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
-      if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
       if (cmd === 'curl') {
         const o = args.indexOf('-o')
         if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, opts.api ?? API('pkg'))
@@ -102,7 +102,10 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const r = await verifyPackage('pkg', { version: '1.0.0', home, sandboxUser: 'nobody',
       execFn: fakeOs(calls), spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
-    // sudo -n -u nobody mkdir + chmod + pkill sweep happened
+    // uh handed to the sandbox uid via chown (nobody can't create inside a
+    // 0711 runner-owned home); chmod + pkill sweep happened
+    expect(calls.some(c => c.cmd === 'sudo' && c.args[0] === '-n' && c.args[1] === 'chown'
+      && c.args[2] === 'nobody' && c.args[3] === join(home, 'u'))).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args.slice(0, 3).join(' ') === '-n -u nobody')).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args[1] === 'chmod')).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args.includes('pkill'))).toBe(true)
@@ -136,9 +139,9 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const uh = join(home, 'u')
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
-      if (cmd === 'sudo' && args.includes('mkdir')) {
-        mkdirSync(uh, { recursive: true })
-        // plugin pre-plants a forged "active" listing inside its own home
+      if (cmd === 'sudo' && args.includes('chown')) {
+        // uh exists by now (runner mkdirSync) — plugin pre-plants a forged
+        // "active" listing inside its own home
         writeFileSync(join(uh, 'plugins.json'), API('pkg', 'active'))
       }
       // real curl fetch reports the plugin FAILED — the honest state
@@ -171,8 +174,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
       const uh = join(home, 'u')
-      if (cmd === 'sudo' && args.includes('mkdir')) {
-        mkdirSync(uh, { recursive: true })
+      if (cmd === 'sudo' && args.includes('chown')) {
         const dir = join(uh, 'cache', 'opencode', 'npm', 'pkg@1.0.0', '999', 'node_modules', 'pkg')
         mkdirSync(dir, { recursive: true })
         writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui-experimental': './g.js' } }))
@@ -202,8 +204,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
       const uh = join(home, 'u')
-      if (cmd === 'sudo' && args.includes('mkdir')) {
-        mkdirSync(uh, { recursive: true })
+      if (cmd === 'sudo' && args.includes('chown')) {
         const dir = join(uh, 'cache', 'opencode', 'npm', 'pkg@1.0.0', '1', 'node_modules', 'pkg')
         mkdirSync(dir, { recursive: true })
         writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui-experimental': './g.js' } }))
@@ -230,7 +231,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
       const uh = join(home, 'u')
-      if (cmd === 'sudo' && args.includes('mkdir')) {
+      if (cmd === 'sudo' && args.includes('chown')) {
         mkdirSync(join(uh, '.config', 'opencode'), { recursive: true })
         writeFileSync(cfgPath, JSON.stringify({ plugins: ['other@1.0.0'] }))
       }
@@ -257,8 +258,6 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const calls: Rec[] = []
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
-      const uh = join(home, 'u')
-      if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(uh, { recursive: true })
       if (cmd === 'curl') {
         const o = args.indexOf('-o')
         if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg'))
@@ -280,7 +279,6 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     const calls: Rec[] = []
     const fake = (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
-      if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
       return { stdout: 'x', stderr: '' }
     }) as unknown as ExecFn
     // serve emits nothing → no port → no curl → no snapshot → honest failure
@@ -296,9 +294,8 @@ describe('verifyShard sandbox probing', () => {
     const home = mkdtempSync(join(tmpdir(), 'vsp-'))
     const out = join(home, 'r.json')
     const calls: string[] = []
-    const fake = (async (cmd: string, args: string[]) => {
+    const fake = (async (cmd: string) => {
       calls.push(cmd)
-      if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
     const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn })

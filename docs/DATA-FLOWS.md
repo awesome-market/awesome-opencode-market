@@ -88,7 +88,7 @@ flowchart TB
 
 - `version: null` = github-kind 条目（无版本概念）。
 - `source` 由写入方盖章，模型永远写不出 `human`。
-- `sha` = npm `dist.integrity`——**两通道都盖**：人工通道写盘时取（npm view），AI 诊断经 `integrityOf` 盖。同 sha 跨版本复用判词；同版本 sha 漂移=re-tag→自动重审。
+- `sha` = npm `dist.integrity`——**两通道都盖**：人工通道写盘时取（npm view），AI 诊断经 `makeIntegrityOf`（packument 每 name 一次取全版本）盖。同 sha 跨版本复用判词；同版本 sha 漂移=re-tag→自动重审（drifted 插队队首）。
 - `by`/`issue` = 人工裁决溯源（裁决人+单号）；`model`/`l05` = AI 审计元数据（模型 id + L0.5 实得分——阈值/模型变了老判词可回放）。
 - 键：`vkey(name,version)` = `name\0version`（NUL 分隔——`@` 会和 scoped 包名撞车）。
 - `latestVerdicts` 逐行容错解析（坏行跳过）——diagnose/digest/docket 都走它。
@@ -455,7 +455,7 @@ alert job（failure()）：pipeline-alert issue 去重——查 open 单有则�
 
 ## 4. AI 诊断流 — `bin/ai-diagnose.sh`（launchd 每小时；手动同命令；**迁移期计划任务暂停**）
 
-**实现**：`pipeline/ai/diagnose.ts::unreviewedTargets/reviewMaterial/l05Score/ornithReview/integrityOf/verdictRecord` · `ai/l05_score.py`（L0.5 打分器，独立进程）· `verdicts.ts::loadVerdicts/latestVerdicts/vkey`
+**实现**：`pipeline/ai/diagnose.ts::unreviewedTargets/reviewMaterial/materialPrompt/l05Score/ornithReview/makeIntegrityOf/verdictRecord` · `ai/l05_score.py`（L0.5 打分器，独立进程）· `verdicts.ts::loadVerdicts/latestVerdicts/vkey`
 
 双通道合成——L0.5 机械打分压过 LLM 自判，任一通道挂都 fail-closed：
 
@@ -481,36 +481,50 @@ flowchart TB
 逐步细节：
 
 ```
-ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双烧 LLM）
+ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双烧 LLM；
+  锁龄>2h 视为僵死回收——SIGKILL/断电不会把评审永久停摆，D-11）
   → catalog clone（~/.local/share/opencode-market-catalog）→ fetch+reset --hard
   （失败即退，不拿陈旧数据跑）；本地日志 >5MB 自动截尾
 → diagnose.ts（--limit DIAGNOSE_LIMIT=50；--budget 45min；--name/DIAGNOSE_NAME 定向；
-  --force 重审已裁决；--state 状态文件；--dry）
+  --force 重审已裁决；--state 状态文件；--dry——探查性 dry 不记 attempts，D-14）
   有 LLM 候选时先 omlxAlive 探活（GET /models，任何响应即活）——
     死 omlx 秒退：免费 verdict（sha 复用/verify-failed）与 flagged/L0.5 兜底照写
-  --state 文件按目标记连续 LLM 失败（探活跳过不算）：≥5 次（MAX_ATTEMPTS）
-    写"工具故障非安全结论"concern——停止白烧 + 人类可见 + --force 可救；
-    成功后清零
-  候选 = unreviewedTargets（按 heldAt/firstSeenAt FIFO，不按字母序）：
+  探活后中途死掉 → CIRCUIT_MAX=3 连续真实失败即开熔断：
+    剩余 LLM 候选留 held，不再每个烧 5min 超时到预算耗尽（D-12）；
+    flagged/L0.5 兜底 verdict 照写；间歇失败（成功即清零）不误触
+  --state 文件按目标记连续 LLM 失败（探活跳过/熔断跳过都不算）：≥5 次
+    （MAX_ATTEMPTS）写"工具故障非安全结论"concern——停止白烧 + 人类可见
+    + --force 可救；成功后清零
+  候选 = **drifted 插队 + unreviewedTargets FIFO**（D-9：re-tag=同版本
+      换字节，是最可疑信号，不许在 >limit 积压里饿死在队尾）：
       ver = pendingUpdate?.version ?? (approval==='pending' ? latestVersion : null)
       且 vkey(name,ver) 在 seen(latestVerdicts) 中**完全没有记录**
       ——任何 source 的 verdict 都排除：人工裁决就是终局，
         AI 复审会写一条 at 更新的记录静默翻盘（latest wins）
       ——AI 也绝不复审自己审过的（无 churn）；例外：sha 漂移（同版本
-        re-tag）自动重审、--name --force 定向重审（模型/阈值升级通道）
+        re-tag）自动重审、--name --force 定向重审（模型/阈值升级通道；
+        注意 --name 不带 --force 仍受 48h 推迟——插队要 --force，D-17）
       verification==='unverified' 且挂起 <48h → 推迟（等装测物料）；
         >48h 降级硬审（verify 瘫了不饿死在 unverified 上）
+  drift 扫描：全体「在押+已判+带 sha」条目 → shaFor 查 registry
+    （mapPool 并发 8 限流，D-10——不再 Promise.all 假并发串行阻塞）
   每候选（先免费后付费）：
-    integrityOf(name@ver) → npm dist.integrity（verdict 统一盖 sha）
+    shaFor(name@ver) → npm dist.integrity（verdict 统一盖 sha）
+      ——makeIntegrityOf：每 name 一次 packument 覆盖全版本 integrity
+        （D-10：老的逐版本 `npm view` 是 execFileSync 伪并行，
+          几百条在押判词就是数分钟纯等 npm）
       同 sha 已有裁决（跨版本同 tarball）→ 直接复用判词，零模型调用；
-      shaFor 缓存让 drift 扫描与判词盖章共享单查（同轮不重复 npm view）
+      shaFor 缓存让 drift 扫描与判词盖章共享单查
     目标槽 verification.status==='failed' → 直接写 concern
       （带 level+logExcerpt 摘要；spec §3/§11——模型看不到装测，不给它猜）
     reviewMaterial = manifest + findings + redFlags + pending 行
       + meta（type/source/created/firstSeen/published/maintainers/repoId/
         stars/下载量——休眠、维护者变更、repojack 信号）
       + verify（装测状态+日志摘录）+ prev-findings（展示版 delta 对照）
-    L0.5（Galvanize-2）**每轮一次** python 调用批量打分
+    materialPrompt 总预算 32KB（D-15：500 findings × ≤4KB 曾能顶出 ~2MB
+      prompt——上下文溢出被误记"工具故障"；溢出块折成 [material truncated]）
+    L0.5（Galvanize-2）**每轮一次** python 调用批量打分（spawn 带 5min
+      timeout——模型加载卡死不能挂住 runner+锁，D-13）
       （复合 id `name\0block` 拆回；meta/verify 纯机器串块不打分——
         off-distribution 路径串实测出 0.694 FP）
       ≥0.662 → l05flag{zh,en}（红旗，压过 LLM 自判）
@@ -528,7 +542,7 @@ ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双�
     --budget 分钟数到点 → 只跳 LLM 调用；sha 复用/verify-failed 免费 verdict 照写
   verdict 记录：source:'ai'、version=候选版本、sha=dist.integrity、
     model=LLM id、l05={model,score}（审计元数据——阈值/模型变了可回放）
-  verdicts → mktemp 文件 → 推送循环 ×3：
+  verdicts → mktemp 文件 → 推送循环 ×4：
     fetch → reset --hard → comm 去重 append → commit（staged-diff 判空）
     → push；远端并发写（catalog/verify/人工）不再撞 EOF 冲突，
     也不会丢本地裁决或推送假成功
@@ -914,7 +928,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | 验证是硬门 | unverified/failed 永不放；skipped 两类：红旗 skipped 事实只人工 pass 可放，github-kind skipped 只能人工 verdict(null) 放（其红旗扫描结果同样约束人工判断） |
 | failed 限界重试 | failed 槽 7 天内且 retries<3 自动回队（merge 计数）；超限/超窗才终态；手动 `targets`+--retest 手动补刀 |
 | 版本钉死 | 验证验候选版（pendingUpdate 优先）；客户端 pinSpec/approvedTarballUrl 钉批准版；`plugin add`/`npm view` 不隐式 latest |
-| 审计可回放 | verdicts append-only，NUL 键最新 at 胜出；sha 双通道溯源（AI 经 integrityOf、人工写盘时取）+ by/issue 人工溯源 + model/l05 AI 元数据 |
+| 审计可回放 | verdicts append-only，NUL 键最新 at 胜出；sha 双通道溯源（AI 经 makeIntegrityOf、人工写盘时取）+ by/issue 人工溯源 + model/l05 AI 元数据 |
 | 写冲突不丢数据 | 数据分支写入都走 fetch→改→commit→push 重试循环；并发组见 §12 |
 | 裁决事件不丢 | verdict 类 job 用 per-issue 并发组（共享锁会丢 pending） |
 | 发布不破目录 | corruptionGate：空 index/掉幅>20% 拒发 |
@@ -939,7 +953,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | hourly :40 + catalog/verify success 完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
 | catalog/verify push 后 dispatch | site.yml | site-deploy | Pages 站点（单发布者） |
 | cron 21:15 UTC + dispatch | digest.yml | catalog-branch（共享） | digest/*.md、digest-state.json |
-| launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例） | ai-verdicts.jsonl |
+| launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例；>2h 僵锁自动回收 D-11） | ai-verdicts.jsonl |
 | 手动兜底 | bin/publish-digest.sh | — | digest/*.md、digest-state.json |
 | push/PR | ci.yml | — | tsc + vitest ≥90%（合并门） |
 | workflow_dispatch（手动） | spike.yml | — | dev 演练（非数据面；曾 on:push 白烧 runner+模型，N-17） |
@@ -984,7 +998,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `verify/gui.ts` | `checkGuiBundle` `findGuiBundle` | L3a jsdom+vm 真渲染 |
 | `verify/merge.ts` | `mergeResults` | 结果按 version 路由写槽 |
 | `site/build.ts` | `buildSite` `buildSkillCatalog` `listPage` `detailPage` `skillsPage` `removedPage` `healthGate` `installHint` `isVisible` `scanLabel` `verifyLabel` `approvalBadge` | Pages 站点+HTTP skill catalog（缓存+两段式提取+发布闸门） |
-| `ai/diagnose.ts` | `unreviewedTargets` `reviewMaterial` `l05Score` `ornithReview` `omlxAlive` `integrityOf` `verdictRecord` | L0.5+Ornith 双通道 AI 审（sha/48h/红旗草稿/budget/force/state 尝试计数） |
+| `ai/diagnose.ts` | `unreviewedTargets` `reviewMaterial` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` | L0.5+Ornith 双通道 AI 审（sha/48h/红旗草稿/budget/force/state 尝试计数/drift 插队/mapPool 限流/熔断） |
 | `ai/digest.ts` | `renderDigest` `nextDigestState` | 日报五板块渲染（放行/held/concerns/验证积压/评审积压）+announced 锚点推进 |
 | `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程） |
 

@@ -1,11 +1,13 @@
 /** D-series diagnose ops: omlx preflight (D-1), sha fetch dedup (D-2),
  *  chronic-failure attempts → tooling concern (D-3), bounded --limit default
- *  (D-6), digest review-backlog section (D-7). */
+ *  (D-6), digest review-backlog section (D-7); round two: re-tag front-run
+ *  (D-9), mid-run circuit breaker (D-12), --dry state isolation (D-14),
+ *  material size cap (D-15). */
 import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
+import { main as diagnoseMain, materialPrompt, MATERIAL_BUDGET } from '../pipeline/ai/diagnose.ts'
 import { renderDigest } from '../pipeline/ai/digest.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -129,6 +131,91 @@ describe('D-6 bounded defaults', () => {
     const { argv } = files(many)
     await diagnoseMain(argv, { l05: cleanL05, ornith: async () => { calls++; return okOrnith() }, sha: noSha, ping: async () => true })
     expect(calls).toBe(50)
+  })
+})
+
+describe('D-9 sha-drift re-tags front-run the review queue', () => {
+  it('a drifted entry is reviewed BEFORE the FIFO backlog', async () => {
+    // 'a' waits in the ordinary queue; 'b' already had a verdict but its
+    // registry sha no longer matches — the re-tag is the suspicious event
+    // and must be judged first even though 'a' was held longer
+    const a = e({ name: 'a', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-12-01T00:00:00Z' } })
+    const b = e({ name: 'b', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
+    const { argv, op } = files([a, b], [v({ name: 'b', sha: 'sha-old' })])
+    await diagnoseMain(argv, {
+      l05: cleanL05, ornith: okOrnith,
+      sha: async (n: string) => (n === 'b' ? 'sha-new' : undefined),
+      ping: async () => true,
+    })
+    const got = outLines(op)
+    expect(got).toHaveLength(2)
+    expect(got[0]!.name).toBe('b')   // re-tag judged first
+    expect(got[1]!.name).toBe('a')
+  })
+})
+
+describe('D-12 mid-run LLM circuit breaker', () => {
+  it('3 consecutive failures open the circuit — rest held; flagged fallback still writes', async () => {
+    // 4 ordinary targets + 1 flagged tail (latest heldAt → last in queue).
+    // The server dies after preflight: exactly CIRCUIT_MAX real calls burn,
+    // everything later stays held — no per-candidate timeout parade.
+    const mk = (name: string, heldAt: string, redFlags: string[] = []) =>
+      e({ name, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags }, verification: { status: 'verified' }, heldAt } })
+    const targets = [
+      mk('t1', '2025-12-01T00:00:00Z'), mk('t2', '2025-12-02T00:00:00Z'),
+      mk('t3', '2025-12-03T00:00:00Z'), mk('t4', '2025-12-04T00:00:00Z'),
+      mk('flagged-tail', '2025-12-05T00:00:00Z', ['net:exfil']),
+    ]
+    let calls = 0
+    const { argv, op } = files(targets)
+    await diagnoseMain(argv, {
+      l05: () => new Map(),
+      ornith: async () => { calls++; throw new Error('omlx died mid-run') },
+      sha: noSha, ping: async () => true,
+    })
+    expect(calls).toBe(3)                                                  // circuit opened
+    const got = outLines(op)
+    expect(got).toHaveLength(1)
+    expect(got[0]!.name).toBe('flagged-tail')                              // fallback still emitted
+    expect(got[0]!.verdict).toBe('concern')
+  })
+  it('a success mid-run resets the streak — the circuit does not open on intermittent failures', async () => {
+    const mk = (name: string, heldAt: string) =>
+      e({ name, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt } })
+    const targets = [mk('a', '2025-12-01T00:00:00Z'), mk('b', '2025-12-02T00:00:00Z'), mk('c', '2025-12-03T00:00:00Z'), mk('d', '2025-12-04T00:00:00Z')]
+    let calls = 0
+    const { argv, op } = files(targets)
+    await diagnoseMain(argv, {
+      l05: () => new Map(),
+      // fail, fail, pass, fail — never 3 consecutive
+      ornith: async () => { if (++calls === 3) return okOrnith(); throw new Error('flaky') },
+      sha: noSha, ping: async () => true,
+    })
+    expect(calls).toBe(4)                                                  // all tried — no trip
+    const got = outLines(op)
+    expect(got.filter(x => x.verdict === 'pass')).toHaveLength(1)
+  })
+})
+
+describe('D-14 --dry keeps attempts state clean', () => {
+  it('a dry run that sees LLM failures does NOT write the --state file', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'dops-dry-'))
+    const sp = join(d, 'attempts.json')
+    const { argv } = files([held], [], sp)
+    await diagnoseMain([...argv, '--dry'], {
+      l05: cleanL05, ornith: async () => { throw new Error('x') }, sha: noSha, ping: async () => true,
+    })
+    expect(existsSync(sp)).toBe(false)
+  })
+})
+
+describe('D-15 material total-size cap', () => {
+  it('oversized material collapses into a truncation marker instead of a 2MB prompt', () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ id: `finding:${i}`, text: 'x'.repeat(4000) }))
+    const p = materialPrompt([{ id: 'manifest', text: 'pkg: desc' }, ...many])
+    expect(p.length).toBeLessThan(MATERIAL_BUDGET + 200)
+    expect(p).toContain('[manifest]')
+    expect(p).toContain('material truncated')
   })
 })
 

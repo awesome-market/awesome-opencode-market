@@ -198,7 +198,12 @@ const shq = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`
 async function setupSandbox(home: string, user: string, run: ExecFn): Promise<Sandbox> {
   chmodSync(home, 0o711)
   const uh = join(home, 'u')
-  await run('sudo', ['-n', '-u', user, 'mkdir', '-p', uh], { timeout: 10_000 })
+  // home stays 0711 runner-owned — nobody can traverse but NOT create entries
+  // (the runner-owned plugins.json evidence lives beside uh). Making uh as
+  // nobody (`sudo -u mkdir`) therefore EACCESes on a real runner: create it
+  // as the runner, then hand ownership to the sandbox uid.
+  mkdirSync(uh, { recursive: true })
+  await run('sudo', ['-n', 'chown', user, uh], { timeout: 10_000 })
   const env = xdgEnv(uh)
   const kvs = Object.entries(env).map(([k, v]) => shq(`${k}=${v ?? ''}`)).join(' ')
   const wrapper = join(home, 'sb.sh')

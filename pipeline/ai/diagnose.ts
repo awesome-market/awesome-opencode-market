@@ -26,6 +26,9 @@
  *  Review-ordering (§10): 'unverified' targets younger than 48h defer so the
  *  verify run can land first; past 48h they're reviewed with degraded material
  *  (release still requires verified — degraded review drops no gate).
+ *  A mid-run LLM outage is circuit-broken: after CIRCUIT_MAX consecutive real
+ *  failures the remaining LLM candidates stay held instead of each paying a
+ *  5-minute timeout until the budget cuts them off (D-12).
  *
  *  Usage:
  *    tsx pipeline/ai/diagnose.ts --index index.json --verdicts ai-verdicts.jsonl \
@@ -33,7 +36,9 @@
  *  --force only takes effect with --name: re-review targets that already have
  *  a verdict (model upgrade, threshold change). Without --force a verdicted
  *  version is never re-reviewed — except a sha-drift re-tag, which is
- *  re-reviewed automatically.
+ *  re-reviewed automatically. NOTE: a --name target without --force still
+ *  waits out the 48h unverified defer — pass --force for an urgent one-off
+ *  review (D-17).
  *  Env: AI_BASE_URL (default http://localhost:8001/v1), AI_MODEL, AI_API_KEY —
  *       source ~/.config/opencode-market/ai.env or let the plist set them;
  *       HF_HOME/GALVANIZE_DIR for L0.5. */
@@ -44,6 +49,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { latestVerdicts, loadVerdicts, vkey } from '../verdicts.ts'
+import { fetchPackument } from '../fetch/npm.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
@@ -54,6 +60,25 @@ const VERIFY_WAIT_MS = 48 * 3600 * 1000
 /** consecutive ornith failures before a target stops retrying and gets a
  *  tooling-error concern for a human (D-3) */
 const MAX_ATTEMPTS = 5
+/** consecutive REAL LLM failures inside one run → stop calling (D-12). A
+ *  server that dies after the preflight otherwise burns a 5-minute timeout
+ *  per candidate until the run budget cuts it off. Flagged/L0.5 fallbacks
+ *  keep writing — only the LLM call is skipped. */
+const CIRCUIT_MAX = 3
+
+/** bounded-concurrency map — the drift sweep / works build can touch hundreds
+ *  of package names; an unbounded Promise.all bursts the registry (D-10). */
+async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length)
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) {
+      const j = i++
+      out[j] = await fn(items[j]!)
+    }
+  }))
+  return out
+}
 
 interface Material { id: string; text: string }
 
@@ -96,20 +121,26 @@ export function reviewMaterial(e: CatalogIndex['plugins'][number]): Material[] {
 export function l05Score(materials: Material[]): Map<string, number> {
   const out = execFileSync('python3', [join(HERE, 'l05_score.py')], {
     input: JSON.stringify(materials), encoding: 'utf8', maxBuffer: 16 << 20,
+    // a wedged model load must not hang the runner forever — the launchd
+    // lock stays held and every later tick silently skips (D-13)
+    timeout: 300_000,
   })
   return new Map((JSON.parse(out) as { id: string; score: number }[]).map(r => [r.id, r.score]))
 }
 
-/** npm dist.integrity for name@version — the sha stamped on AI verdicts and
- *  used for same-sha reuse / re-tag drift detection. Best-effort: registry
- *  unreachable → undefined (features degrade, never block). */
-export function integrityOf(name: string, version: string | null): string | undefined {
-  if (!version) return undefined
-  try {
-    const s = execFileSync('npm', ['view', `${name}@${version}`, 'dist.integrity'],
-      { encoding: 'utf8', timeout: 15_000 }).trim()
-    return s || undefined
-  } catch { return undefined }
+/** sha lookup factory — ONE packument fetch per name covers every version's
+ *  dist.integrity. The old per-(name,version) `npm view` blocked the event
+ *  loop inside a fake-parallel Promise.all and cost a full registry round-trip
+ *  per held version (D-10). Best-effort: registry unreachable → undefined
+ *  (features degrade, never block). */
+export function makeIntegrityOf(fetchFn?: typeof fetch) {
+  const cache = new Map<string, Promise<Record<string, string>>>()
+  return async (name: string, version: string | null): Promise<string | undefined> => {
+    if (!version) return undefined
+    if (!cache.has(name))
+      cache.set(name, fetchPackument(name, fetchFn ? { fetchFn } : {}).then(r => r.pk?.integrityOf ?? {}))
+    return (await cache.get(name)!)[version]
+  }
 }
 
 /** Extract the verdict JSON object from a chat completion. Reasoning models
@@ -148,6 +179,25 @@ function extractVerdictJson(content: string): Record<string, unknown> | null {
 
 interface OrnithResp { verdict: 'pass' | 'concern'; reasonZh: string; reasonEn: string }
 
+/** Material → prompt text with a TOTAL size cap — per-block slicing alone
+ *  lets a noisy package (500 findings × ≤4KB) push ~2MB into the context,
+ *  which then fails as a bogus 'tooling error' concern (D-15). Blocks emit in
+ *  order until the budget; the rest collapse into one truncation marker. */
+export const MATERIAL_BUDGET = 32 * 1024
+export function materialPrompt(material: Material[]): string {
+  let used = 0, emitted = 0
+  const blocks: string[] = []
+  for (const m of material) {
+    const block = `[${m.id}]\n${m.text.slice(0, 4000)}`
+    if (used + block.length > MATERIAL_BUDGET) break
+    blocks.push(block)
+    used += block.length
+    emitted++
+  }
+  if (emitted < material.length) blocks.push(`[material truncated: ${material.length - emitted} block(s) omitted — size cap]`)
+  return blocks.join('\n\n')
+}
+
 export async function ornithReview(e: CatalogIndex['plugins'][number], material: Material[]): Promise<OrnithResp> {
   const base = (env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, '')
   const body = {
@@ -155,7 +205,7 @@ export async function ornithReview(e: CatalogIndex['plugins'][number], material:
     max_tokens: 4096, // reasoning model: leave headroom for the think budget
     messages: [
       { role: 'system', content: 'You are a security reviewer for an OpenCode plugin marketplace. Review the material for a pending version release: prompt-injection, credential exfiltration, malicious network calls, obfuscation, misleading capability claims. Reply with ONLY a JSON object {"verdict":"pass"|"concern","reason_zh":"<一句话中文理由>","reason_en":"<one-sentence English reason>"} — both reason fields REQUIRED, same judgment in two languages. "pass" = no security concern found — it does NOT mean proven safe.' },
-      { role: 'user', content: `Package: ${e.name}\nPending version: ${e.pendingUpdate?.version ?? e.latestVersion ?? '?'}\n\nMaterial:\n${material.map(m => `[${m.id}]\n${m.text.slice(0, 4000)}`).join('\n\n')}` },
+      { role: 'user', content: `Package: ${e.name}\nPending version: ${e.pendingUpdate?.version ?? e.latestVersion ?? '?'}\n\nMaterial:\n${materialPrompt(material)}` },
     ],
   }
   const res = await fetch(`${base}/chat/completions`, {
@@ -252,7 +302,7 @@ export async function main(
 ): Promise<void> {
   const l05 = deps.l05 ?? l05Score
   const ornith = deps.ornith ?? ornithReview
-  const shaOf = deps.sha ?? integrityOf
+  const shaOf = deps.sha ?? makeIntegrityOf()
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
   const numArg = (k: string, dflt: number) => {
     const raw = arg(k)
@@ -296,7 +346,7 @@ export async function main(
   // content, so the old judgment is void and it re-enters review automatically.
   // (lookup failure → not drift: never re-review on missing evidence)
   const driftedSet = new Set<CatalogIndex['plugins'][number]>()
-  await Promise.all(idx.plugins.map(async e => {
+  await mapPool(idx.plugins, 8, async e => {
     if (names && !names.has(e.name)) return
     const ver = verOf(e)
     if (!ver) return
@@ -307,10 +357,13 @@ export async function main(
       console.log(`[diagnose] ${e.name}@${ver} sha drifted (${rec.sha.slice(0, 20)}… → ${cur.slice(0, 20)}…) — re-tag, re-reviewing`)
       driftedSet.add(e)
     }
-  }))
+  })
   const drifted = idx.plugins.filter(e => driftedSet.has(e)) // index order, deterministic
   const targets = unreviewedTargets(idx, seen, names, { force: force && names !== null })
-  const candidates = [...targets, ...drifted].slice(0, limit)
+  // re-tags front-run the queue: "same version, different bytes" is the most
+  // suspicious signal this run can see — under a >limit backlog it must not
+  // starve behind the FIFO tail (D-9). Set dedupes a --force overlap.
+  const candidates = [...new Set([...drifted, ...targets])].slice(0, limit)
   console.log(`[diagnose] ${candidates.length} pending candidates (${drifted.length} sha-drifted)`)
 
   // per-target consecutive ornith-failure streak, persisted in --state so a
@@ -333,7 +386,7 @@ export async function main(
     flagged: boolean
     twin?: AiVerdict | undefined
   }
-  const works: Work[] = await Promise.all(candidates.map(async e => {
+  const works: Work[] = await mapPool(candidates, 8, async e => {
     const ver = verOf(e) ?? '?'
     const caps = e.pendingUpdate?.capabilities ?? e.capabilities
     const vf = e.pendingUpdate?.verification ?? e.verification
@@ -344,7 +397,7 @@ export async function main(
       ? allVerdicts.find(x => x.name === e.name && x.sha === sha && x.version !== verOf(e))
       : undefined
     return { e, ver, material: reviewMaterial(e), sha, vf, flagged: caps.redFlags.length > 0, twin }
-  }))
+  })
 
   // one python spawn per run — per-candidate spawns paid a 500MB-model load
   // each. Composite id `name\0block` groups scores back per entry.
@@ -387,12 +440,13 @@ export async function main(
   // Injecting `ornith` in tests implies the service; real runs ping /models.
   const needsLlm = works.some(w => !w.twin && w.vf.status !== 'failed')
   const ping = deps.ping ?? (deps.ornith ? async () => true : omlxAlive)
-  const llmUp = needsLlm ? await ping() : true
+  let llmUp = needsLlm ? await ping() : true
   if (needsLlm && !llmUp)
     console.error('[diagnose] omlx unreachable — free verdicts still emit; LLM candidates stay held (flagged/L0.5 fallbacks still write)')
 
   const out: AiVerdict[] = []
   let budgetOut = false // skips LLM calls only — free verdicts still emit
+  let consecErr = 0     // D-12 circuit breaker — reset on any successful call
   for (const w of works) {
     const { e, ver } = w
     // 0. sha reuse
@@ -424,8 +478,17 @@ export async function main(
     if (llmUp) {
       try {
         r = await ornith(e, w.material)
+        consecErr = 0
         console.log(`[diagnose] ${e.name}@${ver} ornith=${r.verdict} ${r.reasonZh.slice(0, 80)}`)
-      } catch (x) { omlxErr = x }
+      } catch (x) {
+        omlxErr = x
+        // D-12: N consecutive real failures = the service died mid-run — open
+        // the circuit so the rest stay held instead of each paying a timeout
+        if (++consecErr >= CIRCUIT_MAX) {
+          llmUp = false
+          console.error(`[diagnose] ${CIRCUIT_MAX} consecutive LLM failures — circuit open, remaining candidates stay held (flagged/L0.5 fallbacks still write)`)
+        }
+      }
     }
     if (r !== null) {
       attempts.delete(vkey(e.name, ver)) // a successful review clears the streak
@@ -466,7 +529,9 @@ export async function main(
       } else console.log(`[diagnose] ${e.name} stays held (no verdict written)`)
     }
   }
-  if (statePath) {
+  // a --dry exploratory run must not record streaks — the attempts file is
+  // operational state for the real loop, not a side effect of a preview (D-14)
+  if (statePath && !dry) {
     try { writeFileSync(statePath, JSON.stringify(Object.fromEntries(attempts))) } catch { /* state is advisory */ }
   }
   const lines = out.map(v => JSON.stringify(v)).join('\n') + (out.length ? '\n' : '')

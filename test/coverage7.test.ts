@@ -19,7 +19,7 @@ vi.mock('node:child_process', () => ({
   execFile: () => { throw new Error('unused') },
 }))
 
-import { l05Score, integrityOf } from '../pipeline/ai/diagnose.ts'
+import { l05Score, makeIntegrityOf } from '../pipeline/ai/diagnose.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -53,15 +53,33 @@ describe('l05Score', () => {
   })
 })
 
-describe('integrityOf', () => {
-  it('null version → undefined (github-kind, no npm call)', () => {
-    const before = execCalls.filter(c => c.cmd === 'npm').length
-    expect(integrityOf('o/r', null)).toBeUndefined()
-    expect(execCalls.filter(c => c.cmd === 'npm').length).toBe(before)
+describe('makeIntegrityOf (D-10 packument-backed)', () => {
+  it('one packument fetch per name covers every version; lookups share the cache', async () => {
+    let fetches = 0
+    const fetchFn = (async () => {
+      fetches++
+      return new Response(JSON.stringify({
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': { dist: { integrity: 'sha512-aaa' } },
+          '2.0.0': { dist: { integrity: 'sha512-bbb' } },
+        },
+      }))
+    }) as unknown as typeof fetch
+    const io = makeIntegrityOf(fetchFn)
+    expect(await io('pkg', '1.0.0')).toBe('sha512-aaa')
+    expect(await io('pkg', '2.0.0')).toBe('sha512-bbb')
+    expect(await io('pkg', '9.9.9')).toBeUndefined()
+    expect(fetches).toBe(1)
   })
-  it('returns trimmed dist.integrity; registry error → undefined', () => {
-    expect(integrityOf('pkg', '1.0.0')).toBe('sha512-abc')
-    expect(integrityOf('missing-pkg', '1.0.0')).toBeUndefined()
+  it('null version → no fetch at all (github-kind); registry error → undefined', async () => {
+    let fetches = 0
+    const fetchFn = (async () => { fetches++; return new Response('x', { status: 500 }) }) as unknown as typeof fetch
+    const io = makeIntegrityOf(fetchFn)
+    expect(await io('o/r', null)).toBeUndefined()
+    expect(fetches).toBe(0)
+    expect(await io('gone', '1.0.0')).toBeUndefined()
+    expect(fetches).toBe(1)
   })
 })
 
