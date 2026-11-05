@@ -86,14 +86,14 @@ jobs:
             printf '\n\n⚠️ 本次重审由非投稿人 @%s 触发（投稿人 @%s）——包名可能已易主，转人工复核。\n' "$COMMENTER" "$ISSUE_AUTHOR" >> /tmp/review.md
             sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
           fi
-          # name-age guard: package registered AFTER an issue that has been open
-          # >24h means the name changed hands since submission (legit
+          # name-age guard: package/repo registered AFTER an issue that has been
+          # open >24h means the name changed hands since submission (legit
           # submit-then-publish resolves within hours). Catches author-driven
-          # re-review of a squatted name too.
-          if [ "$KIND" = npm ]; then
+          # re-review of a squatted name too — repojack mirror for repos.
+          if [ "$KIND" != "none" ]; then
             PC=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}')
             if [ -n "$PC" ] && [ "$PC" != "null" ] && PC="$PC" node -e "process.exit(Date.parse(process.env.PC) > Date.parse(process.env.ISSUE_CREATED) && Date.now() - Date.parse(process.env.ISSUE_CREATED) > 86400e3 ? 0 : 1)"; then
-              printf '\n\n⚠️ 包名在 issue 创建之后才注册（%s），且 issue 已存在超过 24 小时——名称可能已易主，转人工复核。\n' "$PC" >> /tmp/review.md
+              printf '\n\n⚠️ 包/仓库在 issue 创建之后才注册（%s），且 issue 已存在超过 24 小时——名称可能已易主，转人工复核。\n' "$PC" >> /tmp/review.md
               sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
             fi
           fi
