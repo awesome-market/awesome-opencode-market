@@ -214,6 +214,9 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
            身份级检查——与新条目同口径。
            槽位释放（重定向到 pk.latest）仅当在押版达终态：最新裁决 concern，
            或 failed 且 retryable 耗尽；pk.latest 上有**人工**裁决时主动跳车
+           （"最新裁决/人工裁决"均取 `slotVerdict` 共享谓词——human stickiness
+           与包级刹车同一套语义，不是 raw latest：人工 concern 之后补写的
+           AI pass 不会把在押版误判成"未终态"而永久 pin 住）
         ② 版本同 + ruleset 同 → 增量短路整体复用；**seed 候选先补版本**——
            投稿行不带 version，先拉一份 abbreviated packument（install-v1）
            拿 dist-tags.latest 再进同版比较（否则种子存活 ~90d 内每班都全量
@@ -685,6 +688,12 @@ ai-diagnose.sh 壳：env 检查（bash -n 预检）→ mkdir 原子锁（防 lau
     前缀识别本机落地）
   → fetch+reset --hard（失败即退，不拿陈旧数据跑）；本地日志 >5MB
     自动截尾；全部日志带时间戳
+  **`ai-diagnose.sh pause|resume`**（在锁/env 之前处理——翻转开关不等
+  45min 诊断锁、不需要 ai.env）：把声明暂停写进数据面——catalog 分支
+  根目录 `diagnose.paused` 标志文件（push 重试×4，幂等）。消费端四处：
+  本脚本每轮自跳过（防"pause 了忘了 launchd 还在跑"空烧 LLM）、
+  watchdog 停摆腿跳过、docket none 目标聚合为积压总单、digest §⑤ 标注。
+  上线删掉标志文件即恢复，不用改任何 workflow/launchd 配置
 → diagnose.ts（--limit DIAGNOSE_LIMIT=50；--budget 45min；--name/DIAGNOSE_NAME 定向；
   --force 重审已裁决；--state 状态文件；--dry——探查性 dry 不记 attempts，D-14）
   有 LLM 候选时先 omlxAlive 探活（GET /models，任何响应即活）——
@@ -952,7 +961,10 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      compact/submit-verdict 都写同一文件，会把死掉的本地 worker 抹绿）、
      index.json >36h、digest-state.json >36h（"绿过但 state 没落盘"的兜底）、
      线上 health.json >36h；无匹配 commit（从未跑过）= 引导态不算停摆，
-     跳过该腿；dedupe 按 in:title 搜索；alert job 同款 pipeline-alert 去重
+     跳过该腿；**`diagnose.paused` 在 catalog 分支存在时第一腿跳过**——
+     声明暂停是有意停机不是停摆，上线前 launchd 手动期不该每班误报
+     pipeline-alert（其余各腿与本地诊断无关照常检查）；
+     dedupe 按 in:title 搜索；alert job 同款 pipeline-alert 去重
   → docket.yml 读 digest-state：ai:pass 审核单体里显示成熟相位
      （已公告·待放行闸 / 已裁决·待日报公告）——维护者不再疑惑"为何不放行"
 ```
@@ -1007,7 +1019,7 @@ pending 条目 bump → 就地换候选 + approvalReason 重置（旧理由说�
 已展示条目 npm latest 消失/回滚 → 携带全部展示态（pendingUpdate 也保留）
 ```
 
-**放行判定**（两个版本槽各自查 `vkey(name, version)` 的最新 verdict）：
+**放行判定**（两个版本槽各自查 `vkey(name, version)` 的最新 verdict——判定本身收敛在 `slotVerdict`/`packageBrake` 共享谓词上：放行闸、hold-pin 终态、digest 相位、docket 目标、explain 全走同一套"最新裁决+human stickiness+包级刹车"语义，不再各自实现）：
 
 ```
 包级闸（先于槽位判定）：name\0null 键最新裁决=
@@ -1040,13 +1052,17 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
 → pendingUpdate 放行：latestVersion/publishedAt/capabilities/verification/features/contains/integrity ← pu
    （contains/integrity=被放行版的——hold 期间展示槽一直钉展示版；
    publishedAt/features 不回退旧版：候选为 null/缺就如实写 null/缺，
-   不把旧版本日期/特性挂到新版上）
+   不把旧版本日期/特性挂到新版上；**legacy hold（pu 无 integrity）同样
+   写 null 而非继承展示版 SRI**——旧版哈希钉到新版上会让每个客户端
+   fail-closed 拒装，还会把错误锚冻结成永久的假 sec:integrity-drift；
+   null=诚实"未知"，下轮 refreshMeta 经 anchorIntegrity(null→新sha)
+   干净补回）
    source.version 同步，approvalReason 清空，pendingUpdate 删除
 → 展示槽 pending 放行：approval→approved，approvalReason 清空
 标注幂等：reason 相同不重复写（held/releases 计数只记真变化）
 ```
 
-**时延预期**：一条 pass 从写入到生效 ≈ 6h–30h——21:15 UTC 日报公告后，最早下一班 catalog（03:17 UTC，约 6h 后）即放行，最晚等次日 11:00 UTC 班（约 30h）；若在 21:15 之后才写入则顺延一天。这是预告期设计的代价不是故障（R-6）；concern 不等公示即刻生效。排障工具：`release.ts --explain` 按槽位打印判定链（哪条裁决胜出/是否已公告/哪道闸在拦）。
+**时延预期**：一条 pass 从写入到生效 ≈ 6h–30h——21:15 UTC 日报公告后，最早下一班 catalog（03:17 UTC，约 6h 后）即放行，最晚等次日 11:00 UTC 班（约 30h）；若在 21:15 之后才写入则顺延一天。这是预告期设计的代价不是故障（R-6）；concern 不等公示即刻生效。排障工具：`release.ts --explain` 按槽位打印判定链（哪条裁决胜出/是否已公告/哪道闸在拦）；`--name <pkg>` 只打印单条目（全索引 explain 会 dump 每个在押槽的链）。
 
 **即时通道（R-2）**：`release.ts` 是 `applyMatureVerdicts` 的 CLI 壳——concern/submit 裁决写盘时 `catalog-append.sh APPLY_INDEX=1` 在同一 commit 把裁决应用到 index.json（人工 concern 立刻刹车、人工 pass 即时生效受同一套成熟+验证闸约束），不必等下一班 catalog。
 
@@ -1091,6 +1107,13 @@ docket.ts：index+verdicts → docketTargets
   ∨ none 目标（有版本）：在押版本键上无任何裁决且在押超 48h——
     diagnose 队列积压或停摆（launchd 暂停）时给同等的 standing issue，
     年轻在押仍归 AI 队列，不提前骚扰人工。
+    **聚合**：none 目标数 > `NONE_ISSUE_CAP`(8) 或 `diagnose.paused` 在
+    catalog 分支存在时，全部聚合进一张 standing 总单
+    `[review] (unreviewed backlog)`（保留字防撞，同 repo-only 总单；
+    正文列前 60 条在押久者优先，逐条 `/approve|/concern 名@版本` 裁决，
+    判词落地即移出并立单版审核单，积压清空总单自动关）——AI 停摆期
+    500+ 逐条单对维护者是 tracker 洪水；≤cap 且未声明暂停时仍逐条开单
+    （单版单带完整扫描摘录/sha 证据面，聚合单只列摘要行）。
     **在押时钟 = candidateHeldAt**（pendingUpdate.heldAt → 候选槽
     capabilities.scannedAt → firstSeenAt，与 diagnose 48h 降级窗/digest §②
     同源）：firstSeenAt 是条目级、跨版本 bump 保留，单用它会把"昨天刚

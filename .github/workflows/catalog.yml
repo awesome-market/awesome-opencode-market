@@ -126,7 +126,9 @@ jobs:
             # stale snapshot over it — re-derive state from the freshest
             # remote jsonl + digest-state (idempotent; a brake that arrived
             # mid-run stays a brake, our own mature release still releases).
-            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
+            # stderr carries the released/held line — keep the LAST attempt's
+            # output for the step summary below (each retry truncates it)
+            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log; then
               mv /tmp/index.released.json /tmp/index.json
               RELEASE_FAILED=0
             else
@@ -150,6 +152,17 @@ jobs:
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
+          # surface the release fold's outcome — "what released this run" is
+          # the single most-asked question and today it sits inside a megabyte
+          # of discovery logs (the run.ts line is in the generate job; this is
+          # the publish-time re-apply that actually lands)
+          if [ -s /tmp/release-fold.log ]; then
+            { echo '## 放行折叠 (release fold)'
+              echo ''
+              grep -E '^release: ' /tmp/release-fold.log | tail -1
+              echo ''
+            } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          fi
           # G10: the publish succeeded but the verdict fold failed on the
           # last attempt — brakes/releases are deferred ~12h while the index
           # shows stale approval state. The workflow alert job can't see this

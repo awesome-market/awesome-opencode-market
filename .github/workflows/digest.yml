@@ -159,12 +159,16 @@ jobs:
             const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
             console.log(unreviewedTargets(idx, seen).length)
           ")
-          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
+          # diagnose.paused = 本地 AI 队列是“声明暂停”而不是“疑似停摆”——
+          # launchd 手动期/上线前的有意停机不该每班都报 pipeline-alert；
+          # 其余三条腿（index/digest-state/site）与本地诊断无关，照常检查。
+          PAUSED=$([ -f /tmp/cat/diagnose.paused ] && echo 1 || echo 0)
+          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}; diagnose paused: ${PAUSED}"
           REASONS=""
           # LAST*=0 → the file has NO git history (never written). That is
           # bootstrap, not staleness — without the >0 guard a fresh deployment
           # false-alerts on every leg within its first day.
-          if [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+          if [ "$PAUSED" != 1 ] && [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
             REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
