@@ -138,17 +138,9 @@ export function approvedTarballUrl(
 }
 
 export async function fetchIndex(url = DEFAULT_INDEX_URL): Promise<MarketIndex> {
-  // timeout guard — a sandboxed webview fetch that never settles must surface as an error
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 30_000)
-  try {
-    const res = await fetch(url, { signal: ctrl.signal })
-    if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
-    const idx = sanitizeIndex((await res.json()) as MarketIndex)
-    return { ...idx, plugins: idx.plugins.filter(isVisible) }
-  } finally {
-    clearTimeout(t)
-  }
+  // delegates to the sha-verified path — a plain fetch+parse must not exist
+  // as a way to bypass the published-manifest check (S-14)
+  return fetchIndexCached(url, /*force*/ true)
 }
 
 // ── index URL resolution + manifest-first fetch ──────────────────────────
@@ -409,9 +401,9 @@ export function descOf(e: MarketEntry): string {
 }
 
 /** The string an install records as "what version is on disk" — npm version,
- *  or github pushedAt for repo skills (their version marker). */
+ *  or the github tree sha that was installed (pushedAt only for pre-sha data). */
 export function verMarker(e: MarketEntry): string | undefined {
-  return e.latestVersion ?? (e.source?.kind === 'github' ? e.modifiedAt ?? undefined : undefined)
+  return e.latestVersion ?? (e.source?.kind === 'github' ? e.source.version ?? e.modifiedAt ?? undefined : undefined)
 }
 
 /** Newer-than-installed compare — works for both npm versions and github

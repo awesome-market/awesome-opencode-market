@@ -231,9 +231,10 @@ export default Plugin.define({
           let url: string
           let integrity: string | null = null
           if (plan.skill === 'github') {
-            // repo skills ship via codeload at HEAD — pushedAt (modifiedAt) is
-            // the version marker; no SRI exists for git archives
-            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/HEAD`
+            // repo skills pin to the scanned tree sha (source.version) —
+            // installed bytes equal what the pipeline reviewed; HEAD only as
+            // a fallback for pre-sha index data (no SRI exists for git archives)
+            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/${e.source?.version ?? 'HEAD'}`
           } else {
             // pin to the catalog-approved version — dist-tags.latest is the
             // pendingUpdate users are NOT allowed to get yet (hold semantics)

@@ -1196,14 +1196,14 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     const noLog = detailPage(e({ approval: 'approved' }))
     expect(noLog).not.toContain('failure log')
   })
-  it('buildSkillCatalog: same basename → namespaced ids; tarballOf injected', () => {
+  it('buildSkillCatalog: same basename → namespaced ids; tarballOf injected', async () => {
     const d = tmp('sc-')
     const skills = [
       e({ name: 'a/test', slug: 'a/test', contains: ['skill'], latestVersion: '1.0.0' }),
       e({ name: 'b/test', slug: 'b/test', contains: ['skill'], latestVersion: '1.0.0' }),
       e({ name: 'c/solo', slug: 'c/solo', contains: ['skill'], latestVersion: null }),
     ]
-    buildSkillCatalog(idx(skills), d, () => null)   // tarballOf null → skip all
+    await buildSkillCatalog(idx(skills), d, () => null)   // tarballOf null → skip all
     const out = JSON.parse(readFileSync(join(d, 'skills', 'index.json'), 'utf8')) as { skills: unknown[] }
     expect(out.skills).toEqual([])
   })

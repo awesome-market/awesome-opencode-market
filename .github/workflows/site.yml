@@ -6,11 +6,13 @@ name: site
 # (GITHUB_TOKEN events never start workflows), so dispatch is the only channel.
 on:
   workflow_dispatch:
+  workflow_call:      # other pipelines (re-features) reuse this instead of copying the deploy block — one publisher, one gate
 concurrency: site-deploy
 permissions: {}
 jobs:
   site:
     runs-on: ubuntu-latest
+    timeout-minutes: 30   # cold skill fetches are pooled but bounded — a hung npm/curl must not hold the 6h default
     permissions: { pages: write, id-token: write, contents: read }
     environment:
       name: github-pages

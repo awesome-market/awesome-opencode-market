@@ -49,10 +49,10 @@ describe('site honest labels', () => {
     expect(html).not.toContain('<script>x')
     expect(html).toContain('opencode plugin add p')
   })
-  it('buildSite writes index + detail pages', () => {
+  it('buildSite writes index + detail pages', async () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [mk({ name: 'a' }), mk({ name: 'b' })], removed: [] }
-    buildSite(idx, out)
+    await buildSite(idx, out)
     expect(existsSync(join(out, 'index.json'))).toBe(true)
     expect(existsSync(join(out, 'p', 'o/p.html'))).toBe(true)
     const list = readFileSync(join(out, 'index.html'), 'utf8')
@@ -62,11 +62,11 @@ describe('site honest labels', () => {
     expect(listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] })).toContain('id=q')
   })
 })
-  it('buildSite writes skills/index.json even when skill tarball unavailable', () => {
+  it('buildSite writes skills/index.json even when skill tarball unavailable', async () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'definitely-not-a-real-pkg-zz9', contains: ['skill'] }), mk({ name: 'b' })], removed: [] }
-    buildSite(idx, out)
+    await buildSite(idx, out)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(Array.isArray(cat.skills)).toBe(true)
     expect(cat.skills).toHaveLength(0)   // npm view fails → skipped, no crash
@@ -82,7 +82,7 @@ describe('site honest labels', () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'sk-real', contains: ['skill'], latestVersion: '2' })], removed: [] }
-    buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
+    await buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)
     expect(cat.skills[0].name).toBe('sk-real')
@@ -102,7 +102,7 @@ describe('site honest labels', () => {
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'sk-pin', contains: ['skill'], latestVersion: '1.2.3' })], removed: [] }
     const seen: string[] = []
-    buildSkillCatalog(idx, out, (spec) => { seen.push(spec); return `file://${join(src, 's.tgz')}` })
+    await buildSkillCatalog(idx, out, (spec) => { seen.push(spec); return `file://${join(src, 's.tgz')}` })
     expect(seen).toEqual(['sk-pin@1.2.3'])
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
@@ -121,7 +121,7 @@ describe('site honest labels', () => {
       mk({ name: 'sk-nover', contains: ['skill'], latestVersion: null }),             // no approved version → skipped, never latest
     ], removed: [] }
     const specs: string[] = []
-    buildSkillCatalog(idx, out, (n) => { specs.push(n); return n.startsWith('sk-empty') ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}` })
+    await buildSkillCatalog(idx, out, (n) => { specs.push(n); return n.startsWith('sk-empty') ? `file://${join(src, 'empty.tgz')}` : `file://${join(src, 'ok.tgz')}` })
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(1)
     expect(cat.skills[0].version).toBe('3')
@@ -150,7 +150,7 @@ describe('buildSkillCatalog github-kind entries', () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [ghEntry()], removed: [] }
     const npmSpecs: string[] = []; const ghRepos: string[] = []
-    buildSkillCatalog(idx, out,
+    await buildSkillCatalog(idx, out,
       (spec) => { npmSpecs.push(spec); return null },
       undefined,
       (repo) => { ghRepos.push(repo); return `file://${tgz}` })
@@ -171,10 +171,26 @@ describe('buildSkillCatalog github-kind entries', () => {
       ghEntry({ name: 'g2', source: { kind: 'github', id: 'g2', repo: 'not a repo' } }),
     ], removed: [] }
     const ghRepos: string[] = []
-    const r = buildSkillCatalog(idx, out, () => null, undefined, (repo) => { ghRepos.push(repo); return null })
+    const r = await buildSkillCatalog(idx, out, () => null, undefined, (repo) => { ghRepos.push(repo); return null })
     expect(ghRepos).toHaveLength(0)
     expect(r.candidates).toBe(0)
     rmSync(out, { recursive: true, force: true })
+  })
+
+  it('source.version (tree sha) pins codeload — served bytes = scanned bytes', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { src, tgz } = mkGhTgz()
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      ghEntry({ source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill', version: 'abc123def' } }),
+    ], removed: [] }
+    const seen: (string | null | undefined)[][] = []
+    await buildSkillCatalog(idx, out, () => null, undefined,
+      (repo, sha) => { seen.push([repo, sha]); return `file://${tgz}` })
+    expect(seen).toEqual([['o/gh-skill', 'abc123def']])
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills[0].version).toBe('abc123def')   // sha is the version marker now
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 })
 
@@ -185,7 +201,7 @@ describe('buildSkillCatalog failure paths', () => {
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'sk-dead', contains: ['skill'], latestVersion: '9' })], removed: [] }
     // https URL that refuses — curl -f fails fast on a refused connection
-    buildSkillCatalog(idx, out, () => 'https://127.0.0.1:1/nope.tgz')
+    await buildSkillCatalog(idx, out, () => 'https://127.0.0.1:1/nope.tgz')
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     expect(cat.skills).toHaveLength(0)
     expect(existsSync(join(out, 'skills', 'sk-dead.tmp'))).toBe(false)
@@ -218,17 +234,17 @@ describe('skill catalog hardening (S-1/S-4/S-5/S-12)', () => {
     // miss → fetch + seed cache
     const url = tgz(src, { 'SKILL.md': '# v1' })
     let calls = 0
-    buildSkillCatalog(idx('1.0.0'), out, () => { calls++; return url }, cache)
+    await buildSkillCatalog(idx('1.0.0'), out, () => { calls++; return url }, cache)
     expect(calls).toBe(1)
     expect(existsSync(join(cache, 'sk-c%401.0.0', 'SKILL.md'))).toBe(true)
     // hit → zero network
     calls = 0
-    buildSkillCatalog(idx('1.0.0'), out, () => { calls++; return 'https://127.0.0.1:1/x' }, cache)
+    await buildSkillCatalog(idx('1.0.0'), out, () => { calls++; return 'https://127.0.0.1:1/x' }, cache)
     expect(calls).toBe(0)
     expect(existsSync(join(out, 'skills', 'sk-c', 'SKILL.md'))).toBe(true)
     // bump → refetch + old key pruned
     calls = 0
-    buildSkillCatalog(idx('2.0.0'), out, () => { calls++; return url }, cache)
+    await buildSkillCatalog(idx('2.0.0'), out, () => { calls++; return url }, cache)
     expect(calls).toBe(1)
     expect(existsSync(join(cache, 'sk-c%401.0.0'))).toBe(false)
     expect(existsSync(join(cache, 'sk-c%402.0.0'))).toBe(true)
@@ -242,7 +258,7 @@ describe('skill catalog hardening (S-1/S-4/S-5/S-12)', () => {
     const url = tgz(src, { 'SKILL.md': '# ok', 'node_modules/dep/README.md': '# leak', 'docs/UP.MD': '# caps' }, { 'evil.md': '/tmp/pwned-site' })
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'sk-x', contains: ['skill'], latestVersion: '1' })], removed: [] }
-    buildSkillCatalog(idx, out, () => url)
+    await buildSkillCatalog(idx, out, () => url)
     const dest = join(out, 'skills', 'sk-x')
     expect(existsSync(join(dest, 'SKILL.md'))).toBe(true)
     expect(existsSync(join(dest, 'docs', 'UP.MD'))).toBe(true)
@@ -263,7 +279,7 @@ describe('skill catalog hardening (S-1/S-4/S-5/S-12)', () => {
       mk({ name: '@b/x', contains: ['skill'], latestVersion: '1' }),
       mk({ name: 'a--x', contains: ['skill'], latestVersion: '1' }),
     ], removed: [] }
-    buildSkillCatalog(idx, out, () => url)
+    await buildSkillCatalog(idx, out, () => url)
     const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
     const names = cat.skills.map((s: { name: string }) => s.name).sort()
     expect(new Set(names).size).toBe(3)
@@ -279,7 +295,7 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
       mk({ name: 'a' }),
       mk({ name: 'sk-1', contains: ['skill'], latestVersion: '1' }),
       mk({ name: 'sk-2', contains: ['skill'], latestVersion: '1' })], removed: [] }
-    buildSite(idx, out)   // real tarballOf → npm view fails → 0/2 landed → degraded
+    await buildSite(idx, out)   // real tarballOf → npm view fails → 0/2 landed → degraded
     const h = JSON.parse(readFileSync(join(out, 'health.json'), 'utf8'))
     expect(h.entries).toBe(3)
     expect(h.skills).toMatchObject({ candidates: 2, landed: 0, degraded: true })
@@ -299,20 +315,24 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     expect(healthGate({ entries: 1000 }, { entries: 400 })).toContain('50%')
     expect(healthGate({ entries: 1000 }, { entries: 600 })).toBeNull()
     expect(healthGate({ entries: null as unknown as number }, { entries: 500 })).toBeNull()
+    // S-15: a >50% skill-fetch outage gates deploy — infra failure, not data
+    expect(healthGate(null, { entries: 500, skills: { candidates: 20, landed: 5, degraded: true } })).toContain('skills degraded')
+    expect(healthGate(null, { entries: 500, skills: { candidates: 20, landed: 15, degraded: false } })).toBeNull()
+    expect(healthGate(null, { entries: 500, skills: { candidates: 3, landed: 1, degraded: true } })).toBeNull()   // tiny set → warn only
   })
 
-  it('S-7 index.lite.json: visible-only + no pendingUpdate internals', () => {
+  it('index.json is the only data file — full catalog incl pending; lite dropped (no consumer)', async () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
       mk({ name: 'a', pendingUpdate: { version: '9', heldAt: 't', capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' } } }),
       mk({ name: 'b', approval: 'pending' })], removed: [] }
-    buildSite(idx, out)
-    const lite = JSON.parse(readFileSync(join(out, 'index.lite.json'), 'utf8'))
-    expect(lite.plugins).toHaveLength(1)
-    expect(lite.plugins[0].name).toBe('a')
-    expect(lite.plugins[0].pendingUpdate).toBeUndefined()
+    await buildSite(idx, out)
+    expect(existsSync(join(out, 'index.lite.json'))).toBe(false)
     const full = JSON.parse(readFileSync(join(out, 'index.json'), 'utf8'))
     expect(full.plugins).toHaveLength(2)   // full index keeps pending — auditable
+    expect(full.plugins[0].pendingUpdate).toBeTruthy()
+    expect(existsSync(join(out, '404.html'))).toBe(true)
+    expect(readFileSync(join(out, '404.html'), 'utf8')).toContain('removed.html')
     rmSync(out, { recursive: true, force: true })
   })
 
@@ -321,7 +341,7 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [mk({ name: 'a' })], removed: [
       { slug: 'o/gone', name: 'gone-pkg', disappearedAt: '2026-01-02T00:00:00Z', reason: 'npm-404' },
       { slug: 'o/old', name: 'old-pkg', disappearedAt: '2026-01-01T00:00:00Z', reason: 'manual' }] }
-    buildSite(idx, out)
+    await buildSite(idx, out)
     const rem = readFileSync(join(out, 'removed.html'), 'utf8')
     expect(rem).toContain('gone-pkg')
     expect(rem.indexOf('gone-pkg')).toBeLessThan(rem.indexOf('old-pkg'))  // newest first
@@ -340,11 +360,39 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     expect(html).toContain('中&quot;文')
   })
 
-  it('buildSite clears stale output before writing', () => {
+  it('buildSite clears stale output before writing', async () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     writeFileSync(join(out, 'stale.html'), 'old')
-    buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] }, out)
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] }, out)
     expect(existsSync(join(out, 'stale.html'))).toBe(false)
     rmSync(out, { recursive: true, force: true })
+  })
+
+  it('skillsPage hrefs are URI-encoded — spaced/unicode filenames must not 404', async () => {
+    const { skillsPage } = await import('../pipeline/site/build.ts')
+    const html = skillsPage([{ name: 'sk', version: '1', files: ['docs/my file.md', 'README.md'] }])
+    expect(html).toContain('href="skills/sk/docs/my%20file.md"')
+    expect(html).not.toContain('href="skills/sk/docs/my file.md"')
+    expect(html).toContain('>docs/my file.md<')   // display text stays human-readable
+  })
+
+  it('installHint mirrors installPlan — github plugin gets no bogus add line', async () => {
+    const { installHint } = await import('../pipeline/site/build.ts')
+    // npm plugin → pinned plugin add
+    expect(installHint(mk({ latestVersion: '2.0.0' }))).toContain('opencode plugin add p@2.0.0')
+    // dual-nature npm → plugin + skills catalog
+    const dual = installHint(mk({ contains: ['plugin', 'skill'] }))
+    expect(dual).toContain('opencode plugin add')
+    expect(dual).toContain('skills catalog')
+    // github plugin-only → browse only (client itself has no path)
+    const ghPlugin = mk({ latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'o/r' } })
+    expect(installHint(ghPlugin)).toContain('browse only')
+    expect(installHint(ghPlugin)).not.toContain('plugin add')
+    // github skill → skills catalog link
+    const ghSkill = mk({ latestVersion: null, type: 'skill', contains: ['skill'],
+      source: { kind: 'github', id: 'o/s', repo: 'o/s' } })
+    expect(installHint(ghSkill)).toContain('skills catalog')
+    // versionless npm entry → browse only
+    expect(installHint(mk({ latestVersion: null }))).toContain('browse only')
   })
 })

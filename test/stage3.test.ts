@@ -100,9 +100,9 @@ describe('site rendering', () => {
     const html = detailPage(entry({ latestVersion: '2.5.1' }))
     expect(html).toContain('opencode plugin add pkg@2.5.1')
   })
-  it('buildSite writes no detail page for pending, index.json keeps full data', () => {
+  it('buildSite writes no detail page for pending, index.json keeps full data', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'site3-'))
-    buildSite(idx([
+    await buildSite(idx([
       entry({ name: 'shown', slug: 'shown' }),
       entry({ name: 'pending-pkg', slug: 'pending-pkg', approval: 'pending' }),
     ]), dir)
@@ -124,7 +124,9 @@ describe('fetchIndex pending filter (data plane)', () => {
         { name: 'hidden', slug: 'hidden', type: 'plugin', category: [], approval: 'pending' },
       ],
     }
-    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }))
+    // fresh Response per call — fetchIndex now hits health.json first (sha
+    // manifest check) and a shared, already-consumed body throws on re-read
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify(body), { status: 200 }))
     try {
       const { fetchIndex } = await import('../plugins/market/src/catalog.ts')
       const out = await fetchIndex('https://example.test/index.json')
