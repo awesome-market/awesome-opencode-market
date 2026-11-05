@@ -67,10 +67,15 @@ def send(keys, pause=0.6):
 
 check('opencode starts', wait(r'opencode|会话|session|model', 25000))
 send(b'/market', 0.8); send(b'\r', 0.5); send(b'\r')
-check('market dialog opens', wait(r'全部更新|我的插件|发现', 15000))
-check('index renders (cards + categories)', wait(r'全部\(\d+\)|installed', 15000))
+check('market dialog opens', wait(r'update all|全部更新|discover|发现|my plugins|我的插件', 15000))
+check('index renders (cards + categories)', wait(r'全部\(\d+\)|all\(\d+\)|installed', 15000))
 
-# ---------- real upgrade: i on the focused first card (usage pinned @0.4.1)
+# focus the pinned package — verified-first sort + ~2k entries means it is NOT
+# the first card anymore; filter the grid to it (query persists after esc)
+send(b'/', 0.8); send(b'@1930dev/opencode-usage', 1.5); send(b'\x1b', 1.0)
+check('search narrows to usage entry', wait(r'opencode-usage', 8000))
+
+# ---------- real upgrade: i on the focused usage card (pinned @0.4.1 → 0.5.0)
 # must run BEFORE other tests move focus; verified at the end via plugin list
 send(b'i', 5.0)
 check('update path runs (updating status)', wait(r'updat|install|装|activated|restart', 20000))
@@ -78,8 +83,8 @@ check('update path runs (updating status)', wait(r'updat|install|装|activated|r
 # tab switching
 send(b'5', 1.2); check('tab 5 我的插件 shows installed', wait(r'installed|已安装|我的插件', 8000))
 send(b'2', 1.2); check('tab 2 插件 shows catalog cards', wait(r'@|installed|\d+\.\d+\.\d+', 8000))
-send(b'7', 1.2); check('tab 7 设置 shows settings', wait(r'更新数据|devlog|备份|设置', 8000))
-send(b'1', 1.2); check('tab 1 back to 发现', wait(r'全部\(\d+\)|发现', 8000))
+send(b'7', 1.2); check('tab 7 设置 shows settings', wait(r'更新数据|refresh data|dev log|开发日志|备份与恢复|backup|清除数据|clear data', 8000))
+send(b'1', 1.2); check('tab 1 back to 发现', wait(r'全部\(\d+\)|all\(\d+\)|发现|discover', 8000))
 
 # search + esc semantics
 send(b'/', 0.8); send(b'opencode-usage', 1.2)
@@ -89,13 +94,16 @@ send(b'/', 0.6); send(b'zzz-not-a-plugin-xyz', 1.0)
 check('search no-match shows empty state', wait(r'没有|无结果|empty|\(0\)', 8000))
 send(b'\x1b', 0.8)
 send(b'/', 0.8); send(b'zzz', 0.6); send(b'\x1b', 1.0)
-check('esc in search stays in market', re.search(r'全部更新|发现', screen()) is not None)
+check('esc in search stays in market', re.search(r'update all|全部更新|discover|发现|my plugins|我的插件', screen()) is not None)
+# the zzz queries leave the grid filtered to empty — clear the search box so
+# detail/favorite/filter/mouse checks below run against real cards
+send(b'/', 0.8); os.write(fd, b'\x7f' * 60); pump(1.0); send(b'\x1b', 1.0)
 
 # detail dialog open/close
 send(b'\r', 1.5)
 check('enter opens detail dialog', wait(r'关闭|详情|detail|esc', 8000))
 send(b'\x1b', 1.0)
-check('esc closes detail back to list', re.search(r'全部更新|发现', screen()) is not None)
+check('esc closes detail back to list', re.search(r'update all|全部更新|discover|发现|my plugins|我的插件', screen()) is not None)
 
 # favorite toggle
 send(b'*', 0.8)
@@ -109,7 +117,7 @@ send(b'\x1b', 0.8)
 
 # r refresh
 send(b'r', 1.5)
-check('r triggers refresh', re.search(r'全部更新|发现', screen()) is not None)
+check('r triggers refresh', re.search(r'update all|全部更新|discover|发现|my plugins|我的插件', screen()) is not None)
 
 # mouse: SGR click a specific card → '›' selection marker lands on it
 def sgr_click(col, row):
@@ -122,7 +130,7 @@ before = screen()
 os.write(fd, b'\x1b[<65;20;16M' + b'\x1b[<65;20;16m')   # wheel down + release
 pump(1.0)
 # pty 里 wheel 事件可能不吃/列表一屏装完——宽松断言不崩即可
-check('wheel input does not crash market', re.search(r'全部更新|发现', screen()) is not None)
+check('wheel input does not crash market', re.search(r'update all|全部更新|discover|发现|my plugins|我的插件', screen()) is not None)
 # click a chrome tab (5 我的插件) → tab switch via mouse
 for row in range(6, 12):
     os.write(fd, f'\x1b[<0;34;{row}M\x1b[<0;34;{row}m'.encode()); pump(0.4)
@@ -132,13 +140,14 @@ send(b'1', 0.8)   # back to 发现
 
 # navigation stability
 send(b'\x1b[A\x1b[A\x1b[A', 1.0)
-check('still in market after ↑↑↑', re.search(r'全部更新|发现', screen()) is not None)
+check('still in market after ↑↑↑', re.search(r'update all|全部更新|discover|发现|my plugins|我的插件', screen()) is not None)
 
 # ---------- real upgrade: pinned 0.4.1 → i on first card → 0.5.0 ----------
 # the first card IS @1930dev/opencode-usage (› marker + update → v0.5.0 badge)
+send(b'/', 0.8); send(b'@1930dev/opencode-usage', 1.5); send(b'\x1b', 1.0)  # refilter to the pinned package
 send(b'\x1b\x1b', 0.5)          # ensure nothing is focused but the grid
 send(b'\x1b[H', 1.0)           # home → top of grid
-send(b'i', 4.0)                  # install/update on the focused first card
+send(b'i', 4.0)                  # install/update on the focused usage card
 check('update path runs', wait(r'updat|install|装|已安装|activated|restart', 20000))
 send(b'q', 1.5)
 check('q closes market to main TUI', wait(r'Ask anything|shift\+tab|ctrl\+p', 8000))
