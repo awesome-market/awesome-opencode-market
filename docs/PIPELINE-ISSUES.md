@@ -443,6 +443,42 @@ Pipeline/CI 安全：
 
 **验证**：typecheck 0 错；500 tests 全过；branches 90.62%。`RESULTS_HMAC` secret 未使用——uid 隔离后 secret 前提不成立，已可删除。
 
+### 附六·二轮：verify.yml 流程深审（V-A…V-M，2026-11）
+
+V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据的落地路径**——serve 输出和 plugins.json 都曾经过 nobody 可写的文件。本轮把这个洞和周边的流程缺口全部封掉。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| V-A 判定证据文件可被 nobody 伪造——serve.out 预种 `server listening` 行 + plugins.json 间隔重写，apiLoaded 的"服务端应答不可伪造"前提在 fs 边界被击穿 | ✅ | `verifyPackage`：serve 改 `spawn` 直接起（沙箱下唯一过 `sb.wrapper` 的部分），stdout/stderr 管道回 runner 进程——PORT/PW 从 runner 持有的字节提取；curl 轮询全部 runner 侧；`plugins.json` 写 runner-owned `<home>` 而非 nobody 的 `uh`。判定路径上不存在插件可写的环节。`spawnFn` 可注入——测试用 `serveSpawn`/`deadSpawn` 假进程，本机真装了 opencode 也不会起真 serve |
+| V-B alert job 每次失败新开 issue——持久故障 12h 一单轰炸 | ✅ | 对齐 catalog/site/digest 的去重模式：查 open `pipeline-alert` 单，有则评论追加、无则新建 |
+| V-C results artifact 零校验——畸形 `status` 裸进 index，下游每个 CatalogIndex.parse 全硬抛 | ✅ | `VerifyResultFile` zod 边界 schema（status/level 枚举 + 必填元数据），逐条 safeParse、畸形 warn+丢弃；合并输出再 `CatalogIndex.parse` 一次才落盘——坏结果产不出非法 index |
+| V-D `concurrency: catalog-branch` 挂 workflow 级——~30min 分片期独占分支写锁，catalog/digest/submit 白饿 | ✅ | 锁移到 merge job 级（job 级与工作流级共享组名命名空间）：分片零写入相位不占锁，写相位才与 catalog publish/digest 互斥 |
+| V-E timeout 预算账过期——V-4 加宽窗口后 12 目标最坏 ≈44min 超 30min 上限 | ✅ | 片宽 12→8（≈30min 最坏）+ job timeout 30→35min 留余量 |
+| V-F `targets` 打错名 → 零命中绿过空跑，操作者以为验过了 | ✅ | 收窄后 `plugins.length===0` → plan 步 exit 1 红失败，报错列出请求的名字 |
+| V-G `ocVersion` 每目标一次 `opencode --version`（~2s×N） | ✅ | 提到 `verifyShard` 入口一次——runner 侧跑（--version 不执行插件代码），结果经 `opts.opencodeVersion` 分发；verifyPackage 有该字段时不再自探 |
+| V-H workflow 字面量 `cli@2.2.5` 与 `OPENCODE_VERSION` 靠注释互引会漂 | ✅ | 回归测试 grep `.github/workflows/verify.yml` 断言含 `@opencode/cli@${OPENCODE_VERSION}`——漂移当场红 |
+| V-I `level` 字段双关（failed=失败阶段 / verified=最深通过）未写明 | ✅ | VerifyResult 字段注释 + DATA-FLOWS §3 写明双关语义 |
+| V-J `grep -qF "\"$NAME"` 子串早退（`core` 命中 `"core-x"`） | ✅ 顺带消除 | spawn 化后判定走 `apiPluginState` 解析条目（精确 target 匹配），不再有任何子串判定；早退只省等待不误判 |
+| V-K docket `workflow_run` 只接 `conclusion=='success'`——verify 部分失败时评审单停更 | ✅ | 门放宽到 `!= 'cancelled'`：部分失败照样落了有效 catalog 数据，同步安全；cancelled 才意味着什么都没写 |
+| V-L plan 输出 `tail -1` 刮 JSON 行——加日志会断 matrix | ✅ | `plan.ts` 自写 `/tmp/plan-matrix.json` 片索引文件，workflow 从文件读 `$GITHUB_OUTPUT` |
+| V-M plan job 无 egress 限制 | ✅ | 补 harden-runner 白名单（git/api.github 即可）——不跑不可信代码但同姿态堵静默缺口 |
+
+**验证**：typecheck 0 错；619 tests 全过；新回归：serveSpawn 路由（serve 过 wrapper、curl/version 不过）、api canary 缺席→failed/load、ocVersion 每片一次（3 目标仅 1 次 --version）、畸形 artifact 行 safeParse 拒、workflow↔OPENCODE_VERSION 钉步、deadSpawn 注入全部 verify 用例（本机真二进制不起真 serve）。
+
+### 附六·三轮：部件路由与工作流壳（V-P…V-T，2026-11）
+
+双栖（plugin+skill）改造暴露了 verify 比 `contains` 老一代的问题：纯技能 npm 条目会被塞进插件安装链误判；顺带把 merge job 里残留的提交遮羞布、fork cron 白烧等壳层问题一起收掉。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| V-P 纯技能 npm 条目（`contains:['skill']`/type=skill 无部件）被排进插件验证链——`plugin add`+serve 找不到插件条目 → apiPluginState 判 failed，正当技能包被盖错章烧光重试。**顺带发现**：npm 条目的 `contains` 曾把 repo-tree-only 的 SKILL.md 也算成技能部件——用户按声明装 tarball 只会抽到空气（结构检查如实判 failed，暴露上游虚标） | ✅ | `verifyPartsOf` 在 plan 边界归一化 `contains→parts`（无 contains 按 `type==='skill'` 补形）；`VerifyTarget.parts` 透传到 verifyPackage；无 'plugin' 部件 → `checkSkillStructure`：`npm pack` 钉版包（pacote 顺带校 dist.integrity）+ tar 列表找 SKILL.md + 提取验证 frontmatter `name:`——与收录门 `hasSkillPath` 同一口径，结果 `level:'structure'`（"字节可装、清单可解析、没跑代码"的诚实级）；插件链根本不启动。**run.ts**：npm 侧 `hasSkill` 收紧为 tarball 文件表口径（install-truth——github 侧保留 repo tree，codeload 装的就是 tree） |
+| V-Q 双栖条目只验了插件半边 | ✅ | 插件链过后 `parts.includes('skill')` → 再跑 `checkSkillStructure`；技能载荷坏 → failed，level 记插件链最深通过级，excerpt 注明 "plugin half passed" |
+| V-R 无 plugin 也无 skill 的条目（mcp/command/agent）排队后无可验载荷 | ✅ | planTargets 直接跳过——schema 的 contains 枚举比当前结构检查覆盖面宽，无诚实判定口径的不进队列 |
+| V-S merge `commit \|\| echo "no changes"`——真提交失败被空 push 成功掩盖，验证结果静默丢失（catalog-append 的 C-2 同款洞，verify 漏修） | ✅ | staged-diff 预检：`diff --cached --quiet` → "无事可提"ok 跳出；否则 commit 失败 → continue 重试，绝不走到 push |
+| V-T 壳层批量：plan 端 catalog 分支存在但 index 读不出 → `{"plugins":[]}` 绿过空跑（fetch 故障静默饿一天）；merge worktree 残留 `/tmp/cat` 使裸 add 连 fallback 一起挂；readLog 全文件读可被插件日志顶 OOM；顺序切片把重目标挤进头部片；`--retest` 只在带 targets 时可用；fork 的 schedule 照跑白烧分片机时 | ✅ | 分支存在+index 读不出 → exit 1 硬失败（分支不存在才合法空计划）；worktree `remove --force` 先行；readLog 改尾部 256KB 读；shard 改加权贪心（1+features 估分钟摊最轻片，等权退化为轮转，确定性）；`retest` 独立 boolean input；plan job `if` 闸——schedule 只在 prod 仓跑，手动 dispatch 处处可跑 |
+
+**验证**：typecheck 0 错；630 tests 全过；新回归：verifyPartsOf 归一化、skill-only 路由（plugin add/serve 不启动）、structure 判定三分支（无 SKILL.md/无 frontmatter name/pack 失败）、嵌套 skills/<x>/ 布局、双栖补验成败两向、加权分片均衡、VerifyResultFile 收 structure。
+
 ## 附七：AI 诊断链审计（D-1…D-8）
 
 `bin/ai-diagnose.sh`（launchd 每小时）→ `diagnose.ts`（sha复用→verify短路→L0.5→ornith）→ ai-verdicts.jsonl → `applyMatureVerdicts`。

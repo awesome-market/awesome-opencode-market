@@ -2,9 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadedSignal, xdgEnv, verifyPackage } from '../pipeline/verify/verify.ts'
+import { loadedSignal, xdgEnv, verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
 import type { CatalogIndex } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 describe('verify', () => {
   it('loadedSignal matches the A3-verified log format', () => {
@@ -89,7 +97,7 @@ describe('verifyPackage (injected exec)', () => {
       if (args[1] === 'add') throw Object.assign(new Error('boom'), { stderr: 'NpmInstallFailedError 404' })
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('x', { home: vHome(), execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('x', { home: vHome(), execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('install')
     expect(r.opencodeVersion).toBe('2.2.5')
@@ -101,7 +109,7 @@ describe('verifyPackage (injected exec)', () => {
       [{ source: { type: 'package', target: 'goodpkg' }, state: { status: 'active' } }]))
     const fake = (async (_c: string, args: string[]) =>
       ({ stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('verified')
     expect(r.logExcerpt).toBeUndefined()
   })
@@ -112,7 +120,7 @@ describe('verifyPackage (injected exec)', () => {
       if (args[0] === '-c') throw new Error('serve boot failed') // tolerated
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
     expect(r.logExcerpt).toContain('absent from /api/plugin')
@@ -122,7 +130,7 @@ describe('verifyPackage (injected exec)', () => {
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'badpkg' }, state: { status: 'failed' } }]))
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('badpkg', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('badpkg', { home, execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
     expect(r.logExcerpt).toContain('serve reports the plugin failed to load')
@@ -136,7 +144,7 @@ describe('verifyPackage (injected exec)', () => {
     writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
       'ts level=INFO msg="loading plugin" id=goodpkg entrypoint=file:///x\n')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
   })
@@ -146,7 +154,7 @@ describe('verifyPackage (injected exec)', () => {
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'goodpkg@2.3.4' }, state: { status: 'active' } }]))
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { version: '2.3.4', home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { version: '2.3.4', home, execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('verified')
   })
 
@@ -156,7 +164,7 @@ describe('verifyPackage (injected exec)', () => {
       if (args[0] === '--version') throw new Error('no version')
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('p', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('p', { home, execFn: fake, spawnFn: deadSpawn })
     expect(r.opencodeVersion).toBe('unknown')
   })
 })

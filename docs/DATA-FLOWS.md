@@ -317,18 +317,20 @@ issue(opened/edited/labeled) 且 (有 submission 标签 或 [submit] 标题)
 
 ## 3. 验证流 — `verify.yml`（每天 2 班 UTC 04:47/16:47 + `targets` 手动指定）
 
-**实现**：`verify/plan.ts::verifyTargetOf/planTargets/shard`（目标+分片）· `verify/verify.ts::verifyPackage/xdgEnv/writeDummyProvider/loadedSignal`（L1/L1.5 沙箱验证）· `verify/tui.ts::checkTui/judgeTuiPane`（L2 tmux）· `verify/gui.ts::findGuiBundle/checkGuiBundle`（L3a jsdom 渲染）· `verify/merge.ts::mergeResults`（版本路由写槽）
+**实现**：`verify/plan.ts::verifyTargetOf/verifyPartsOf/planTargets/shard`（目标+parts 归一化+加权分片）· `verify/verify.ts::verifyPackage/checkSkillStructure/xdgEnv/writeDummyProvider/loadedSignal`（L1/L1.5 沙箱验证 + 技能载荷结构检查）· `verify/tui.ts::checkTui/judgeTuiPane`（L2 tmux）· `verify/gui.ts::findGuiBundle/checkGuiBundle`（L3a jsdom 渲染）· `verify/merge.ts::mergeResults`（版本路由写槽）
 
 ```mermaid
 flowchart TB
-  IDX[("index.json")] --> P["planTargets<br/>unverified∨可重试failed+!flagged<br/>(手动 targets→retest)"]
-  P --> SH["shard ×12<br/>matrix"]
+  IDX[("index.json")] --> P["planTargets<br/>unverified∨可重试failed+!flagged<br/>+verifyPartsOf 归一化<br/>(手动 targets→retest)"]
+  P --> SH["shard ×8<br/>加权贪心分片<br/>matrix"]
   SH --> VP["verifyPackage<br/>隔离 HOME+XDG"]
-  VP --> L1["L1 install 45s"]
-  L1 --> L15["L1.5 serve<br/>POST /api/session<br/>apiPluginState 轮询"]
+  VP -->|"parts 无 plugin"| ST["structure 级<br/>npm pack+tar<br/>SKILL.md frontmatter"]
+  VP -->|"含 plugin"| L1["L1 install 45s"]
+  ST --> RS
+  L1 --> L15["L1.5 serve（spawn 管道归 runner）<br/>POST /api/session<br/>apiPluginState 轮询"]
   L15 --> L2["L2 tmux (tui)"]
   L15 --> L3["L3a jsdom (gui)"]
-  L2 --> RS["results-N.json"]
+  L2 --> RS["results-N.json<br/>(runner-owned)"]
   L3 --> RS
   RS --> M{"mergeResults<br/>version 路由"}
   M -->|"== pendingUpdate.version"| PUS["pendingUpdate.verification"]
@@ -339,8 +341,14 @@ flowchart TB
 逐步细节：
 
 ```
-plan job（contents:read）：
-      catalog 分支取 index → targets 输入非空则按包名收窄 index
+plan job（contents:read + harden-runner egress 白名单——不跑不可信代码但
+      拉 catalog 数据，同 verify 分片的出站姿态堵住这个静默缺口）：
+      if 闸：schedule 只在 prod 仓跑——fork 的 cron 会白烧 2×N×35min
+        分片机时并写 dev catalog；手动 dispatch 处处可跑
+      catalog 分支取 index——分支存在但 index 读不出 → exit 1 硬失败
+        （fetch 故障不等于"无可验目标"，绿过空跑会静默饿一天验证）；
+        分支真不存在（首跑）才是合法空计划
+      → targets 输入非空则按包名收窄 index
       → planTargets（retest 开关见下；cap 默认 48/班，dispatch 输入
         `cap` → VERIFY_CAP 可调）
         选序 = 两级：discoveredVia 含 'submission' 的先取（投稿优先），
@@ -351,43 +359,97 @@ plan job（contents:read）：
         超限/超窗才成终态
         排队期间 npm 发新版 → pendingUpdate 换版，轮到验当前版；
         版本错配的结果 merge 时过期丢弃，不写错槽
-        → shard 顺序切片 12/组（items.slice，非 hash）→ matrix 输出片索引
+        parts 归一化（verifyPartsOf）：entry.contains 原样透传；无 contains
+        的 legacy 条目按 type 补形——type=skill → ['skill']（声明技能、
+        载荷是 SKILL.md 而非可加载插件），其余 → ['plugin']。
+        既无 plugin 也无 skill 的条目（mcp/command/agent 尚无结构检查）
+        不排队——没有可诚实验证的载荷
+        → shard 加权贪心 8/组——顺序切片会把 submission 优先层和
+          feature 重的目标全挤进头部片；现按 1+features 数估分钟数贪心
+          摊到最轻的片（等权时退化为轮转，给定输入确定性）
+        → matrix 片索引写 /tmp/plan-matrix.json（文件输出，不再 tail -1
+          刮 stdout 末行——将来加日志行不会悄悄毁掉片表）
       手动 targets= 逗号包名 → 定向验证 + --retest（failed/verified 可重验，
-        越过 retries 上限的手动补刀）
+        越过 retries 上限的手动补刀）；收窄后零命中 → plan 步 exit 1
+        红失败（打错名不能绿过空跑，让操作者以为验过了）；
+        retest 独立 boolean input 同效但不收窄集合（全量重验开关）
 verify job（permissions:{} 零权限 + harden-runner egress 白名单
       registry/api.npmjs.org, api.github.com, github.com, *.githubusercontent.com；
-      整 job if: shards != '[]'——空计划全跳；timeout-minutes 30——
-      12 目标串行 ~18min 上限（V-4 把 load 窗口加宽后 20min 太薄，N-21））：
-      npm i -g @opencode/cli@2.2.5（与 OPENCODE_VERSION 常量钉齐——缓存键含宿主版本）
+      整 job if: shards != '[]'——空计划全跳；timeout-minutes 35——
+      8 目标串行 ≈30min 上限（V-4 加宽 load 窗口后旧的 18min/12 目标
+      账已过期，片宽 12→8 + 超时 30→35 留余量））：
+      npm i -g @opencode/cli@2.2.5（与 OPENCODE_VERSION 常量钉齐——缓存键含宿主版本；
+        测试断言 workflow 字面量与常量同步，钉漂移当场红）
+      ocVersion 每片探测一次（verifyShard 入口，runner 侧——--version
+        不执行插件代码；探到版本随 opts 分发给全部目标，不再每包一次）
       verifyPackage(name@version)：
-        L1 install: 隔离 HOME+XDG_CONFIG/DATA/CACHE → `opencode plugin add name@ver`（45s）
+        parts 路由：无 'plugin' 部件 → checkSkillStructure（npm pack 钉版
+          包——pacote 顺带校 dist.integrity——+ tar 列表找 SKILL.md +
+          提取验证 frontmatter 含 name:；与收录门 hasSkillPath 同一"技能
+          文件"口径，tarball 多一层 package/ 前缀）。结果 level='structure'
+          ——诚实语义"字节可装、清单可解析，但没有代码跑过"；
+          plugin add/serve 整条链根本不跑——否则正当的技能包会被
+          apiPluginState 误判 failed
+        L1 install: 隔离 HOME+XDG_CONFIG/DATA/CACHE → `opencode plugin add name@ver`（45s；
+          失败摘录带一句"沙箱出站是白名单——拉取失败可能是网络策略而非包坏"）
         L1.5 load: writeDummyProvider（合并写！不抹 plugin add 的 plugins[]）
-                   → `opencode serve` 后台 → 等 "server listening"+密码行
-                   → GET /api/plugin + GET+POST /api/session
-                     （2.2.5 懒加载：GET 不触发，POST session 才 load）
+                   → `opencode serve` 经 spawn 起后台（沙箱模式下唯一过
+                     nobody wrapper 的部分）——stdout/stderr 管道直接回
+                     runner 进程，等 "server listening"+密码行
+                   → GET /api/plugin + GET+POST /api/session（curl 全部
+                     runner 侧跑；2.2.5 懒加载：GET 不触发，POST session 才 load）
                    → 轮询 GET /api/plugin ≤20s 看 apiPluginState：
                      active→pass / failed→带 reason fail（apiLoaded/apiFailed）
                      ——canary 日志匹配降为诊断信息，不再当判定信号
+                   证据面边界：serve.out/plugins.json 全部落在 runner-owned
+                     home——曾存在的伪造洞（nobody 可写 serve.out 预种
+                     listening 行、间隔重写 plugins.json）已封：PORT/PW 从
+                     runner 持有的管道字节提取，apiPluginState 解析的文件
+                     nobody 物理够不着；判定路径无插件可写环节
+                   清理：finally SIGTERM + 沙箱下 sudo -u nobody pkill -f
+                     'opencode serve'（sudo 链会留 nobody 孤儿，同 uid 清扫）
         L2 interactive: features 含 tui → tmux 冒烟（checkTui）
-        L3a render: features 含 gui → findGuiBundle + checkGuiBundle（jsdom+vm 真渲染）
+        L3a render: features 含 gui → findGuiBundle + checkGuiBundle（jsdom+vm 真渲染；
+          沙箱模式下移到 `npx tsx gui.ts` nobody 子进程——vm 逃逸只拿 nobody）
+        双栖补验：parts 同时含 plugin+skill → 插件链过后再跑一遍
+          checkSkillStructure——技能半边载荷坏（SKILL.md 缺/frontmatter 残）
+          → failed，level 记插件链最深通过级，excerpt 注明"plugin half passed"
         → VerifyResult{name,version,status,level,opencodeVersion,verifiedAt,logExcerpt≤2048}
-        → results-<shard>.json artifact（7 天）
+          （logExcerpt 来源 readLog 改尾部 256KB 读——插件可控的日志文件
+          写多大都不能把 runner 顶 OOM）
+          level 双关语义：failed=失败的阶段；verified=最深通过的阶段
+          （带 feature 的目标会过 'load' 进 interactive/render）
+        → results-<shard>.json artifact（7 天；逐目标增量 flush——片崩只丢
+          在验目标，N-10）
 merge job（`if: always()`——分片挂了已落地的 results 照样合，不等整矩阵
-      成功（N-10）；contents+actions 写；actions 只为 dispatch site.yml——V-8 单发布者）：
+      成功（N-10）；`concurrency: catalog-branch` 只挂本 job——分片 ~30min
+      相位零写入，工作流级锁会白饿 catalog/digest/submit 半个钟；
+      contents+actions 写；actions 只为 dispatch site.yml——V-8 单发布者）：
+      artifact 边界校验：results-*.json 逐条过 VerifyResultFile zod
+        （status/level 枚举 + 必填元数据），畸形行 warn+丢弃——坏 artifact
+        不能裸进 index 把下游所有 CatalogIndex.parse 打成硬抛；
+        合并输出再 CatalogIndex.parse 一次才落盘（坏结果产不出非法 index）
       mergeResults 按 version 路由写槽
       r.version == pendingUpdate.version → 写 pendingUpdate.verification
       r.version == latestVersion 或空 → 写 entry.verification
       两槽都不匹配 → 过期结果丢弃（npm 中途又发新版）
       RUN_URL env → verification.runUrl（失败详情页回链）
-      写回 catalog（fetch→reset→merge→commit→push，4 次重试）
+      写回 catalog（worktree 先 remove --force 清残留再加——上次 run 崩溃
+        留下的 /tmp/cat 会让裸 add 连 fallback 一起挂；
+        fetch→reset→merge→add→commit→push，4 次重试——
+        每轮对新鲜远端头重新 merge，不推陈旧产物；
+        staged-diff 预检区分"无事可提→ok 跳出"与"commit 真失败→重试"，
+        `commit || echo` 那类遮羞布会让提交失败被空 push 成功掩盖、
+        结果静默丢失——同 C-2 修法）
       → dispatch site.yml（gh workflow run；dispatch 失败只记日志——下一班
         catalog 会补发；不自建站点，V-8 单发布者原则）
-alert job（failure()）：开 pipeline-alert issue
+alert job（failure()）：pipeline-alert issue 去重——查 open 单有则评论
+      追加、无则新建（npm 故障/钉包坏掉的连败不再 12h 一单轰炸）
 ```
 
-结果 → `verification.status ∈ {verified, failed, skipped, unverified}` + `level ∈ {install, load, interactive, render, structure}`；failed 槽经 mergeResults 累加 `retries`（非 failed 结果清零）。
+结果 → `verification.status ∈ {verified, failed, skipped, unverified}` + `level ∈ {install, load, interactive, render, structure}`；failed 槽经 mergeResults 累加 `retries`（非 failed 结果清零）。`structure` 级语义：载荷字节可装、SKILL.md 清单可解析——但没有执行过任何代码（纯技能/无插件部件的条目只走这一路）。
 
-**verifyTargetOf**：`version = pendingUpdate?.version ?? latestVersion`；`unverified` 取**候选槽**自己的 verification；`flagged` 取候选槽 redFlags；features 同样候选槽优先。计划条件（`verifyQueued`——planTargets 与 digest §④ 验证积压共享同一谓词）：`有版本 && !flagged && (unverified || retryable)`，`retryable`=failed 且 verifiedAt 在 7 天内且 retries<3；retest 模式放宽到任意 failed/verified（flagged 永不执行——红旗代码不上 runner）。
+**verifyTargetOf**：`version = pendingUpdate?.version ?? latestVersion`；`unverified` 取**候选槽**自己的 verification；`flagged` 取候选槽 redFlags；features 同样候选槽优先。计划条件（`verifyQueued`——planTargets 与 digest §④ 验证积压共享同一谓词）：`有版本 && !flagged && (unverified || retryable)`，`retryable`=failed 且 verifiedAt 在 7 天内且 retries<3；retest 模式放宽到任意 failed/verified（flagged 永不执行——红旗代码不上 runner）。`verifyPartsOf` 归一化 `contains→parts`（无 contains 按 type 补形）；parts 无 plugin 无 skill 的条目不排队（无可验载荷）。
 
 ---
 

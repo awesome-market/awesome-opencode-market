@@ -13,9 +13,11 @@ jobs:
   # maintainer can rule by tapping a label from a phone. Labels bootstrapped
   # here so the flow works on a fresh repo.
   docket:
+    # a partially-failed verify still left valid catalog data — syncing the
+    # docket against it is safe; only a cancelled run means "nothing landed"
     if: >-
       github.event_name != 'workflow_run'
-      || github.event.workflow_run.conclusion == 'success'
+      || github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
     # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —
     # two parallel runs both see an empty open-set and double-create issues

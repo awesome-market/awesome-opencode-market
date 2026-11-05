@@ -12,17 +12,47 @@ on:
         description: 'max targets to plan this run (empty = 48; raise to drain backlog)'
         required: false
         default: ''
-concurrency: catalog-branch   # shared with catalog.yml — serializes all writers of the catalog branch (I-4)
+      retest:
+        description: 're-verify failed/verified entries too (targets still narrows the set)'
+        required: false
+        type: boolean
+        default: false
 permissions: {}
 jobs:
   plan:
+    # scope: prod-only is real, not a comment — a fork's schedule would burn
+    # 2×N×35min of shard compute daily. Manual dispatch stays open everywhere.
+    if: github.event_name != 'schedule' || github.repository == 'awesome-market/awesome-opencode-market'
     runs-on: ubuntu-latest
     outputs: { shards: "${{ steps.shards.outputs.list }}" }
     permissions: { contents: read }
     steps:
+      # plan touches no untrusted code but fetches catalog data — same egress
+      # posture as the verify shards keeps the job from being a quiet hole
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
-      - run: git fetch origin catalog 2>/dev/null || true
-      - run: git show origin/catalog:index.json > /tmp/index.json 2>/dev/null || echo '{"plugins":[]}' > /tmp/index.json
+      - run: git fetch origin catalog 2>/dev/null || echo "no catalog branch yet"
+      - run: |
+          if git show origin/catalog:index.json > /tmp/index.json 2>/dev/null; then
+            echo "index fetched"
+          elif git rev-parse --verify -q origin/catalog >/dev/null; then
+            # the branch exists but index.json didn't read — that's a fetch
+            # failure or corruption, not "nothing to verify". Green-no-op here
+            # would silently starve a whole day of verification.
+            echo "catalog branch exists but index.json is unreadable" >&2
+            exit 1
+          else
+            echo "no catalog branch — nothing to verify"
+            echo '{"plugins":[]}' > /tmp/index.json
+          fi
       - name: narrow index to requested targets (manual dispatch only)
         if: inputs.targets != ''
         env: { T: "${{ inputs.targets }}" }
@@ -30,8 +60,11 @@ jobs:
           node -e 'const ns=process.env.T.split(",").map(s=>s.trim()).filter(Boolean);
             const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));
             i.plugins=i.plugins.filter(p=>ns.includes(p.name));
-            require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i));
-            console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)")'
+            console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)");
+            // a typoed target name must FAIL, not green-no-op — the operator
+            // thinks they verified something that never ran
+            if (!i.plugins.length) { console.error(`none of the requested targets exist in the catalog index: ${ns.join(", ")}`); process.exit(1) }
+            require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i))'
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
@@ -40,9 +73,10 @@ jobs:
         run: |
           # targeted dispatch → retest mode: failed/verified slots become eligible
           # again (recent failed slots also auto-retry up to 3 attempts — V-3)
-          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ inputs.targets && '--retest' || '' }} > /tmp/plan.out
-          tail -1 /tmp/plan.out > /tmp/shard-list.json
-          echo "list=$(cat /tmp/shard-list.json)" >> "$GITHUB_OUTPUT"
+          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ (inputs.targets != '' || inputs.retest) && '--retest' || '' }} > /tmp/plan.out
+          cat /tmp/plan.out
+          # plan writes the matrix list itself — no stdout tail-scraping
+          echo "list=$(cat /tmp/plan-matrix.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with: { name: shards, path: /tmp/shard-*.json, retention-days: 1 }
 
@@ -53,7 +87,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 30                 # 12 targets serial ≈ 18min worst-case (V-4 widened the load window); 20 was too thin (N-21)
+    timeout-minutes: 35                 # 8 targets serial ≈ 30min worst-case (V-4 widened the load window — the old 18min/12-target math was stale)
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
@@ -103,6 +137,10 @@ jobs:
     # shards' results are still valid — merge whatever landed (N-10)
     if: always() && needs.verify.result != 'cancelled' && needs.verify.result != 'skipped'
     runs-on: ubuntu-latest
+    # catalog-branch lock lives HERE — the ~30min shard phase never writes, so
+    # holding the workflow-level lock starved catalog/digest/submit for no
+    # reason. Job-level shares the same group namespace.
+    concurrency: catalog-branch
     permissions: { contents: write, actions: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +157,10 @@ jobs:
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
           git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
-          # catalog branch is data-only — keep pipeline sources reachable via a worktree
+          # catalog branch is data-only — keep pipeline sources reachable via a worktree.
+          # clear a stale worktree first — a crashed run leaves /tmp/cat behind and
+          # bare `add` then fails twice (path exists, branch exists) for the whole job
+          git worktree remove /tmp/cat --force 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
           ok=0
           for i in 1 2 3 4; do
@@ -129,7 +170,14 @@ jobs:
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
             cp /tmp/index.new.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
-            git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
+            # staged-diff precheck (same C-2 fix as catalog-append): a real
+            # commit failure must not pass as "no changes" — the push that
+            # follows would no-op-succeed and the results would silently vanish
+            if git -C /tmp/cat diff --cached --quiet; then
+              echo "merged results produced no index changes — nothing to publish"
+              ok=1; break
+            fi
+            git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
             git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
             echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
           done
@@ -154,7 +202,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "verify workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          # dedupe: a persistent failure (npm outage, broken pin) must not open
+          # a fresh issue every 12h — append to the open one instead
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "verify workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "verify workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

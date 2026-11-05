@@ -5,8 +5,23 @@
  *  slot holds are stale (npm moved on) and are dropped. */
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { z } from 'zod'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
 import type { VerifyResult } from './verify.ts'
+
+/** Shard-artifact boundary check — results files are JSON.parse'd, but nothing
+ *  upstream guarantees their shape. A malformed `status` would land verbatim
+ *  in index.json and hard-fail every downstream CatalogIndex.parse (site
+ *  build, the next plan run). Validate at the boundary and drop the bad rows. */
+export const VerifyResultFile = z.object({
+  name: z.string(),
+  version: z.string().optional(),
+  status: z.enum(['verified', 'failed']),
+  level: z.enum(['install', 'load', 'interactive', 'render', 'structure']),
+  opencodeVersion: z.string(),
+  verifiedAt: z.string(),
+  logExcerpt: z.string().optional(),
+})
 
 function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['verification']): PluginEntry['verification'] {
   return {
@@ -51,10 +66,20 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, resultsDir, outPath] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
-  const results: VerifyResult[] = readdirSync(resultsDir!)
-    .filter(f => f.startsWith('results-'))
-    .flatMap(f => JSON.parse(readFileSync(join(resultsDir!, f), 'utf8')) as VerifyResult[])
-  const merged = mergeResults(index, results, process.env.RUN_URL)
+  const results: VerifyResult[] = []
+  let dropped = 0
+  for (const f of readdirSync(resultsDir!).filter(f => f.startsWith('results-'))) {
+    const raw: unknown = JSON.parse(readFileSync(join(resultsDir!, f), 'utf8'))
+    if (!Array.isArray(raw)) { console.warn(`${f}: not a result array — skipped`); dropped++; continue }
+    for (const r of raw) {
+      const p = VerifyResultFile.safeParse(r)
+      if (p.success) results.push(p.data as VerifyResult)
+      else { console.warn(`${f}: malformed result dropped (${JSON.stringify(r).slice(0, 120)})`); dropped++ }
+    }
+  }
+  // re-parse the merge output — a bad result must not produce an index the
+  // next CatalogIndex.parse (site build, plan) rejects wholesale
+  const merged = CatalogIndex.parse(mergeResults(index, results, process.env.RUN_URL))
   writeFileSync(outPath!, JSON.stringify(merged, null, 2))
-  console.log(`merged ${results.length} verify results`)
+  console.log(`merged ${results.length} verify results${dropped ? ` (${dropped} malformed dropped)` : ''}`)
 }

@@ -4,12 +4,21 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { verifyPackage, coerceTarget, type ExecFn } from '../pipeline/verify/verify.ts'
+import { verifyPackage, coerceTarget, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
-import { planTargets, verifyTargetOf, shard } from '../pipeline/verify/plan.ts'
+import { planTargets, verifyTargetOf, verifyPartsOf, shard } from '../pipeline/verify/plan.ts'
+import { VerifyResultFile } from '../pipeline/verify/merge.ts'
 import { judgeTuiPane } from '../pipeline/verify/tui.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'p', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
@@ -40,7 +49,7 @@ describe('verifyPackage pinning', () => {
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'pkg@2.3.4' }, state: { status: 'active' } }]))
-    const r = await verifyPackage('pkg', { version: '2.3.4', home, execFn: fake })
+    const r = await verifyPackage('pkg', { version: '2.3.4', home, execFn: fake, spawnFn: deadSpawn })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg@2.3.4')).toBe(true)
     expect(r.version).toBe('2.3.4')
     expect(r.status).toBe('verified')
@@ -54,7 +63,7 @@ describe('verifyPackage pinning', () => {
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'pkg' }, state: { status: 'active' } }]))
-    const r = await verifyPackage('pkg', { home, execFn: fake })
+    const r = await verifyPackage('pkg', { home, execFn: fake, spawnFn: deadSpawn })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg')).toBe(true)
     expect(r.version).toBeUndefined()
   })
@@ -120,11 +129,21 @@ describe('verify/plan', () => {
       pendingUpdate: { version: '1.1.0', capabilities: caps(), verification: verf('unverified'), features: ['server', 'gui'], heldAt: 't' },
     })
     const t = planTargets(idx([e]))
-    expect(t).toEqual([{ name: 'p', version: '1.1.0', features: ['server', 'gui'] }])
+    expect(t).toEqual([{ name: 'p', version: '1.1.0', features: ['server', 'gui'], parts: ['plugin'] }])
   })
   it('targets latestVersion for pending new entries', () => {
     const e = entry({ approval: 'pending', latestVersion: '2.0.0', verification: verf('unverified') })
-    expect(planTargets(idx([e]))).toEqual([{ name: 'p', version: '2.0.0' }])
+    expect(planTargets(idx([e]))).toEqual([{ name: 'p', version: '2.0.0', parts: ['plugin'] }])
+  })
+  it('skill-only npm entries queue with parts [skill]; plugin-less skill-less entries stay out', () => {
+    const skill = entry({ name: 'sk', type: 'skill', contains: ['skill'], verification: verf('unverified') })
+    const dual = entry({ name: 'du', contains: ['plugin', 'skill'], verification: verf('unverified') })
+    const orphan = entry({ name: 'or', contains: ['command'], verification: verf('unverified') })
+    const legacySkill = entry({ name: 'ls', type: 'skill', verification: verf('unverified') })
+    const got = planTargets(idx([dual, legacySkill, orphan, skill]))   // index.plugins is name-asc
+    expect(got.map(t => [t.name, t.parts])).toEqual([
+      ['du', ['plugin', 'skill']], ['ls', ['skill']], ['sk', ['skill']],
+    ])
   })
   it('skips verified, flagged, and version-less entries', () => {
     const verified = entry({ name: 'a', verification: verf('verified') })
@@ -160,7 +179,7 @@ describe('verify/plan', () => {
       pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 2 }, heldAt: 't' },
     })
     // display slot verified, held slot failed-once-more-eligible → targets the held version
-    expect(planTargets(idx([e]), 48, false, now)).toEqual([{ name: 'p', version: '2.0.0' }])
+    expect(planTargets(idx([e]), 48, false, now)).toEqual([{ name: 'p', version: '2.0.0', parts: ['plugin'] }])
   })
   it('held flagged version is skipped (flag lives on pendingUpdate.capabilities)', () => {
     const e = entry({
@@ -197,8 +216,21 @@ describe('verify/plan', () => {
     })
     expect(verifyTargetOf(e)).toEqual({ version: '2.0.0', unverified: true, flagged: false, features: ['tui'] })
   })
-  it('shard chunks by size', () => {
-    expect(shard([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
+  it('shard spreads items across buckets (greedy balance, deterministic)', () => {
+    expect(shard([1, 2, 3, 4, 5], 2)).toEqual([[1, 4], [2, 5], [3]])
+    expect(shard([], 8)).toEqual([])
+  })
+  it('weighted shard balances heavy targets instead of headcount', () => {
+    // two gui-heavy (w=3 each) + four light (w=1) targets, size 4 → 2 shards.
+    // Headcount slicing would put both heavies (list head) in one shard.
+    const ts = ['a', 'b', 'c', 'd', 'e', 'f']
+    const w = (t: string) => (t === 'a' || t === 'b' ? 3 : 1)
+    const got = shard(ts, 4, w)
+    expect(got).toHaveLength(2)
+    // heavies land on different shards; both buckets carry ~equal total weight
+    expect(got.some(s => s.includes('a') && s.includes('b'))).toBe(false)
+    const ws = got.map(s => s.reduce((n, t) => n + w(t), 0))
+    expect(Math.abs(ws[0]! - ws[1]!)).toBeLessThanOrEqual(1)
   })
 })
 
@@ -347,6 +379,100 @@ describe('gui harness', () => {
   })
 })
 
+describe('skill structure check (skill-only + dual-nature parts)', () => {
+  const vHome = () => mkdtempSync(join(tmpdir(), 'vh3-'))
+  const SKILL = '---\nname: test-skill\ndescription: does things\n---\nbody text'
+  const fakeSkillOs = (opts: { body?: string; list?: string; packErr?: boolean; calls?: string[][] } = {}) =>
+    (async (cmd: string, args: string[]) => {
+      opts.calls?.push([cmd, ...args])
+      if (args.includes('--version')) return { stdout: 'opencode v2.2.5', stderr: '' }
+      if (cmd === 'npm' && args[0] === 'pack') {
+        if (opts.packErr) throw Object.assign(new Error('boom'), { stderr: 'npm ERR! 404' })
+        return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
+      }
+      if (cmd === 'tar' && args[0] === 'tzf')
+        return { stdout: opts.list ?? 'package/package.json\npackage/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf')
+        return { stdout: opts.body ?? SKILL, stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+
+  it('verifyPartsOf normalizes contains → parts', () => {
+    expect(verifyPartsOf(entry({ contains: ['skill'] }))).toEqual(['skill'])
+    expect(verifyPartsOf(entry({ type: 'skill' }))).toEqual(['skill'])     // declared skill, no parts
+    expect(verifyPartsOf(entry({}))).toEqual(['plugin'])                    // legacy
+    expect(verifyPartsOf(entry({ contains: ['plugin', 'skill'] }))).toEqual(['plugin', 'skill'])
+  })
+
+  it('skill-only parts → structure check only; plugin add/serve never run', async () => {
+    const calls: string[][] = []
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: vHome(), execFn: fakeSkillOs({ calls }), spawnFn: deadSpawn })
+    expect(r.status).toBe('verified')
+    expect(r.level).toBe('structure')
+    expect(calls.some(a => a[0] === 'npm' && a[1] === 'pack' && a[2] === 'sk@1.0.0')).toBe(true)
+    expect(calls.some(a => a.includes('plugin') || a.includes('serve'))).toBe(false)
+  })
+
+  it('no SKILL.md in tarball → failed/structure with reason', async () => {
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: vHome(), execFn: fakeSkillOs({ list: 'package/package.json\npackage/index.js\n' }), spawnFn: deadSpawn })
+    expect(r).toMatchObject({ status: 'failed', level: 'structure' })
+    expect(r.logExcerpt).toContain('no SKILL.md')
+  })
+
+  it('SKILL.md without frontmatter name → failed/structure', async () => {
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: vHome(), execFn: fakeSkillOs({ body: '# just markdown\nno frontmatter here' }), spawnFn: deadSpawn })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain('frontmatter')
+  })
+
+  it('npm pack failure → failed/structure (version gone = not installable)', async () => {
+    const r = await verifyPackage('sk', { version: '9.9.9', parts: ['skill'],
+      home: vHome(), execFn: fakeSkillOs({ packErr: true }), spawnFn: deadSpawn })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('structure')
+    expect(r.logExcerpt).toContain('404')
+  })
+
+  it('nested skills/<x>/SKILL.md layout also passes', async () => {
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: vHome(), execFn: fakeSkillOs({ list: 'package/package.json\npackage/skills/foo/SKILL.md\n' }), spawnFn: deadSpawn })
+    expect(r.status).toBe('verified')
+  })
+
+  it('dual-nature: plugin passes load AND skill payload checked → verified', async () => {
+    const calls: string[][] = []
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'du@1.0.0' }, state: { status: 'active' } }]))
+    const r = await verifyPackage('du', { version: '1.0.0', parts: ['plugin', 'skill'],
+      home, execFn: fakeSkillOs({ calls }), spawnFn: deadSpawn })
+    expect(r.status).toBe('verified')
+    expect(calls.some(a => a.includes('add') && a.join(' ').includes('du@1.0.0'))).toBe(true)
+    expect(calls.some(a => a[0] === 'npm' && a[1] === 'pack')).toBe(true)
+  })
+
+  it('dual-nature: plugin ok but skill payload broken → failed at passed level', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'du@1.0.0' }, state: { status: 'active' } }]))
+    const r = await verifyPackage('du', { version: '1.0.0', parts: ['plugin', 'skill'],
+      home, execFn: fakeSkillOs({ list: 'package/index.js\n' }), spawnFn: deadSpawn })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('skill payload failed')
+  })
+
+  it('structure-level result rows pass the merge artifact boundary', () => {
+    expect(VerifyResultFile.safeParse({
+      name: 's', version: '1', status: 'verified', level: 'structure',
+      opencodeVersion: '2.2.5', verifiedAt: 't',
+    }).success).toBe(true)
+  })
+})
+
 describe('verifyShard', () => {
   it('a harness-failing target records failed + flushes results incrementally', async () => {
     const { verifyShard } = await import('../pipeline/verify/verify.ts')
@@ -358,7 +484,7 @@ describe('verifyShard', () => {
     const notDir = join(home, 'afile')
     writeFileSync(notDir, 'x')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
-    const results = await verifyShard(['a', 'b'], out, { home: notDir, execFn: fake })
+    const results = await verifyShard(['a', 'b'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
     expect(results).toHaveLength(2)
     expect(results.every(r => r.status === 'failed')).toBe(true)
     expect(results[0]!.logExcerpt).toContain('harness error')

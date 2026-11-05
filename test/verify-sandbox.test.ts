@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apiLoaded, apiFailed, apiPluginState, verifyPackage, verifyShard, type ExecFn } from '../pipeline/verify/verify.ts'
+import { apiLoaded, apiFailed, apiPluginState, verifyPackage, verifyShard, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
 
 const API = (target: string, status = 'active') =>
@@ -57,31 +57,67 @@ describe('apiPluginState / apiFailed (V-4)', () => {
   })
 })
 
+interface Rec { cmd: string; args: string[] }
+
+/** Fake serve spawn — emits the boot lines the harness parses, then idles.
+ *  Real `serve` output is piped runner-side now (never file-mediated through
+ *  the nobody uid — the pre-plant/interval-rewrite forge hole this closed). */
+const serveSpawn = (calls: Rec[], lines = 'server listening on http://127.0.0.1:4567\nserver password pw\n'): SpawnFn =>
+  ((cmd: string, args: string[]) => {
+    calls.push({ cmd, args })
+    return {
+      stdout: { on: (_e: 'data', cb: (d: unknown) => void) => { cb(lines) } },
+      stderr: { on: () => {} },
+      on: () => {},
+      kill: () => {},
+    }
+  }) as unknown as SpawnFn
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (CI/dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
 describe('verifyPackage sandboxed (sandboxUser)', () => {
-  interface Rec { cmd: string; args: string[] }
-  /** Fake exec that plays the OS: mkdir actually mkdirs, the boot sh -c writes
-   *  plugins.json like the real curl loop would, everything else succeeds. */
-  const fakeOs = (home: string, calls: Rec[], opts: { api?: string } = {}) =>
+  /** Fake exec that plays the OS: mkdir actually mkdirs, the runner-side curl
+   *  writes plugins.json to the -o target (a runner-owned path under home),
+   *  everything else succeeds. */
+  const fakeOs = (calls: Rec[], opts: { api?: string } = {}) =>
     (async (cmd: string, args: string[]) => {
       calls.push({ cmd, args })
       if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
-      if (cmd.endsWith('sb.sh') && args.includes('-c'))
-        writeFileSync(join(home, 'u', 'plugins.json'), opts.api ?? API('pkg'))
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, opts.api ?? API('pkg'))
+      }
       return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
     }) as unknown as ExecFn
 
   it('routes every untrusted command through the nobody wrapper', async () => {
     const home = mkdtempSync(join(tmpdir(), 'sb-'))
     const calls: Rec[] = []
-    const r = await verifyPackage('pkg', { version: '1.0.0', home, sandboxUser: 'nobody', execFn: fakeOs(home, calls) })
+    const r = await verifyPackage('pkg', { version: '1.0.0', home, sandboxUser: 'nobody',
+      execFn: fakeOs(calls), spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
-    // sudo -n -u nobody mkdir + sudo -n chmod happened
+    // sudo -n -u nobody mkdir + chmod + pkill sweep happened
     expect(calls.some(c => c.cmd === 'sudo' && c.args.slice(0, 3).join(' ') === '-n -u nobody')).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args[1] === 'chmod')).toBe(true)
-    // opencode/sh/env all went through <home>/sb.sh — never invoked directly
-    const untrusted = calls.filter(c => c.cmd !== 'sudo')
+    expect(calls.some(c => c.cmd === 'sudo' && c.args.includes('pkill'))).toBe(true)
+    // serve spawned through the wrapper with the binary restored as argv[0]
+    expect(calls.some(c => c.cmd.endsWith('sb.sh') && c.args[0] === 'opencode' && c.args[1] === 'serve')).toBe(true)
+    // plugin-executing commands (opencode/sh/env/npx/tsx) went through <home>/sb.sh;
+    // runner-side harness calls (curl, the version probe) legitimately didn't
+    const untrusted = calls.filter(c => c.cmd !== 'sudo' && c.cmd !== 'curl')
     expect(untrusted.length).toBeGreaterThan(0)
     expect(untrusted.every(c => c.cmd.endsWith('sb.sh'))).toBe(true)
+    // the api snapshot landed under runner-owned home — NOT the nobody-writable uh
+    const apiWrites = calls.filter(c => c.cmd === 'curl').flatMap(c => {
+      const o = c.args.indexOf('-o'); return o >= 0 ? [c.args[o + 1]!] : []
+    }).filter(p => p !== '/dev/null')
+    expect(apiWrites).toEqual([join(home, 'plugins.json')])
     // plugin add spec travelled via: env … opencode plugin add pkg@1.0.0
     const add = calls.find(c => c.args.includes('add'))
     expect(add!.args.join(' ')).toContain('opencode plugin add pkg@1.0.0')
@@ -91,10 +127,37 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     expect(wrapper).toContain(`'HOME=${join(home, 'u')}'`)
   })
 
+  it('a forged plugins.json inside the nobody home is NOT read as evidence (V-A)', async () => {
+    // the whole point of the runner-side restructure: plugin code could plant
+    // or rewrite <uh>/plugins.json — the verdict must come only from the
+    // runner-owned snapshot curl actually fetched
+    const home = mkdtempSync(join(tmpdir(), 'sb-'))
+    const calls: Rec[] = []
+    const uh = join(home, 'u')
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args })
+      if (cmd === 'sudo' && args.includes('mkdir')) {
+        mkdirSync(uh, { recursive: true })
+        // plugin pre-plants a forged "active" listing inside its own home
+        writeFileSync(join(uh, 'plugins.json'), API('pkg', 'active'))
+      }
+      // real curl fetch reports the plugin FAILED — the honest state
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg', 'failed'))
+      }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake, spawnFn: serveSpawn(calls) })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('serve reports the plugin failed to load')
+  })
+
   it('writes the dummy provider config by base64 through the sandbox', async () => {
     const home = mkdtempSync(join(tmpdir(), 'sb-'))
     const calls: Rec[] = []
-    await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fakeOs(home, calls) })
+    await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fakeOs(calls), spawnFn: serveSpawn(calls) })
     const wr = calls.find(c => c.args.some(a => a.includes('base64 -d')))
     expect(wr).toBeTruthy()
     const b64 = wr!.args.join(' ').match(/printf %s '([A-Za-z0-9+/=]+)'/)![1]!
@@ -115,12 +178,16 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
         writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui-experimental': './g.js' } }))
         writeFileSync(join(dir, 'g.js'), 'module.exports={}')
       }
-      if (cmd.endsWith('sb.sh') && args.includes('-c')) writeFileSync(join(uh, 'plugins.json'), API('pkg'))
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg'))
+      }
       if (cmd.endsWith('sb.sh') && args.includes('tsx'))
         return { stdout: '{"ok":true,"rendered":1}', stderr: '' }
       return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
     }) as unknown as ExecFn
-    const r = await verifyPackage('pkg', { version: '1.0.0', features: ['gui'], home, sandboxUser: 'nobody', execFn: fake })
+    const r = await verifyPackage('pkg', { version: '1.0.0', features: ['gui'], home, sandboxUser: 'nobody',
+      execFn: fake, spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
     // wrapper shape: sb.sh env npx tsx <gui.ts> <bundle>
@@ -131,7 +198,9 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
 
   it('gui subprocess failing → failed/render with the subprocess error', async () => {
     const home = mkdtempSync(join(tmpdir(), 'sb-'))
+    const calls: Rec[] = []
     const fake = (async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args })
       const uh = join(home, 'u')
       if (cmd === 'sudo' && args.includes('mkdir')) {
         mkdirSync(uh, { recursive: true })
@@ -140,11 +209,15 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
         writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui-experimental': './g.js' } }))
         writeFileSync(join(dir, 'g.js'), 'module.exports={}')
       }
-      if (cmd.endsWith('sb.sh') && args.includes('-c')) writeFileSync(join(uh, 'plugins.json'), API('pkg'))
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg'))
+      }
       if (cmd.endsWith('sb.sh') && args.includes('tsx')) throw new Error('tsx crashed')
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const r = await verifyPackage('pkg', { version: '1.0.0', features: ['gui'], home, sandboxUser: 'nobody', execFn: fake })
+    const r = await verifyPackage('pkg', { version: '1.0.0', features: ['gui'], home, sandboxUser: 'nobody',
+      execFn: fake, spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('render')
     expect(r.logExcerpt).toContain('gui subprocess')
@@ -165,11 +238,14 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       if (cmd.endsWith('sb.sh') && args.includes('-c')) {
         const m = args.join(' ').match(/base64 -d > '([^']+)'/)
         if (m) writeFileSync(m[1]!, Buffer.from(args.join(' ').match(/printf %s '([A-Za-z0-9+/=]+)'/)![1]!, 'base64').toString('utf8'))
-        else writeFileSync(join(uh, 'plugins.json'), API('pkg'))
+      }
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg'))
       }
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake })
+    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake, spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     const cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as { plugins?: string[]; model?: string }
     expect(cfg.plugins).toEqual(['other@1.0.0'])
@@ -183,12 +259,15 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       calls.push({ cmd, args })
       const uh = join(home, 'u')
       if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(uh, { recursive: true })
-      if (cmd.endsWith('sb.sh') && args.includes('-c')) writeFileSync(join(uh, 'plugins.json'), API('pkg'))
+      if (cmd === 'curl') {
+        const o = args.indexOf('-o')
+        if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, API('pkg'))
+      }
       if (cmd === 'tmux' && args[0] === 'capture-pane') return { stdout: 'x'.repeat(60), stderr: '' }
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
     const r = await verifyPackage('pkg', {
-      home, sandboxUser: 'nobody', execFn: fake, features: ['tui'], tuiOpts: { settleMs: 1 },
+      home, sandboxUser: 'nobody', execFn: fake, spawnFn: serveSpawn(calls), features: ['tui'], tuiOpts: { settleMs: 1 },
     })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
@@ -204,7 +283,9 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
       return { stdout: 'x', stderr: '' }
     }) as unknown as ExecFn
-    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake })
+    // serve emits nothing → no port → no curl → no snapshot → honest failure
+    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake,
+      spawnFn: serveSpawn(calls, ''), bootWaitMs: 20 })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
   })
@@ -220,7 +301,7 @@ describe('verifyShard sandbox probing', () => {
       if (cmd === 'sudo' && args.includes('mkdir')) mkdirSync(args.at(-1)!, { recursive: true })
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake })
+    const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn })
     expect(results).toHaveLength(1)
     expect(calls.some(c => c.endsWith('sb.sh'))).toBe(true)
   })
@@ -232,7 +313,7 @@ describe('verifyShard sandbox probing', () => {
     writeFileSync(notDir, 'x')
     const fake = (async () => ({ stdout: '', stderr: '' })) as unknown as ExecFn
     const results = await verifyShard([{ name: 'p', version: '1.2.3', features: ['server'] }], out,
-      { home: notDir, execFn: fake })
+      { home: notDir, execFn: fake, spawnFn: deadSpawn })
     expect(results[0]).toMatchObject({ name: 'p', version: '1.2.3', status: 'failed' })
   })
 
@@ -245,11 +326,46 @@ describe('verifyShard sandbox probing', () => {
       if (cmd === 'sudo') throw new Error('sudo: a password is required')
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake })
+    const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn })
     expect(results).toHaveLength(1)
     // degraded: raw commands, no sb.sh wrapper anywhere
     expect(calls.some(c => c.endsWith('sb.sh'))).toBe(false)
     expect(calls).toContain('opencode')
+  })
+})
+
+describe('shard-level hoists and boundaries', () => {
+  it('ocVersion is probed once per shard, not per target', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ocv-'))
+    const calls: string[][] = []
+    const fake = (async (_c: string, args: string[]) => {
+      calls.push(args)
+      return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
+    }) as unknown as ExecFn
+    const results = await verifyShard(['a', 'b', 'c'], join(home, 'r.json'), { execFn: fake, spawnFn: deadSpawn })
+    expect(results).toHaveLength(3)
+    expect(calls.filter(a => a[0] === '--version')).toHaveLength(1)
+    expect(results.every(r => r.opencodeVersion === '2.2.5')).toBe(true)
+  })
+
+  it('VerifyResultFile drops malformed artifact rows at the merge boundary', async () => {
+    const { VerifyResultFile } = await import('../pipeline/verify/merge.ts')
+    const ok = { name: 'p', status: 'verified', level: 'load', opencodeVersion: 'x', verifiedAt: 't' }
+    expect(VerifyResultFile.safeParse(ok).success).toBe(true)
+    // the poison case: a status string that would hard-fail CatalogIndex.parse
+    // downstream if it ever reached verification.status
+    for (const bad of [
+      { ...ok, status: 'verified-ish' },
+      { ...ok, level: 'quantum' },
+      { ...ok, verifiedAt: 42 },
+      { name: 'p' },
+    ]) expect(VerifyResultFile.safeParse(bad).success).toBe(false)
+  })
+
+  it('verify.yml pins the same opencode version as OPENCODE_VERSION (V-H)', async () => {
+    const { OPENCODE_VERSION } = await import('../pipeline/publish/merge.ts')
+    const wf = readFileSync(new URL('../.github/workflows/verify.yml', import.meta.url), 'utf8')
+    expect(wf).toContain(`@opencode/cli@${OPENCODE_VERSION}`)
   })
 })
 

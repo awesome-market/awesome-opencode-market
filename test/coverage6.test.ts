@@ -12,7 +12,7 @@ import { main as digestMain } from '../pipeline/ai/digest.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
-import { verifyPackage } from '../pipeline/verify/verify.ts'
+import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, repoFileExists, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
@@ -31,6 +31,14 @@ import { buildSeedList, repoToNpm } from '../pipeline/discover/seed.ts'
 import { detailPage, buildSkillCatalog } from '../pipeline/site/build.ts'
 import { detectFeatures } from '../src/features.ts'
 import { backfill } from '../pipeline/backfill.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
@@ -397,14 +405,14 @@ describe('verifyPackage feature routes', () => {
       } })`)
   }
   it('tui feature: tmux survives → level interactive', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), features: ['tui'], tuiOpts: { settleMs: 1 } })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: deadSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
   })
   it('tui feature: session dies → failed/interactive', async () => {
     const r = await verifyPackage('pkg', {
       home: home(), features: ['tui'], tuiOpts: { settleMs: 1 },
-      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }),
+      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: deadSpawn,
     })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('interactive')
@@ -412,12 +420,12 @@ describe('verifyPackage feature routes', () => {
   it('gui feature: bundle renders → level render', async () => {
     const h = home()
     guiFixture(h)
-    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
   })
   it('gui feature: bundle dir missing → failed/render', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('render')
   })
@@ -723,15 +731,24 @@ describe('run.ts uncovered arms', () => {
     expect(g.source.repoId).toBe(777)
   })
 
-  it('repo tree with .opencode/skills path → contains:[skill]; rate-limited meta tolerated', async () => {
-    const tgz = mkTgz()
+  it('skill payload in the tarball → contains:[skill]; rate-limited meta tolerated', async () => {
+    // install-truth: 'skill' must ship in the published tarball — repo-tree
+    // evidence alone doesn't count (V-P). Build a tarball carrying the
+    // .opencode/skills layout rather than relying on the repo-tree mock.
+    const sd = tmp('rt-skill-')
+    mkdirSync(join(sd, 'pkg', '.opencode', 'skills', 'x'), { recursive: true })
+    writeFileSync(join(sd, 'pkg', 'package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+    writeFileSync(join(sd, 'pkg', '.opencode', 'skills', 'x', 'SKILL.md'), '---\nname: x\n---\n')
+    execFileSync('tar', ['-czf', join(sd, 'p.tgz'), '-C', sd, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    const tgz = readFileSync(join(sd, 'p.tgz'))
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('api.github.com') && url.includes('/git/trees/')) {
-        return new Response(JSON.stringify({ tree: [{ path: '.opencode/skills/x/SKILL.md' }] }))
-      }
       if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', default_branch: 'main' }))
-      return mkFetch(tgz)(input)
+      return mkFetch(tgz, {
+        // mkFetch's packument ships dist:{} — a tarball URL is required or the
+        // scan (and with it the skill file list) never happens
+        'registry.npmjs.org/good-pkg': new Response(packument('good-pkg', { dist: { tarball: 'https://x/t.tgz' } })),
+      })(input)
     }) as typeof fetch
     const out = await run({ outPath: join(tmp('rh-'), 'i.json'), fetchFn: f, now: 't' })
     expect(out.plugins[0]!.contains).toContain('skill')
@@ -923,7 +940,7 @@ describe('verifyShard + writeDummyProvider arms', () => {
       calls.push(args)
       return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
     }) as never
-    const rs = await verifyShard(['p'], join(d, 'res.json'), { execFn: fake })
+    const rs = await verifyShard(['p'], join(d, 'res.json'), { execFn: fake, spawnFn: deadSpawn })
     // execFn is shared, but home is mkdtemp — the log above isn't read here;
     // assert the shard wrote results for the bare target
     expect(rs).toHaveLength(1)

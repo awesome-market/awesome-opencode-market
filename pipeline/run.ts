@@ -361,9 +361,13 @@ export async function run(opts: RunOptions = {}) {
       if (treeRes?.paths && treeRes.truncated)
         console.warn(`repo tree truncated for ${repo} — deep .opencode/skills probes may miss`)
       // skills can ship in the published tarball without being in the repo tree
-      // (generated/export-subset artifacts) — scan files are the fuller signal
-      const hasSkill = (!!treeRes?.paths && hasSkillPath(treeRes.paths))
-        || hasSkillPath(new Set(scanFiles.map(f => f.replace(/^package\//, ''))))
+      // (generated/export-subset artifacts) — scan files are the fuller signal.
+      // contains must claim what USERS CAN INSTALL: for npm entries that's the
+      // tarball, so repo-tree-only skills don't count — a SKILL.md the codeload
+      // tarball lacks is an unshipped repo file, and a 'skill' part on it makes
+      // installSkill extract nothing (verify's structure check then fails it
+      // correctly, but the claim was wrong upstream).
+      const hasSkill = hasSkillPath(new Set(scanFiles.map(f => f.replace(/^package\//, ''))))
       const marketMeta = repo ? await fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
       // npm↔repo correspondence: the repo's own package.json should name this
       // package. A positive mismatch (claiming an unrelated popular repo to

@@ -44,6 +44,14 @@ export function verifyQueued(e: PluginEntry, now = new Date()): boolean {
   return t.unverified || retryable(ver, now)
 }
 
+/** The installable parts a verify run must prove, normalized from `contains`.
+ *  Legacy entries predate the field — plugin-shaped unless the submission
+ *  declared itself a skill (type 'skill' + no parts), whose payload is
+ *  SKILL.md rather than a loadable plugin artifact. */
+export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains']> {
+  return e.contains?.length ? e.contains : [e.type === 'skill' ? 'skill' : 'plugin']
+}
+
 export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date()): VerifyTarget[] {
   const subs: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
@@ -53,7 +61,15 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
     // Flagged stays excluded in every mode: red-flagged code never executes here.
     if (!t.version || t.flagged || (!retest && !verifyQueued(p, now))) continue
-    const target: VerifyTarget = { name: p.name, version: t.version, ...(t.features.length ? { features: t.features } : {}) }
+    const parts = verifyPartsOf(p)
+    // no plugin artifact AND no skill payload — nothing exists to honestly
+    // verify (mcp/command/agent entries have no structure check yet)
+    if (!parts.includes('plugin') && !parts.includes('skill')) continue
+    const target: VerifyTarget = {
+      name: p.name, version: t.version,
+      ...(t.features.length ? { features: t.features } : {}),
+      parts,
+    }
     // submission-originated entries verify first — a human asked for them.
     // index.plugins is name-asc, so each tier stays alphabetical; backlog
     // drains over as many runs as the cap requires.
@@ -62,21 +78,41 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
   return [...subs, ...rest].slice(0, cap)
 }
 
-export function shard<T>(items: T[], size: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
+/** Greedy weight-balanced sharding: each target lands on the currently
+ *  lightest shard. Sequential slicing clustered the submission-priority tier
+ *  (and any run of feature-heavy targets) into the first shards, so a heavy
+ *  shard could hit the 35min timeout while others sat idle. `weight` lets the
+ *  caller charge feature-routed targets their real minutes; ties and empty
+ *  items break to the lowest index — deterministic for a given input. */
+export function shard<T>(items: T[], size: number, weight: (t: T) => number = () => 1): T[][] {
+  if (!items.length) return []
+  const n = Math.max(1, Math.ceil(items.length / size))
+  const out: { t: T[]; w: number }[] = Array.from({ length: n }, () => ({ t: [], w: 0 }))
+  for (const it of items) {
+    let best = 0
+    for (let i = 1; i < n; i++) if (out[i]!.w < out[best]!.w) best = i
+    out[best]!.t.push(it)
+    out[best]!.w += weight(it)
+  }
+  return out.filter(b => b.t.length).map(b => b.t)
 }
 
-/* v8 ignore next 13 */
+/* v8 ignore next 16 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, outDir] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
   const cap = Number(process.env.VERIFY_CAP) || 48
   const targets = planTargets(index, cap, process.argv.includes('--retest'))
-  const shards = shard(targets, 12)
+  // 8/shard: post-V-4 worst case ≈ 8 × ~3.7min ≈ 30min — fits the 35min job
+  // timeout with margin (the old 12/shard math predates the widened windows).
+  // Feature-routed targets cost extra stages — charge them so shards balance
+  // by minutes, not headcount.
+  const shards = shard(targets, 8, t => 1 + (t.features?.length ?? 0))
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))
+  // matrix list goes to a file, not stdout-position — a future log line can't
+  // silently corrupt the workflow's shard list (was `tail -1` scraping)
+  writeFileSync(join(outDir!, 'plan-matrix.json'), JSON.stringify(shards.map((_, i) => i)))
   console.log(`plan: ${targets.length} targets, ${shards.length} shards`)
   console.log(JSON.stringify(shards.map((_, i) => i)))
 }

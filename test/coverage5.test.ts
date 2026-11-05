@@ -6,11 +6,19 @@ import { filterByStars, repoToNpm, buildSeedList } from '../pipeline/discover/se
 import { fetchRepoMeta, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchDownloads30d } from '../pipeline/fetch/npm.ts'
 import { reviewPackage, verdict, renderReview } from '../pipeline/review.ts'
-import { verifyPackage } from '../pipeline/verify/verify.ts'
+import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { versionCmp } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 const mkRes = (body: unknown, status = 200) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })
@@ -87,7 +95,7 @@ describe('fetch/npm.ts + review.ts branches', () => {
 describe('verify.ts exec branches', () => {
   const execAllFail = (async () => { throw new Error('boom') }) as never
   it('plugin add fails → failed/install, ocVersion catch → unknown', async () => {
-    const r = await verifyPackage('x', { execFn: execAllFail })
+    const r = await verifyPackage('x', { execFn: execAllFail, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('install')
     expect(r.opencodeVersion).toBe('unknown')
