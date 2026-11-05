@@ -773,10 +773,12 @@ export default Plugin.define({
         try {
           const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
           if (idx) setData(idx)
+          // honest refresh result — a manifest-same hit isn't "refreshed N".
+          // read BEFORE installed(): that call refetches the index and would
+          // stamp 'fresh' over this refresh's real outcome
+          const oc = await safe.indexOutcome?.().catch(() => '') as string
           const fresh = await safe.installed?.().catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-          // honest refresh result — a manifest-same hit isn't "refreshed N"
-          const oc = await safe.indexOutcome?.().catch(() => '') as string
           setRefText(oc === 'fresh'
             ? `${t('dataFresh')}，${new Date().toLocaleTimeString()}`
             : `${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${new Date().toLocaleTimeString()}`)
