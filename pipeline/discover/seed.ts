@@ -60,7 +60,7 @@ export async function buildSeedList(
   const names: string[] = []
   for (const { repo, branch } of starred) {
     const npm = await repoToNpm(repo, { ...opts, ...(branch ? { branch } : {}) })
-    names.push(npm ?? `github:${repo}`)
+    names.push(npm ?? `github:${repo.toLowerCase()}`)
   }
   return names
 }

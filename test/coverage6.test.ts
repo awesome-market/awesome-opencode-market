@@ -14,7 +14,7 @@ import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
 import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
-import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, repoFileExists, fetchMarketMeta } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
 import { run } from '../pipeline/run.ts'
 import { latestVerdicts, applyMatureVerdicts, vkey, akey } from '../pipeline/verdicts.ts'
@@ -514,16 +514,6 @@ describe('fetch/github uncovered arms', () => {
     expect(err.status).toBe('error')
     const noname = await fetchRepoPackageName('o/r', { fetchFn: (async () => res(200, { name: 42 })) as typeof fetch })
     expect(noname.pkgName).toBeNull()
-  })
-  it('repoFileExists: branch query param; !ok → false; throw → false', async () => {
-    let seen = ''
-    const f = (async (u: RequestInfo | URL) => { seen = String(u); return res(200) }) as typeof fetch
-    expect(await repoFileExists('o/r', 'SKILL.md', { branch: 'dev', fetchFn: f })).toBe(true)
-    expect(seen).toContain('?ref=dev')
-    const nf = await repoFileExists('o/r', 'x', { fetchFn: (async () => res(404)) as typeof fetch })
-    expect(nf).toBe(false)
-    const boom = await repoFileExists('o/r', 'x', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })
-    expect(boom).toBe(false)
   })
   it('fetchMarketMeta: bad category filtered; desc partial; empty → null; !ok → null', async () => {
     const f = (b: unknown, s = 200) => (async () => res(s, b)) as typeof fetch

@@ -179,7 +179,10 @@ export function renderRepoReview(r: RepoReview): string {
     `**${r.repo}** — GitHub 仓库${r.stars != null ? ` (${r.stars}★)` : ''}${r.pkgName ? `, package.json: \`${r.pkgName}\`` : ''}`,
     `Scanned commit: \`${r.resolvedSha ?? 'unknown'}\`${r.truncated ? ' (tree listing truncated — 深层路径可能漏检)' : ''}`,
     scanLine(r.scanned, r.scanError, r.findings.length, r.redFlags.length),
-    `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none — 缺少 opencode 专属信号（.opencode/ 目录、opencode.json 或 opencode-* topic），目录端同样会被证据门拒收'}`,
+    `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,
+    !r.evidenceOk
+      ? `### ⚠️ 证据不足\n缺少 opencode 专属信号（\`.opencode/\` 目录、\`opencode.json\` 或 \`opencode-*\` topic）——目录收录端同样会被证据门拒收，请确认这是 OpenCode 插件/技能仓库。`
+      : '',
     r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',
     r.scanned && r.findings.length ? fold('### Findings', r.findings) : (r.scanned ? '### Findings: none — this does not mean safe.' : ''),
   ]

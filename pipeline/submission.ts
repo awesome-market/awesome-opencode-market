@@ -49,7 +49,7 @@ const LANG_LINE = /^([a-z]{2,3}(?:-[A-Za-z]{2,8})?)\s*[:：]\s*(.+)$/
 
 export function parseSubmission(body: string): Submission {
   const map = sections(body)
-  let name = field(map, 'npm package name / npm 包名', 'npm 包名', 'package', 'npm package', 'npm package name', '包名')
+  let name = field(map, 'npm package name / npm 包名', 'npm 包名', 'npm 包名或 owner/repo', 'package', 'npm package', 'npm package name', '包名')
   if (name && !PKG_RE.test(name)) name = null
   // freeform fallback: first package-like token in the body
   if (!name) {
@@ -64,7 +64,8 @@ export function parseSubmission(body: string): Submission {
   }
   const repoRaw = field(map, 'GitHub repository / GitHub 仓库地址', 'GitHub 仓库地址', 'repo', 'repository', 'github', '仓库')
   const repoM = repoRaw?.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/) ?? body.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/)
-  const repo = repoM ? repoM[1]!.replace(/\.git$/, '').replace(/\/$/, '') : null
+  // canonical lowercase — repo identity must not split on typed/display casing
+  const repo = repoM ? repoM[1]!.replace(/\.git$/, '').replace(/\/$/, '').toLowerCase() : null
 
   // description is free text — keep the whole answer (newlines collapsed so a
   // catalog one-liner can't break layout), capped like every other seed field

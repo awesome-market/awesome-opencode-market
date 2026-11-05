@@ -21,6 +21,11 @@ export interface ScanResult {
 const TEXT_EXT = /\.(js|mjs|cjs|ts|mts|cts|json|md|txt|yml|yaml|sh|toml)$/i
 /** Benign media/doc assets — shipping these is normal, not a binary-blob signal. */
 const MEDIA_EXT = /\.(png|jpe?g|gif|ico|svg|webp|avif|woff2?|ttf|otf|eot|pdf|mp4|webm|mp3|wav)$/i
+/** Well-known runtime binary payloads — a wasm/native blob is common in real
+ *  plugins (tree-sitter, oniguruma, sqlite, esbuild). Still uninspectable, so
+ *  it stays a finding — just not a high-severity one (high → verification
+ *  skipped → every such release would need a human pass, FP-diluting the flag). */
+const KNOWN_BIN_EXT = /\.(wasm|node|dll|so|dylib|exe|bin|dat|so\.[0-9]+)$/i
 
 /** Zip-bomb guard: the fetch cap bounds the COMPRESSED tarball (64MB), not what
  *  it inflates to. A 64MB gzip can decompress to GBs — track cumulative bytes
@@ -76,7 +81,11 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
           if (skipBody) return
           const buf = Buffer.concat(chunks)
           if (isBinary(buf)) {
-            pushFinding({ rule: 'binary-blob', severity: 'high', file: path, detail: 'binary file in package' })
+            const known = KNOWN_BIN_EXT.test(path)
+            pushFinding({
+              rule: 'binary-blob', severity: known ? 'medium' : 'high', file: path,
+              detail: known ? 'binary payload of a known type — unscannable' : 'binary file in package',
+            })
             return
           }
           const text = TEXT_EXT.test(path) || isPkgJson(path) ? buf.toString('utf8') : null

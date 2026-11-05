@@ -483,7 +483,13 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   tarballOf?: (spec: string) => string | null | Promise<string | null>,
   cacheDir?: string,
   ghTarballOf: (repo: string, sha?: string | null) => string | null =
-    (repo, sha) => `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`)
+    // source.version is the scanned tree sha — validate the pin is hex
+    // before it reaches a URL: a malformed ref in a crafted index would
+    // otherwise fetch un-scanned bytes (client gitPinRef fails closed too)
+    (repo, sha) => {
+      if (sha != null && sha !== '' && !/^[0-9a-f]{7,64}$/.test(sha)) return null
+      return `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`
+    })
   : Promise<{ candidates: number; landed: number; degraded: boolean; entries: { name: string; version: string; files: string[] }[] }> {
   // injected impls (tests) own their scheme; the default is https-validated above
   const tbOf = tarballOf ?? npmTarballResolver()

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fetchRepoMeta, fetchMarketMeta, fetchRepoPackage, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoPackage } from '../pipeline/fetch/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
 import { run, replacementOf } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
@@ -85,14 +85,7 @@ describe('fetchRepoPackage (repo-root package.json)', () => {
   })
 })
 
-describe('repoFileExists + fetchPackument statuses', () => {
-  it('repoFileExists: ok→true, 404/500/throw→false', async () => {
-    const yes = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({})) as typeof fetch })
-    const no = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })
-    const err = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })
-    const thr = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })
-    expect([yes, no, err, thr]).toEqual([true, false, false, false])
-  })
+describe('fetchPackument statuses', () => {
   it('packument: 500 → error; exception → error; ok parses identity fields', async () => {
     expect((await fetchPackument('x', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })).status).toBe('error')
     expect((await fetchPackument('x', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })).status).toBe('error')

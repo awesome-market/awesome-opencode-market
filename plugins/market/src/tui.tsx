@@ -9,7 +9,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec, cleanSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission } from './hostx.js'
@@ -77,7 +77,18 @@ export default Plugin.define({
       const [searchOn, setSearchOn] = createSignal(!!pendingQuery)
       const [settingsSel, setSettingsSel] = createSignal(0)
       const [findingsOpen, setFindingsOpen] = createSignal(false)
-      const jobs = new Map<string, unknown>()
+      // per-entry cancellables — a dual install runs a plugin spawn AND a
+      // skill download concurrently, so each entry owns a SET of cancel fns
+      // ('C' fires them all). The old map held only the ChildProcess: skill
+      // installs were unguarded (double 'i' raced two tarballs) and 'C' could
+      // never reach a fetch.
+      const jobs = new Map<string, Set<() => void>>()
+      const jobTrack = (name: string, cancel: () => void): (() => void) => {
+        let s = jobs.get(name)
+        if (!s) jobs.set(name, s = new Set())
+        s.add(cancel)
+        return () => { s.delete(cancel); if (!s.size) jobs.delete(name) }
+      }
       let searchInput: { focus(): void; blur(): void } | undefined
 
       const log = (line: string) => {
@@ -99,11 +110,16 @@ export default Plugin.define({
               // dir-installed plugins — GUI maps them under their internal id
               const clean = String(p.id)
               map[clean] = 'local'; ids[clean] = clean
-            } else if ((p.source?.type === 'git' || p.source?.type === 'github') && p.source?.target) {
+            } else if (p.source && ((p.source.type as string) === 'git' || (p.source.type as string) === 'github')) {
               // git-spec installs — visible but never claimed catalog-verified
-              const clean = cleanSpec(String(p.source.target)) || String(p.source.target)
-              map[clean] = p.source.version ?? 'local'
-              if (p.id) ids[clean] = String(p.id)
+              // (SDK union lacks 'git'/'github' — widen to the runtime shape;
+              // the host does emit them)
+              const src = p.source as { target?: string; version?: string }
+              if (src.target) {
+                const clean = cleanSpec(String(src.target)) || String(src.target)
+                map[clean] = src.version ?? 'local'
+                if (p.id) ids[clean] = String(p.id)
+              }
             }
           }
         } catch { /* server list unavailable */ }
@@ -205,39 +221,21 @@ export default Plugin.define({
         }, 0)
       })
 
-      // resolves when the spawned `plugin add` (and any config rewrite) has
-      // fully settled — updateAll awaits it, so serialized sweeps can't race.
-      // Returns success so sweep counters report real failures, not just throws
-      const install = async (e: MarketEntry): Promise<boolean> => {
-        if (jobs.has(e.name)) { setStatus(t('installRunning')); return false }
-        const plan = installPlan(e)
-        log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
-        if (!plan.plugin) { if (plan.skill) return installSkill(e, plan); return false }
-        // dual-nature entries deliver BOTH parts — skill install runs async
-        // alongside the plugin spawn (independent surfaces)
-        const skillDone = plan.skill ? installSkill(e, plan) : Promise.resolve(true)
-        setStatus(tf('installingN', { name: e.name }))
-        const { spawn } = await import('node:child_process')
-        const ver = installed()[e.name]
-        // pin to the catalog-approved version — `plugin add` accepts name@ver
-        // and never silently resolves past what review allowed
+      // plugin half: `plugin add <pin>` + unconditional config dedupe.
+      // `plugin add` APPENDS rather than dedupes, and it can leave a stale
+      // same-name spec even on a "fresh" install (installed() lag, manual
+      // edits) — so dedupe runs after EVERY successful add, not just updates.
+      // Resolves when the spawn + config rewrite fully settled — updateAll's
+      // serial lane awaits it so config writes can't race.
+      const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<boolean> => {
         const pin = pinSpec(e)
         try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
-        const updating = !!(ver && hasUpdate(e, ver))
-        const afterAdd = async () => {
-          if (!updating) return
-          // `plugin add` appends rather than dedupes — rewrite config down to
-          // exactly the pinned spec so no stale/duplicate specs linger
-          const cfg = await configPath()
-          const d = await readJson(cfg)
-          const list = strArrayField(d, 'plugins')
-          d.plugins = dedupeToSpec(list, pin)
-          await writeJsonAtomic(cfg, d)
-        }
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
-        const pluginOk = await new Promise<boolean>(resolve => {
+        else setStatus(tf('installingN', { name: e.name }))
+        const { spawn } = await import('node:child_process')
+        return new Promise<boolean>(resolve => {
           const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
-          jobs.set(e.name, p)
+          const un = jobTrack(e.name, () => p.kill('SIGTERM'))
           // 90s ceiling — a wedged `plugin add` must not hold the dialog status
           // forever (GUI main already kills at 90s; the TUI had none)
           let timedOut = false
@@ -247,32 +245,45 @@ export default Plugin.define({
           const push = (d: Buffer) => setStatus(sanitize(String(d).trim()).split('\n').filter(Boolean).pop() ?? '')
           p.stdout?.on('data', push); p.stderr?.on('data', push)
           p.on('close', code => {
-            clearTimeout(kill); jobs.delete(e.name)
+            clearTimeout(kill); un()
             if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve(false) }
             else if (code === 0) {
-              void afterAdd().then(() => {
+              void (async () => {
+                try {
+                  const cfg = await configPath()
+                  const d = await readJson(cfg)
+                  const list = strArrayField(d, 'plugins')
+                  d.plugins = dedupeToSpec(list, pin)
+                  await writeJsonAtomic(cfg, d)
+                } catch (x) { setStatus(tf('updateFail', { err: String(x) })); resolve(false); return }
                 setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
                 void refreshInstalled(); resolve(true)
-              }).catch(x => { setStatus(tf('updateFail', { err: String(x) })); resolve(false) })
+              })()
             }
             else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve(false) }
           })
-          p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
+          p.on('error', x => { clearTimeout(kill); un(); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
         })
-        // dual-nature success needs BOTH parts; a failed skill half must not
-        // let updateAll count the entry as updated
-        return pluginOk && await skillDone
       }
+      // skill half: tarball fetch + installSkillTar. Tracked in jobs with an
+      // AbortController so 'C' can cancel the download (previously the fetch
+      // was untracked — double 'i' raced two installs, 'C' couldn't reach it).
       const installSkill = async (e: MarketEntry, plan: InstallPlan): Promise<boolean> => {
+        if (!plan.skill) return false
+        const ac = new AbortController()
+        let userCancel = false
+        const un = jobTrack(e.name, () => { userCancel = true; ac.abort() })
+        const timer = setTimeout(() => ac.abort(), 30_000)
         try {
           setStatus(tf('installingN', { name: e.name }))
           let url: string
           let integrity: string | null = null
           if (plan.skill === 'github') {
-            // repo skills pin to the resolved commit sha (source.version) —
-            // installed bytes equal what the pipeline reviewed; HEAD only as
-            // a fallback for pre-sha index data (no SRI exists for git archives)
-            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/${e.source?.version ?? 'HEAD'}`
+            // repo skills pin to the scanned tree sha (source.version) —
+            // installed bytes equal what the pipeline reviewed; gitPinRef
+            // fails closed on a malformed pin (crafted/custom index), HEAD
+            // only for pre-pin index data (no SRI exists for git archives)
+            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/${gitPinRef(e.source?.version)}`
           } else {
             // pin to the catalog-approved version — dist-tags.latest is the
             // pendingUpdate users are NOT allowed to get yet (hold semantics)
@@ -284,7 +295,7 @@ export default Plugin.define({
           }
           // zip-bomb guard: refuse before buffering the whole body; the
           // decompressed ceiling inside installSkillTar is the second wall
-          const tgz = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+          const tgz = await fetch(url, { signal: ac.signal })
           if (!tgz.ok) throw new Error(`tarball fetch failed: ${tgz.status}`)
           const cl = Number(tgz.headers.get('content-length') ?? 0)
           if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
@@ -299,7 +310,28 @@ export default Plugin.define({
           setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
           setStatus(`${e.name} ${t('installed')} (${msg})`)
           return true
-        } catch (x) { setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return false }
+        } catch (x) {
+          if (userCancel) { setStatus(t('cancelled')); return false }
+          setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return false
+        } finally { clearTimeout(timer); un() }
+      }
+      // per-half sync decision shared by the card action and updateAll:
+      // fresh install → every deliverable half; otherwise only halves that
+      // are installed AND outdated (missing halves aren't resurrected, and a
+      // current half never masks a stale sibling)
+      const halvesFor = (e: MarketEntry) => halvesToSync(e, halfState(e, installed(), store.skillVers))
+      const install = async (e: MarketEntry): Promise<boolean> => {
+        if (jobs.has(e.name)) { setStatus(t('installRunning')); return false }
+        const plan = installPlan(e)
+        const sync = halvesFor(e)
+        log(`install start ${e.name} plugin=${sync.plugin} skill=${sync.skill}`)
+        if (!sync.plugin && !sync.skill) { setStatus(t('allLatest')); return true }
+        setStatus(tf('installingN', { name: e.name }))
+        // halves run concurrently — plugin add mutates opencode.json, skill
+        // install writes the skills root; independent surfaces (GUI parity)
+        const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve(true)
+        const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve(true)
+        return (await pJob) && (await sJob)
       }
       const uninstall = (e: MarketEntry) =>
         openMenu(`${e.name} — ${t('confirmUninstall')}`, [
@@ -311,20 +343,31 @@ export default Plugin.define({
         // uninstall what is actually installed — a dual-nature entry can own
         // both a plugin spec and skill dirs. Check __skill_ keys directly:
         // skillInstalledVer also matches the PLUGIN key and would fire the
-        // skill-dir sweep on every pure plugin uninstall (deletes <name>-* dirs)
+        // skill-dir sweep on every pure plugin uninstall.
+        // The legs settle INDEPENDENTLY: a foreign (non-market) skill dir
+        // refusing deletion must not block the plugin-spec removal — the old
+        // early-return did exactly that.
         const sBase = `__skill_${skillId(e.name)}`
         const sBare = `__skill_${e.name.split('/').pop() ?? e.name}`
         const hasSkillDir = Object.keys(installed()).some(k => k === sBase || k === sBare || k.startsWith(`${sBase}-`) || k.startsWith(`${sBare}-`))
         const hasPlugin = !!installed()[e.name]
         const doSkill = hasSkillDir || (!hasPlugin && !!e.contains?.includes('skill'))
         const doPlugin = hasPlugin || (!hasSkillDir && !e.contains?.includes('skill'))
+        let skillErr: string | null = null
+        let pluginErr: string | null = null
         if (doSkill) {
-          try { await uninstallSkillDir(e.name, await globalSkillsRoot()) } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
-          const base = `__skill_${skillId(e.name)}`
-          const next = { ...installed() }
-          for (const k of Object.keys(next)) if (k === base || k.startsWith(`${base}-`)) delete next[k]
-          await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
-          setInstalled(next); setStatus(tf('removedN', { name: e.name }))
+          try {
+            await uninstallSkillDir(e.name, await globalSkillsRoot())
+            const base = `__skill_${skillId(e.name)}`
+            const bare = `__skill_${e.name.split('/').pop() ?? e.name}`
+            const next = { ...installed() }
+            // base AND bare prefixes — a non-colliding install lives at the
+            // bare basename dir, and its __skill_ key must go too (the old
+            // code only swept the namespaced prefix → phantom installed state)
+            for (const k of Object.keys(next)) if (k === base || k === bare || k.startsWith(`${base}-`) || k.startsWith(`${bare}-`)) delete next[k]
+            await mutate(d => { if (d.skillVers) delete d.skillVers[e.name] })
+            setInstalled(next)
+          } catch (x) { skillErr = String(x) }
         }
         if (doPlugin) {
           // rewrite config plugins[] directly — CLI `plugin remove` takes a
@@ -337,10 +380,20 @@ export default Plugin.define({
             const list = strArrayField(d, 'plugins')
             d.plugins = removeSpec(list, e.name, installedIds())
             await writeJsonAtomic(cfg, d)
-          } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
-          const next = { ...installed() }; delete next[e.name]
-          setInstalled(next); setStatus(tf('removedN', { name: e.name }))
+            const next = { ...installed() }; delete next[e.name]
+            setInstalled(next)
+          } catch (x) { pluginErr = String(x) }
         }
+        if (pluginErr) {
+          setStatus(tf('uninstallFail', { err: pluginErr + (skillErr ? ` · skill: ${skillErr}` : ''), key: 'u' }))
+        } else if (skillErr) {
+          // plugin leg gone but the skill dir was refused (foreign files) —
+          // say exactly what happened instead of a bare "removed"
+          setStatus(doPlugin ? tf('uninstallPartial', { name: e.name, err: skillErr }) : tf('uninstallFail', { err: skillErr, key: 'u' }))
+        } else if (doSkill || doPlugin) {
+          setStatus(tf('removedN', { name: e.name }))
+        }
+        void refreshInstalled()
       }
       const toggleFav = (e: MarketEntry) =>
         void mutate(d => { if (d.favorites[e.name]) delete d.favorites[e.name]; else d.favorites[e.name] = true })
@@ -470,11 +523,14 @@ export default Plugin.define({
       // github-kind entries carry no npm version — their marker is pushedAt
       const dispVer = (e: MarketEntry) => e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)
       const actionLabel = (e: MarketEntry) => {
-        const ver = verOf(e)
-        if (ver && !hasUpdate(e, ver)) return `✓ ${t('installed')}`
+        // per-half state — a current plugin half must not mask a stale skill
+        // half (and vice versa); the old merged-version check did exactly that
+        const hs = halfState(e, installed(), store.skillVers)
+        const ver = hs.ver
+        if (hs.anyOn && !hs.anyOut) return `✓ ${t('installed')}`
         // installed > approved = revert to the reviewed artifact — honest
         // label, not "update" (hold semantics)
-        if (ver) return `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${dispVer(e)}`
+        if (hs.anyOn) return `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${dispVer(e)}`
         // entries with no deliverable part show an inert label — a clickable
         // control that only errors is a trap (AGENTS: 好理解)
         if (!canInstall(e)) return t('noInstallTarget')
@@ -496,22 +552,55 @@ export default Plugin.define({
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
       const move = (d: number) => setSel(i => { const n = Math.max(0, Math.min(pool().length - 1, i + d)); growCap(n); return n })
       const updateAll = () => {
-        const targets = (idx()?.plugins ?? []).filter(e => { const v = verOf(e); return v && hasUpdate(e, v) })
-        if (!targets.length) { setStatus(t('allLatest')); return }
-        setStatus(tf('updateN', { n: targets.length }))
-        // sequential — concurrent `plugin add` + concurrent read-modify-write
-        // of opencode.json raced: two afterAdd dedupes based on the same stale
-        // read overwrote each other and lost specs (GUI is serial already)
+        // per-half targeting — only halves installed AND outdated; the old
+        // merged-version filter missed whichever half lagged behind
+        const items = (idx()?.plugins ?? [])
+          .map(e => {
+            const hs = halfState(e, installed(), store.skillVers)
+            if (!hs.anyOut) return null
+            const sync = halvesToSync(e, hs)
+            return sync.plugin || sync.skill ? { e, sync } : null
+          })
+          .filter((j): j is { e: MarketEntry; sync: { plugin: boolean; skill: boolean } } => !!j)
+        if (!items.length) { setStatus(t('allLatest')); return }
+        setStatus(tf('updateN', { n: items.length }))
+        // two serial LANES that overlap each other: plugin adds rewrite
+        // opencode.json (must serialize against each other — concurrent
+        // read-modify-write raced and lost specs), skill installs write the
+        // skills root (serialize for lift-collision checks). Tarball downloads
+        // no longer block config writes → roughly half the wall time on
+        // mixed sweeps. An entry fails if ANY of its attempted halves failed.
         void (async () => {
+          let done = 0
+          const total = items.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
+          const bump = () => setStatus(tf('updatingN', { n: ++done, total }))
+          const results = items.map(j => ({ ...j, pOk: undefined as boolean | undefined, sOk: undefined as boolean | undefined }))
+          const pluginLane = (async () => {
+            for (const j of results) if (j.sync.plugin) {
+              bump()
+              j.pOk = await installPluginHalf(j.e, true)
+            }
+          })()
+          const skillLane = (async () => {
+            for (const j of results) if (j.sync.skill) {
+              bump()
+              j.sOk = await installSkill(j.e, installPlan(j.e))
+            }
+          })()
+          await Promise.all([pluginLane, skillLane])
           let ok = 0, fail = 0
-          for (const e of targets) {
-            try { if (await install(e)) ok++; else fail++ } catch { fail++ }
-            setStatus(tf('updatingN', { n: ok + fail, total: targets.length }))
+          for (const j of results) {
+            const bad = (j.sync.plugin && j.pOk === false) || (j.sync.skill && j.sOk === false)
+            bad ? fail++ : ok++
           }
           setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
           void refreshInstalled()
         })()
       }
+      // passive "N updatable" count on the [U] button — the sweep used to be
+      // the only way to learn anything was outdated at all
+      const outdatedN = createMemo(() =>
+        (idx()?.plugins ?? []).filter(e => halfState(e, installed(), store.skillVers).anyOut).length)
 
       // dialogs run in the "modal" input mode — a plugin keymap layer must
       // target it explicitly or binds never dispatch (upstream btw.tsx pattern);
@@ -626,9 +715,11 @@ export default Plugin.define({
         // a cancel button; the TUI jobs map existed but had no trigger)
         if (k === 'C') {
           const e = detail() ?? pick()
-          const j = e && jobs.get(e.name)
-          if (j && typeof (j as { kill?: (s?: string) => void }).kill === 'function') {
-            (j as { kill: (s?: string) => void }).kill('SIGTERM')
+          const s = e && jobs.get(e.name)
+          if (s?.size) {
+            // fire every tracked cancellable — plugin spawn kill AND skill
+            // fetch abort (a dual install owns both)
+            for (const fn of [...s]) fn()
             jobs.delete(e.name); setStatus(t('cancelled'))
           }
           return
@@ -717,7 +808,9 @@ export default Plugin.define({
             </box>
             <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(descOf(e), descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
-            <text fg={theme.text.faint}>{categoriesOf(e).map(catLabel).join('  ')}</text>
+            {/* catalog-declared feature parts — same signal the GUI chips show;
+                without them a dual entry's plugin half was invisible on cards */}
+            <text fg={theme.text.faint}>{[categoriesOf(e).map(catLabel).join('  '), (e.features ?? []).join('·')].filter(Boolean).join('  ')}</text>
           </box>
         )
       }
@@ -728,12 +821,12 @@ export default Plugin.define({
           <box flexDirection="column" flexShrink={0}>
             <box flexDirection="row" paddingLeft={1} paddingRight={1}>
               <text fg={theme.text.base}><b>opencode market</b></text>
-              <text fg={theme.text.muted}>  oc-market-quail-zephyr-72a0 v{PKG_VERSION} · {indexAge(idx())}</text>
+              <text fg={theme.text.muted}>  opencode-market v{PKG_VERSION} · {indexAge(idx())}</text>
               <box flexGrow={1} />
               <box backgroundColor={chromeFocused(0, 0) ? theme.background.action.primary.focused : undefined}>
                 <text fg={chromeFocused(0, 0) ? theme.text.action.primary.focused : theme.text.muted}
                       onMouseOver={() => { setZone('chrome'); setChromeRow(0); setChromeSel(0) }}
-                      onMouseDown={(ev) => { ev.stopPropagation(); updateAll() }}>[U] {t('updateAll')}</text>
+                      onMouseDown={(ev) => { ev.stopPropagation(); updateAll() }}>[U] {t('updateAll')}{outdatedN() ? ` (${outdatedN()})` : ''}</text>
               </box>
             </box>
             <box flexDirection="row" paddingLeft={1}>
@@ -848,7 +941,10 @@ export default Plugin.define({
                     <Show when={e.compat?.engines || e.compat?.peer}>
                       <text fg={theme.text.muted}>{t('compat')}: {[e.compat?.engines ? `opencode ${e.compat.engines}` : '', e.compat?.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}</text>
                     </Show>
-                    <Show when={e.source?.version}><text fg={theme.text.muted}>commit: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
+                    <Show when={e.source?.kind === 'github' && e.source?.version}><text fg={theme.text.muted}>tree: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
+                    <Show when={e.firstSeenAt || e.aliases?.length || (e.distTags && Object.keys(e.distTags).length)}>
+                      <text fg={theme.text.muted}>{[e.firstSeenAt ? `first seen: ${e.firstSeenAt.slice(0, 10)}` : '', e.aliases?.length ? `aka: ${e.aliases.join(', ')}` : '', e.distTags && Object.keys(e.distTags).length ? `dist-tags: ${Object.entries(e.distTags).map(([k, v]) => `${k}=${v}`).join(' · ')}` : ''].filter(Boolean).join(' · ')}</text>
+                    </Show>
                     <Show when={e.integrity}><text fg={theme.text.muted}>integrity: {(e.integrity ?? '').slice(0, 32)}…</text></Show>
                     {/* verify story — status/level/date + run link + log excerpt
                         (AGENTS: 报错三件套 — 发生了什么/为什么/下一步) */}

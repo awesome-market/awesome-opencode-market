@@ -4,13 +4,14 @@ import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
-import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName } from './fetch/github.ts'
+import { fetchPackument, fetchTarball, fetchDownloads30d, compatStrings } from './fetch/npm.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
 import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, vkey } from './verdicts.ts'
 import { retryable } from './verify/plan.ts'
+import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry, type RemovedEntry, type AiVerdict } from '../src/schema.ts'
 import { classify, catId, CAT_NAMES } from '../src/categories.ts'
@@ -29,6 +30,9 @@ export interface RunOptions {
   verdictsPath?: string | undefined
   /** catalog-branch digest-state.json — pass verdict maturity anchor */
   digestStatePath?: string | undefined
+  /** workflow_dispatch escape hatch: publish despite a red corruption gate
+   *  (legitimate mass-deprecation/removal events otherwise dead-lock every run) */
+  forceGate?: boolean | undefined
 }
 
 export function loadOldIndex(path?: string): CatalogIndex | null {
@@ -45,9 +49,12 @@ function loadBlocklist(path?: string): Blocklist | null {
   if (!path || !existsSync(path)) return null
   try {
     const b = JSON.parse(readFileSync(path, 'utf8')) as { names?: unknown; slugs?: unknown }
+    // normalize to lowercase AT LOAD — lookups lowercase their side too, so a
+    // row written with display casing ('Owner/Repo') must still hit; leaving
+    // the file's casing authoritative would make the list silently not-block
     return {
-      names: Array.isArray(b.names) ? b.names.filter(x => typeof x === 'string') as string[] : [],
-      slugs: Array.isArray(b.slugs) ? b.slugs.filter(x => typeof x === 'string') as string[] : [],
+      names: Array.isArray(b.names) ? b.names.filter(x => typeof x === 'string').map(s => s.toLowerCase()) as string[] : [],
+      slugs: Array.isArray(b.slugs) ? b.slugs.filter(x => typeof x === 'string').map(s => s.toLowerCase()) as string[] : [],
     }
   } catch (e) {
     // corrupt blocklist must not silently disable blocking (fail-open) — abort
@@ -105,13 +112,17 @@ export async function run(opts: RunOptions = {}) {
       console.log(`verdicts: ${verdicts.length} loaded, lastDigestAt=${digest?.lastDigestAt ?? '-inf'} announced=${digest?.announced.length ?? 0} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
     }
   }
-  const oldByName = new Map((old?.plugins ?? []).map(e => [e.name, e]))
+  // name keys are canonical lowercase — a github entry stored as 'Owner/Repo'
+  // must still match a 'owner/repo' candidate on a later run (GitHub's API is
+  // case-insensitive, our maps must be too). npm names are already lowercase.
+  const oldByName = new Map((old?.plugins ?? []).map(e => [e.name.toLowerCase(), e]))
   // latest tombstone per name — the re-entry identity check compares against
   // the most recent disappearance (a package can cycle in and out)
   const removedByName = new Map<string, RemovedEntry>()
   for (const r of old?.removed ?? []) {
-    const cur = removedByName.get(r.name)
-    if (!cur || r.disappearedAt > cur.disappearedAt) removedByName.set(r.name, r)
+    const key = r.name.toLowerCase()
+    const cur = removedByName.get(key)
+    if (!cur || r.disappearedAt > cur.disappearedAt) removedByName.set(key, r)
   }
   const blocklist = loadBlocklist(opts.blocklistPath)
   const isBlocked = (name: string, slug?: string) =>
@@ -139,7 +150,13 @@ export async function run(opts: RunOptions = {}) {
   // repo-only submissions (name:null) keep declared metadata too — keyed by repo
   const seedRepoMeta = new Map<string, SeedMeta>()
   const seedNames = new Set<string>()
-  if (opts.seedPath) {
+  if (opts.seedPath && !existsSync(opts.seedPath)) {
+    // consistent with every other optional input (old index, blocklist):
+    // warn and continue rather than hard-fail — a mistyped local path must
+    // not nuke the run, and the workflow always touches the file anyway
+    console.warn(`seed file not found: ${opts.seedPath} — continuing without submissions`)
+  }
+  if (opts.seedPath && existsSync(opts.seedPath)) {
     let seeded = 0
     const lines = readFileSync(opts.seedPath, 'utf8').split('\n').map(s => s.trim()).filter(Boolean)
     for (const line of lines) {
@@ -149,8 +166,8 @@ export async function run(opts: RunOptions = {}) {
         try {
           const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown>; version?: string; pkg?: string; issue?: number; author?: string; dead?: boolean }
           if (s.dead) continue   // withdrawn/expired submission — stop spending scan budget on it
-          name = s.name ?? null
-          repo = s.repo ?? null
+          name = s.name?.toLowerCase() ?? null
+          repo = s.repo?.toLowerCase() ?? null
           // seed metadata is attacker-adjacent (issue-form fields, editable) —
           // cap counts/lengths like fetchMarketMeta does (F-4)
           const desc: Record<string, string> = {}
@@ -171,9 +188,9 @@ export async function run(opts: RunOptions = {}) {
           else if (repo) seedRepoMeta.set(repo, meta)
         } catch { continue }
       } else if (line.startsWith('github:')) {
-        repo = line.slice(7)
+        repo = line.slice(7).toLowerCase()
       } else {
-        name = line
+        name = line.toLowerCase()
       }
       if (name) seedNames.add(name)
       if (name && !npmCands.has(name)) {
@@ -186,14 +203,24 @@ export async function run(opts: RunOptions = {}) {
         // already discovered organically — still record the submission channel
         const ex = npmCands.get(name)!
         if (!ex.discoveredVia.includes('submission')) ex.discoveredVia.push('submission')
-      } else if (!name && repo && !ghCands.has(repo)) {
-        // repo-only submission (e.g. a skill with no npm package) → github-kind
-        ghCands.set(repo, {
-          fullName: repo, description: '', archived: false, fork: false, pushedAt: null,
-          stars: 0, defaultBranch: 'HEAD', id: null, createdAt: null, license: null, topics: [],
-          discoveredVia: ['submission' as const],
-        })
-        seeded++
+      } else if (!name && repo) {
+        const ex = ghCands.get(repo)
+        if (ex) {
+          // topic search found it first — still record the submission channel
+          // so seedRepoMeta hooks (desc/type/drift check) stay armed
+          if (!ex.discoveredVia.includes('submission')) ex.discoveredVia.push('submission')
+        } else {
+          // repo-only submission (e.g. a skill with no npm package) → github-kind.
+          // Identity fields are fabricated here — ghWorker backfills them via
+          // fetchRepoMeta before the evidence gate (repoId/pushedAt/createdAt
+          // are needed for repojacking, reuse, and tombstone checks)
+          ghCands.set(repo, {
+            fullName: repo, description: '', archived: false, fork: false, pushedAt: null,
+            stars: 0, defaultBranch: 'HEAD', id: null, createdAt: null, license: null, topics: [],
+            discoveredVia: ['submission' as const],
+          })
+          seeded++
+        }
       }
     }
     console.log(`seed: ${seeded} entries injected`)
@@ -206,22 +233,36 @@ export async function run(opts: RunOptions = {}) {
   const rejectedGh = new Set<string>()
   const ghList = [...ghCands.values()].filter(c => {
     const ok = preAdmit({ name: c.fullName, repoUrl: c.fullName, archived: c.archived, fork: c.fork }).admit
-    if (!ok) rejectedGh.add(c.fullName)
+    if (!ok) rejectedGh.add(c.fullName.toLowerCase())
     return ok
   })
   const byOwner = new Map<string, string[]>()
   for (const c of npmList) {
-    const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0] ?? c.name.split('/')[0]!
+    const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0]?.toLowerCase() ?? c.name.split('/')[0]!
     byOwner.set(owner, [...(byOwner.get(owner) ?? []), c.name])
   }
   const spamOwners = new Set([...byOwner.entries()].filter(([, ns]) => looksLikeTemplateSpam(ns)).map(([o]) => o))
   const rejectedNpm = new Set<string>()
   const admitted = npmList.filter(c => {
-    const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0] ?? c.name.split('/')[0]!
+    const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0]?.toLowerCase() ?? c.name.split('/')[0]!
     if (spamOwners.has(owner)) { rejectedNpm.add(c.name); return false }
     return true
   })
-  console.log(`admitted: ${admitted.length} npm + ${ghList.length} github (spam owners: ${[...spamOwners].join(', ') || 'none'})`)
+  // same template-spam heuristic on the gh side — a burst of near-identical
+  // repo names under one owner is the same fingerprint with a different
+  // surface (evidence gate still backs it up, cheap insurance)
+  const byGhOwner = new Map<string, string[]>()
+  for (const c of ghList) {
+    const owner = c.fullName.split('/')[0]!.toLowerCase()
+    byGhOwner.set(owner, [...(byGhOwner.get(owner) ?? []), c.fullName])
+  }
+  const ghSpamOwners = new Set([...byGhOwner.entries()].filter(([, ns]) => looksLikeTemplateSpam(ns)).map(([o]) => o))
+  const ghAdmitted = ghList.filter(c => {
+    const owner = c.fullName.split('/')[0]!.toLowerCase()
+    if (ghSpamOwners.has(owner)) { rejectedGh.add(c.fullName.toLowerCase()); return false }
+    return true
+  })
+  console.log(`admitted: ${admitted.length} npm + ${ghAdmitted.length} github (spam owners: ${[...spamOwners, ...ghSpamOwners].join(', ') || 'none'})`)
 
   // deterministic admission order: name asc — the slice cap must not flap (PIPELINE-ISSUES §F-1).
   // The cap bounds NEW-discovery work, not catalog size: entries already in the
@@ -230,10 +271,13 @@ export async function run(opts: RunOptions = {}) {
   // position silently evicts the catalog tail once discovery outgrows --max (C-1).
   const limit = opts.maxEntries ?? 500
   const sorted = [...admitted].sort((a, b) => a.name.localeCompare(b.name))
-  const existing = sorted.filter(c => oldByName.has(c.name))
-  const newbies = sorted.filter(c => !oldByName.has(c.name))
-  const newCap = Math.max(0, limit - existing.length)
-  const queue = [...existing, ...newbies.slice(0, newCap)]
+  const existing = sorted.filter(c => oldByName.has(c.name.toLowerCase()))
+  const newbies = sorted.filter(c => !oldByName.has(c.name.toLowerCase()))
+  // the cap bounds NEW-discovery work per run, not catalog size — existing
+  // entries don't consume the budget (DATA-FLOWS §1: 已在 index 里的条目 +
+  // 投稿 seed 全部豁免). Otherwise a large catalog would starve new
+  // discovery to zero without any signal.
+  const queue = [...existing, ...newbies.slice(0, limit)]
   // submissions bypass the cap — a human-reviewed seed must not starve behind
   // alphabetical truncation (E2E rehearsal: 'oc-market-…' sorts past the cap)
   const queued = new Set(queue.map(c => c.name))
@@ -242,20 +286,19 @@ export async function run(opts: RunOptions = {}) {
   // budget the tail position could starve a submission for runs. sort is
   // stable, so each tier keeps its deterministic name-asc order.
   queue.sort((a, b) => Number(seedNames.has(b.name)) - Number(seedNames.has(a.name)))
-  const cappedOut = new Set(newbies.slice(newCap).map(c => c.name).filter(n => !seedNames.has(n)))
+  const cappedOut = new Set(newbies.slice(limit).map(c => c.name).filter(n => !seedNames.has(n)))
 
   // github side gets the same deterministic cap — a topic-search burst must not
   // silently grow the index past maxEntries. Submissions and existing entries bypass.
-  const isSeedRepo = (c: (typeof ghList)[number]) => c.discoveredVia.includes('submission')
-  const ghSorted = [...ghList].sort((a, b) => a.fullName.localeCompare(b.fullName))
-  const ghExisting = ghSorted.filter(c => oldByName.has(c.fullName))
-  const ghNew = ghSorted.filter(c => !oldByName.has(c.fullName))
-  const ghNewCap = Math.max(0, limit - ghExisting.length)
-  const ghQueue = [...ghExisting, ...ghNew.slice(0, ghNewCap)]
+  const isSeedRepo = (c: (typeof ghAdmitted)[number]) => c.discoveredVia.includes('submission')
+  const ghSorted = [...ghAdmitted].sort((a, b) => a.fullName.localeCompare(b.fullName))
+  const ghExisting = ghSorted.filter(c => oldByName.has(c.fullName.toLowerCase()))
+  const ghNew = ghSorted.filter(c => !oldByName.has(c.fullName.toLowerCase()))
+  const ghQueue = [...ghExisting, ...ghNew.slice(0, limit)]
   const ghQueued = new Set(ghQueue.map(c => c.fullName))
   for (const c of ghSorted) if (isSeedRepo(c) && !ghQueued.has(c.fullName)) ghQueue.push(c)
   ghQueue.sort((a, b) => Number(isSeedRepo(b)) - Number(isSeedRepo(a)))
-  for (const c of ghNew.slice(ghNewCap)) if (!isSeedRepo(c)) cappedOut.add(c.fullName)
+  for (const c of ghNew.slice(limit)) if (!isSeedRepo(c)) cappedOut.add(c.fullName.toLowerCase())
 
   // 3. fetch + evidence gate + scan — concurrent batches of 10.
   //    Incremental short-circuit (S-2): name@version unchanged in old index → reuse
@@ -271,16 +314,7 @@ export async function run(opts: RunOptions = {}) {
   // a whole batch's barrier — the pool lets the next candidate start as soon
   // as any worker frees, same concurrency without the tail latency
   const POOL = 10
-  const pool = async <T>(items: T[], fn: (x: T) => Promise<void>) => {
-    let next = 0
-    await Promise.all(Array.from({ length: Math.min(POOL, items.length) }, async () => {
-      for (;;) {
-        const i = next++
-        if (i >= items.length) return
-        await fn(items[i]!)
-      }
-    }))
-  }
+  const pool = <T>(items: T[], fn: (x: T) => Promise<void>) => mapPool(items, POOL, fn)
 
   const refreshMeta = async (e: PluginEntry): Promise<PluginEntry> => {
     const [pkRes, repoMetaRes, downloads] = await Promise.all([
@@ -324,25 +358,38 @@ export async function run(opts: RunOptions = {}) {
       ...(held ? { pendingUpdate: { ...e.pendingUpdate!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
       // refresh repoId so repojacking detection works on reused entries too
       ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
+      // compat follows the DISPLAYED version — packument carries every
+      // version's engines/peerDependencies, so refreshing is free
+      compat: pk?.compatOf[e.latestVersion ?? ''] ?? e.compat,
     }
   }
 
   const worker = async (cand: (typeof admitted)[number]) => {
     try {
-      const prev = oldByName.get(cand.name)
+      const prev = oldByName.get(cand.name.toLowerCase())
+      // seed candidates carry no version — without one the incremental
+      // short-circuit can never hit, so a submission row would refetch the
+      // full packument + tarball every run for its ~90d seed life. One
+      // abbreviated packument call buys dist-tags.latest cheaply; a match
+      // then reuses the entry like any rediscovered candidate.
+      let candVersion = cand.version
+      if (!candVersion && prev) {
+        const { pk: abbr } = await fetchPackument(cand.name, { fetchFn: f, abbreviated: true })
+        candVersion = abbr?.latest ?? ''
+      }
       // incremental short-circuit: same version + same ruleset → reuse wholesale.
       // Under hold-by-default the candidate to compare is the HELD version —
       // a held bump already carries that version's scan in pendingUpdate.
-      // The ruleset check must read the capabilities of the slot cand.version
-      // ACTUALLY occupies: a scan-failed pendingUpdate carries no
+      // The ruleset check must read the capabilities of the slot the candidate
+      // version ACTUALLY occupies: a scan-failed pendingUpdate carries no
       // rulesetVersion, and the old `?? prev.capabilities` fallback borrowed
       // the displayed slot's ruleset — failed held scans froze forever.
       const slotCaps = prev
-        ? prev.pendingUpdate?.version === cand.version ? prev.pendingUpdate.capabilities
-          : prev.latestVersion === cand.version ? prev.capabilities
+        ? prev.pendingUpdate?.version === candVersion ? prev.pendingUpdate.capabilities
+          : prev.latestVersion === candVersion ? prev.capabilities
           : null
         : null
-      if (prev && cand.version && cand.version === (prev.pendingUpdate?.version ?? prev.latestVersion)
+      if (prev && candVersion && candVersion === (prev.pendingUpdate?.version ?? prev.latestVersion)
           && slotCaps?.rulesetVersion === RULESET_VERSION
           && !isBlocked(cand.name, prev.slug)) {
         const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
@@ -421,9 +468,23 @@ export async function run(opts: RunOptions = {}) {
           || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification, new Date(now)))
         const humanOnLatest = pk.latest !== null && latestByKey.get(vkey(cand.name, pk.latest))?.source === 'human'
         if (!terminal && !humanOnLatest) {
-          const repoMetaRes = repo ? await fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : null
+          // the pin path used to skip every repo/metadata probe — a held
+          // entry's description/category/license froze for as long as the
+          // hold lasted (upstream bumps re-pin indefinitely). Same refresh
+          // the fresh-entry path gets: repoMeta + marketMeta + downloads +
+          // the npm↔repo package-name correspondence check (dir-traversal
+          // guard included — repository.directory is attacker-controlled)
+          const dir = pk.repositoryDir ?? undefined
+          const dirTraversal = !!dir && dir.split('/').some(s => s === '..' || s === '.')
+          const [repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
+            repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+            fetchDownloads30d(cand.name, { fetchFn: f }),
+            repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+            repo && !dirTraversal
+              ? fetchRepoPackageName(repo, { dir, fetchFn: f })
+              : Promise.resolve({ pkgName: null, status: 'not-found' as RepoMetaStatus }),
+          ])
           if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
-          const downloads = await fetchDownloads30d(cand.name, { fetchFn: f })
           // ruleset staleness OR a byte-swap on a pinned hold: the held
           // version never re-enters the full scan path, so a ruleset upgrade
           // would leave it permanently judged by retired rules and a same-
@@ -470,13 +531,38 @@ export async function run(opts: RunOptions = {}) {
           const dispA = heldPrev.latestVersion
             ? anchorIntegrity(heldPrev.capabilities, heldPrev.integrity, pk.integrityOf[heldPrev.latestVersion] ?? null)
             : { integrity: heldPrev.integrity ?? null, capabilities: heldPrev.capabilities }
+          // repo-evidence findings ride the displayed slot's caps — same
+          // checks the fresh-entry path runs (identity-level, not scan-level)
+          let dispCaps = dispA.capabilities
+          if (dirTraversal) dispCaps = addFinding(dispCaps, 'sec:repo-dir-traversal')
+          else if (repoPkg.status === 'ok' && repoPkg.pkgName && repoPkg.pkgName !== cand.name && repoPkg.pkgName !== cand.name.split('/').pop()) {
+            dispCaps = addFinding(dispCaps, `sec:repo-mismatch:${repoPkg.pkgName}`)
+          }
+          if (declaredRepo && repo && declaredRepo.toLowerCase() !== repo.toLowerCase()) {
+            dispCaps = addFinding(dispCaps, `sec:repo-declared-mismatch:${declaredRepo}`)
+          }
           const puChanged = puCaps !== heldPin.capabilities || puIntegrity !== (heldPin.integrity ?? null)
+          // long-held entries still refresh author-declared metadata — a
+          // pinned display must not keep describing what the repo looked
+          // like at hold time (submission-declared values keep precedence
+          // over nothing, marketMeta wins over both)
+          const sub = seedMeta.get(cand.name)
+          const heldCats = (marketMeta?.category ?? sub?.category ?? [])
+            .map(catId).filter(cc => CAT_NAMES[cc] !== undefined)
           entries.push({
             ...heldPrev,
             ...(puChanged
               ? { pendingUpdate: { ...heldPin, capabilities: puCaps, integrity: puIntegrity } }
               : {}),
-            capabilities: dispA.capabilities,
+            capabilities: dispCaps,
+            description: {
+              en: marketMeta?.description?.en ?? sub?.desc?.en ?? heldPrev.description.en,
+              ...(marketMeta?.description?.zh || sub?.desc?.zh
+                ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh }
+                : heldPrev.description.zh ? { zh: heldPrev.description.zh } : {}),
+            },
+            category: heldCats.length ? heldCats : heldPrev.category,
+            license: pk.license ?? repoMetaRes?.meta?.license ?? heldPrev.license,
             distTags: pk.distTags,
             modifiedAt: pk.modifiedAt,
             maintainers: pk.maintainers,
@@ -485,6 +571,7 @@ export async function run(opts: RunOptions = {}) {
             replacement: replacementOf(pk.deprecatedMessage),
             source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
             integrity: dispA.integrity,
+            compat: pk.compatOf[heldPrev.latestVersion ?? ''] ?? heldPrev.compat,
             metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads, checkedAt: now },
           })
           reusedNames.add(cand.name)
@@ -542,14 +629,14 @@ export async function run(opts: RunOptions = {}) {
           scan.findings.push(`sec:repo-mismatch:${pkgName}`)
         }
       }
-      if (declaredRepo && declaredRepo !== repo)
+      if (declaredRepo && repo && declaredRepo.toLowerCase() !== repo.toLowerCase())
         scan.findings.push(`sec:repo-declared-mismatch:${declaredRepo}`)
       // tombstone identity check: a same-name package re-entering after a
       // disappearance is compared against the tombstone record — a different
       // repoId on the same repo or a NEWER package createdAt means the
       // recycled name is a new object, not a resurrection (name-reuse
       // detection the live-path trustFlags can't see across the tombstone gap)
-      const tomb = removedByName.get(cand.name)
+      const tomb = removedByName.get(cand.name.toLowerCase())
       if (tomb?.lastSource?.kind === 'npm') {
         if (pk.createdAt && tomb.createdAt && Date.parse(pk.createdAt) > Date.parse(tomb.createdAt) + 1000) {
           scan.redFlags.push('sec:name-reused')
@@ -568,9 +655,13 @@ export async function run(opts: RunOptions = {}) {
       // tarball whose only artifact is SKILL.md declares 'skill' and routes
       // off the plugin verify chain instead of failing a nonexistent plugin
       // install. An explicit empty list means "no installable payload".
+      // The author-DECLARED type never strips a real entry point's plugin
+      // part — a 'skill'-labeled package that ships main/exports still goes
+      // through install+load verification (the label sets the badge, not
+      // the verification level).
       const hasEntry = !!(pk.main || pk.exports)
       const parts: NonNullable<PluginEntry['contains']> = [
-        ...(hasEntry && sub?.type !== 'skill' ? ['plugin' as const] : []),
+        ...(hasEntry ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
       // marketMeta/submission category strings are author-controlled — only
@@ -613,7 +704,9 @@ export async function run(opts: RunOptions = {}) {
         verification: parts.length === 0 || scan.redFlags.length > 0
           ? { status: 'skipped', level: 'install' }
           : { status: 'unverified' },
-        compat: {},
+        // engines/peerDependencies from the packument's latest version —
+        // the field the site/client render as the 兼容性 row (was always {})
+        compat: pk.compatOf[pk.latest ?? ''] ?? {},
         approval: 'pending',
         approvalReason: 'awaiting-review',
       }
@@ -650,6 +743,9 @@ export async function run(opts: RunOptions = {}) {
           // to the DISPLAYED version's parts so install routing never offers
           // the held candidate's payload shape for the shown release
           entry.contains = prev.contains
+          // compat describes the DISPLAYED version too — the packument
+          // carries every version's fields, so pinning is free
+          entry.compat = pk.compatOf[prev.latestVersion ?? ''] ?? prev.compat
           entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
         } else {
           // npm has no latest tag at all — carry the whole display state
@@ -662,6 +758,7 @@ export async function run(opts: RunOptions = {}) {
           entry.verification = prev.verification
           entry.features = prev.features
           entry.contains = prev.contains
+          entry.compat = pk.compatOf[prev.latestVersion ?? ''] ?? prev.compat
           entry.source = { ...entry.source, ...(prev.source.version ? { version: prev.source.version } : {}) }
         }
       } else if (prev) {
@@ -720,28 +817,60 @@ export async function run(opts: RunOptions = {}) {
   const ghStats = {
     covered: ghQueue.length - ghMissing.length
       - ghQueue.filter(c => isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())).length,
-    blocked: 0, reused: 0, treeTransient: 0, treeEmpty: 0, evidenceRejected: 0, scanFailed: 0, scanOversize: 0, admitted: 0,
+    blocked: 0, reused: 0, treeTransient: 0, treeEmpty: 0, truncated: 0, archived: 0,
+    evidenceRejected: 0, scanFailed: 0, scanOversize: 0, admitted: 0,
   }
   ghStats.blocked = ghQueue.filter(c => isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())).length
   const ghWorker = async (c: (typeof ghMissing)[number]) => {
-      const ghPrev = oldByName.get(c.fullName)
+      // every identity comparison keys on the canonical lowercase repo name —
+      // display casing ('Owner/Repo') is kept for the entry NAME only
+      const lower = c.fullName.toLowerCase()
+      const ghPrev = oldByName.get(lower)
+      let cand = c
+      let canonicalName: string | null = null
+      // submission seeds arrive with fabricated metadata (id:null, stars:0,
+      // pushedAt:null, archived:false) — one meta call anchors them to real
+      // identity: repoId for repojacking, createdAt for name-reuse
+      // tombstones, pushedAt for incremental reuse, canonical casing, and a
+      // truthful archived flag (the fake 'false' previously let an archived
+      // submission slip past preAdmit)
+      if (isSeedRepo(cand) && cand.id == null) {
+        const metaRes = await fetchRepoMeta(cand.fullName, { token: opts.ghToken, fetchFn: f })
+        if (metaRes.status === 'rate-limited') rateLimitedCalls++
+        if (metaRes.meta) {
+          const m = metaRes.meta
+          if (m.archived) { ghStats.archived++; rejectedGh.add(lower); return null }
+          canonicalName = m.fullName
+          cand = {
+            ...cand,
+            id: m.id ?? cand.id,
+            createdAt: cand.createdAt ?? m.createdAt,
+            stars: cand.stars || m.stars,
+            pushedAt: cand.pushedAt ?? m.pushedAt,
+            license: cand.license ?? m.license,
+            topics: cand.topics.length ? cand.topics : m.topics,
+            archived: m.archived,
+            defaultBranch: cand.defaultBranch === 'HEAD' ? (m.defaultBranch ?? cand.defaultBranch) : cand.defaultBranch,
+          }
+        }
+      }
       // incremental reuse: pushedAt unchanged + same ruleset → carry the prior
       // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
-      if (ghPrev && c.pushedAt && ghPrev.modifiedAt === c.pushedAt
+      if (ghPrev && cand.pushedAt && ghPrev.modifiedAt === cand.pushedAt
           && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
-          && !isBlockedAnyCase(c.fullName, ghPrev.slug)) {
+          && !isBlockedAnyCase(cand.fullName, ghPrev.slug)) {
         ghStats.reused++
-        reusedNames.add(c.fullName)
+        reusedNames.add(lower)
         // pushedAt unchanged means the BYTES are identical — but stars move
         // while code doesn't; refresh the metrics stamp from the search hit
         // (free: already in memory) instead of freezing it forever
-        return { ...ghPrev, metrics: { ...ghPrev.metrics, stars: c.stars, checkedAt: now } }
+        return { ...ghPrev, metrics: { ...ghPrev.metrics, stars: cand.stars, checkedAt: now } }
       }
       // evidence gate: a topic tag alone never admits — the tree must show an
       // opencode-specific signal AND an installable artifact. 'HEAD' resolves
       // the default branch server-side — a search-index-stale defaultBranch
       // (branch rename) would 404 a named-ref fetch and falsely filter the repo.
-      const treeRes = await fetchRepoTree(c.fullName, 'HEAD', { token: opts.ghToken, fetchFn: f })
+      const treeRes = await fetchRepoTree(cand.fullName, 'HEAD', { token: opts.ghToken, fetchFn: f })
       if (treeRes.status === 'rate-limited') rateLimitedCalls++
       if (treeRes.status === 'error' || treeRes.status === 'rate-limited') {
         // transient failure ≠ junk — keep the old entry rather than dropping it
@@ -749,16 +878,27 @@ export async function run(opts: RunOptions = {}) {
         ghStats.treeTransient++
         return ghPrev ?? null
       }
-      if (!treeRes.paths) { ghStats.treeEmpty++; rejectedGh.add(c.fullName); return null }   // gone/empty — gone-check decides
-      const ev = hasRepoEvidence(treeRes.paths, c.topics)
-      if (!ev.ok) { ghStats.evidenceRejected++; rejectedGh.add(c.fullName); return null }
-      const marketMeta = await fetchMarketMeta(c.fullName, { token: opts.ghToken, fetchFn: f })
-      const repoPkg = await fetchRepoPackage(c.fullName, { fetchFn: f })
+      if (!treeRes.paths) { ghStats.treeEmpty++; rejectedGh.add(lower); return null }   // gone/empty — gone-check decides
+      // a truncated tree is INCOMPLETE data, not a verdict — the API cut the
+      // deep paths, so evidence judged on the front of the tree alone gets a
+      // visible counter (and a finding on the admitted entry), instead of a
+      // silent 'evidence-rejected' against partial information
+      if (treeRes.truncated) ghStats.truncated++
+      const ev = hasRepoEvidence(treeRes.paths, cand.topics)
+      if (!ev.ok) { ghStats.evidenceRejected++; rejectedGh.add(lower); return null }
+      // the tree already told us whether a package.json exists — a 404 fetch
+      // would only burn a raw.githubusercontent round-trip to learn the same
+      const [marketMeta, repoPkg] = await Promise.all([
+        fetchMarketMeta(cand.fullName, { token: opts.ghToken, fetchFn: f }),
+        treeRes.paths.has('package.json')
+          ? fetchRepoPackage(cand.fullName, { fetchFn: f })
+          : Promise.resolve<{ pkg: null; status: RepoMetaStatus }>({ pkg: null, status: 'not-found' }),
+      ])
       // codeload resolves HEAD → default branch too, so no meta lookup needed
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
       try {
-        const tgz = await fetchTarball(`https://codeload.github.com/${c.fullName}/tar.gz/HEAD`, { fetchFn: f })
+        const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/HEAD`, { fetchFn: f })
         const r = await scanTarball(tgz)
         const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
         scanFiles = r.files.map(strip)
@@ -770,7 +910,7 @@ export async function run(opts: RunOptions = {}) {
         }
       } catch (e) {
         const msg = (e as Error).message
-        console.warn(`scan failed ${c.fullName}:`, msg)
+        console.warn(`scan failed ${cand.fullName}:`, msg)
         ghStats.scanFailed++
         // oversize repos fail deterministically — stamp the ruleset so the
         // incremental-reuse check above skips re-fetching them every run
@@ -778,8 +918,11 @@ export async function run(opts: RunOptions = {}) {
         if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++ }
       }
       ghStats.admitted++
+      // an admitted entry built on a truncated tree says so — deep paths the
+      // API never returned could hide evidence the gate didn't see
+      if (treeRes.truncated) scan.findings.push('sec:tree-truncated')
       const hasSkill = hasSkillPath(treeRes.paths) || hasSkillPath(new Set(scanFiles))
-      const sub = seedRepoMeta.get(c.fullName)
+      const sub = seedRepoMeta.get(lower)
       // repo drift: the submission review scanned tree `sub.version`; if HEAD's
       // tree hash moved, the bytes a reviewer saw are gone — flag it and drop
       // carried-over approval so the new bytes re-enter review instead of
@@ -794,19 +937,19 @@ export async function run(opts: RunOptions = {}) {
       // tombstone identity: a same-name repo reappearing with a different
       // repoId (or a newer createdAt) is a recreated repo under a recycled
       // fullName, not a resurrection
-      const tomb = removedByName.get(c.fullName)
+      const tomb = removedByName.get(lower)
       if (tomb?.lastSource?.kind === 'github') {
-        if (c.id && tomb.lastSource.repoId && c.id !== tomb.lastSource.repoId) {
+        if (cand.id && tomb.lastSource.repoId && cand.id !== tomb.lastSource.repoId) {
           scan.redFlags.push('sec:repo-recreated')
         }
-        if (tomb.createdAt && c.createdAt && Date.parse(c.createdAt) > Date.parse(tomb.createdAt) + 1000) {
+        if (tomb.createdAt && cand.createdAt && Date.parse(cand.createdAt) > Date.parse(tomb.createdAt) + 1000) {
           scan.redFlags.push('sec:name-reused')
         }
       }
       // type drives the site badge: declared wins; otherwise a repo whose only
       // artifact is skills (no root package.json, no .opencode plugin path)
       // is a skill repo, not a plugin
-      const pluginArtifact = [...treeRes.paths].some(p => /^\.opencode\/(plugin|plugins)\//.test(p))
+      const pluginArtifact = [...treeRes.paths].some(p => /(^|\/)\.opencode\/(plugin|plugins)\//.test(p))
       const type: PluginEntry['type'] = sub?.type === 'skill' ? 'skill'
         : (hasSkill && !treeRes.paths.has('package.json') && !pluginArtifact ? 'skill' : 'plugin')
       const feats = detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles })
@@ -821,41 +964,46 @@ export async function run(opts: RunOptions = {}) {
       // to the canonical taxonomy (unrecognized claims fall back to classify)
       const ghClaimedCats = (marketMeta?.category ?? sub?.category ?? [])
         .map(catId).filter(cc => CAT_NAMES[cc] !== undefined)
+      // name stability beats case freshness: an existing entry keeps its
+      // established name (a display-case-only rename doesn't fork identity);
+      // new entries get the API's canonical casing when we fetched meta
+      const entryName = ghPrev?.name ?? canonicalName ?? cand.fullName
       const entry: PluginEntry = {
-        name: c.fullName,
-        slug: c.fullName.toLowerCase(),
+        name: entryName,
+        slug: lower,
         aliases: [],
         type,
         contains: ghParts,
-        discoveredVia: c.discoveredVia as PluginEntry['discoveredVia'],
-        source: { kind: 'github', id: c.fullName, repo: c.fullName, ...(c.id ? { repoId: c.id } : {}), ...(treeRes.sha ? { version: treeRes.sha } : {}) },
+        discoveredVia: cand.discoveredVia as PluginEntry['discoveredVia'],
+        source: { kind: 'github', id: entryName, repo: canonicalName ?? cand.fullName, ...(cand.id ? { repoId: cand.id } : {}), ...(treeRes.sha ? { version: treeRes.sha } : {}) },
         description: {
-          en: marketMeta?.description?.en ?? sub?.desc?.en ?? c.description,
+          en: marketMeta?.description?.en ?? sub?.desc?.en ?? cand.description,
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
         features: feats,
         category: ghClaimedCats.length ? ghClaimedCats
-          : classify(c.fullName, c.fullName.toLowerCase(), c.description, c.topics),
-        license: c.license,
+          : classify(cand.fullName, lower, cand.description, cand.topics),
+        license: cand.license,
         deprecated: false,
         deprecatedMessage: null,
         replacement: null,
-        createdAt: c.createdAt,
-        modifiedAt: c.pushedAt,
+        createdAt: cand.createdAt,
+        modifiedAt: cand.pushedAt,
         maintainers: [],
         distTags: {},
         firstSeenAt: ghPrev?.firstSeenAt ?? now,
         latestVersion: null,
         publishedAt: null,
         integrity: null,
-        metrics: { stars: c.stars, npmDownloads30d: null, checkedAt: now },
+        metrics: { stars: cand.stars, npmDownloads30d: null, checkedAt: now },
         capabilities: scan,
         // 'skipped' is load-bearing: verdicts.ts RELEASABLE admits it as the
         // "deliberately not run" state for no-install kinds — a human pass can
         // release it. 'unverified' would freeze repo-only entries forever.
         // Display layers render latestVersion===null as "nothing to install".
         verification: { status: 'skipped', level: 'install' },
-        compat: {},
+        // repo-root package.json carries engines/peerDependencies too
+        compat: compatStrings(repoPkg.pkg?.engines, repoPkg.pkg?.peerDependencies),
         // drift is surfaced as a finding, not an approval demotion: repo-kind
         // verdicts key on name@'' (no version slot) so a standing human pass
         // would re-approve the entry at publish anyway — the durable signal
@@ -867,7 +1015,8 @@ export async function run(opts: RunOptions = {}) {
   }
   await pool(ghMissing, async c => { const e = await ghWorker(c); if (e) entries.push(e) })
   console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +
-    `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ` +
+    `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.archived} seed-archived, ` +
+    `${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ${ghStats.truncated} truncated-tree, ` +
     `${ghStats.scanFailed} scan-failed of which ${ghStats.scanOversize} oversize)`)
   if (rateLimitedCalls > 0) {
     console.warn(`github api rate-limited on ${rateLimitedCalls} call(s) — repoId/tree coverage partial; heals on subsequent runs`)
@@ -879,7 +1028,7 @@ export async function run(opts: RunOptions = {}) {
   //    missed — search truncated, topic sort window passed, worker crash — is
   //    kept, not tombstoned: absence from a paginated search result is not
   //    evidence of anything (R-3). Real departures still tombstone via 404.
-  const freshNames = new Set(entries.map(e => e.name))
+  const freshNames = new Set(entries.map(e => e.name.toLowerCase()))
   const removedNow: RemovedEntry[] = []
 
   // periodic ruleset sweep (bounded slice per run): carried-over entries whose
@@ -965,8 +1114,9 @@ export async function run(opts: RunOptions = {}) {
   }
 
   const goneCheck = async (e: PluginEntry) => {
+    const lower = e.name.toLowerCase()
     let reason: RemovedEntry['reason'] = 'unknown'
-    if (cappedOut.has(e.name)) reason = 'capped'
+    if (cappedOut.has(lower)) reason = 'capped'
     else if (isBlockedAnyCase(e.name, e.slug)) reason = 'manual'
     else if (e.source.kind === 'npm') {
       // abbreviated packument — the probe only needs existence + dist.tarball
@@ -991,7 +1141,7 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedGh.has(e.name)) { entries.push(await rescanStaleGh(e)); return }
+      if (status === 'ok' && !rejectedGh.has(lower)) { entries.push(await rescanStaleGh(e)); return }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }
     removedNow.push({
@@ -1002,7 +1152,7 @@ export async function run(opts: RunOptions = {}) {
       createdAt: e.createdAt,
     })
   }
-  const missing = (old?.plugins ?? []).filter(e => !freshNames.has(e.name))
+  const missing = (old?.plugins ?? []).filter(e => !freshNames.has(e.name.toLowerCase()))
   await pool(missing, goneCheck)
   if (removedNow.length) {
     console.log(`removed: ${removedNow.length} (${removedNow.map(r => `${r.name}:${r.reason}`).join(', ')})`)
@@ -1012,7 +1162,8 @@ export async function run(opts: RunOptions = {}) {
   const { index, gate } = buildIndex(entries, old, {
     opencodeVersion: OPENCODE_VERSION, now, rulesetVersion: RULESET_VERSION, removed: removedNow,
   })
-  if (!gate.ok) throw new Error(`publish gate: ${gate.reason}`)
+  if (!gate.ok && !opts.forceGate) throw new Error(`publish gate: ${gate.reason}`)
+  if (!gate.ok) console.error(`publish gate: ${gate.reason} — overridden by --force-gate`)
 
   // 6. write
   const out = opts.outPath ?? 'dist/index.json'
@@ -1040,5 +1191,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ...(max !== undefined ? { maxEntries: max } : {}),
     verdictsPath: arg('--verdicts'),
     digestStatePath: arg('--digest-state'),
+    ...(process.argv.includes('--force-gate') ? { forceGate: true } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }

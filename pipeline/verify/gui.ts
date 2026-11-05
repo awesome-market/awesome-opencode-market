@@ -100,10 +100,17 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     // ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING (fire-and-forget import() would
     // otherwise surface as a stray unhandled rejection — see verifyShard's
     // process-level guard)
-    const script = new vm.Script(bundleSrc, {
-      filename: 'gui-bundle.cjs',
-      importModuleDynamically: () => Promise.reject(new Error('module not in gui host whitelist: (dynamic import)')),
-    })
+    let script: vm.Script
+    try {
+      script = new vm.Script(bundleSrc, {
+        filename: 'gui-bundle.cjs',
+        importModuleDynamically: () => Promise.reject(new Error('module not in gui host whitelist: (dynamic import)')),
+      })
+    } catch (e) {
+      // a syntactically broken bundle must record 'failed', not crash the
+      // whole verify shard — compile errors land here, evaluate errors below
+      return { ok: false, stage: 'evaluate', error: (e as Error).message }
+    }
     let def: { setup?: (ctx: unknown) => unknown } | undefined
     try {
       script.runInContext(vctx, { timeout: EVAL_TIMEOUT })

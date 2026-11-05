@@ -155,33 +155,45 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
 
 export async function uninstallSkillDir(name: string, root: string): Promise<string> {
   const fs = await import('node:fs')
-  const { join, resolve, sep } = await import('node:path')
+  const { join, resolve, sep, basename } = await import('node:path')
   const { readdirSync, readFileSync, rmSync, existsSync } = fs
   const rootRes = resolve(root)
   assertSkillId(name)
-  // conditional ids: a same-basename package lives at the namespaced dir —
-  // check it first so a foreign basename dir is never touched; singletons
-  // live at the bare basename
-  let dest = resolve(root, skillId(name))
-  if (!dest.startsWith(rootRes + sep)) throw new Error(`dest escapes skills root: ${dest}`)
-  if (!existsSync(dest)) {
-    const bare = resolve(root, name.split('/').pop()!)
-    if (bare.startsWith(rootRes + sep) && existsSync(bare)) dest = bare
-  }
-  const mf = join(dest, '.market-skills.json')
-  if (existsSync(mf)) {
-    // manifest of lifted paths — remove exactly what installSkillTar created
-    const m = JSON.parse(readFileSync(mf, 'utf8')) as { paths?: string[] }
+  // Ownership is proven by .market-skills.json — the manifest has existed
+  // since this installer was born, so a manifest-less dir is FOREIGN (user
+  // files, another tool's output), never a "legacy" market install. The old
+  // code rm -rf'd such dirs and swept every `<id>-*` sibling — deleting
+  // unrelated dirs like `test-utils` along the way. installSkillTar already
+  // refuses to merge into foreign dirs for exactly this reason; uninstall
+  // must refuse symmetrically.
+  const cands = [...new Set([skillId(name), name.split('/').pop()!])]
+    .map(id => resolve(root, id))
+    .filter(d => d.startsWith(rootRes + sep))
+  const existing = cands.filter(existsSync)
+  for (const dest of existing) {
+    const mf = join(dest, '.market-skills.json')
+    if (!existsSync(mf)) continue                                  // foreign — not ours
+    let m: { name?: string; paths?: string[] }
+    try { m = JSON.parse(readFileSync(mf, 'utf8')) as typeof m } catch { continue }
+    if (typeof m.name === 'string' && m.name !== name) continue   // another package's dir
+    // owned → remove exactly what installSkillTar recorded, then the dir
     for (const rel of m.paths ?? []) {
       const t = resolve(rootRes, rel)
       if (t.startsWith(rootRes + sep)) rmSync(t, { recursive: true, force: true })
     }
-  } else for (const d of readdirSync(rootRes)) {
-    // collision-prefixed lifts were named <installId>-* — same as basename(dest)
-    const destId = dest.slice(rootRes.length + 1)
-    if (d.startsWith(`${destId}-`)) rmSync(join(rootRes, d), { recursive: true, force: true })
+    rmSync(dest, { recursive: true, force: true })
+    return 'removed'
   }
-  rmSync(dest, { recursive: true, force: true })
+  if (existing.length)
+    throw new Error(`skill dir '${basename(existing[0]!)}' exists but is not managed by market — left untouched (delete it manually if unwanted)`)
+  // no package dir — stray `<id>-*` lifts may linger from a manually deleted
+  // install, but they are indistinguishable from foreign dirs; report rather
+  // than delete (the card keeps showing them as installed, which is honest —
+  // the files ARE still there and functional)
+  const ids = [...new Set([skillId(name), name.split('/').pop()!])]
+  const strays = readdirSync(rootRes).filter(d => ids.some(id => d.startsWith(`${id}-`)))
+  if (strays.length)
+    throw new Error(`${strays.length} '${strays[0]!.split('-')[0]}-*' dir(s) found but not managed by market — left untouched`)
   return 'removed'
 }
 

@@ -61,14 +61,37 @@ export function trustFlags(prev: PluginEntry | undefined, e: PluginEntry): { fin
   return { findings, redFlags }
 }
 
-/** Dotted-numeric compare (1.2.3 vs 1.2.10); non-numeric → 0. */
+/** Semver-ish compare: numeric core first, then prerelease semantics
+ *  (a release outranks its own prereleases; identifiers compare semver-style —
+ *  numeric < alphanumeric, shorter identifier list < longer on equal prefix).
+ *  Non-numeric core (or empty input) → 0: unparsable means "can't order", not
+ *  "equal" — callers treat 0 as no-rollback either way. */
 export function versionCmp(a: string | null, b: string | null): number {
   if (!a || !b) return 0
-  const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
+  const split = (v: string): readonly [string, string | undefined] => {
+    const i = v.indexOf('-')
+    return i < 0 ? [v, undefined] : [v.slice(0, i), v.slice(i + 1)]
+  }
+  const [ac, ap] = split(a)
+  const [bc, bp] = split(b)
+  const pa = ac.split('.').map(Number), pb = bc.split('.').map(Number)
   if (pa.some(Number.isNaN) || pb.some(Number.isNaN)) return 0
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] ?? 0) - (pb[i] ?? 0)
     if (d) return Math.sign(d)
+  }
+  if (ap === undefined) return bp === undefined ? 0 : 1   // 1.0.0 > 1.0.0-rc.9
+  if (bp === undefined) return -1
+  const ai = ap.split('.'), bi = bp.split('.')
+  for (let i = 0; i < Math.max(ai.length, bi.length); i++) {
+    const x = ai[i], y = bi[i]
+    if (x === undefined) return -1                        // 1.0.0-alpha < 1.0.0-alpha.1
+    if (y === undefined) return 1
+    const nx = Number(x), ny = Number(y)
+    const xn = !Number.isNaN(nx), yn = !Number.isNaN(ny)
+    if (xn && yn) { if (nx !== ny) return Math.sign(nx - ny) }
+    else if (xn !== yn) return xn ? -1 : 1                // numeric < alphanumeric
+    else if (x !== y) return x < y ? -1 : 1
   }
   return 0
 }

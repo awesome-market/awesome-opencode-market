@@ -115,6 +115,7 @@ export function main(argv: string[] = process.argv): void {
   for (const r of rows) upsertStatusComment(repo, r, runId)
 }
 
+/* v8 ignore next 3 -- CLI entry guard, only reachable via `node submission-status.ts` */
 if (import.meta.url === `file://${process.argv[1]}`) {
   main()
 }

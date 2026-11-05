@@ -1,5 +1,6 @@
 /** npm registry discovery: keyword search with pagination + rank filtering. */
 import { withTimeout } from '../fetch/npm.ts'
+import { mapPool } from '../pool.ts'
 
 export const NPM_SEARCH_URL = 'https://registry.npmjs.org/-/v1/search'
 export const NPM_REGISTRY = 'https://registry.npmjs.org'
@@ -69,12 +70,14 @@ export async function discoverNpm(
   opts: Parameters<typeof searchByKeyword>[1] = {},
 ): Promise<Map<string, NpmSearchResult & { discoveredVia: string[] }>> {
   const map = new Map<string, NpmSearchResult & { discoveredVia: string[] }>()
-  for (const kw of keywords) {
+  // keywords run a few at a time — each keyword still pages serially, but the
+  // per-page 15s worst case stops compounding across the whole keyword list
+  await mapPool(keywords, 3, async kw => {
     for (const r of await searchByKeyword(kw, opts)) {
       if (!map.has(r.name)) {
         map.set(r.name, { ...r, discoveredVia: ['npm-keyword'] })
       }
     }
-  }
+  })
   return map
 }

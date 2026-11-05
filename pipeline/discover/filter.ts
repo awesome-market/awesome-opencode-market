@@ -40,13 +40,15 @@ export function hasRepoEvidence(
 ): { ok: boolean; via: string[] } {
   const has = (re: RegExp) => [...paths].some(p => re.test(p))
   const via: string[] = []
-  if (has(/^\.opencode\//)) via.push('opencode-dir')
+  // .opencode/ anchored at any depth — monorepo packages keep their host
+  // config under packages/<x>/.opencode/ just as often as at the root
+  if (has(/(^|\/)\.opencode\//)) via.push('opencode-dir')
   if (has(/(^|\/)opencode\.jsonc?$/)) via.push('opencode-config')
   const skillFile = has(/(^|\/)SKILL\.md$/)
   if (skillFile) via.push('skill-file')
   const pkg = has(/(^|\/)package\.json$/)
   if (pkg) via.push('package')
-  const pluginArtifact = has(/^\.opencode\/(plugin|plugins|skills)\//)
+  const pluginArtifact = has(/(^|\/)\.opencode\/(plugin|plugins|skills)\//)
   if (pluginArtifact) via.push('opencode-artifact')
   // topic tags are affiliation, not artifact claims — and only the opencode-*
   // topics say anything about THIS host. 'agent-skill' is a cross-host generic
@@ -68,7 +70,7 @@ export function hasRepoEvidence(
  *  github-kind admission path so `contains` matches the evidence gate's idea
  *  of a skill. */
 export const hasSkillPath = (paths: ReadonlySet<string>): boolean =>
-  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || p.startsWith('.opencode/skills'))
+  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || /(^|\/)\.opencode\/skills/.test(p))
 
 /** Evidence check post-fetch: does the package actually look like an opencode artifact? */
 export function hasPluginEvidence(pkg: {

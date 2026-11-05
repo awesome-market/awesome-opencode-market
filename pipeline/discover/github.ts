@@ -1,5 +1,6 @@
 /** GitHub discovery: topic search + repo metadata. Unauthenticated works (60 req/h); GH_TOKEN raises limits. */
 import { withTimeout } from '../fetch/npm.ts'
+import { mapPool } from '../pool.ts'
 
 export const GH_API = 'https://api.github.com'
 export const TOPICS = ['opencode-plugin', 'opencode', 'agent-skill', 'opencode-skill', 'opencode-mcp', 'opencode-config', 'opencode-theme'] as const
@@ -81,13 +82,18 @@ export async function discoverGithub(
   opts: Parameters<typeof searchTopic>[1] = {},
 ): Promise<Map<string, GhRepo & { discoveredVia: string[] }>> {
   const map = new Map<string, GhRepo & { discoveredVia: string[] }>()
-  for (const t of topics) {
+  // map keys are canonical lowercase — the same repo seen as Owner/Repo in one
+  // topic and owner/repo in another (or a seed typed differently) must dedupe
+  // into ONE candidate, not two identity twins
+  // 2-way concurrency stays well under the search API's secondary rate limits
+  await mapPool(topics, 2, async t => {
     for (const r of await searchTopic(t, opts)) {
-      if (!map.has(r.fullName)) {
-        map.set(r.fullName, { ...r, discoveredVia: ['github-topic'] })
+      const key = r.fullName.toLowerCase()
+      if (!map.has(key)) {
+        map.set(key, { ...r, discoveredVia: ['github-topic'] })
       }
     }
-  }
+  })
   return map
 }
 
@@ -98,6 +104,9 @@ export function normalizeRepoUrl(raw: string | null | undefined): string | null 
   s = s.replace(/^git\+/, '').replace(/\.git\/?$/, '')
   s = s.replace(/^git@github\.com:/, 'https://github.com/')
   s = s.replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/')
+  // npm's repository shorthand — 'github:owner/repo' (optionally '#commit') is
+  // as canonical a GitHub pointer as a full URL; gitlab:/bitbucket: still miss
+  s = s.replace(/^github:/i, 'https://github.com/')
   const m = s.match(/github\.com\/([^/]+\/[^/#?]+)/)
   if (m) return m[1]!.replace(/\.git$/, '').replace(/\/$/, '')
   // bare owner/repo — submission seeds and terse repository fields

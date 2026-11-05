@@ -38,6 +38,20 @@ export function assertSpecForName(name: string, spec: unknown): void {
   if (v && !VER_RE.test(v)) throw new Error(`invalid version in spec: ${v.slice(0, 80)}`)
 }
 
+/** Uninstall targets are broader than install ids: catalog names (npm or
+ *  owner/repo) AND the raw spec strings opencode records in plugins[] —
+ *  https/git/ssh urls, git+ forms, scp syntax (git@host:path), github:
+ *  shorthand, local ids. Values are only string-compared against config
+ *  entries (never argv, never a path), but kept tight anyway: no
+ *  whitespace/control chars, bounded length. */
+const UNINSTALL_RE = /^(?:@[\w.-]+\/)?[\w][\w.-]*$|^[\w.-]+\/[\w.-]+$|^(?:https?|ssh|git):\/\/\S+$|^git\+(?:https?|ssh|git):\/\/\S+$|^[\w.-]+@[\w.-]+:[\w./~-]+$|^github:[\w.-]+\/[\w.-]+$/
+export function assertUninstallRef(name: unknown): asserts name is string {
+  // '/./' '/../' segment guard — [\w.-]+ alone lets '..' through as a "repo"
+  if (typeof name !== 'string' || name.length > 500 || /[\x00-\x1f\x7f\s]/.test(name)
+    || /(^|\/)\.\.?(\/|$)/.test(name) || !UNINSTALL_RE.test(name))
+    throw new Error(`invalid uninstall target: ${String(name).slice(0, 80)}`)
+}
+
 /** Namespaced skill dir id — used only when the basename already belongs to a
  *  different package (`@a/test` vs `@b/test` both want `test`). Encoding keeps
  *  a single safe path segment: `@a/test`→`a--test`, `a/test`→`a--test`,
@@ -165,6 +179,12 @@ export function restrictedEnv(over: Record<string, string> = {}): Record<string,
     'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
     'SystemRoot', 'COMSPEC', 'PATHEXT'])
     if (process.env[k]) out[k] = process.env[k] as string
-  for (const [k, v] of Object.entries(process.env)) if (k.startsWith('OPENCODE_')) out[k] = v as string
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith('OPENCODE_')) { out[k] = v as string; continue }
+    // npm client config via env (private registry, custom cert dirs…) must
+    // reach spawned `plugin add` or it silently resolves against public npm —
+    // but credential-bearing keys (_authToken, *_TOKEN, *_KEY, …) stay out
+    if (/^(?:NPM_CONFIG_|npm_config_)/.test(k) && !/(?:TOKEN|KEY|SECRET|PASS|CREDENTIAL|AUTH)/i.test(k)) out[k] = v as string
+  }
   return { ...out, ...over }
 }

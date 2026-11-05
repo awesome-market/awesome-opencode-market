@@ -26,12 +26,11 @@ export function markNotified(
     if (!t.startsWith('{')) return [l]
     try {
       const s = JSON.parse(t) as { name?: string; repo?: string; issue?: number; notified?: boolean; staleWarned?: boolean; dead?: boolean; at?: string }
-      // terminal rows (dead / notified) stop re-evaluating — and past a 90d
-      // grace window they drop out of the file entirely. The grace gives the
-      // workflow's comment+close retries room to succeed on transient gh
-      // failures; after that, git history is the audit and the file would
-      // otherwise grow forever.
-      if (s.dead || s.notified) {
+      // notified is fully terminal — past a 90d grace window the row drops out
+      // of the file entirely (the grace gives the workflow's comment+close
+      // retries room to succeed on transient gh failures; after that, git
+      // history is the audit and the file would otherwise grow forever)
+      if (s.notified) {
         // missing/unparseable `at` can't prove the grace expired — keep
         const age = s.at ? now - Date.parse(s.at) : 0
         return age > 90 * 86400e3 ? [] : [l]
@@ -46,7 +45,19 @@ export function markNotified(
         : undefined
       const key = s.name ?? s.repo
       const unlanded = !e || e.approval === 'pending'
-      if (key && s.issue && !s.notified && e && e.approval !== 'pending') {
+      // dead is terminal for scanning but a late landing still deserves the
+      // one-shot comment — the issue is closed, not deaf: an entry that got in
+      // anyway (another submission path, rediscovery) must not publish with
+      // the submitter left thinking it failed
+      if (s.dead) {
+        if (key && s.issue && e && e.approval !== 'pending') {
+          issues.add(s.issue)
+          return [JSON.stringify({ ...s, notified: true })]
+        }
+        const age = s.at ? now - Date.parse(s.at) : 0
+        return age > 90 * 86400e3 ? [] : [l]
+      }
+      if (key && s.issue && e && e.approval !== 'pending') {
         issues.add(s.issue)
         return [JSON.stringify({ ...s, notified: true })]
       }

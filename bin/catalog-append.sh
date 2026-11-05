@@ -70,7 +70,9 @@ for i in 1 2 3; do
       # KEY dedupe blocks RE-submission only while the entry is actually live —
       # a tombstoned/never-landed package must be able to come back through the
       # front door; otherwise a stale seed line locks it out forever.
-      if grep -qF "\"name\":\"$KEY\"," "$WT/$FILE" || grep -qF "\"repo\":\"$KEY\"," "$WT/$FILE"; then
+      # -i: repo identity is case-insensitive — a seed written 'Owner/Repo'
+      # and a re-submission typed 'owner/repo' are the same repo
+      if grep -qiF "\"name\":\"$KEY\"," "$WT/$FILE" || grep -qiF "\"repo\":\"$KEY\"," "$WT/$FILE"; then
         # in-flight if the entry is in plugins[] — pending counts (still queued);
         # removed[] tombstones do NOT count: a gone package may re-submit.
         LIVE=1

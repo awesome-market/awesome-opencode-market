@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from '../pipeline/fetch/npm.ts'
-import { fetchRepoMeta, repoFileExists, fetchRepoPackageName } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchRepoPackageName } from '../pipeline/fetch/github.ts'
 
 const mkRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
@@ -61,10 +61,6 @@ describe('fetch/github', () => {
   it('NOASSERTION license → null', async () => {
     const f = async () => mkRes({ stargazers_count: 0, archived: false, pushed_at: null, license: { spdx_id: 'NOASSERTION' } })
     expect((await fetchRepoMeta('o/r', { fetchFn: f as typeof fetch })).meta!.license).toBeNull()
-  })
-  it('repoFileExists true/false on status', async () => {
-    expect(await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => new Response('', { status: 200 })) as typeof fetch })).toBe(true)
-    expect(await repoFileExists('o/r', 'NOPE', { fetchFn: (async () => new Response('', { status: 404 })) as typeof fetch })).toBe(false)
   })
   it('fetchRepoPackageName reads name from raw CDN + monorepo dir', async () => {
     const urls: string[] = []

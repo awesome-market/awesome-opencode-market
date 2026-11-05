@@ -9,9 +9,9 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission } from './hostx.js'
+import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 const Market = Ipc.define({
@@ -43,7 +43,7 @@ type Api = {
   index(p?: { url?: string }): Promise<MarketIndex>
   refreshIndex(p?: { url?: string }): Promise<MarketIndex>
   indexOutcome(): Promise<string>
-  installed(): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
+  installed(p?: { names?: string[] | undefined }): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
   install(p: { name: string; spec?: string }): Promise<string>
   update(p: { name: string; spec?: string }): Promise<string>
   cancelInstall(name: string): Promise<string>
@@ -116,6 +116,10 @@ export default Plugin.define({
     }
     const [err, setErr] = createSignal('')
     const [query, setQuery] = createSignal('')
+    // catalog entry names the renderer already fetched — passed to
+    // installed() so the host doesn't pull the whole index a second time
+    // just to split cataloged vs uncataloged specs (index double-cache fix)
+    const catalogNames = () => data()?.plugins?.map(p => p.name)
     const [cat, setCat] = createSignal('')
     const [sort, setSort] = createSignal<string>('verified')
     const [view, setView] = createSignal<View>({ kind: 'list' })
@@ -152,7 +156,7 @@ export default Plugin.define({
     } catch { /* older host: no events */ }
 
     safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e)))
-    safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
+    safe.installed?.({ names: catalogNames() }).then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
 
     // tab scope — shared by filtered() and the 全部(N) category chips so the
     // count always matches what the list actually shows on every tab
@@ -188,7 +192,9 @@ export default Plugin.define({
     }
     const statusOf = (e: MarketEntry) => {
       const iv = installedVer(e)
-      return iv ? `${t('installed')} v${iv}`
+      // 'local' = dir install without a version, '?' = host didn't report one —
+      // neither is a version, so don't render "installed vlocal"/"v?"
+      return iv ? (iv === 'local' || iv === '?' ? t('installed') : `${t('installed')} v${iv}`)
       // nothing this client can deliver (github plugin parts, malformed repos)
       // gets the honest "no target" label — not a fake verification status
       : !canInstall(e) ? t('noInstallTarget')
@@ -234,6 +240,7 @@ export default Plugin.define({
     const uninstallBtn = (e: MarketEntry) => {
       const isSkill = e.contains?.includes('skill') && !installed()[e.name]
       const b = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', t('uninstall')) as HTMLButtonElement
+      b.dataset.act = 'uninstall'
       let armed = false
       let timer = 0
       b.onclick = ev => {
@@ -248,47 +255,74 @@ export default Plugin.define({
         // uninstall what is actually installed, not what the type says — a
         // dual-nature entry may have both a plugin spec and skill dirs.
         // __skill_ keys directly: skillInstalledVer also matches the plugin
-        // key, which would fire the skill sweep on every plugin uninstall
+        // key, which would fire the skill sweep on every plugin uninstall.
+        // The two legs settle INDEPENDENTLY: a foreign (non-market) skill dir
+        // refusing deletion must not mask a successful plugin-spec removal —
+        // and vice versa (allSettled, not Promise.all).
         const sBase = `__skill_${skillId(e.name)}`
         const sBare = `__skill_${e.name.split('/').pop() ?? e.name}`
         const hasSkillDir = Object.keys(installed()).some(k => k === sBase || k === sBare || k.startsWith(`${sBase}-`) || k.startsWith(`${sBare}-`))
-        const ops: Promise<string>[] = []
-        if (installed()[e.name]) ops.push(safe.uninstall(e.name))
-        if (hasSkillDir || isSkill) ops.push(safe.uninstallSkill(e.name))
-        if (!ops.length) ops.push(safe.uninstall(e.name))
-        Promise.all(ops).then(
-          async () => {
-            log(`uninstall ${e.name}`)
-            // drop every key this entry could own: plugin id, namespaced dir,
-            // BARE basename dir (non-colliding installs land there), *-lifts
-            const base = `__skill_${skillId(e.name)}`
-            const bare = `__skill_${e.name.split('/').pop() ?? e.name}`
-            const next = { ...installed() }
-            delete next[e.name]
-            for (const k of Object.keys(next)) if (k === base || k === bare || k.startsWith(`${base}-`) || k.startsWith(`${bare}-`)) delete next[k]
-            const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]
-            put({ skillVers: sv }); setInstalled(next)
-            setInstalledExtra(installedExtra().filter(x => x.name !== e.name))
-            // daemon rescans config async — wait, then reconcile; drop the
-            // entry from the fresh data too so it can't resurrect
-            await new Promise(r => setTimeout(r, 2000))
-            const fresh = await safe.installed?.().catch(() => null)
-            if (fresh) {
-              const v = { ...fresh.versions }; delete v[e.name]
-              setInstalled(v)
-              setInstalledExtra(fresh.extras.filter(x => x.name !== e.name))
-              setFeatMap(fresh.features)
-            }
-          },
-          (x: unknown) => { log(`uninstall fail ${e.name}: ${String(x)}`); b.disabled = false; armed = false; b.textContent = t('failedRetry'); b.title = String(x) },
-        )
+        const wantPlugin = !!installed()[e.name] || !(hasSkillDir || isSkill)
+        const wantSkill = hasSkillDir || isSkill
+        const pluginP = wantPlugin
+          ? safe.uninstall(e.name).then(() => 'ok' as const, (x: unknown) => `ERR:${String(x)}`)
+          : Promise.resolve('skip' as const)
+        const skillP = wantSkill
+          ? safe.uninstallSkill(e.name).then(() => 'ok' as const, (x: unknown) => `ERR:${String(x)}`)
+          : Promise.resolve('skip' as const)
+        void Promise.all([pluginP, skillP]).then(async ([pRes, sRes]) => {
+          const pOk = pRes === 'ok' || pRes === 'skip'
+          const sOk = sRes === 'ok' || sRes === 'skip'
+          const sErr = String(sRes).startsWith('ERR:') ? String(sRes).slice(4) : null
+          const pErr = String(pRes).startsWith('ERR:') ? String(pRes).slice(4) : null
+          if (!pOk) {
+            log(`uninstall fail ${e.name}: ${pErr}${sErr ? ` (skill: ${sErr})` : ''}`)
+            b.disabled = false; armed = false; b.textContent = t('failedRetry'); b.title = pErr ?? ''
+            setProg({ ...prog(), [e.name]: { lines: [pErr ?? 'uninstall failed', ...(sErr ? [`skill: ${sErr}`] : [])], done: true, ok: false } })
+            return
+          }
+          // plugin leg done (or nothing to do) — reconcile installed state;
+          // skill keys are dropped ONLY when the skill leg actually succeeded,
+          // so a refused foreign dir keeps showing its honest "installed"
+          log(`uninstall ${e.name}${sErr ? ` — skill kept: ${sErr}` : ''}`)
+          const base = `__skill_${skillId(e.name)}`
+          const bare = `__skill_${e.name.split('/').pop() ?? e.name}`
+          const next = { ...installed() }
+          delete next[e.name]
+          if (sOk) for (const k of Object.keys(next)) if (k === base || k === bare || k.startsWith(`${base}-`) || k.startsWith(`${sBare}-`)) delete next[k]
+          if (sOk) { const sv = { ...(state().skillVers ?? {}) }; delete sv[e.name]; put({ skillVers: sv }) }
+          setInstalled(next)
+          setInstalledExtra(installedExtra().filter(x => x.name !== e.name))
+          if (sErr) {
+            // partial success — surface the kept dir instead of pretending all gone
+            setProg({ ...prog(), [e.name]: { lines: [sErr], done: true, ok: false } })
+            b.disabled = false; armed = false; b.textContent = t('uninstall'); b.title = sErr
+          }
+          // daemon rescans config async — wait, then reconcile; drop the
+          // entry from the fresh data too so it can't resurrect
+          await new Promise(r => setTimeout(r, 2000))
+          const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
+          if (fresh) {
+            const v = { ...fresh.versions }; delete v[e.name]
+            setInstalled(v)
+            setInstalledExtra(fresh.extras.filter(x => x.name !== e.name))
+            setFeatMap(fresh.features)
+          }
+        })
       }
       return b
     }
     const installBtn = (e: MarketEntry) => {
-      const ver = installedVer(e)
+      const hs = halfState(e, installed(), state().skillVers)
+      const ver = hs.ver
       const plan = installPlan(e)
       const isSkill = plan.skill !== null
+      // which halves this click may touch — fresh install delivers every
+      // deliverable half; an update touches only installed-and-outdated halves
+      // (a current plugin half must not mask a stale skill half, and a missing
+      // half must not be silently resurrected by an unrelated update)
+      const sync = halvesToSync(e, hs)
+      const doPlugin = sync.plugin, doSkill = sync.skill
       // progress-driven busy/failed states — a re-render during install must
       // keep showing … instead of resetting the button back to add
       const pr = prog()[e.name]
@@ -311,7 +345,7 @@ export default Plugin.define({
         return fb
       }
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
-      if (ver && !hasUpdate(e, ver))
+      if (ver && !hs.anyOut)
         return tab() === 'installed' || tab() === 'mySkills'
           ? uninstallBtn(e)
           : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
@@ -325,6 +359,7 @@ export default Plugin.define({
         ? `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}`
         : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
+      b.dataset.act = 'install'
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
@@ -336,25 +371,28 @@ export default Plugin.define({
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
         log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
         // dual-nature entries deliver BOTH parts — installing only the skill
-        // side silently drops the plugin half the package ships
+        // side silently drops the plugin half the package ships. `update`
+        // (add pinned + config dedupe) is used for fresh installs too: it is
+        // a strict superset of install and also clears stale same-name specs
+        // the inventory may not have reported yet.
         const doInstall = async (): Promise<string> => {
           const outs: string[] = []
-          if (plan.plugin)
-            outs.push(await (ver && hasUpdate(e, ver) && typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) })))
-          if (plan.skill) outs.push(await installSkillNet(e))
+          if (doPlugin)
+            outs.push(await (typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) })))
+          if (doSkill) outs.push(await installSkillNet(e))
           return outs.join(' + ') || 'installed'
         }
         try { doInstall().then(
           async () => {
             setProg({ ...prog(), [e.name]: { lines: [], done: true, ok: true } })
-            if (isSkill) {
+            if (doSkill) {
               // optimistic + version bookkeeping → real update detection later;
               // github skills record the pushedAt marker they shipped at
               const v = verMarker(e) ?? 'local'
               setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
               put({ skillVers: { ...state().skillVers, [e.name]: v } })
             }
-            if (!plan.plugin) {
+            if (!doPlugin) {
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
               // optimistic mark — daemon rescans config async; refresh after a
@@ -362,7 +400,7 @@ export default Plugin.define({
               const expect = e.latestVersion ?? '?'
               setInstalled({ ...installed(), [e.name]: expect })
               await new Promise(r => setTimeout(r, 2000))
-              const fresh = await safe.installed?.().catch(() => null)
+              const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
               if (fresh) {
                 if (!fresh.versions[e.name]) fresh.versions[e.name] = expect
                 setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features)
@@ -388,8 +426,101 @@ export default Plugin.define({
       ? `https://github.com/${e.source.repo}`
       : `https://www.npmjs.com/package/${encodeURIComponent(e.name)}`
 
-    const row = (e: MarketEntry) => {
+    // ---- keyboard navigation ------------------------------------------------
+    // j/k/↑↓ move by row · h/l/←→ step · enter opens detail · i install/update
+    // · u uninstall (same two-step arm as the mouse) · * favorite · / search ·
+    // esc back. The webview is mouse-first, but a keyboard path keeps the
+    // panel usable without a pointer and matches the TUI's keymap spirit.
+    const [selIdx, setSelIdx] = createSignal(-1)
+    let keyShell: HTMLElement | null = null
+    let searchEl: HTMLInputElement | null = null
+    const gridCols = () => {
+      const w = (keyShell?.querySelector('[data-list]') as HTMLElement | null)?.clientWidth ?? 620
+      return Math.max(1, Math.floor((w + 10) / 310))
+    }
+    // outline follows the selection without rebuilding cards — rows are
+    // recreated on every prog/installed change, so re-apply after each
+    createEffect(() => {
+      const i = selIdx()
+      if (i < 0 || !keyShell) return
+      void filtered(); void installed(); void prog(); void state()
+      keyShell.querySelectorAll('[data-mi]').forEach(n => {
+        const on = Number((n as HTMLElement).dataset.mi) === i
+        ;(n as HTMLElement).style.outline = on ? '1.5px solid var(--v2-border-border-focus, #5b8def)' : ''
+        ;(n as HTMLElement).style.outlineOffset = '-1.5px'
+      })
+    })
+    const actBtn = (act: string): HTMLElement | null => {
+      if (!keyShell) return null
+      if (view().kind === 'detail') return keyShell.querySelector(`[data-act="${act}"]`)
+      const i = selIdx()
+      return i >= 0 ? keyShell.querySelector(`[data-mi="${i}"] [data-act="${act}"]`) : null
+    }
+    const onDocKey = (ev: KeyboardEvent) => {
+      const sh = keyShell
+      if (!sh || !sh.isConnected) { document.removeEventListener('keydown', onDocKey); return }
+      const tgt = ev.target as HTMLElement | null
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) {
+        if (ev.key === 'Escape') (tgt as HTMLInputElement).blur?.()
+        return
+      }
+      if (view().kind === 'detail') {
+        if (ev.key === 'Escape') { ev.preventDefault(); setView({ kind: 'list' }); return }
+        if (ev.key === 'i') { actBtn('install')?.click(); return }
+        if (ev.key === 'u') { actBtn('uninstall')?.click(); return }
+        if (ev.key === '*') { actBtn('fav')?.click(); return }
+        return
+      }
+      if (tab() === 'advanced') return   // settings surface — inputs own the keys
+      const items = filtered()
+      if (!items.length) return
+      const move = (d: number) => {
+        ev.preventDefault()
+        const n = Math.max(0, Math.min(items.length - 1, (selIdx() < 0 ? 0 : selIdx()) + d))
+        setSelIdx(n)
+        requestAnimationFrame(() => {
+          const card = keyShell?.querySelector(`[data-mi="${n}"]`)
+          if (card) (card as HTMLElement).scrollIntoView?.({ block: 'nearest' })
+          else if (keyShell) keyShell.scrollTop += 320   // past the rendered page — sentinel loads more
+        })
+      }
+      switch (ev.key) {
+        case 'j': case 'ArrowDown': move(gridCols()); return
+        case 'k': case 'ArrowUp': move(-gridCols()); return
+        case 'h': case 'ArrowLeft': move(-1); return
+        case 'l': case 'ArrowRight': move(1); return
+        case 'Enter': {
+          ev.preventDefault()
+          const i = selIdx() >= 0 ? selIdx() : 0
+          const e = items[i]
+          if (e) { setSelIdx(i); setView({ kind: 'detail', e }) }
+          return
+        }
+        case 'i': case 'I': {
+          const e = items[selIdx()]
+          if (!e) return
+          const b = actBtn('install')
+          if (b && !b.hasAttribute('disabled')) b.click()
+          else setView({ kind: 'detail', e })   // installed/no-target → show state
+          return
+        }
+        case 'u': {
+          const e = items[selIdx()]
+          if (!e) return
+          const b = actBtn('uninstall')
+          if (b && !b.hasAttribute('disabled')) b.click()
+          else setView({ kind: 'detail', e })
+          return
+        }
+        case '*': { const e = items[selIdx()]; if (e) toggleFav(e.name); return }
+        case '/': searchEl?.focus(); ev.preventDefault(); return
+      }
+    }
+    if (typeof document !== 'undefined') document.addEventListener('keydown', onDocKey)
+
+    const row = (e: MarketEntry, idx: number) => {
       const d = el('div', 'padding:12px 14px;border-radius:8px;display:flex;flex-direction:column;min-height:110px;box-sizing:border-box;position:relative')
+      d.dataset.mi = String(idx)   // keyboard-nav anchor — index into filtered()
       // official [data-component=settings-list]: bg-layer-01 + 0.5px inset hairline via box-shadow
       d.style.background = 'var(--v2-background-bg-layer-01, color-mix(in srgb, CanvasText 4%, Canvas))'
       d.style.boxShadow = 'inset 0 0 0 0.5px var(--v2-border-border-muted, color-mix(in srgb, CanvasText 14%, transparent))'
@@ -411,7 +542,11 @@ export default Plugin.define({
       nameBox.onmouseleave = () => { nameBox.style.textDecoration = 'none' }
       nameBox.onclick = ev => { ev.stopPropagation(); try { ctx.system?.openExternal?.(entryUrl(e)) } catch { /* noop */ } }
       title.append(nameBox)
-      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-8px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', e.contains?.includes('skill') ? t('skill') : t('plugin'))
+      // dual-nature packages get a compound badge — showing only 'skill'
+      // hides the plugin half the entry also delivers
+      const hasP = e.contains ? e.contains.includes('plugin') : e.type !== 'skill'
+      const hasS = e.contains ? e.contains.includes('skill') : e.type === 'skill'
+      const typeBadge = el('span', 'font-size:10px;line-height:16px;color:inherit;opacity:.85;border-radius:8px 8px 0 0;padding:1px 8px 0;position:absolute;top:-8px;right:10px;background:var(--v2-background-bg-layer-01,color-mix(in srgb, CanvasText 4%, Canvas));z-index:1', hasP && hasS ? `${t('plugin')}+${t('skill')}` : hasS ? t('skill') : t('plugin'))
       // outline only for the ~9px above the card edge — inside part stays fused
       typeBadge.appendChild(el('span', 'position:absolute;inset:0 0 auto;height:8px;box-sizing:border-box;border:0.5px solid var(--v2-border-border-muted,color-mix(in srgb, CanvasText 14%, transparent));border-bottom:none;border-radius:8px 8px 0 0;pointer-events:none'))
       d.appendChild(typeBadge)
@@ -446,11 +581,16 @@ export default Plugin.define({
         tg.onclick = ev => { ev.stopPropagation(); setCat(ct) }
         bottom.appendChild(tg)
       }
-      // bottom-right favorite bookmark (dsh style) — localStorage state
-      const favBtn = el('button', 'margin-left:auto;font-size:14px;line-height:1;cursor:pointer;border:none;background:transparent;padding:2px 6px', state().favorites[e.name] ? '★' : '☆') as HTMLButtonElement
-      const syncFav = () => { favBtn.textContent = state().favorites[e.name] ? '★' : '☆'; favBtn.style.color = state().favorites[e.name] ? '#da3' : 'rgba(128,128,128,.7)' }
-      syncFav()
-      favBtn.onclick = ev => { ev.stopPropagation(); toggleFav(e.name); syncFav() }
+      // bottom-right favorite bookmark (dsh style) — localStorage state;
+      // reactive so keyboard '*' toggles repaint without a list rebuild
+      const favBtn = el('button', 'margin-left:auto;font-size:14px;line-height:1;cursor:pointer;border:none;background:transparent;padding:2px 6px') as HTMLButtonElement
+      favBtn.dataset.act = 'fav'
+      createEffect(() => {
+        const on = !!state().favorites[e.name]
+        favBtn.textContent = on ? '★' : '☆'
+        favBtn.style.color = on ? '#da3' : 'rgba(128,128,128,.7)'
+      })
+      favBtn.onclick = ev => { ev.stopPropagation(); toggleFav(e.name) }
       bottom.appendChild(favBtn)
       d.append(title, meta, desc, bottom)
       const p = prog()[e.name]
@@ -487,10 +627,11 @@ export default Plugin.define({
       // first page + auto-load on scroll (sentinel) keeps tab switches instant
       const PAGE = 60
       const [visible, setVisible] = createSignal(PAGE)
-      createEffect(() => { tab(); cat(); query(); sort(); sortDir(); favOnly(); rangeDays(); featFilter(); setVisible(PAGE) })
+      createEffect(() => { tab(); cat(); query(); sort(); sortDir(); favOnly(); rangeDays(); featFilter(); setVisible(PAGE); setSelIdx(-1) })
+      list.dataset.list = ''   // keyboard nav measures column count off this
       insert(list, () => {
         const items = filtered()
-        const rows = items.slice(0, visible()).map(row)
+        const rows = items.slice(0, visible()).map((e, i) => row(e, i))
         if (items.length > visible()) {
           const more = el('button', `grid-column:1/-1;padding:10px;font-size:13px;cursor:pointer;opacity:.8;background:transparent;border:1px solid rgba(128,128,128,.3);border-radius:8px;color:inherit`,
             `${t('loadMore')} (${items.length - visible()})`) as HTMLButtonElement
@@ -523,32 +664,63 @@ export default Plugin.define({
       head.appendChild(el('span', 'margin-left:12px;font-size:12px;opacity:.55', `opencode-market v${PKG_VERSION}`))
       const updAll = el('button', 'margin-left:auto;font-size:12px;cursor:pointer;padding:2px 14px;border:1px solid rgba(128,128,128,.5);border-radius:6px;background:transparent;color:inherit', t('updateAll')) as HTMLButtonElement
       updAll.dataset.act = 'updateAll'   // dispatch marker — text changes per state/lang, this doesn't
+      // passive "N updatable" badge — users used to have to open the sweep to
+      // learn anything was outdated at all
+      const [updBusy, setUpdBusy] = createSignal(false)
+      const outdatedCount = () => (data()?.plugins ?? []).filter(e => halfState(e, installed(), state().skillVers).anyOut).length
+      createEffect(() => {
+        if (updBusy()) return
+        const n = outdatedCount()
+        updAll.textContent = n ? `${t('updateAll')} (${n})` : t('updateAll')
+      })
+      const markSkillInstalled = (e: MarketEntry) => {
+        const v = verMarker(e) ?? 'local'
+        setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
+        put({ skillVers: { ...state().skillVers, [e.name]: v } })
+      }
       const runUpdateAll = async () => {
-        if (typeof safe.update !== 'function') { updAll.textContent = t('needRestartDesk'); return }
-        // skills join the sweep — the GUI used to only chase plugin specs and
-        // silently left stale skill dirs behind (TUI already covered both)
-        const outdated = (data()?.plugins ?? []).filter(e => { const v = installedVer(e); return !!v && hasUpdate(e, v) })
-        if (!outdated.length) { updAll.textContent = t('allLatest'); setTimeout(() => { updAll.textContent = t('updateAll') }, 3000); return }
-        updAll.disabled = true
-        let ok = 0, fail = 0
-        for (const e of outdated) {
-          updAll.textContent = tf('updatingN', { n: ok + fail + 1, total: outdated.length })
-          try {
-            const plan = installPlan(e)
-            if (plan.plugin && installed()[e.name]) await safe.update({ name: e.name, spec: pinSpec(e) })
-            if (plan.skill && skillInstalledVer(installed(), e.name)) {
-              await installSkillNet(e)
-              const v = verMarker(e) ?? 'local'
-              setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
-              put({ skillVers: { ...state().skillVers, [e.name]: v } })
-            }
-            ok++
-          } catch { fail++ }
-        }
+        if (typeof safe.update !== 'function' && typeof safe.writeSkill !== 'function') { updAll.textContent = t('needRestartDesk'); return }
+        // per-half targeting: only halves that are installed AND outdated —
+        // a current plugin half must not mask a stale skill half (the old
+        // merged-version check did exactly that)
+        const jobs = (data()?.plugins ?? [])
+          .map(e => {
+            const hs = halfState(e, installed(), state().skillVers)
+            if (!hs.anyOut) return null
+            const sync = halvesToSync(e, hs)
+            return { e, sync }
+          })
+          .filter((j): j is { e: MarketEntry; sync: { plugin: boolean; skill: boolean } } => !!j && (j.sync.plugin || j.sync.skill))
+        if (!jobs.length) { updAll.textContent = t('allLatest'); setTimeout(() => { setUpdBusy(false); updAll.textContent = t('updateAll') }, 3000); return }
+        updAll.disabled = true; setUpdBusy(true)
+        const total = jobs.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
+        let done = 0, ok = 0, fail = 0
+        const bump = () => { updAll.textContent = tf('updatingN', { n: ++done, total }) }
+        // two serial lanes — plugin adds rewrite opencode.json (must serialize
+        // against each other), skill installs write the skills root (serialize
+        // for lift-collision checks). The lanes overlap: tarball downloads no
+        // longer block config writes, halving wall time on mixed sweeps.
+        const pluginLane = (async () => {
+          for (const j of jobs) if (j.sync.plugin) {
+            bump()
+            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++ } catch { fail++ }
+          }
+        })()
+        const skillLane = (async () => {
+          const canSkill = typeof safe.writeSkill === 'function'
+          for (const j of jobs) if (j.sync.skill) {
+            bump()
+            try {
+              if (!canSkill) throw new Error('host missing writeSkill')
+              await installSkillNet(j.e); markSkillInstalled(j.e); ok++
+            } catch { fail++ }
+          }
+        })()
+        await Promise.all([pluginLane, skillLane])
         await new Promise(r => setTimeout(r, 2000))
-        const fresh = await safe.installed?.().catch(() => null)
+        const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
         if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-        updAll.disabled = false
+        updAll.disabled = false; setUpdBusy(false)
         updAll.textContent = fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })
         setTimeout(() => { updAll.textContent = t('updateAll') }, 4000)
       }
@@ -621,6 +793,7 @@ export default Plugin.define({
       q.placeholder = t('search')
       q.style.cssText = 'flex:1;height:32px;padding:0 8px 0 28px;box-sizing:border-box;font-size:13px;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid var(--v2-border-border-base,rgba(128,128,128,.35));border-radius:8px;outline:none'
       q.oninput = () => setQuery(q.value)
+      searchEl = q   // '/' focuses this from the keyboard handler
       const mag = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       mag.setAttribute('width', '14'); mag.setAttribute('height', '14'); mag.setAttribute('viewBox', '0 0 24 24')
       mag.setAttribute('fill', 'none'); mag.setAttribute('stroke', 'currentColor'); mag.setAttribute('stroke-width', '2')
@@ -715,7 +888,9 @@ export default Plugin.define({
       const info = el('div', 'font-size:12px;opacity:.8;margin:10px 0')
       const caps = e.capabilities
       for (const line of [
-        `version: ${e.latestVersion ?? '?'}`,
+        // github-kind entries have no npm version — fall back to the pushedAt
+        // marker like the card meta does, never a bare '?'
+        `version: ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}`,
         // held-back newer version — the index knows it exists; review hasn't
         // cleared it, so the client must never install it (hold semantics)
         ...(e.pendingUpdate?.version ? [tf('heldReview', { v: e.pendingUpdate.version })] : []),
@@ -729,12 +904,21 @@ export default Plugin.define({
         ...(e.replacement ? [tf('replacedBy', { name: e.replacement })] : []),
         ...(e.license ? [`license: ${e.license}`] : []),
         ...(e.createdAt ? [`created: ${e.createdAt.slice(0, 10)}`] : []),
+        // first catalog sighting + prior package names — context the index
+        // already carries but the detail page never showed
+        ...(e.firstSeenAt ? [`first seen: ${e.firstSeenAt.slice(0, 10)}`] : []),
+        ...(e.aliases?.length ? [`aka: ${e.aliases.join(', ')}`] : []),
+        // registry dist-tags beyond latest (beta/next/…) — informational only;
+        // installs always pin latestVersion, never a dist-tag
+        ...(e.distTags && Object.keys(e.distTags).length ? [`dist-tags: ${Object.entries(e.distTags).map(([k, v]) => `${k}=${v}`).join(' · ')}`] : []),
         ...(e.maintainers?.length ? [`maintainers: ${e.maintainers.join(', ')}`] : []),
         ...(e.compat?.engines || e.compat?.peer
           ? [`${t('compat')}: ${[e.compat.engines ? `opencode ${e.compat.engines}` : '', e.compat.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}`]
           : []),
-        // github-kind identity: the commit sha the evidence gate + scan saw
-        ...(e.source?.version ? [`commit: ${e.source.version.slice(0, 12)}`] : []),
+        // github-kind identity: source.version is the scanned TREE sha (not a
+        // commit, not an npm version) — label it accordingly and never show
+        // it for npm entries where the same field holds a semver
+        ...(e.source?.kind === 'github' && e.source?.version ? [`tree: ${e.source.version.slice(0, 12)}`] : []),
         ...(e.integrity ? [`integrity: ${e.integrity.slice(0, 32)}…`] : []),
         `verify: ${v?.status ?? 'unverified'}${v?.level ? ` · ${t('verifyLevel')}: ${v.level}` : ''}`,
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
@@ -828,7 +1012,7 @@ export default Plugin.define({
           // read BEFORE installed(): that call refetches the index and would
           // stamp 'fresh' over this refresh's real outcome
           const oc = await safe.indexOutcome?.().catch(() => '') as string
-          const fresh = await safe.installed?.().catch(() => null)
+          const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           setRefText(oc === 'fresh'
             ? `${t('dataFresh')}，${new Date().toLocaleTimeString()}`
@@ -902,7 +1086,7 @@ export default Plugin.define({
         const paintPerms = async () => {
           const [perms, inv] = await Promise.all([
             safe.skillPermission({ id: '', mode: null }).catch(() => ({}) as Record<string, string>),
-            safe.installed?.().catch(() => null),
+            safe.installed?.({ names: catalogNames() }).catch(() => null),
           ])
           const ids = Object.keys(inv?.versions ?? {})
             .filter(k => k.startsWith('__skill_')).map(k => k.slice('__skill_'.length))
@@ -929,6 +1113,7 @@ export default Plugin.define({
 
     const mount = (parent: HTMLElement, surface: 'panel' | 'settings') => {
       const shell = el('div', 'overflow:auto;height:100%')
+      keyShell = shell   // keyboard nav scopes queries to the live shell
       const head = chrome(surface)   // built ONCE — signal reads here don't get tracked
       const body = el('div')
       shell.append(head, body)
@@ -998,13 +1183,12 @@ export default Plugin.define({
     // lastIndexUrl keeps installed()'s extras lookup on the SAME catalog the
     // renderer asked for — a second fetch at the default would double-pull
     let lastIndexUrl = resolveIndexUrl(null)
-    const urlOrDefault = (u: unknown) =>
-      typeof u === 'string' && /^https:\/\//.test(u) ? u : lastIndexUrl
+    const urlOrDefault = (u: unknown) => isIndexUrl(u) ? u : lastIndexUrl
     m.provide(Market, {
         index: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl) as Promise<MarketIndex> },
         refreshIndex: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl, true) as Promise<MarketIndex> },
         indexOutcome: () => fetchOutcome(),
-        installed: async () => {
+        installed: async (p?: { names?: unknown }) => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
           const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
           const { homedir } = require('node:os') as typeof import('node:os')
@@ -1045,7 +1229,9 @@ export default Plugin.define({
           } catch { /* host api unavailable */ }
           if (!Object.keys(map).length) try {
             const out = await new Promise<string>((res, rej) =>
-              execFile('opencode', ['plugin', 'list'], { timeout: 15_000 }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
+              // restrictedEnv for parity with install/update — the fallback
+              // must not leak ambient secrets into a spawned process either
+              execFile('opencode', ['plugin', 'list'], { timeout: 15_000, env: restrictedEnv() }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
             for (const ln of out.split('\n').slice(1)) {
               const [id, ver, src] = ln.trim().split(/\s{2,}/)
               if (id) {
@@ -1069,7 +1255,11 @@ export default Plugin.define({
           let idxNames = new Set<string>()
           let extras: { name: string; version: string }[] = []
           try {
-            idxNames = new Set(((await fetchIndexCached(lastIndexUrl))?.plugins ?? []).map(p => p.name))
+            // renderer already fetched+sanitized the index for display — reuse
+            // its name list instead of pulling the multi-MB catalog a second
+            // time just to split cataloged vs uncataloged specs
+            const given = Array.isArray(p?.names) ? p.names.filter((x): x is string => typeof x === 'string') : null
+            idxNames = given ? new Set(given) : new Set(((await fetchIndexCached(lastIndexUrl))?.plugins ?? []).map(p => p.name))
             extras = buildExtras(specByName, idByName, map, idxNames)
             for (const x of extras) map[x.name] = x.version
           } catch { lg('installed(): catalog unreachable — extras degraded (no uncataloged split)') }
@@ -1137,7 +1327,11 @@ export default Plugin.define({
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
         },
         uninstall: async (name: string) => {
-          assertPkgName(name)
+          // broader than assertPkgName on purpose: git-spec installs record
+          // owner/repo, git urls, scp syntax etc. in plugins[] — removeSpec
+          // only string-compares, so any well-formed spec ref is safe here
+          // (assertPkgName rejected every git install → GUI couldn't remove it)
+          assertUninstallRef(name)
           lg(`uninstall ${name}: called`)
           // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
           // takes a spec, not the catalog name, and silently misses pinned specs
@@ -1166,7 +1360,10 @@ export default Plugin.define({
           let url: string
           let integrity: string | null = null
           if (plan.skill === 'github') {
-            url = `https://codeload.github.com/${entry.source!.repo}/tar.gz/${entry.source?.version ?? 'HEAD'}`
+            // source.version is the scanned tree sha — gitPinRef validates the
+            // pin is hex (a malformed ref in a crafted/custom index fails
+            // closed instead of sliding a branch name past the scan)
+            url = `https://codeload.github.com/${entry.source!.repo}/tar.gz/${gitPinRef(entry.source?.version)}`
           } else if (plan.skill === 'npm') {
             if (!entry.latestVersion) throw new Error('no approved version to install')
             const meta = await fetchPkgVersionMeta(entry.name, entry.latestVersion)
@@ -1243,7 +1440,7 @@ export default Plugin.define({
             let name: string
             try { name = cleanSpec(String(spec)); assertSpecForName(name, spec) } catch (e) { reject(e); return }
             const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } = require('node:fs') as typeof import('node:fs')
+            const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } = require('node:fs') as typeof import('node:fs')
             const { tmpdir } = require('node:os') as typeof import('node:os')
             const { join } = require('node:path') as typeof import('node:path')
             const home = mkdtempSync(join(tmpdir(), 'mkt-verify-'))
@@ -1261,12 +1458,18 @@ export default Plugin.define({
             const logEnv = { ...env, LOG: join(home, 'data', 'opencode', 'log', 'opencode.log') }
             execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, (err) => {
               const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
+              // every probe leaves a temp home (serve.out + config + logs) —
+              // clean it on ALL paths or each install leaks a tmpdir forever
+              const finish = (v: string) => {
+                try { rmSync(home, { recursive: true, force: true }) } catch { /* best effort */ }
+                resolve(v)
+              }
               // tri-state: 'unknown' when the probe itself couldn't run (no sh
               // on Windows, serve never wrote a log) — the caller must not
               // dress that up as a confident not-loaded diagnosis
-              if (err || !existsSync(log)) return resolve('unknown')
+              if (err || !existsSync(log)) return finish('unknown')
               const ok = new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
-              resolve(ok ? 'activated' : 'not-loaded')
+              finish(ok ? 'activated' : 'not-loaded')
             })
           }),
       })

@@ -361,7 +361,7 @@ describe('skill-install', () => {
     expect(readdirSync(out)).not.toContain('.secret')
   })
 
-  it('uninstallSkillDir: legacy <id>-* cleanup when no manifest', async () => {
+  it('uninstallSkillDir: manifest-less dirs are foreign — refuses, preserves', async () => {
     const { uninstallSkillDir } = await import('../src/skill-install.ts')
     const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
@@ -370,9 +370,11 @@ describe('skill-install', () => {
     mkdirSync(join(out, 'suite-alpha'), { recursive: true })
     mkdirSync(join(out, 'other'), { recursive: true })
     writeFileSync(join(out, 'other', 'SKILL.md'), 'keep')
-    await uninstallSkillDir('suite', out)
-    expect(existsSync(join(out, 'suite'))).toBe(false)
-    expect(existsSync(join(out, 'suite-alpha'))).toBe(false)
+    // no manifest anywhere → 'suite' and the <id>-* sibling are all foreign;
+    // the old code deleted them unconditionally (P0: user-file loss)
+    await expect(uninstallSkillDir('suite', out)).rejects.toThrow(/not managed by market/)
+    expect(existsSync(join(out, 'suite'))).toBe(true)
+    expect(existsSync(join(out, 'suite-alpha'))).toBe(true)
     expect(existsSync(join(out, 'other'))).toBe(true)
   })
 })
@@ -789,5 +791,116 @@ describe('skill-install foreign-dir protection', () => {
     await installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })   // owned → allowed
     expect(existsSync(join(out, 'suite', '.market-skills.json'))).toBe(true)
     expect(existsSync(join(out, 'suite', 'file.txt'))).toBe(true)
+  })
+})
+
+describe('audit-round-3 fixes', () => {
+  it('versionCmp: prerelease < release; numeric/alnum prerelease ids', async () => {
+    const { versionCmp } = await import('../src/catalog.ts')
+    // the old part-wise compare ranked 1.0.0-beta.1 NEWER than 1.0.0
+    expect(versionCmp('1.0.0', '1.0.0-beta.1')).toBeGreaterThan(0)
+    expect(versionCmp('1.0.0-beta.1', '1.0.0')).toBeLessThan(0)
+    expect(versionCmp('1.0.0-beta.1', '1.0.0-beta.2')).toBeLessThan(0)
+    expect(versionCmp('1.0.0-beta.2', '1.0.0-beta.10')).toBeLessThan(0)   // numeric ids
+    expect(versionCmp('1.0.0-alpha', '1.0.0-alpha.1')).toBeLessThan(0)    // shorter loses
+    expect(versionCmp('1.0.0-1', '1.0.0-alpha')).toBeLessThan(0)          // numeric < alnum
+    expect(versionCmp('1.2.0', '1.10.0')).toBeLessThan(0)
+    expect(versionCmp('v1.0.0', '1.0.0')).toBe(0)                          // build metadata ignored
+  })
+  it('resolveIndexUrl/isIndexUrl: https anywhere, http only on loopback', async () => {
+    const { resolveIndexUrl, isIndexUrl } = await import('../src/catalog.ts')
+    expect(isIndexUrl('https://x.test/i.json')).toBe(true)
+    expect(isIndexUrl('http://localhost:8000/index.json')).toBe(true)
+    expect(isIndexUrl('http://127.0.0.1:9000/i.json')).toBe(true)
+    expect(isIndexUrl('http://[::1]:8000/i.json')).toBe(true)
+    expect(isIndexUrl('http://insecure.example.com/i.json')).toBe(false)
+    expect(isIndexUrl('http://localhost.evil.com/i.json')).toBe(false)
+    expect(isIndexUrl('ftp://x')).toBe(false)
+    expect(resolveIndexUrl({ indexUrl: 'http://localhost:8123/index.json' })).toBe('http://localhost:8123/index.json')
+    expect(resolveIndexUrl({ indexUrl: 'http://insecure.example.com/i.json' })).toBe(DEFAULT_INDEX_URL)
+  })
+  it('gitPinRef: hex pins pass, missing → HEAD, malformed fails closed', async () => {
+    const { gitPinRef } = await import('../src/catalog.ts')
+    expect(gitPinRef('0123456789abcdef0123456789abcdef01234567')).toBe('0123456789abcdef0123456789abcdef01234567')
+    expect(gitPinRef(null)).toBe('HEAD')
+    expect(gitPinRef(undefined)).toBe('HEAD')
+    expect(gitPinRef('')).toBe('HEAD')
+    for (const bad of ['main', 'v1.2.3', 'HEAD', '0123\n4567', 'zzzz'])
+      expect(() => gitPinRef(bad)).toThrow('invalid source pin')
+  })
+  it('halfState/halvesToSync: per-half install+update truth table', async () => {
+    const { halfState, halvesToSync, installPlan } = await import('../src/catalog.ts')
+    const dual: MarketEntry = {
+      name: 'pkg', slug: 'pkg', type: 'plugin', category: [], contains: ['plugin', 'skill'],
+      source: { kind: 'npm', id: 'pkg' }, latestVersion: '2.0.0',
+    } as MarketEntry
+    // fresh → both halves sync
+    expect(halvesToSync(dual, halfState(dual, {}, {}))).toEqual({ plugin: true, skill: true })
+    // plugin current + skill outdated → only skill
+    const hs1 = halfState(dual, { pkg: '2.0.0' }, { pkg: '1.0.0' })
+    expect(hs1.pluginOn).toBe(true); expect(hs1.pluginOut).toBe(false)
+    expect(hs1.skillOn).toBe(true); expect(hs1.skillOut).toBe(true)
+    expect(halvesToSync(dual, hs1)).toEqual({ plugin: false, skill: true })
+    // plugin outdated + skill current → only plugin
+    const hs2 = halfState(dual, { pkg: '1.0.0' }, { pkg: '2.0.0' })
+    expect(halvesToSync(dual, hs2)).toEqual({ plugin: true, skill: false })
+    // all current → nothing
+    const hs3 = halfState(dual, { pkg: '2.0.0' }, { pkg: '2.0.0' })
+    expect(hs3.anyOut).toBe(false)
+    expect(halvesToSync(dual, hs3)).toEqual({ plugin: false, skill: false })
+    // partial install (plugin only) → plugin updates, missing skill NOT resurrected
+    const hs4 = halfState(dual, { pkg: '1.0.0' }, {})
+    expect(halvesToSync(dual, hs4)).toEqual({ plugin: true, skill: false })
+    // foreign skill dir ('local') → on but never "outdated"
+    const hs5 = halfState(dual, {}, { pkg: 'local' })
+    expect(hs5.skillOn).toBe(true); expect(hs5.skillOut).toBe(false)
+    expect(hs5.anyOut).toBe(false)
+  })
+  it('categoriesOf reads zh descriptions too', async () => {
+    const { categoriesOf } = await import('../src/catalog.ts')
+    const zhOnly: MarketEntry = {
+      name: 'x9z-unrelated', slug: 'x9z', type: 'plugin', category: [],
+      description: { zh: '管理 opencode 的模型提供商与用量计费' },
+    } as MarketEntry
+    const cats = categoriesOf(zhOnly)
+    expect(cats).toContain('models')
+    expect(cats).not.toContain('other')
+  })
+  it('restrictedEnv forwards safe NPM_CONFIG_*, still strips credentials', async () => {
+    const { restrictedEnv } = await import('../src/hostx.ts')
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    env.NPM_CONFIG_REGISTRY = 'https://npm.corp.example/'; env.npm_config_cache = '/tmp/npmcache'
+    env.NPM_CONFIG_//registry.npmjs.org/:_authToken = 'SECRET'
+    env.NPM_TOKEN = 'SECRET2'
+    const e = restrictedEnv()
+    expect(e.NPM_CONFIG_REGISTRY).toBe('https://npm.corp.example/')
+    expect(e.npm_config_cache).toBe('/tmp/npmcache')
+    expect(Object.keys(e).some(k => /authToken|_TOKEN/i.test(k))).toBe(false)
+    delete env.NPM_CONFIG_REGISTRY; delete env.npm_config_cache
+    delete env['NPM_CONFIG_//registry.npmjs.org/:_authToken']; delete env.NPM_TOKEN
+  })
+  it('assertUninstallRef: npm/repo/git-urls ok; junk rejected', async () => {
+    const { assertUninstallRef } = await import('../src/hostx.ts')
+    for (const ok of ['pkg', '@scope/pkg', 'owner/repo', 'https://github.com/o/r', 'git+ssh://git@h/o/r.git', 'git@github.com:o/r.git', 'ssh://git@h/o/r', 'github:o/r'])
+      expect(() => assertUninstallRef(ok)).not.toThrow()
+    for (const bad of ['', 'a b', '../x', 'x;rm -rf /', 'https://x y', 42, null, 'a'.repeat(600)])
+      expect(() => assertUninstallRef(bad)).toThrow('invalid uninstall target')
+  })
+  it('fetchPkgVersionMeta cache is bounded (LRU evicts oldest)', async () => {
+    const { fetchPkgVersionMeta } = await import('../src/catalog.ts')
+    const realFetch = globalThis.fetch
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(JSON.stringify({ 'dist-tags': {}, versions: { '1.0.0': { dist: { tarball: 'https://r/x.tgz', integrity: 'sha512-x' } } } }), { status: 200 })
+    }) as typeof fetch
+    try {
+      for (let i = 0; i < 105; i++) await fetchPkgVersionMeta(`pk-bound-${i}`, '1.0.0')
+      const before = calls
+      await fetchPkgVersionMeta('pk-bound-0', '1.0.0')   // evicted → refetches
+      expect(calls).toBe(before + 1)
+      await fetchPkgVersionMeta('pk-bound-104', '1.0.0') // newest → cache hit
+      expect(calls).toBe(before + 1)
+    } finally { globalThis.fetch = realFetch }
   })
 })

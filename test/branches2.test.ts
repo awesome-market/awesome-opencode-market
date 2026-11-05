@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { searchByKeyword, discoverNpm } from '../pipeline/discover/npm.ts'
 import { searchTopic, discoverGithub } from '../pipeline/discover/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
-import { fetchRepoMeta, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta } from '../pipeline/fetch/github.ts'
 import { scanTarball } from '../pipeline/scan/scan.ts'
 import { mergeEntries } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
@@ -65,12 +65,6 @@ describe('branches round 2', () => {
     }
     const { meta: r } = await fetchRepoMeta('o/r', { token: 'tok', fetchFn: f as typeof fetch })
     expect(r).toMatchObject({ archived: true, license: null })
-  })
-  it('repoFileExists: branch param in query', async () => {
-    let seen = ''
-    const f = async (input: RequestInfo | URL) => { seen = String(input); return new Response('', { status: 200 }) }
-    await repoFileExists('o/r', 'SKILL.md', { branch: 'dev', token: 't', fetchFn: f as typeof fetch })
-    expect(seen).toContain('ref=dev')
   })
   it('scanTarball: AppleDouble ._ files skipped', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sc3-'))

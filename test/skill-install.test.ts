@@ -116,13 +116,28 @@ describe('uninstallSkillDir', () => {
     expect(existsSync(join(root, 'my-pkg'))).toBe(false)
   })
 
-  it('legacy fallback removes <id>-* dirs without a manifest', async () => {
+  it('manifest-less dirs are FOREIGN — refuses to delete, preserves everything', async () => {
+    // .market-skills.json existed since this installer was born, so a dir
+    // without one can never be a market install — it is user files. The old
+    // "legacy fallback" rm -rf'd it AND swept every <id>-* sibling.
     mkdirSync(join(root, 'old-pkg-sub', 'x'), { recursive: true })
     writeFileSync(join(root, 'old-pkg-sub', 'x', 'SKILL.md'), '#')
     mkdirSync(join(root, 'old-pkg'), { recursive: true })
-    await uninstallSkillDir('old-pkg', root)
-    expect(existsSync(join(root, 'old-pkg-sub'))).toBe(false)
-    expect(readdirSync(root)).toEqual([])
+    writeFileSync(join(root, 'old-pkg', 'SKILL.md'), '# foreign')
+    await expect(uninstallSkillDir('old-pkg', root)).rejects.toThrow(/not managed by market/)
+    expect(existsSync(join(root, 'old-pkg-sub', 'x', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(root, 'old-pkg', 'SKILL.md'))).toBe(true)
+  })
+
+  it('stray <id>-* dirs with no package dir are reported, not deleted', async () => {
+    // orphan lifts from a manually-deleted install are indistinguishable from
+    // foreign dirs — report honestly instead of guessing
+    mkdirSync(join(root, 'old-pkg-sub'), { recursive: true })
+    writeFileSync(join(root, 'old-pkg-sub', 'SKILL.md'), '#')
+    await expect(uninstallSkillDir('old-pkg', root)).rejects.toThrow(/not managed by market/)
+    expect(existsSync(join(root, 'old-pkg-sub', 'SKILL.md'))).toBe(true)
+    // nothing at all → idempotent 'removed'
+    await expect(uninstallSkillDir('never-installed', root)).resolves.toBe('removed')
   })
 
   it('uninstall prefers the namespaced dir, falls back to basename', async () => {
@@ -135,9 +150,10 @@ describe('uninstallSkillDir', () => {
     await uninstallSkillDir('@a/test', root)
     expect(existsSync(join(root, 'a--test'))).toBe(false)
     expect(existsSync(join(root, 'test', 'SKILL.md'))).toBe(true)   // foreign untouched
-    // singleton install lives at basename
-    await uninstallSkillDir('@a/test', root)
-    expect(existsSync(join(root, 'test'))).toBe(false)
+    // the remaining 'test' dir has NO manifest — it is foreign, so a second
+    // uninstall must refuse rather than delete user files (was: deleted it)
+    await expect(uninstallSkillDir('@a/test', root)).rejects.toThrow(/not managed by market/)
+    expect(existsSync(join(root, 'test', 'SKILL.md'))).toBe(true)
   })
 
   it('manifest paths cannot escape the root', async () => {

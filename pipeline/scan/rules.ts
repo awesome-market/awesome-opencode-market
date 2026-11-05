@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r3'
+export const RULESET_VERSION = 'r4'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -53,8 +53,12 @@ export const RULES: Rule[] = [
   },
   {
     id: 'obfuscation', sev: 'high',
-    test: (_p, c) => {
-      if (c == null) return null
+    test: (p, c) => {
+      // docs legitimately SHOW eval/hex examples — a high-severity hit on a
+      // README would fake a red flag and gate the whole version on manual
+      // review; only executable surface can obfuscate (same scoping as
+      // credential-read)
+      if (c == null || !/\.(js|mjs|cjs|ts|mts|cts|sh)$/i.test(p)) return null
       if (/eval\(|new Function/.test(c)) return 'eval/Function usage'
       if (/(\\x[0-9a-fA-F]{2}){8,}/.test(c)) return 'long hex-escaped blob'
       return null
