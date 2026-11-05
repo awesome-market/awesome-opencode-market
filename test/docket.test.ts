@@ -78,9 +78,11 @@ describe('docketTargets', () => {
   it('ai pass over a standing human concern → re-review target carries the brake context (K-3)', () => {
     const t = docketTargets(idx([e()]), [
       v({ at: '2026-01-01T00:00:00Z', verdict: 'concern', source: 'human', reason: 'manual brake' }),
-      v({ at: '2026-01-02T00:00:00Z', verdict: 'pass', source: 'ai' }),
+      v({ at: '2026-01-02T00:00:00Z', verdict: 'pass', source: 'ai', reason: '干净', reasonEn: 'clean' }),
     ])
     expect(t[0]!.verdict).toBe('pass')
+    expect(t[0]!.reason).toBe('干净')
+    expect(t[0]!.reasonEn).toBe('clean')
     expect(t[0]!.humanVerdict?.verdict).toBe('concern')
     expect(t[0]!.humanVerdict?.reason).toBe('manual brake')
   })
@@ -95,10 +97,10 @@ describe('docketTargets', () => {
       { now: '2026-01-05T00:00:00Z' })).toEqual([])
   })
   it('flag: live entry with identity sec redFlags → standing issue on displayed key', () => {
-    const t = docketTargets(idx([e({ approval: 'approved',
+    const t = docketTargets(idx([e({ approval: 'approved', publishedAt: '2026-01-01T00:00:00Z',
       capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-recreated'] } })]), [])
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'flag', reason: 'sec:repo-recreated',
-      verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, heldAt: 't' }])
+      verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, publishedAt: '2026-01-01T00:00:00Z' }])
   })
   it('flag retired by any human verdict on the displayed key; pending entries never flag', () => {
     const flagged = e({ approval: 'approved',
@@ -113,6 +115,7 @@ describe('docketTargets', () => {
       e({ name: n, slug: `o/${n}`, firstSeenAt: 't', ...over })
     const t = docketTargets(idx([
       mk('flagpkg', { approval: 'approved', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } }),
+      mk('flag2', { approval: 'approved', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:y'] } }),
       mk('concpkg'),
       mk('nonepkg', { firstSeenAt: '2020-01-01T00:00:00Z' }),
       mk('passpkg'),
@@ -120,7 +123,8 @@ describe('docketTargets', () => {
       v({ name: 'concpkg', verdict: 'concern' }),
       v({ name: 'passpkg', verdict: 'pass' }),
     ], null, { now: '2026-01-05T00:00:00Z' })
-    expect(t.map(x => x.verdict)).toEqual(['pass', 'none', 'concern', 'flag'])
+    expect(t.map(x => x.verdict)).toEqual(['pass', 'none', 'concern', 'flag', 'flag'])
+    expect(t.slice(3).map(x => x.name)).toEqual(['flagpkg', 'flag2'])
   })
 })
 
@@ -160,6 +164,27 @@ describe('issueBody', () => {
     expect(body).toContain('github.com/o/r/blob/catalog')
     expect(body).toContain('https://o.github.io/r/p/o/p.html')
     expect(body).toContain('已上架')
+  })
+  it('aged none (versioned) explains backlog; repo-only none explains AI never runs', () => {
+    expect(issueBody({ name: 'p', version: '1.0.0', verdict: 'none' })).toContain('诊断已停摆')
+    expect(issueBody({ name: 'o/r', version: null, verdict: 'none' })).toContain('AI 不审')
+  })
+  it('ai concern body states the block; flag without reason falls back to sec:*', () => {
+    expect(issueBody({ name: 'p', version: '1.0.0', verdict: 'concern' })).toContain('已拦截放行')
+    expect(issueBody({ name: 'p', version: '1.0.0', verdict: 'flag' })).toContain('sec:*')
+  })
+  it('findings-only still renders the scan line; heldAt shows without publishedAt', () => {
+    const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', findings: 3, heldAt: '2026-01-05T00:00:00Z' })
+    expect(body).toContain('静态扫描')
+    expect(body).toContain('在押自：2026-01-05')
+    expect(body).not.toContain('npm 发布于')
+  })
+  it('no repo opt → plain catalog-branch pointer; repo without pagesBase → no detail link', () => {
+    expect(issueBody({ name: 'p', version: '1.0.0', verdict: 'pass' }))
+      .toContain('catalog 分支 `index.json`')
+    const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', slug: 'o/p' }, { repo: 'o/r' })
+    expect(body).toContain('catalog/index.json')
+    expect(body).not.toContain('详情页')
   })
 })
 
@@ -293,6 +318,83 @@ describe('docket main', () => {
     expect(calls.some(c => c.includes('close') && c.includes('5'))).toBe(true)
   })
 
+  it('close comments name the reason per case: superseded / tombstoned / decided', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk7-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    // pkg@1.0.0 still wanted (ai pass) → pkg@0.9.0's issue is superseded;
+    // gone/ghost isn't in the index at all → tombstoned
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        { number: 8, title: '[review] pkg@0.9.0', labels: [], body: 'x' },
+        { number: 9, title: '[review] gone/ghost@9.9.9', labels: [], body: 'x' },
+        // unparseable title body → titleTarget null → same tombstone bucket
+        { number: 10, title: '[review]', labels: [], body: 'x' },
+        // already carries review:decided and no pending → no label edit needed
+        { number: 11, title: '[review] gone/ghost2', labels: [{ name: 'review:decided' }], body: 'x' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    const summary = join(dir, 'summary.md')
+    const savedSummary = process.env.GITHUB_STEP_SUMMARY
+    process.env.GITHUB_STEP_SUMMARY = summary
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      // assigning undefined would leak the literal string 'undefined' into
+      // later tests' env — delete restores the unset state
+      if (savedSummary === undefined) delete process.env.GITHUB_STEP_SUMMARY
+      else process.env.GITHUB_STEP_SUMMARY = savedSummary
+    }
+    const comments = calls.filter(c => c.includes('comment')).map(c => c.join(' ')).join('\n')
+    expect(comments).toContain('评审目标已变更')
+    expect(comments).toContain('已不在 catalog 索引中')
+    // #11 already decided: no label edit wasted on it
+    expect(calls.some(c => c.includes('edit') && c.includes('11'))).toBe(false)
+    const { readFileSync } = await import('node:fs')
+    const sm = readFileSync(summary, 'utf8')
+    expect(sm).toContain('review-docket')
+    expect(sm).toContain('关闭 4')
+    expect(sm).toContain('新开 1')
+  })
+
+  it('listing at the cap warns loudly instead of truncating silently', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk8-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const full = Array.from({ length: 4000 }, (_, i) => ({ number: i, title: `noise/${i}`, labels: [], body: '' }))
+    const ghFn = (args: string[]) => args.includes('list') ? JSON.stringify(full) : ''
+    const warned: string[] = []
+    const orig = console.warn
+    console.warn = (...a: unknown[]) => { warned.push(a.join(' ')) }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      console.warn = orig
+    }
+    expect(warned.join('\n')).toContain('hit limit')
+  })
+
   it('duplicate same-title issues: newest survives, older ones close as 重复审核单', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
@@ -357,5 +459,130 @@ describe('docket main', () => {
     expect(edits).toContain('未写盘')
     // ai:* is already correct — no label churn, only the body edit
     expect(edits).not.toContain('--add-label ai:')
+  })
+
+  it('missing required args rejects with usage instead of reading argv[0]', async () => {
+    const { main } = await import('../pipeline/docket.ts')
+    await expect(main(['x', 'y'], () => '')).rejects.toThrow('usage:')
+  })
+
+  it('a decided-but-still-pending entry closes its issue as 已决议', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk9-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))   // still pending…
+    writeFileSync(vPath, JSON.stringify(v({ source: 'human' })) + '\n')   // …but ruled
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        { number: 6, title: '[review] pkg@1.0.0', labels: [], body: 'x' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    expect(calls.some(c => c.includes('comment') && c.join(' ').includes('verdict 已决议'))).toBe(true)
+    expect(calls.some(c => c.includes('close') && c.includes('6'))).toBe(true)
+  })
+
+  it('--digest-state path is honored: announced verdicts render announced maturity', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk10-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const dPath = join(dir, 'd.json')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    const ver = v()
+    writeFileSync(vPath, JSON.stringify(ver) + '\n')
+    writeFileSync(dPath, JSON.stringify({
+      lastDigestAt: '2026-01-02T00:00:00Z',
+      announced: [`${ver.name}\0${ver.version}\0${ver.at}`],
+      day: '2026-01-02', dayAnnounced: [],
+    }))
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return '[]'
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--digest-state', dPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))
+    expect(create).toBeTruthy()
+    expect(create!.join(' ')).toContain('已公告·待放行闸')
+  })
+
+  it('--dry prints actions without touching issues', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk11-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        { number: 5, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'stale' },
+        { number: 7, title: '[review] gone/x@1.0.0', labels: [], body: 'x' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--dry'], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    expect(calls.filter(c => c.includes('list')).length).toBe(1)
+    expect(calls.some(c => c.includes('create') || c.includes('edit')
+      || c.includes('close') || c.includes('comment'))).toBe(false)
+  })
+
+  it('an issue whose ai:* label no longer matches (flag target now) gets it stripped', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk12-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{
+        number: 4, title: '[review] pkg@1.0.0',
+        labels: [{ name: 'review:pending' }, { name: 'ai:pass' }], body: 'old',
+      }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+    expect(edits).toContain('--remove-label ai:pass')
+    expect(edits).not.toContain('--add-label ai:')
+    expect(calls.some(c => c.includes('create'))).toBe(false)
   })
 })

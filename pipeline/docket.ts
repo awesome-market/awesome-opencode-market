@@ -77,16 +77,18 @@ export function docketTargets(
   const announced = new Set(digest?.announced ?? [])
   const out: DocketTarget[] = []
   for (const e of index.plugins) {
-    const meta = (cap: { findings: unknown[]; redFlags: string[] } | undefined,
-      ver: { verification?: { status: string } } | undefined) => ({
-      ...(cap ? { findings: cap.findings.length, redFlags: cap.redFlags.length } : {}),
+    // slot = what the issue is about: the pendingUpdate when held, else the
+    // entry itself. heldAt/publishedAt follow the candidate, not the entry.
+    const slot = e.pendingUpdate ?? e
+    const held = 'heldAt' in slot ? slot.heldAt : slot.firstSeenAt
+    const meta = {
+      findings: slot.capabilities.findings.length,
+      redFlags: slot.capabilities.redFlags.length,
+      verification: slot.verification.status,
       ...(e.slug ? { slug: e.slug } : {}),
-      ...(e.pendingUpdate?.heldAt ?? e.firstSeenAt
-        ? { heldAt: e.pendingUpdate?.heldAt ?? e.firstSeenAt } : {}),
-      ...(e.pendingUpdate?.publishedAt ?? e.publishedAt
-        ? { publishedAt: e.pendingUpdate?.publishedAt ?? e.publishedAt ?? undefined } : {}),
-      ...(ver?.verification?.status ? { verification: ver.verification.status } : {}),
-    })
+      ...(held ? { heldAt: held } : {}),
+      ...(slot.publishedAt ? { publishedAt: slot.publishedAt } : {}),
+    }
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
     // live entry. Held entries already have a review channel (the held
     // version); a displayed version never gets one — the AI doesn't re-review
@@ -99,10 +101,9 @@ export function docketTargets(
           name: e.name, version: e.latestVersion, verdict: 'flag',
           reason: flags.join(' '),
           verification: e.verification.status,
-          slug: e.slug,
           findings: e.capabilities.findings.length,
           redFlags: e.capabilities.redFlags.length,
-          ...(e.firstSeenAt ? { heldAt: e.firstSeenAt } : {}),
+          ...(e.slug ? { slug: e.slug } : {}),
           ...(e.publishedAt ? { publishedAt: e.publishedAt } : {}),
         })
       }
@@ -115,8 +116,7 @@ export function docketTargets(
       // entry sits invisible+pending forever. Keep one open until any verdict
       // (human, by construction) lands on name\0.
       if (e.approval === 'pending' && e.latestVersion === null && !latest.has(vkey(e.name, null))) {
-        out.push({ name: e.name, version: null, verdict: 'none',
-          ...meta(e.capabilities, e) })
+        out.push({ name: e.name, version: null, verdict: 'none', ...meta })
       }
       continue
     }
@@ -125,10 +125,9 @@ export function docketTargets(
       // no verdict AT ALL on a held version: the diagnose queue is behind or
       // dead (launchd pause). Young holds stay AI's job; aged ones get the
       // same standing-issue channel as repo-only so they can't go invisible.
-      const held = Date.parse(e.pendingUpdate?.heldAt ?? e.firstSeenAt ?? '')
+      const held = Date.parse(e.pendingUpdate?.heldAt ?? e.firstSeenAt)
       if (Number.isFinite(held) && now - held >= NO_VERDICT_AGE_MS) {
-        out.push({ name: e.name, version: ver, verdict: 'none',
-          ...meta(e.pendingUpdate?.capabilities ?? e.capabilities, e.pendingUpdate ?? e) })
+        out.push({ name: e.name, version: ver, verdict: 'none', ...meta })
       }
       continue
     }
@@ -140,7 +139,7 @@ export function docketTargets(
       ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
       ...(hv ? { humanVerdict: hv } : {}),
       maturity: announced.has(akey(rec)) ? 'announced' : 'pending-announce',
-      ...meta(e.pendingUpdate?.capabilities ?? e.capabilities, e.pendingUpdate ?? e),
+      ...meta,
     })
   }
   // Creation order = severity so the freshest issues on the phone are the
@@ -148,11 +147,12 @@ export function docketTargets(
   // concern (blocked, decide) → flag (live entry, identity signal). Ties:
   // oldest-held first, matching diagnose FIFO.
   const rank = { pass: 0, none: 1, concern: 2, flag: 3 } as const
-  out.sort((a, b) => rank[a.verdict] - rank[b.verdict]
-    || Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
+  const heldKey = (t: DocketTarget) => Date.parse(t.heldAt ?? '') || 0
+  out.sort((a, b) => rank[a.verdict] - rank[b.verdict] || heldKey(a) - heldKey(b))
   return out
 }
 
+/* v8 ignore next 8 -- the real gh CLI is never invoked under unit tests */
 const gh = (args: string[]) =>
   execFileSync('gh', args, {
     encoding: 'utf8',
@@ -247,7 +247,7 @@ export async function main(
   const dry = args.includes('--dry')
   const repo = env.GH_REPO
   if (!idxPath || !verdictsPath || !repo)
-    exit('usage: --index <p> --verdicts <p> [--digest-state <p>] [--dry]   (GH_REPO=owner/repo required)')
+    throw new Error('usage: --index <p> --verdicts <p> [--digest-state <p>] [--dry]   (GH_REPO=owner/repo required)')
 
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const verdicts = loadVerdicts(verdictsPath)
