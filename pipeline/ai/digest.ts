@@ -215,6 +215,15 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
     .filter(Number.isFinite)
     .sort((a, b) => a - b)
     .map(t => new Date(t).toISOString())[0]
+  // 最新 AI 裁决时间 —— pendingReview 计数可以稳定不动掩盖停摆(候选全被
+  // twin/verify 短路消化时照样写行),但"多久没出 AI 判词"骗不了人。这是
+  // 本地诊断 worker 的被动心跳:文件新鲜度不行(人工裁决/compact 也写同一
+  // 文件),最新 source:ai 行的 at 才是 diagnose 自己的脚印。
+  const latestAiAt = verdicts
+    .filter(v => v.source === 'ai')
+    .map(v => Date.parse(v.at))
+    .filter(Number.isFinite)
+    .reduce((a, b) => Math.max(a, b), 0)
 
   // §⑥ live-entry trust alarms — identity-level sec:* redFlags on a VISIBLE
   // entry (repojack / name-reuse / version-rollback). §②'s held filter
@@ -322,7 +331,7 @@ ${concerns.length ? table(concerns) : '_无_'}
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
-- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'}
+- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}
 
 ## ⑥ 已上架条目信任信号（identity-level sec flags — ${liveAlarms.length}）
 

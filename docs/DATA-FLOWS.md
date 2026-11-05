@@ -655,9 +655,9 @@ flowchart TB
   VJ[("ai-verdicts.jsonl")] --> UT
   UT --> GATE{"免费判定?"}
   GATE -->|"sha 复用"| REC
-  GATE -->|"verify=failed → concern 短路<br/>(harness error: 摘录豁免——包未实测)"| REC
+  GATE -->|"verify=failed 终态 → concern 短路<br/>(retryable 归 verify 自愈；<br/>harness error: 摘录豁免——包未实测)"| REC
   GATE -->|"否则"| RM["reviewMaterial<br/>manifest+scan+findings+redFlags<br/>+meta+verify+prev-findings"]
-  RM --> L05["L0.5 Galvanize-2<br/>批量打分 1次/轮 (l05_score.py)"]
+  RM --> L05["L0.5 Galvanize-2<br/>批量打分 1次/轮 +canary 自检<br/>(l05_score.py 前向分块)"]
   RM --> OR["Ornith LLM (omlx)<br/>平衡括号取最后 verdict JSON"]
   L05 -->|"≥0.662"| FLG["l05flag {zh,en}"]
   OR --> RESP["{verdict,<br/>reason_zh, reason_en}"]
@@ -671,10 +671,20 @@ flowchart TB
 逐步细节：
 
 ```
-ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双烧 LLM；
-  锁龄>2h 视为僵死回收——SIGKILL/断电不会把评审永久停摆，D-11）
-  → catalog clone（~/.local/share/opencode-market-catalog）→ fetch+reset --hard
-  （失败即退，不拿陈旧数据跑）；本地日志 >5MB 自动截尾
+ai-diagnose.sh 壳：env 检查（bash -n 预检）→ mkdir 原子锁（防 launchd 叠实例双烧
+  LLM；锁龄>2h 视为僵死回收——SIGKILL/断电不会把评审永久停摆，D-11；
+  TERM/INT trap 显式 exit 让正常 kill 即时放锁不等 2h 回收）
+  → 远端 URL 解析（MARKET_GIT_URL 优先——launchd TCC 读不到外置卷上的
+    开发 checkout 时仍能跑；绝不本地路径 clone，假成功 push 不重演）
+  → 钉 ref 代码 checkout（~/.local/share/opencode-market-code，
+    fetch+reset origin/main——管线跑远端主干而非脏开发树；lockfile hash
+    变了才 npm ci，.deps-stamp 记录）
+  → catalog clone（~/.local/share/opencode-market-catalog，先 ls-remote
+    分类：不可达=静默下轮 vs 分支真缺席=无事可审——不再全报"branch not
+    found"；repo-local git identity=market-bot，watchdog 靠 '^ai-diagnose:'
+    前缀识别本机落地）
+  → fetch+reset --hard（失败即退，不拿陈旧数据跑）；本地日志 >5MB
+    自动截尾；全部日志带时间戳
 → diagnose.ts（--limit DIAGNOSE_LIMIT=50；--budget 45min；--name/DIAGNOSE_NAME 定向；
   --force 重审已裁决；--state 状态文件；--dry——探查性 dry 不记 attempts，D-14）
   有 LLM 候选时先 omlxAlive 探活（GET /models，任何响应即活）——
@@ -699,6 +709,11 @@ ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双�
         注意 --name 不带 --force 仍受 48h 推迟——插队要 --force，D-17）
       verification==='unverified' 且挂起 <48h → 推迟（等装测物料）；
         >48h 降级硬审（verify 瘫了不饿死在 unverified 上）
+      'failed' 且可重试（verifiedAt<7d && retries<3，与 verifyQueued 同
+        retryable 谓词——verify/retryable.ts 共享模块，防 diagnose↔plan
+        循环依赖）→ 同样推迟：自动重试可能翻回 verified，提前写 concern
+        会把可自愈的瞬时失败钉成永久人工负债（键一旦已判永不回队）；
+        重试耗尽或超窗→终态，走 verify-failed 短路
   drift 扫描：全体「在押+已判+带 sha」条目 → shaFor 查 registry
     （mapPool 并发 8 限流，D-10——不再 Promise.all 假并发串行阻塞）；
     **--sweep-state 节流 6h**——AI 判词铺开后每小时全量 packument 拉取
@@ -710,8 +725,10 @@ ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双�
           几百条在押判词就是数分钟纯等 npm）
       同 sha 已有裁决（跨版本同 tarball）→ 直接复用判词，零模型调用；
       shaFor 缓存让 drift 扫描与判词盖章共享单查
-    目标槽 verification.status==='failed' → 直接写 concern
-      （带 level+logExcerpt 摘要；spec §3/§11——模型看不到装测，不给它猜）
+    目标槽 verification.status==='failed' 且**终态**（retries≥3 或超 7d
+      窗）→ 直接写 concern（带 level+logExcerpt 摘要；spec §3/§11——
+      模型看不到装测，不给它猜）。可重试 failed 不短路：归 verify 自愈，
+      该版本改走正常 LLM 评审（发布闸仍要求 verified）
     reviewMaterial = manifest + findings + redFlags + pending 行
       + **scan**（scannedAt/ruleset/findings/redFlags 计数；`scannedAt:null`
         → 明示 "never-ran——findings/redFlags 下方为空是缺席而非检净"，
@@ -722,13 +739,23 @@ ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双�
       + **content:\***（§5/§6 真包内容——contentMaterial 拉该版本 tarball，
         取 package.json + 全部 .md/.txt（SKILL.md/AGENTS.md/指令文档正是
         prompt-injection 主攻面）；≤8 文件 × ≤12KB，二进制跳过，fetch 失败
-        降级为纯元数据评审——内容缺失绝不阻塞；块同时进 L0.5 打分）
+        降级为纯元数据评审——内容缺失绝不阻塞；块同时进 L0.5 打分。
+        **选取按 contentRank 优先级而非归档顺序**——tarball 全量解析后
+        按 指令文件>manifest>readme>其他 md、浅层优先 选 8 个；
+        旧的流式取前 8 会被排序投毒绕过（前 8 个无害 md 顶掉第 9 位的
+        恶意指令文件永远不进 LLM 视野））
     materialPrompt 总预算 32KB（D-15：500 findings × ≤4KB 曾能顶出 ~2MB
       prompt——上下文溢出被误记"工具故障"；溢出块折成 [material truncated]）
     L0.5（Galvanize-2）**每轮一次** python 调用批量打分（spawn 带 5min
-      timeout——模型加载卡死不能挂住 runner+锁，D-13）
+      timeout——模型加载卡死不能挂住 runner+锁，D-13；python 侧前向
+      分块 64 行防内存峰值）
       （复合 id `name\0block` 拆回；meta/verify 纯机器串块不打分——
         off-distribution 路径串实测出 0.694 FP）
+      **canary 自检**：批次混入两个已知标签块（良性样例+经典注入样例，
+        L05_CANARY_* 常量）——模型加载坏/tokenizer 错/logits 退化时
+        恶意块必然打低分；canary 不通过→本轮**全部分数丢弃**、
+        stderr 醒目标记、评审继续 LLM-only（注入免疫层必须可见地失效，
+        不能静默降级）
       ≥0.662 → l05flag{zh,en}（红旗，压过 LLM 自判）
     Ornith（omlx, OpenAI 兼容）→ 平衡括号扫描取最后含 "verdict" 的 JSON
       （嵌套 signals[]、code-fence、think 文本伪块都能取对）
@@ -740,14 +767,27 @@ ai-diagnose.sh 壳：env 检查 → mkdir 原子锁（防 launchd 叠实例双�
       否则    → r.verdict（reason=reason_zh, reasonEn=reason_en）
     fail-closed：Ornith 挂 + 无 flag → 该候选本次无 verdict（下轮重试，保持 held）
                 Ornith 挂 + l05flag → 仍写 concern（L0.5 单独也能拦）
-                L0.5 挂 → 仅记日志，LLM 照常
+                L0.5 挂/canary 不通过 → 记日志丢分，LLM 照常
     --budget 分钟数到点 → 只跳 LLM 调用；sha 复用/verify-failed 免费 verdict
       **与 flagged/L0.5 机械 concern 兜底照写**（预算闸不再整候选跳过——
       400+ flagged 积压不能永远无判词）；且已决 concern 组（flagged/L0.5 命中）
       排序**最后**拿 LLM 起草——预算先落在真正需要判定的干净候选上
+      （预算钟在 LLM 段前才起算——drift sweep/物料/L0.5 是准备阶段，
+      不该吃掉 LLM 分钟数）
   verdict 记录：source:'ai'、version=候选版本、sha=dist.integrity、
-    model=LLM id、l05={model,score}（审计元数据——阈值/模型变了可回放）
-  verdicts → mktemp 文件 → 推送循环 ×4：
+    model=LLM id、l05={model,score}（审计元数据——阈值/模型变了可回放）；
+    sha 复用判词附 reusedFrom={version,source}（判词抄自别版本的字节——
+    审计链看得出本轮没对这些字节下过判断）；人工裁决键 re-tag 重审的
+    判词 reason 前缀"同版本换包（该键曾有人工裁决，re-tag 自动重审）"
+    （digest/docket 读者一眼看到"人批过的字节被换了"）
+  --state attempts 文件载入时修剪死键（已裁决/条目消失/版本已变的键
+    不再回带——状态文件不再缓慢泄漏）
+  --health 戳：{at,wrote,l05,omlx}——l05:ok/failed/untrusted/skipped、
+    omlx:up/down/died-mid-run/unused；壳在推送后并入 pushed 字段；
+    让"本机诊断还活着吗"有个文件新鲜度之外的诚实信号
+  verdicts → mktemp 文件 → AiVerdict schema 校验丢畸形行（spool 被手改/
+    盘坏的行不原样落 append-only 审计文件——校验失败不等于推送失败，
+    不过滤照推）→ 推送循环 ×4：
     fetch → reset --hard → comm 去重 append → commit（staged-diff 判空）
     → push；远端并发写（catalog/verify/人工）不再撞 EOF 冲突，
     也不会丢本地裁决或推送假成功
@@ -876,7 +916,10 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      96/天吞吐 vs 排队数一眼可见；行尾附 `宿主版本漂移待重验 N`——
      hostStale 不在共享谓词里，单列以免误读成欠账）
   ⑤ 评审积压（unreviewedTargets 共享谓词——与 diagnose/watchdog 同口径，
-     含 48h 验证等待递延；不再手写"held ∧ 无裁决"虚高计数）
+     含 48h 验证等待递延与 retryable-failed 递延；不再手写"held ∧ 无裁决"
+     虚高计数；行尾**最新 AI 裁决时间戳**=本地 worker 被动心跳——计数
+     稳定可以掩盖停摆，最新 source:ai 行的 at 骗不了人；>48h 且积压非空
+     → ⚠️停摆标注，与 watchdog 同阈值）
   ⑥ 已上架条目信任信号：可见条目展示槽的身份级 sec:* redFlag
      （repojack/name-reuse/version-rollback——held 过滤看不见它们，
      AI 也不复审展示版；standing list，人工裁决落在展示版键即消除）
@@ -904,15 +947,17 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      env 可调）的 AI 行」；畸形行/human 行/每键最新行/窗口内行全保留——
      append-only 审计语义下 bounded 增长（git 历史仍是全量审计底）；
      压实失败非致命，当班按未压实日志照常渲染
-  → watchdog job（独立并行）：三腿——ai-verdicts >48h 未更新+队列非空、
-     index.json >36h、digest-state.json >36h（"绿过但 state 没落盘"的兜底）；
-     文件无 git 历史（从未写过）= 引导态不算停摆，跳过该腿；
-     dedupe 按 in:title 搜索；alert job 同款 pipeline-alert 去重
+  → watchdog job（独立并行）：多腿——**最近 '^ai-diagnose:' commit >48h**
+     +队列非空（按提交前缀探本机落地，不再用文件新鲜度——人工裁决/
+     compact/submit-verdict 都写同一文件，会把死掉的本地 worker 抹绿）、
+     index.json >36h、digest-state.json >36h（"绿过但 state 没落盘"的兜底）、
+     线上 health.json >36h；无匹配 commit（从未跑过）= 引导态不算停摆，
+     跳过该腿；dedupe 按 in:title 搜索；alert job 同款 pipeline-alert 去重
   → docket.yml 读 digest-state：ai:pass 审核单体里显示成熟相位
      （已公告·待放行闸 / 已裁决·待日报公告）——维护者不再疑惑"为何不放行"
 ```
 
-**这是唯一完整的上架预告面**。没有它：pass 永不成熟（-∞ 冻结=总闸）。搬 CI 的原因：日报是纯数据聚合（无 LLM），个人笔记本关机不该冻结整条放行链。`bin/publish-digest.sh` 保留为手动兜底（同款重试内重渲染修复）。
+**这是唯一完整的上架预告面**。没有它：pass 永不成熟（-∞ 冻结=总闸）。搬 CI 的原因：日报是纯数据聚合（无 LLM），个人笔记本关机不该冻结整条放行链。`bin/publish-digest.sh` 保留为手动兜底（同款重试内重渲染修复；本机侧同构加固——独立 `$CATDG`/`$CODED` checkout 不与 ai-diagnose 共享 worktree、钉 origin/main、repo-local identity、TERM/INT trap、mkdir 原子锁）。
 
 ---
 
@@ -1396,15 +1441,16 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `submission-status.ts` | `submissionStatuses` `upsertStatusComment` | 投稿进度状态评论（排队中/评审中/已上架；marker 评论 edit-in-place） |
 | `docket.ts` | `docketTargets` `issueTitle` `issueBody` | [review] 审核单同步+漂移收敛（gh CLI）；flag 目标=可见条目身份级 sec 红旗的刹车通道 |
 | `backfill.ts` | `backfill` | 老条目身份字段一次性修补（createdAt/maintainers/repoId） |
-| `verify/plan.ts` | `verifyTargetOf` `planTargets` `shard` | 验证目标（候选槽语义+retest）+8 片加权分片 |
+| `verify/plan.ts` | `verifyTargetOf` `planTargets` `shard` `retryable`(re-export) | 验证目标（候选槽语义+retest）+8 片加权分片 |
+| `verify/retryable.ts` | `retryable` `MAX_FAILED_ATTEMPTS` `FAILED_RETRY_WINDOW_MS` | V-3 有界重试谓词（独立模块——diagnose 与 plan 共享同一语义不成环） |
 | `verify/verify.ts` | `verifyPackage` `xdgEnv` `writeDummyProvider` `loadedSignal` `apiPluginState` `apiLoaded` `apiFailed` `coerceTarget` | L1 install + L1.5 lazy-load 验证（API 状态判定+canary 诊断） |
 | `verify/tui.ts` | `checkTui` `judgeTuiPane` | L2 tmux 冒烟 |
 | `verify/gui.ts` | `checkGuiBundle` `findGuiBundle` | L3a jsdom+vm 真渲染 |
 | `verify/merge.ts` | `mergeResults` | 结果按 version 路由写槽 |
 | `site/build.ts` | `buildSite` `buildSkillCatalog` `listPage` `detailPage` `skillsPage` `removedPage` `healthGate` `installHint` `isVisible` `scanLabel` `verifyLabel` `approvalBadge` | Pages 站点+HTTP skill catalog（缓存+两段式提取+发布闸门） |
-| `ai/diagnose.ts` | `unreviewedTargets` `candidateHeldAt` `latestShaVerdicts` `reviewMaterial` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` | L0.5+Ornith 双通道 AI 审（sha/48h/红旗草稿/budget/force/state 尝试计数/drift 插队/mapPool 限流/熔断）；system prompt 另要求判断**上架描述质量**——占位符/文不对题/与代码矛盾的描述属 concern 级（代替表单 descEn 校验） |
-| `ai/digest.ts` | `renderDigest` `nextDigestState` | 日报六板块渲染（放行/held/concerns/验证积压/评审积压/信任信号）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；state 丢失且有历史→fail-closed 拒渲） |
-| `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程） |
+| `ai/diagnose.ts` | `unreviewedTargets` `candidateHeldAt` `latestShaVerdicts` `reviewMaterial` `contentMaterial` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` `L05_CANARY_*` | L0.5+Ornith 双通道 AI 审（sha/48h/retryable 递延/红旗草稿/budget/force/state 尝试计数+死键修剪/drift 插队+人工键标记/mapPool 限流/熔断/canary 自检/contentRank 物料选取/--health 戳）；system prompt 另要求判断**上架描述质量**——占位符/文不对题/与代码矛盾的描述属 concern 级（代替表单 descEn 校验） |
+| `ai/digest.ts` | `renderDigest` `nextDigestState` | 日报六板块渲染（放行/held/concerns/验证积压/评审积压+最新 AI 裁决心跳/信任信号）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；state 丢失且有历史→fail-closed 拒渲） |
+| `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程；前向分块 64 行防内存峰值） |
 
 ### plugins/market/src/
 

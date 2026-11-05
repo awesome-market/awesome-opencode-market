@@ -5,6 +5,10 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     conditions: ['browser', 'solid', 'development'],
+    // fileURLToPath, not .pathname — URL.pathname stays percent-encoded, so
+    // a checkout under a non-ASCII path breaks every alias (CJK/accents in
+    // the dir name → "Cannot find package 'solid-js'" on any file that
+    // imports it). fileURLToPath decodes back to the real filesystem path.
     alias: {
       '@opencode/plugin/gui': fileURLToPath(new URL('./test/helpers/host-stub.ts', import.meta.url)),
       'solid-js/web': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url)),

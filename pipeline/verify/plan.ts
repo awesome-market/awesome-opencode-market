@@ -28,17 +28,11 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
   }
 }
 
-/** A failed slot gets bounded automatic retries (V-3): recent failure (within
- *  7d) + fewer than 3 recorded attempts re-enters the queue. Beyond that the
- *  version is genuinely dead — the only remaining path is manual --retest. */
-export const FAILED_RETRY_WINDOW_MS = 7 * 86_400_000
-export const MAX_FAILED_ATTEMPTS = 3
-
-export function retryable(v: PluginEntry['verification'] | undefined, now: Date): boolean {
-  if (v?.status !== 'failed' || (v.retries ?? 0) >= MAX_FAILED_ATTEMPTS) return false
-  const at = Date.parse(v.verifiedAt ?? '')
-  return Number.isFinite(at) && now.getTime() - at < FAILED_RETRY_WINDOW_MS
-}
+// V-3 bounded-retry predicate lives in verify/retryable.ts — diagnose
+// imports the same semantics there (importing them here would cycle
+// plan → diagnose → plan). Re-exported so run.ts/tests keep working.
+export { retryable, MAX_FAILED_ATTEMPTS, FAILED_RETRY_WINDOW_MS } from './retryable.ts'
+import { retryable } from './retryable.ts'
 
 /** Shared queue membership (planTargets + digest backlog §④): a versioned,
  *  unflagged slot that is unverified or a retryable recent failure. Keeping one

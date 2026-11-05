@@ -125,7 +125,11 @@ jobs:
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next run"; exit 0; }
           git worktree remove /tmp/cat --force 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog
-          LAST=$(git -C /tmp/cat log -1 --format=%ct -- ai-verdicts.jsonl 2>/dev/null || echo 0)
+          # freshness probe = last ai-diagnose LANDING, not last touch of the
+          # file — human verdicts / verdicts-compact / submit-verdict jobs all
+          # append the same file and would keep AGE_H green over a dead local
+          # worker. Diagnose commits carry the fixed 'ai-diagnose:' prefix.
+          LAST=$(git -C /tmp/cat log -1 --format=%ct --grep='^ai-diagnose:' -- ai-verdicts.jsonl 2>/dev/null || echo 0)
           AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
           # digest 的输入也要看:index.json 陈旧 = catalog.yml 挂了,digest 照样
           # 在旧数据上"成功"渲染——光盯 verdicts 会漏掉上游停摆
@@ -155,13 +159,13 @@ jobs:
             const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
             console.log(unreviewedTargets(idx, seen).length)
           ")
-          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
+          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
           REASONS=""
           # LAST*=0 → the file has NO git history (never written). That is
           # bootstrap, not staleness — without the >0 guard a fresh deployment
           # false-alerts on every leg within its first day.
           if [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
-            REASONS="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+            REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
