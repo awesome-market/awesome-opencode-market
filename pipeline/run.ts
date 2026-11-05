@@ -465,7 +465,7 @@ export async function run(opts: RunOptions = {}) {
       if (heldPrev) {
         const heldPin = heldPrev.pendingUpdate!
         const terminal = latestByKey.get(vkey(cand.name, heldPin.version))?.verdict === 'concern'
-          || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification, new Date(now)))
+          || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification))
         const humanOnLatest = pk.latest !== null && latestByKey.get(vkey(cand.name, pk.latest))?.source === 'human'
         if (!terminal && !humanOnLatest) {
           // the pin path used to skip every repo/metadata probe — a held
@@ -997,11 +997,18 @@ export async function run(opts: RunOptions = {}) {
         integrity: null,
         metrics: { stars: cand.stars, npmDownloads30d: null, checkedAt: now },
         capabilities: scan,
-        // 'skipped' is load-bearing: verdicts.ts RELEASABLE admits it as the
-        // "deliberately not run" state for no-install kinds — a human pass can
-        // release it. 'unverified' would freeze repo-only entries forever.
+        // parts-aware initial state: an installable payload (plugin/skill) is
+        // 'unverified' and enters the shard queue — github-kind now verifies
+        // via `plugin add owner/repo#<commit>` / codeload structure checks.
+        // Only an entry with NO installable parts stays 'skipped' — the
+        // "deliberately not run" state RELEASABLE admits so a human pass can
+        // still release a docs-only repo. A flagged payload likewise never
+        // executes, so it stays 'skipped' rather than claiming a queue slot.
         // Display layers render latestVersion===null as "nothing to install".
-        verification: { status: 'skipped', level: 'install' },
+        verification: {
+          status: ghParts.length === 0 || scan.redFlags.length > 0 ? 'skipped' : 'unverified',
+          level: 'install',
+        },
         // repo-root package.json carries engines/peerDependencies too
         compat: compatStrings(repoPkg.pkg?.engines, repoPkg.pkg?.peerDependencies),
         // drift is surfaced as a finding, not an approval demotion: repo-kind

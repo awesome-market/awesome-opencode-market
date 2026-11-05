@@ -6,18 +6,30 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { verifyPackage, coerceTarget, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
-import { planTargets, verifyTargetOf, verifyPartsOf, verifyQueued, shard } from '../pipeline/verify/plan.ts'
+import { planTargets, verifyTargetOf, verifyPartsOf, verifyQueued, hostStaleVerify, shard } from '../pipeline/verify/plan.ts'
 import { VerifyResultFile } from '../pipeline/verify/merge.ts'
 import { judgeTuiPane } from '../pipeline/verify/tui.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { vkey } from '../pipeline/verdicts.ts'
 
 /** serve reports dead on arrival — a test must never boot a real `opencode`
- *  binary (dev boxes may have one installed). */
+ *  binary (dev boxes may have one installed). Boot silence now THROWS
+ *  (harness, not a package verdict); api-flow tests use liveSpawn. */
 const deadSpawn = (() => ({
   stdout: { on: () => {} }, stderr: { on: () => {} },
   on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
+/** Fake serve that announces its listener — exercises the post-boot api path. */
+const liveSpawn = (() => ({
+  stdout: { on: (_e: 'data', cb: (d: unknown) => void) => {
+    cb('server listening on http://127.0.0.1:4567\nserver password pw\n')
+  } },
+  stderr: { on: () => {} },
+  on: () => {},
   kill: () => {},
 })) as unknown as SpawnFn
 
@@ -51,7 +63,7 @@ describe('verifyPackage pinning', () => {
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'pkg@2.3.4' }, state: { status: 'active' } }]))
-    const r = await verifyPackage('pkg', { version: '2.3.4', home, execFn: fake, spawnFn: deadSpawn })
+    const r = await verifyPackage('pkg', { version: '2.3.4', home, execFn: fake, spawnFn: liveSpawn })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg@2.3.4')).toBe(true)
     expect(r.version).toBe('2.3.4')
     expect(r.status).toBe('verified')
@@ -65,7 +77,7 @@ describe('verifyPackage pinning', () => {
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'pkg' }, state: { status: 'active' } }]))
-    const r = await verifyPackage('pkg', { home, execFn: fake, spawnFn: deadSpawn })
+    const r = await verifyPackage('pkg', { home, execFn: fake, spawnFn: liveSpawn })
     expect(calls.some(a => a[0] === 'plugin' && a[2] === 'pkg')).toBe(true)
     expect(r.version).toBeUndefined()
   })
@@ -203,21 +215,26 @@ describe('verify/plan', () => {
     const verified = entry({ name: 'b', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
     const flagged = entry({ name: 'c', verification: verf('failed'), capabilities: caps(['r:f']) })
     const skipped = entry({ name: 'd', verification: verf('skipped'), capabilities: caps(['r:f']) })
-    expect(planTargets(idx([failed, verified, flagged, skipped]))).toEqual([])
+    // 'a' has unused retry budget (retries absent → 0) — it auto-requeues;
+    // verified-current and flagged stay out either way
+    expect(planTargets(idx([failed, verified, flagged, skipped])).map(t => t.name)).toEqual(['a'])
     const got = planTargets(idx([failed, verified, flagged, skipped]), 48, true)
     expect(got.map(t => t.name)).toEqual(['a', 'b'])   // flagged targets stay out — pinned version included
     expect(got[0]!.version).toBe('1.0.0')
   })
-  it('recent failed slots re-enter the queue automatically (V-3 bounded retry)', () => {
+  it('failed slots re-enter the queue while attempts remain (V-3 bounded retry)', () => {
     const now = new Date('2026-01-08T00:00:00Z')
     const fresh = entry({ name: 'fresh', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 1 } })
     const legacy = entry({ name: 'legacy', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z' } })
+    // queue starvation must not burn budget: an old failure that was never
+    // retried still owns its attempts — the window is gone, the counter is
+    // the bound
     const stale = entry({ name: 'stale', verification: { status: 'failed', verifiedAt: '2025-12-01T00:00:00Z' } })
     const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3 } })
     const noDate = entry({ name: 'nodate', verification: { status: 'failed' } })
     const got = planTargets(idx([fresh, legacy, stale, exhausted, noDate]), 48, false, now)
-    // fresh(1)+legacy(undefined→first retry) re-enter; stale/exhausted/nodate stay dead
-    expect(got.map(t => t.name)).toEqual(['fresh', 'legacy'])
+    // everything under 3 attempts re-enters; only the exhausted slot is terminal
+    expect(got.map(t => t.name)).toEqual(['fresh', 'legacy', 'stale', 'nodate'])
   })
   it('pendingUpdate failed slot retries on the held version', () => {
     const now = new Date('2026-01-08T00:00:00Z')
@@ -289,7 +306,47 @@ describe('verify/plan', () => {
       verification: verf('verified'), features: ['server'],
       pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: verf('unverified'), features: ['tui'], heldAt: 't' },
     })
-    expect(verifyTargetOf(e)).toEqual({ version: '2.0.0', unverified: true, flagged: false, features: ['tui'], hostStale: false })
+    expect(verifyTargetOf(e)).toEqual({ version: '2.0.0', unverified: true, flagged: false, features: ['tui'],
+      hostStale: false, verification: verf('unverified') })
+  })
+  it('verifyTargetOf emits a pinned git spec for github-kind entries', () => {
+    const e = entry({
+      latestVersion: null,
+      source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'abc123' },
+      verification: verf('unverified'),
+    })
+    const t = verifyTargetOf(e)
+    expect(t.git).toEqual({ repo: 'O/R', sha: 'abc123' })
+    expect(t.version).toBeNull()
+    // a github-kind entry with installable parts now QUEUES — the skipped
+    // state was only ever "no install path existed", and one now does
+    expect(verifyQueued(e)).toBe(true)
+  })
+  it('cleared-flag skipped slots re-queue instead of staying stale', () => {
+    // skipIfFlagged leaves 'skipped' behind when red flags clear — the label
+    // "没跑" would otherwise persist forever on a slot that can now be tested
+    const e = entry({ name: 'cleared', verification: verf('skipped', { level: 'install' }) })
+    expect(verifyQueued(e)).toBe(true)
+    expect(planTargets(idx([e])).map(t => t.name)).toEqual(['cleared'])
+    // a concern verdict on the slot still keeps it OUT — judged ≠ queued.
+    // (latest covers every source — a human verdict lands in both maps, so
+    // the concern must be present in `latest` the way the real stream builds it)
+    const hc = { name: 'cleared', version: '1.0.0', verdict: 'concern', source: 'human', at: 't', reason: 'r' } as never
+    const latest = new Map([[vkey('cleared', '1.0.0'), hc]])
+    const human = new Map([[vkey('cleared', '1.0.0'), hc]])
+    expect(verifyQueued(e, new Date(), latest, human)).toBe(false)
+  })
+  it('a slot-level or package-brake concern is never queued automatically', () => {
+    const e = entry({ name: 'badpkg', verification: verf('unverified') })
+    expect(verifyQueued(e)).toBe(true)   // no verdicts → queued
+    const concern = { name: 'badpkg', version: '1.0.0', verdict: 'concern', source: 'ai', at: 't', reason: 'r' } as never
+    const latest = new Map([[vkey('badpkg', '1.0.0'), concern]])
+    expect(verifyQueued(e, new Date(), latest, new Map())).toBe(false)
+    // package-level human brake (version=null) covers every slot too
+    const brake = new Map([[vkey('badpkg', null), { name: 'badpkg', version: null, verdict: 'concern', source: 'human', at: 't', reason: 'r' } as never]])
+    expect(verifyQueued(e, new Date(), new Map(), brake)).toBe(false)
+    // retest/manual dispatch still bypasses — the human asked for it
+    expect(planTargets(idx([e]), 48, true).map(t => t.name)).toEqual(['badpkg'])
   })
   it('shard spreads items across buckets (greedy balance, deterministic)', () => {
     expect(shard([1, 2, 3, 4, 5], 2)).toEqual([[1, 4], [2, 5], [3]])
@@ -523,7 +580,7 @@ describe('skill structure check (skill-only + dual-nature parts)', () => {
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'du@1.0.0' }, state: { status: 'active' } }]))
     const r = await verifyPackage('du', { version: '1.0.0', parts: ['plugin', 'skill'],
-      home, execFn: fakeSkillOs({ calls }), spawnFn: deadSpawn })
+      home, execFn: fakeSkillOs({ calls }), spawnFn: liveSpawn })
     expect(r.status).toBe('verified')
     expect(calls.some(a => a.includes('add') && a.join(' ').includes('du@1.0.0'))).toBe(true)
     expect(calls.some(a => a[0] === 'npm' && a[1] === 'pack')).toBe(true)
@@ -534,7 +591,7 @@ describe('skill structure check (skill-only + dual-nature parts)', () => {
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'du@1.0.0' }, state: { status: 'active' } }]))
     const r = await verifyPackage('du', { version: '1.0.0', parts: ['plugin', 'skill'],
-      home, execFn: fakeSkillOs({ list: 'package/index.js\n' }), spawnFn: deadSpawn })
+      home, execFn: fakeSkillOs({ list: 'package/index.js\n' }), spawnFn: liveSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
     expect(r.logExcerpt).toContain('skill payload failed')
@@ -569,16 +626,463 @@ describe('verifyShard', () => {
     expect(onDisk.map(r => r.name)).toEqual(['a', 'b'])
   })
 
-  it('three consecutive harness throws abort the shard — remaining targets stay unverified', async () => {
+  it('harness-throw streak aborts the shard — bounded overshoot under parallel lanes', async () => {
     const { verifyShard } = await import('../pipeline/verify/verify.ts')
     const home = mkdtempSync(join(tmpdir(), 'vs-'))
     const out = join(home, 'results.json')
     const notDir = join(home, 'afile')
     writeFileSync(notDir, 'x')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
-    const results = await verifyShard(['a', 'b', 'c', 'd'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
-    // streak hits 3 at 'c' → 'd' never attempted (an outage is not 4 bad packages)
-    expect(results.map(r => r.name)).toEqual(['a', 'b', 'c'])
+    const results = await verifyShard(['a', 'b', 'c', 'd', 'e', 'f'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
+    // 2 lanes: once the streak hits 3 no NEW target is pulled, but a sibling
+    // lane may already hold one in-flight target — overshoot is bounded, not
+    // zero (an outage is still not 6 bad packages)
+    expect(results.length).toBeGreaterThanOrEqual(3)
+    expect(results.length).toBeLessThanOrEqual(4)
     expect(results.every(r => r.harness === true)).toBe(true)
+  })
+})
+
+describe('verify/merge drift, freshness, reuse', () => {
+  const base = { level: 'load' as const, opencodeVersion: OPENCODE_VERSION, verifiedAt: '2026-01-02T00:00:00Z' }
+  it('measured integrity ≠ pinned anchor → failed/install, not standing verified (re-tag)', () => {
+    const e = entry({ integrity: 'sha512-PINNED', verification: verf('unverified') })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'verified', integrity: 'sha512-OTHER', ...base },
+    ])
+    const v = m.plugins[0]!.verification
+    expect(v.status).toBe('failed')
+    expect(v.level).toBe('install')
+    expect(v.logExcerpt).toContain('re-tagged')
+    // the drift failure counts as an attempt — the retest path stays bounded
+    expect(v.retries).toBe(1)
+  })
+  it('measured integrity == pinned anchor → verified stands', () => {
+    const e = entry({ integrity: 'sha512-SAME', verification: verf('unverified') })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'verified', integrity: 'sha512-SAME', ...base },
+    ])
+    expect(m.plugins[0]!.verification.status).toBe('verified')
+    expect(m.plugins[0]!.verification.integrity).toBe('sha512-SAME')
+  })
+  it('result without integrity skips the anchor compare (probe degraded)', () => {
+    const e = entry({ integrity: 'sha512-PINNED', verification: verf('unverified') })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'verified', ...base },
+    ])
+    expect(m.plugins[0]!.verification.status).toBe('verified')
+  })
+  it('github-kind: source.version anchors the display slot', () => {
+    const e = entry({
+      latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'abc123' },
+      verification: verf('unverified'),
+    })
+    const drifted = mergeResults(idx([e]), [
+      { name: 'p', status: 'verified', integrity: 'def456', ...base },
+    ])
+    expect(drifted.plugins[0]!.verification.status).toBe('failed')
+    const ok = mergeResults(idx([e]), [
+      { name: 'p', status: 'verified', integrity: 'abc123', ...base },
+    ])
+    expect(ok.plugins[0]!.verification.status).toBe('verified')
+  })
+  it('pendingUpdate slot drift-checks against pu.integrity', () => {
+    const e = entry({
+      latestVersion: '1.0.0', verification: verf('verified'),
+      pendingUpdate: { version: '2.0.0', capabilities: caps(), verification: verf('unverified'),
+        integrity: 'sha512-PU', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '2.0.0', status: 'verified', integrity: 'sha512-MOVED', ...base },
+    ])
+    expect(m.plugins[0]!.pendingUpdate!.verification.status).toBe('failed')
+    expect(m.plugins[0]!.verification.status).toBe('verified')   // display untouched
+  })
+  it('fresher slot evidence beats a replayed (older) result row', () => {
+    const e = entry({
+      verification: verf('failed', { verifiedAt: '2026-01-05T00:00:00Z', retries: 1 }),
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'verified', ...base },   // verifiedAt 01-02 < slot 01-05
+    ])
+    expect(m.plugins[0]!.verification.status).toBe('failed')
+    expect(m.plugins[0]!.verification.verifiedAt).toBe('2026-01-05T00:00:00Z')
+  })
+  it('skipIfFlagged downgrade preserves the measured evidence trail', () => {
+    const e = entry({
+      verification: verf('unverified'),
+      capabilities: caps(['sec:flag']),
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'verified', integrity: 'sha512-X', ...base },
+    ], 'https://run/url')
+    const v = m.plugins[0]!.verification
+    expect(v.status).toBe('skipped')
+    expect(v.verifiedAt).toBe('2026-01-02T00:00:00Z')
+    expect(v.integrity).toBe('sha512-X')
+    expect(v.runUrl).toBe('https://run/url')
+  })
+  it('content-addressed reuse: a same-anchor verified donor covers the sibling slot', () => {
+    const e = entry({
+      latestVersion: '1.0.0', integrity: 'sha512-TWIN',
+      verification: verf('unverified'),
+      pendingUpdate: { version: '1.0.0', capabilities: caps(),
+        verification: verf('verified', { integrity: 'sha512-TWIN', opencodeVersion: OPENCODE_VERSION }),
+        integrity: 'sha512-TWIN', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [])
+    expect(m.plugins[0]!.verification.status).toBe('verified')
+    expect(m.plugins[0]!.verification.integrity).toBe('sha512-TWIN')
+  })
+  it('reuse refuses stale-host donors and anchor mismatches', () => {
+    const e = entry({
+      latestVersion: '1.0.0', integrity: 'sha512-OTHER',
+      verification: verf('unverified'),
+      pendingUpdate: { version: '1.1.0', capabilities: caps(),
+        // donor carries a DIFFERENT anchor and a stale host stamp — neither
+        // may vouch for the displayed slot's bytes
+        verification: verf('verified', { integrity: 'sha512-TWIN', opencodeVersion: 'oc-old' }),
+        integrity: 'sha512-TWIN', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [])
+    expect(m.plugins[0]!.verification.status).toBe('unverified')
+  })
+})
+
+describe('skill tarball edge cases', () => {
+  const SKILL = '---\nname: s\ndescription: d\n---\nbody'
+  it('any parseable SKILL.md wins — member ORDER must not decide (G3)', async () => {
+    // docs/SKILL.md sorts first in the tar listing but has no frontmatter;
+    // the real manifest under skills/ must still verify the package
+    const fake = (async (cmd: string, args: string[]) => {
+      if (args.includes('--version')) return { stdout: 'opencode v2.2.5', stderr: '' }
+      if (cmd === 'npm' && args[0] === 'pack') return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'tzf')
+        return { stdout: 'package/docs/SKILL.md\npackage/package.json\npackage/skills/x/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf')
+        return { stdout: args.at(-1)!.includes('skills') ? SKILL : '# docs only\n', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { version: '1.0.0', parts: ['skill'], home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('verified')
+    expect(r.level).toBe('structure')
+  })
+  it('ALL manifests unparseable → failed/structure naming every checked file', async () => {
+    const fake = (async (cmd: string, args: string[]) => {
+      if (cmd === 'npm' && args[0] === 'pack') return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'tzf')
+        return { stdout: 'package/SKILL.md\npackage/skills/x/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf') return { stdout: 'no frontmatter\n', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { version: '1.0.0', parts: ['skill'], home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain('no parseable SKILL.md')
+    expect(r.logExcerpt).toContain('checked 2')
+  })
+  it('BOM + padded --- fences still parse as frontmatter', async () => {
+    const fake = (async (cmd: string, args: string[]) => {
+      if (cmd === 'npm' && args[0] === 'pack') return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'package/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf')
+        return { stdout: '﻿---  \nname: s\ndescription: d\n--- \r\nbody', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { version: '1.0.0', parts: ['skill'], home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('verified')
+  })
+})
+
+describe('github-kind verify routes', () => {
+  const vHome = () => mkdtempSync(join(tmpdir(), 'vh4-'))
+  it('git skill-only → codeload tarball structure check, no plugin add', async () => {
+    const calls: string[][] = []
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args])
+      if (cmd === 'curl') return { stdout: '', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'tzf')
+        return { stdout: 'repo-abc123/SKILL.md\nrepo-abc123/README.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf')
+        return { stdout: '---\nname: s\ndescription: d\n---\nbody', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' }, parts: ['skill'],
+      home: vHome(), execFn: fake })
+    expect(r.status).toBe('verified')
+    expect(r.level).toBe('structure')
+    // pinned commit fetch — never a floating HEAD
+    expect(calls.some(a => a[0] === 'curl' && a.join(' ').includes('O/R/tar.gz/abc123'))).toBe(true)
+    expect(calls.some(a => a.includes('plugin'))).toBe(false)
+    // commit sha IS the measured identity
+    expect(r.integrity).toBe('abc123')
+  })
+  it('codeload failure → failed/structure with the error', async () => {
+    const fake = (async (cmd: string) => {
+      if (cmd === 'curl') throw Object.assign(new Error('curl: 404'), { stderr: 'HTTP 404' })
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' }, parts: ['skill'],
+      home: vHome(), execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain('404')
+  })
+  it('git plugin install pins owner/repo#sha and matches basename api entries', async () => {
+    const calls: string[][] = []
+    const home = vHome()
+    // api reports the install dir shape — the repo basename candidate must match
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'r#abc123' }, state: { status: 'active' } }]))
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args])
+      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' },
+      home, execFn: fake, spawnFn: liveSpawn })
+    expect(r.status).toBe('verified')
+    expect(calls.some(a => a.join(' ').includes('plugin add O/R#abc123'))).toBe(true)
+  })
+  it('npm integrity probe: registry SRI lands on the result; failure degrades silently', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
+    const okFake = (async (cmd: string, args: string[]) =>
+      cmd === 'npm' && args.includes('dist.integrity')
+        ? { stdout: 'sha512-AAA\n', stderr: '' }
+        : { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }) as unknown as ExecFn
+    const ok = await verifyPackage('pkg', { version: '1.0.0', home, execFn: okFake, spawnFn: liveSpawn })
+    expect(ok.integrity).toBe('sha512-AAA')
+    const home2 = vHome()
+    writeFileSync(join(home2, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
+    const badFake = (async (cmd: string, args: string[]) => {
+      if (cmd === 'npm' && args.includes('dist.integrity')) throw new Error('registry down')
+      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+    }) as unknown as ExecFn
+    const degraded = await verifyPackage('pkg', { version: '1.0.0', home: home2, execFn: badFake, spawnFn: liveSpawn })
+    expect(degraded.status).toBe('verified')
+    expect(degraded.integrity).toBeUndefined()
+  })
+})
+
+describe('remaining verify/plan/merge edge branches', () => {
+  it('spawnFn throwing outright → dead serve → harness throw, not a verdict', async () => {
+    const boom = (() => { throw new Error('spawn refused') }) as unknown as SpawnFn
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake, spawnFn: boom, bootWaitMs: 20 }))
+      .rejects.toThrow('serve did not announce a listener')
+  })
+  it('git dual-nature: plugin passes AND codeload skill manifest checked', async () => {
+    const calls: string[][] = []
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'O/R#abc123' }, state: { status: 'active' } }]))
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args])
+      if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-abc/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' }, parts: ['plugin', 'skill'],
+      home, execFn: fake, spawnFn: liveSpawn })
+    expect(r.status).toBe('verified')
+    expect(calls.some(a => a[0] === 'curl' && a.join(' ').includes('codeload'))).toBe(true)
+    const broken = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' }, parts: ['plugin', 'skill'],
+      home: (() => { const h = mkdtempSync(join(tmpdir(), 'vx-'))
+        writeFileSync(join(h, 'plugins.json'), JSON.stringify(
+          [{ source: { type: 'package', target: 'O/R#abc123' }, state: { status: 'active' } }]))
+        return h })(),
+      execFn: (async (cmd: string, args: string[]) => {
+        if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-abc/index.js\n', stderr: '' }
+        return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      }) as unknown as ExecFn, spawnFn: liveSpawn })
+    expect(broken.status).toBe('failed')
+    expect(broken.logExcerpt).toContain('skill payload failed')
+  })
+  it('git target without a pinned sha → HEAD spec + codeload HEAD', async () => {
+    const calls: string[][] = []
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args])
+      if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-x/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R' }, parts: ['skill'],
+      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('verified')
+    expect(calls.some(a => a[0] === 'curl' && a.join(' ').includes('tar.gz/HEAD'))).toBe(true)
+    expect(r.integrity).toBeUndefined()   // no sha → nothing to anchor
+  })
+  it('verifyTargetOf github fallback: missing source.repo → id; missing version → no sha', () => {
+    const e = entry({
+      latestVersion: null,
+      source: { kind: 'github', id: 'o/r' } as PluginEntry['source'],
+      verification: verf('unverified'),
+    })
+    const t = verifyTargetOf(e)
+    expect(t.git).toEqual({ repo: 'o/r' })
+    expect(t.version).toBeNull()
+  })
+  it('hostStaleVerify: github-kind slot invalidated by a host bump re-queues', () => {
+    const e = entry({
+      latestVersion: null,
+      source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'abc' },
+      verification: verf('verified', { opencodeVersion: 'oc-old' }),
+    })
+    expect(hostStaleVerify(e)).toBe(true)
+    expect(verifyQueued(e)).toBe(true)
+    const names = planTargets(idx([e])).map(t => t.name)
+    expect(names).toEqual(['p'])
+  })
+  it('merge reuse: display verified donor covers the held slot on the same anchor', () => {
+    const e = entry({
+      latestVersion: '1.0.0', integrity: 'sha512-SAME',
+      verification: verf('verified', { integrity: 'sha512-SAME', opencodeVersion: OPENCODE_VERSION }),
+      pendingUpdate: { version: '1.0.0', capabilities: caps(), verification: verf('unverified'),
+        integrity: 'sha512-SAME', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [])
+    expect(m.plugins[0]!.pendingUpdate!.verification.status).toBe('verified')
+  })
+  it('merge reuse: no anchor on the recipient slot → nothing adopted', () => {
+    const e = entry({
+      latestVersion: '1.0.0', integrity: null,
+      verification: verf('unverified'),
+      pendingUpdate: { version: '1.1.0', capabilities: caps(),
+        verification: verf('verified', { integrity: 'sha512-X', opencodeVersion: OPENCODE_VERSION }),
+        integrity: 'sha512-X', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [])
+    expect(m.plugins[0]!.verification.status).toBe('unverified')
+  })
+})
+
+describe('coverage: branch stragglers', () => {
+  it('pu slot fresher guard: stale replay does not overwrite newer pu evidence', () => {
+    const e = entry({
+      latestVersion: '1.0.0', verification: verf('verified'),
+      pendingUpdate: { version: '2.0.0', capabilities: caps(),
+        verification: verf('verified', { verifiedAt: '2026-01-06T00:00:00Z' }), heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '2.0.0', status: 'failed', level: 'load', opencodeVersion: 'x',
+        verifiedAt: '2026-01-02T00:00:00Z' },
+    ])
+    expect(m.plugins[0]!.pendingUpdate!.verification.status).toBe('verified')
+  })
+  it('hostStaleVerify false when a host-stale github slot has no checkable parts', () => {
+    const e = entry({
+      latestVersion: null, contains: ['command'],
+      source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'abc' },
+      verification: verf('verified', { opencodeVersion: 'oc-old' }),
+    })
+    expect(hostStaleVerify(e)).toBe(false)
+    expect(verifyQueued(e)).toBe(false)
+  })
+  it('malformed pre-existing opencode.json in uh is rebuilt, not a crash (G9)', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    // non-sandbox: uh IS home — the corrupt file sits where writeDummyProvider reads
+    mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+    writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), '{{{ not json')
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
+    const fake = (async (_c: string, args: string[]) =>
+      ({ stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' })) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { version: '1.0.0', home, execFn: fake, spawnFn: liveSpawn })
+    expect(r.status).toBe('verified')
+  })
+  it('serve without a password line still verifies (pw empty string branch)', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
+    const noPw = (() => ({
+      stdout: { on: (_e: 'data', cb: (d: unknown) => void) => { cb('server listening on http://127.0.0.1:4567\n') } },
+      stderr: { on: () => {} }, on: () => {}, kill: () => {},
+    })) as unknown as SpawnFn
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { version: '1.0.0', home, execFn: fake, spawnFn: noPw })
+    expect(r.status).toBe('verified')
+  })
+  it('npm pack error without stderr falls back to Error.message', async () => {
+    const fake = (async (cmd: string) => {
+      if (cmd === 'npm') throw new Error('spawn npm ENOENT')
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain('ENOENT')
+  })
+  it('verifyShard forwards git targets (git spec + parts reach verifyPackage)', async () => {
+    const { verifyShard } = await import('../pipeline/verify/verify.ts')
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    const calls: string[][] = []
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push([cmd, ...args])
+      if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-x/SKILL.md\n', stderr: '' }
+      if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+    }) as unknown as ExecFn
+    const rs = await verifyShard([{ name: 'o/r', git: { repo: 'O/R', sha: 'abc' }, parts: ['skill'] }],
+      join(home, 'res.json'), { execFn: fake })
+    expect(rs).toHaveLength(1)
+    expect(rs[0]!.status).toBe('verified')
+    expect(calls.some(a => a[0] === 'curl' && a.join(' ').includes('O/R/tar.gz/abc'))).toBe(true)
+  })
+})
+
+describe('coverage: last branch stragglers', () => {
+  it('donor exists but recipient anchor mismatches → slot keeps its own verdict', () => {
+    const e = entry({
+      latestVersion: '1.0.0', integrity: 'sha512-OTHER',
+      verification: verf('unverified'),
+      pendingUpdate: { version: '1.1.0', capabilities: caps(),
+        verification: verf('verified', { integrity: 'sha512-A', opencodeVersion: OPENCODE_VERSION }),
+        integrity: 'sha512-A', heldAt: 't' },
+    })
+    const m = mergeResults(idx([e]), [])
+    // different bytes were never measured on this slot — no adoption
+    expect(m.plugins[0]!.verification.status).toBe('unverified')
+  })
+  it('verifyShard honors an injected opencodeVersion without probing', async () => {
+    const { verifyShard } = await import('../pipeline/verify/verify.ts')
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    const calls: string[][] = []
+    const fake = (async (_c: string, args: string[]) => {
+      calls.push(args)
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const rs = await verifyShard(['a'], join(home, 'res.json'),
+      { execFn: fake, spawnFn: deadSpawn, opencodeVersion: '9.9.9' })
+    expect(calls.filter(a => a[0] === '--version')).toHaveLength(0)
+    expect(rs[0]!.opencodeVersion).toBe('unknown')   // harness rows stamp unknown
+  })
+  it('serve announces listening but no port → boot timeout throw (port empty branch)', async () => {
+    const weird = (() => ({
+      stdout: { on: (_e: 'data', cb: (d: unknown) => void) => { cb('server listening on unix:///tmp/s.sock\n') } },
+      stderr: { on: () => {} }, on: () => {}, kill: () => {},
+    })) as unknown as SpawnFn
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake, spawnFn: weird, bootWaitMs: 30 }))
+      .rejects.toThrow('serve did not announce a listener')
+  })
+  it('codeload error without stderr falls back to Error.message', async () => {
+    const fake = (async (cmd: string) => {
+      if (cmd === 'curl') throw new Error('ECONNREFUSED')
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'x' }, parts: ['skill'],
+      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain('ECONNREFUSED')
+  })
+  it('npm pack with empty stdout → structure check fails on the empty tgz name', async () => {
+    const fake = (async (cmd: string) => {
+      if (cmd === 'npm') return { stdout: '', stderr: '' }
+      if (cmd === 'tar') throw Object.assign(new Error('tar failed'), { stderr: 'tar: not a gzip' })
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
+      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
+    expect(r.status).toBe('failed')
   })
 })

@@ -4,13 +4,14 @@
  *  verify measures the version users will actually install). */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
+import { CatalogIndex, type AiVerdict, type PluginEntry } from '../../src/schema.ts'
 import { candidateHeldAt } from '../ai/diagnose.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
+import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict } from '../verdicts.ts'
 import type { VerifyTarget } from './verify.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
-export function verifyTargetOf(e: PluginEntry): { version: string | null; unverified: boolean; flagged: boolean; features: string[]; hostStale: boolean } {
+export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: { repo: string; sha?: string }; unverified: boolean; flagged: boolean; features: string[]; hostStale: boolean; verification: PluginEntry['verification'] } {
   const slot = e.pendingUpdate ?? null
   const version = slot ? slot.version : e.latestVersion
   const verification = slot ? slot.verification : e.verification
@@ -18,40 +19,70 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; unveri
   const features = slot?.features ?? e.features ?? []
   return {
     version,
+    // github-kind target: `plugin add owner/repo#<sha>` pins the REVIEWED
+    // commit (source.version = the tree sha the pipeline scanned) — verifying
+    // HEAD would measure bytes the scan never saw. source.repo is the
+    // canonical-cased fullName; id is the entry-name fallback.
+    ...(e.source.kind === 'github'
+      ? { git: { repo: e.source.repo ?? e.source.id, ...(e.source.version ? { sha: e.source.version } : {}) } }
+      : {}),
     unverified: verification.status === 'unverified',
     flagged: caps.redFlags.length > 0,
     features,
     // a verified result binds the host it ran on: a different (or absent —
     // predating the field) opencodeVersion means the displayed claim was
-    // never exercised on the current runtime and re-enters the queue
-    hostStale: verification.status === 'verified' && verification.opencodeVersion !== OPENCODE_VERSION,
+    // never exercised on the current runtime and re-enters the queue.
+    // 'unknown' (the shard's own version probe failed) is NOT stale —
+    // unknown ≠ different; treating it as stale re-queued the slot forever.
+    hostStale: verification.status === 'verified'
+      && verification.opencodeVersion !== 'unknown'
+      && verification.opencodeVersion !== OPENCODE_VERSION,
+    verification,
   }
 }
 
-/** A failed slot gets bounded automatic retries (V-3): recent failure (within
- *  7d) + fewer than 3 recorded attempts re-enters the queue. Beyond that the
- *  version is genuinely dead — the only remaining path is manual --retest. */
-export const FAILED_RETRY_WINDOW_MS = 7 * 86_400_000
+/** A failed slot gets bounded automatic retries (V-3): fewer than 3 recorded
+ *  attempts re-enters the queue. Beyond that the version is genuinely dead —
+ *  the only remaining path is manual --retest.
+ *  Deliberately NOT wall-clock bounded: the old 7d window expired while a
+ *  target waited in a deep queue — 'queue delay' and 'retry budget spent'
+ *  were conflated, and a slot could hit terminal-failed having used zero of
+ *  its 3 attempts. The attempts counter alone is the budget; each retry only
+ *  lands when a shard actually measures the slot. */
 export const MAX_FAILED_ATTEMPTS = 3
 
-export function retryable(v: PluginEntry['verification'] | undefined, now: Date): boolean {
-  if (v?.status !== 'failed' || (v.retries ?? 0) >= MAX_FAILED_ATTEMPTS) return false
-  const at = Date.parse(v.verifiedAt ?? '')
-  return Number.isFinite(at) && now.getTime() - at < FAILED_RETRY_WINDOW_MS
+export function retryable(v: PluginEntry['verification'] | undefined): boolean {
+  return v?.status === 'failed' && (v.retries ?? 0) < MAX_FAILED_ATTEMPTS
 }
 
-/** Shared queue membership (planTargets + digest backlog §④): a versioned,
- *  unflagged slot that is unverified or a retryable recent failure. Keeping one
- *  predicate stops the digest from under-reporting the queue the worker sees. */
-export function verifyQueued(e: PluginEntry, now = new Date()): boolean {
+/** Shared queue membership (planTargets + digest backlog §④): an unflagged
+ *  slot with an installable payload that is unverified, a retryable recent
+ *  failure, host-stale, or a cleared 'skipped' — and not already condemned by
+ *  a verdict. Keeping one predicate stops the digest from under-reporting the
+ *  queue the worker sees. */
+export function verifyQueued(
+  e: PluginEntry, _now = new Date(),
+  latest?: Map<string, AiVerdict>, latestHuman?: Map<string, AiVerdict>,
+): boolean {
   const t = verifyTargetOf(e)
-  if (!t.version || t.flagged) return false
+  // an npm slot needs a version to pin; a github-kind slot needs a repo spec.
+  // Anything else has no installable address to point the runner at.
+  if (!t.version && !t.git) return false
+  if (t.flagged) return false
   // entries with no verifiable payload are never queued — the predicate must
   // match planTargets' parts filter or the digest §④ backlog over-counts
   const parts = verifyPartsOf(e)
   if (!parts.includes('plugin') && !parts.includes('skill')) return false
-  const ver = e.pendingUpdate ? e.pendingUpdate.verification : e.verification
-  return t.unverified || retryable(ver, now)
+  // a standing concern (slot-keyed or package brake) already judged these
+  // bytes — re-verifying re-measures a condemned verdict. The verdict moving
+  // re-enters the slot naturally; only --retest bypasses.
+  if (latest && slotVerdict(e.name, t.version, latest, latestHuman ?? new Map())?.verdict === 'concern') return false
+  const ver = t.verification
+  // 'skipped' only exists because red flags vetoed a run — flags gone means
+  // the skip reason no longer describes the slot, so it re-queues for an
+  // honest measurement instead of displaying a stale "没跑" forever. Host-
+  // stale (a verified result bound to an old runtime) likewise re-measures.
+  return t.unverified || ver?.status === 'skipped' || retryable(ver) || t.hostStale
 }
 
 /** The installable parts a verify run must prove, normalized from `contains`.
@@ -75,12 +106,13 @@ export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains
  *  results invalidated by an opencode upgrade. */
 export function hostStaleVerify(e: PluginEntry): boolean {
   const t = verifyTargetOf(e)
-  if (!t.version || t.flagged || !t.hostStale) return false
+  if ((!t.version && !t.git) || t.flagged || !t.hostStale) return false
   const parts = verifyPartsOf(e)
   return parts.includes('plugin') || parts.includes('skill')
 }
 
-export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date()): VerifyTarget[] {
+export function planTargets(index: CatalogIndex, cap = 48, retest = false, now = new Date(),
+  latest?: Map<string, AiVerdict>, latestHuman?: Map<string, AiVerdict>): VerifyTarget[] {
   const subs: VerifyTarget[] = []
   const staleHost: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
@@ -94,17 +126,19 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
     // retest (manual `targets` dispatch) may re-run failed/verified versions;
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
     // Flagged stays excluded in every mode: red-flagged code never executes here.
-    if (!t.version || t.flagged) continue
-    // host-version drift: a verified result recorded under a different
-    // opencodeVersion is stale evidence — re-verify (bounded by cap) rather
-    // than letting a compat claim ride the old runtime forever (P1-6)
-    if (!retest && !verifyQueued(p, now) && !t.hostStale) continue
+    if ((!t.version && !t.git) || t.flagged) continue
+    // host-version drift, cleared-flag skips, and retryable failures all fold
+    // into the one queue predicate — verdict-condemned slots drop out inside
+    // it unless a manual --retest asks for them back
+    if (!retest && !verifyQueued(p, now, latest, latestHuman)) continue
     const parts = verifyPartsOf(p)
     // no plugin artifact AND no skill payload — nothing exists to honestly
     // verify (mcp/command/agent entries have no structure check yet)
     if (!parts.includes('plugin') && !parts.includes('skill')) continue
     const target: VerifyTarget = {
-      name: p.name, version: t.version,
+      name: p.name,
+      ...(t.version ? { version: t.version } : {}),
+      ...(t.git ? { git: t.git } : {}),
       ...(t.features.length ? { features: t.features } : {}),
       parts,
     }
@@ -136,18 +170,22 @@ export function shard<T>(items: T[], size: number, weight: (t: T) => number = ()
   return out.filter(b => b.t.length).map(b => b.t)
 }
 
-/* v8 ignore next 16 */
+/* v8 ignore next 20 */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [indexPath, outDir] = process.argv.slice(2)
+  const [indexPath, outDir, verdictsPath] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
   const cap = Number(process.env.VERIFY_CAP) || 48
-  const targets = planTargets(index, cap, process.argv.includes('--retest'))
-  // 8/shard: post-V-4 worst case ≈ 8 × ~3.7min ≈ 30min — fits the 35min job
-  // timeout with margin (the old 12/shard math predates the widened windows).
-  // Feature-routed targets cost extra stages — charge them so shards balance
-  // by minutes, not headcount. Dual plugin+skill pays for BOTH checks (the
-  // structure pass is a second npm pack+tar cycle on top of the load chain).
-  const shards = shard(targets, 8, t =>
+  // optional verdict feed — a condemned slot isn't worth a shard measuring it.
+  // Absent (local runs) the queue just doesn't apply the verdict filter.
+  const verdicts = verdictsPath ? loadVerdicts(verdictsPath) : []
+  const latest = verdicts.length ? latestVerdicts(verdicts) : undefined
+  const latestHuman = verdicts.length ? latestHumanVerdicts(verdicts) : undefined
+  const targets = planTargets(index, cap, process.argv.includes('--retest'), new Date(), latest, latestHuman)
+  // 12/shard with 2 intra-shard lanes ≈ the old 8×serial wall-clock (~30min
+  // worst case): each lane still only carries ~6 targets. Feature-routed
+  // targets cost extra stages — charge them so shards balance by minutes,
+  // not headcount. Dual plugin+skill pays for BOTH checks.
+  const shards = shard(targets, 12, t =>
     1 + (t.features?.length ?? 0) + (t.parts?.includes('plugin') && t.parts?.includes('skill') ? 1 : 0))
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))

@@ -509,12 +509,12 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
       verification: { status: 'verified', level: 'load', attempts: 1, opencodeVersion: 'oc-old', verifiedAt: '2026-01-01T00:00:00Z' } as never,
     } as Partial<PluginEntry>)
     expect(hostStaleVerify(flagged)).toBe(false)
-    // retryable windows
-    const now = new Date('2026-06-01T00:00:00Z')
-    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-05-30T00:00:00Z' } as never, now)).toBe(true)
-    expect(retryable({ status: 'failed', retries: 3, verifiedAt: '2026-05-30T00:00:00Z' } as never, now)).toBe(false)
-    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-01-01T00:00:00Z' } as never, now)).toBe(false)  // stale window
-    expect(retryable({ status: 'verified' } as never, now)).toBe(false)
+    // retryable: attempts-bound only — age alone no longer kills the budget
+    // (queue starvation must not mark a never-retried slot terminal)
+    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-05-30T00:00:00Z' } as never)).toBe(true)
+    expect(retryable({ status: 'failed', retries: 3, verifiedAt: '2026-05-30T00:00:00Z' } as never)).toBe(false)
+    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-01-01T00:00:00Z' } as never)).toBe(true)  // old but unused budget survives
+    expect(retryable({ status: 'verified' } as never)).toBe(false)
     // verifyPartsOf: contains-driven + type fallback
     expect(verifyPartsOf(mkEntry('c1', { contains: ['plugin', 'skill'] }))).toEqual(['plugin', 'skill'])
     expect(verifyPartsOf(mkEntry('c2', { type: 'skill' }))).toEqual(['skill'])
@@ -527,7 +527,7 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
       mkEntry('flag', { approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: ['x'] } }),
       mkEntry('noparts', { contains: [], approval: 'pending' })   // explicit [] = no installable payload,
     ])
-    const targets = planTargets(idx, 48, false, now)
+    const targets = planTargets(idx, 48, false, new Date('2026-06-01T00:00:00Z'))
     expect(targets.every(t => t.name !== 'flag')).toBe(true)
     expect(targets.every(t => t.name !== 'noparts')).toBe(true)
   })

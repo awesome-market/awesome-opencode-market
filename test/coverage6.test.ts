@@ -33,10 +33,21 @@ import { detectFeatures } from '../src/features.ts'
 import { backfill } from '../pipeline/backfill.ts'
 
 /** serve reports dead on arrival — a test must never boot a real `opencode`
- *  binary (dev boxes may have one installed). */
+ *  binary (dev boxes may have one installed). Boot silence now throws
+ *  (harness lane) — tests exercising post-boot stages use liveSpawn. */
 const deadSpawn = (() => ({
   stdout: { on: () => {} }, stderr: { on: () => {} },
   on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
+/** Fake serve that announces its listener — exercises the post-boot path. */
+const liveSpawn = (() => ({
+  stdout: { on: (_e: 'data', cb: (d: unknown) => void) => {
+    cb('server listening on http://127.0.0.1:4567\nserver password pw\n')
+  } },
+  stderr: { on: () => {} },
+  on: () => {},
   kill: () => {},
 })) as unknown as SpawnFn
 
@@ -405,14 +416,14 @@ describe('verifyPackage feature routes', () => {
       } })`)
   }
   it('tui feature: tmux survives → level interactive', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: deadSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: liveSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
   })
   it('tui feature: session dies → failed/interactive', async () => {
     const r = await verifyPackage('pkg', {
       home: home(), features: ['tui'], tuiOpts: { settleMs: 1 },
-      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: deadSpawn,
+      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: liveSpawn,
     })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('interactive')
@@ -420,12 +431,12 @@ describe('verifyPackage feature routes', () => {
   it('gui feature: bundle renders → level render', async () => {
     const h = home()
     guiFixture(h)
-    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
   })
   it('gui feature: bundle dir missing → failed/render', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('render')
   })

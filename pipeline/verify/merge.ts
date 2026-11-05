@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
+import { OPENCODE_VERSION } from '../publish/merge.ts'
 import type { VerifyResult } from './verify.ts'
 
 /** Shard-artifact boundary check — results files are JSON.parse'd, but nothing
@@ -16,6 +17,9 @@ import type { VerifyResult } from './verify.ts'
 export const VerifyResultFile = z.object({
   name: z.string(),
   version: z.string().optional(),
+  /** SRI (npm) or commit sha (github) of the bytes actually exercised — the
+   *  drift anchor compared against the slot's pinned integrity below. */
+  integrity: z.string().optional(),
   status: z.enum(['verified', 'failed']),
   level: z.enum(['install', 'load', 'interactive', 'render', 'structure']),
   opencodeVersion: z.string(),
@@ -25,12 +29,22 @@ export const VerifyResultFile = z.object({
   harness: z.boolean().optional(),
 })
 
+/** The content identity a slot pins: the held/displayed tarball SRI for npm
+ *  entries, the scanned commit sha for github-kind. A slot may legitimately
+ *  carry no anchor (legacy holds, missing source.version) — the drift check
+ *  then degrades to a no-op rather than inventing an anchor. */
+function slotAnchor(p: PluginEntry, slot: 'pu' | 'display'): string | null | undefined {
+  if (slot === 'pu') return p.pendingUpdate?.integrity
+  return p.integrity ?? (p.source.kind === 'github' ? p.source.version : null)
+}
+
 function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['verification']): PluginEntry['verification'] {
   return {
     status: r.status,
     level: r.level,
     opencodeVersion: r.opencodeVersion,
     verifiedAt: r.verifiedAt,
+    ...(r.integrity ? { integrity: r.integrity } : {}),
     ...(runUrl ? { runUrl } : {}),
     ...(r.logExcerpt ? { logExcerpt: r.logExcerpt } : {}),
     // consecutive-failure counter — plan lets a recent failure back into the
@@ -48,9 +62,11 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
 // on the catalog path: a slot that gained redFlags between plan and merge
 // must not display 'verified' (the flags may describe bytes the run never
 // measured). 'failed' keeps its real outcome — it IS a measurement.
+// Evidence survives the downgrade: verifiedAt/runUrl/integrity/opencodeVersion
+// stay so the detail page keeps the audit trail of what WAS measured.
 const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
   flagged && v.status === 'verified'
-    ? { status: 'skipped', level: v.level ?? 'install' }
+    ? { ...v, status: 'skipped', level: v.level ?? 'install' }
     : v
 
 export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUrl?: string): CatalogIndex {
@@ -62,30 +78,85 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
     if (r.harness) continue
     byName.set(r.name, [...(byName.get(r.name) ?? []), r])
   }
-  return {
-    ...index,
-    plugins: index.plugins.map(p => {
-      const rs = byName.get(p.name)
-      if (!rs?.length) return p
-      let out = p
-      for (const r of rs) {
-        if (r.version && p.pendingUpdate?.version === r.version) {
-          const pu = out.pendingUpdate!
-          out = { ...out, pendingUpdate: { ...pu, verification: skipIfFlagged(
-            toVerification(r, runUrl, pu.verification), pu.capabilities.redFlags.length > 0) } }
-        } else if (r.version ? r.version === out.latestVersion : !out.pendingUpdate) {
-          // versioned display match — or a legacy version-less result, which
-          // is only unambiguous when NO hold exists (with a pendingUpdate it
-          // can't say which version it measured → drop rather than risk
-          // writing the held slot's verdict onto the displayed one)
-          out = { ...out, verification: skipIfFlagged(
-            toVerification(r, runUrl, out.verification), out.capabilities.redFlags.length > 0) }
-        }
-        // version matches neither slot → stale result (npm moved on mid-flight), drop
+  const drifted: string[] = []
+  const plugins = index.plugins.map(p => {
+    const rs = byName.get(p.name)
+    if (!rs?.length) return p
+    let out = p
+    for (const r of rs) {
+      const driftCheck = (anchor: string | null | undefined): VerifyResult => {
+        // measured bytes ≠ pinned bytes → the run answered a different question
+        // than the slot asked (registry re-tag between scan and verify). A
+        // 'verified' on unreviewed bytes must not stand; 'failed' already
+        // fails closed. Mark the drift as a failed install with the evidence —
+        // diagnose's verify-failed concern path then surfaces it for a human
+        // instead of silently re-testing whatever the tag serves tomorrow.
+        if (!r.integrity || !anchor || r.integrity === anchor) return r
+        drifted.push(`${r.name}${r.version ? `@${r.version}` : ''}`)
+        return { ...r, status: 'failed', level: 'install',
+          logExcerpt: `measured bytes differ from the pinned anchor — the version was re-tagged ` +
+            `(tested ${r.integrity.slice(0, 64)}, pinned ${anchor.slice(0, 64)}); ` +
+            `the next catalog scan re-pins the slot before retest` }
       }
-      return out
-    }),
-  }
+      // freshness guard: leftover-artifact replay (a cancelled merge's
+      // results swept into the next run) must not clobber evidence recorded
+      // AFTER the measurement — slot verifiedAt newer than the result wins
+      const fresher = (prev: PluginEntry['verification'] | undefined): boolean =>
+        !!(prev?.verifiedAt && r.verifiedAt && Date.parse(prev.verifiedAt) > Date.parse(r.verifiedAt))
+      if (r.version && p.pendingUpdate?.version === r.version) {
+        const pu = out.pendingUpdate!
+        if (!fresher(pu.verification))
+          out = { ...out, pendingUpdate: { ...pu, verification: skipIfFlagged(
+            toVerification(driftCheck(pu.integrity), runUrl, pu.verification),
+            pu.capabilities.redFlags.length > 0) } }
+      } else if (r.version ? r.version === out.latestVersion : !out.pendingUpdate) {
+        // versioned display match — or a legacy version-less result, which
+        // is only unambiguous when NO hold exists (with a pendingUpdate it
+        // can't say which version it measured → drop rather than risk
+        // writing the held slot's verdict onto the displayed one)
+        if (!fresher(out.verification))
+          out = { ...out, verification: skipIfFlagged(
+            toVerification(driftCheck(slotAnchor(out, 'display')), runUrl, out.verification),
+            out.capabilities.redFlags.length > 0) }
+      }
+      // version matches neither slot → stale result (npm moved on mid-flight), drop
+    }
+    return out
+  })
+  if (drifted.length) console.warn(`verify drift (measured ≠ pinned): ${drifted.join(', ')}`)
+  return { ...index, plugins: reuseVerified(plugins) }
+}
+
+/** For every non-verified slot, adopt a sibling slot's verified result when
+ *  their content anchors are byte-identical (same SRI / same commit) —
+ *  re-tag rollbacks and held-bump↔display twins share one measurement
+ *  instead of burning a second shard pass. The donor must itself be
+ *  current-host verified: stale-host or drifted evidence can't vouch for
+ *  anything. Skipped/unverified/failed recipients all qualify — "does
+ *  THIS blob install?" has one answer. */
+function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
+  return plugins.map(p => {
+    const donors: PluginEntry['verification'][] = [p.verification, p.pendingUpdate?.verification]
+      .filter((v): v is NonNullable<typeof v> =>
+        v?.status === 'verified' && !!v.integrity && v.opencodeVersion === OPENCODE_VERSION)
+    if (!donors.length) return p
+    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'] | undefined)
+      : PluginEntry['verification'] | undefined => {
+      if (!anchor || !ver || ver.status === 'verified') return ver
+      const donor = donors.find(d => d.integrity === anchor)
+      return donor ? { ...donor } : ver
+    }
+    const display = adopt(slotAnchor(p, 'display'), p.verification)
+    const pu = p.pendingUpdate
+      ? adopt(p.pendingUpdate.integrity, p.pendingUpdate.verification)
+      : undefined
+    if (display === p.verification && (!p.pendingUpdate || pu === p.pendingUpdate.verification)) return p
+    return {
+      ...p,
+      verification: display ?? p.verification,
+      ...(p.pendingUpdate && pu ? { pendingUpdate: { ...p.pendingUpdate, verification: pu } } : {}),
+    }
+  })
 }
 
 /* v8 ignore next 11 */
@@ -98,7 +169,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // every shard timed out pre-flush) — merge zero rows, not a crash
   const files = existsSync(resultsDir!) ? readdirSync(resultsDir!) : []
   for (const f of files.filter(f => f.startsWith('results-'))) {
-    const raw: unknown = JSON.parse(readFileSync(join(resultsDir!, f), 'utf8'))
+    // one corrupt shard artifact (truncated upload, non-JSON stray file) must
+    // not take the WHOLE merge down — skip the file, keep the valid shards
+    let raw: unknown
+    try {
+      raw = JSON.parse(readFileSync(join(resultsDir!, f), 'utf8'))
+    } catch (e) {
+      console.warn(`${f}: unreadable JSON — skipped (${String((e as Error).message).slice(0, 120)})`)
+      dropped++
+      continue
+    }
     if (!Array.isArray(raw)) { console.warn(`${f}: not a result array — skipped`); dropped++; continue }
     for (const r of raw) {
       const p = VerifyResultFile.safeParse(r)

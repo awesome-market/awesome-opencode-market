@@ -177,9 +177,13 @@ export function renderDigest({ index, verdicts, prev, now }: DigestInput): strin
     .filter(e => e.approval === 'pending' || e.pendingUpdate)
     .sort((a, b) => heldAt(a) - heldAt(b))
 
-  // verify backlog (V-2): shares planTargets' queue predicate — the 96/day
-  // drain shows the real number, retryable failures included.
-  const queue = index.plugins.filter(e => verifyQueued(e, now))
+  // verify backlog (V-2): shares planTargets' queue predicate — the real
+  // number, retryable failures and cleared-flag re-entries included, minus
+  // slots a verdict already condemned (they're judged, not awaiting a run).
+  const queue = index.plugins.filter(e => verifyQueued(e, now, latest, latestHuman))
+  // drain estimate at the 2×daily scheduled cadence (VERIFY_CAP targets each)
+  // — turns the raw count into "how long until this clears" for ops
+  const drainDays = queue.length ? Math.ceil(queue.length / (Number(process.env.VERIFY_CAP) || 48) / 2) : 0
   const qSubs = queue.filter(e => e.discoveredVia?.includes('submission')).length
   // host-version drift backlog (P1-6): verified results recorded under a
   // different opencodeVersion re-enter the verify queue ahead of normal work
@@ -318,7 +322,7 @@ ${concerns.length ? table(concerns) : '_无_'}
 
 ## ④ 验证积压（queue — ${queue.length}）
 
-- 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}${hostStale ? ` / 宿主版本漂移待重验 ${hostStale}` : ''}
+- 待验证 ${queue.length}（投稿优先 ${qSubs}）/ 近 7 天验证失败 ${recentFailed} / 最老等待 ${oldestWait ? oldestWait.slice(0, 10) : '—'}${hostStale ? ` / 宿主版本漂移待重验 ${hostStale}` : ''}${drainDays ? ` / 按当前节奏约 ${drainDays} 天排空` : ''}
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
