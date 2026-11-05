@@ -88,7 +88,52 @@ export async function writeJsonAtomic(path: string, obj: unknown): Promise<void>
 export async function marketLogPath(): Promise<string> {
   const { homedir } = await import('node:os')
   const { join } = await import('node:path')
-  return join(homedir(), '.config', 'opencode', 'market.log')
+  const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+  return join(base, 'opencode', 'market.log')
+}
+
+/** Resolve the user's opencode config — `OPENCODE_CONFIG` first (the CLI's own
+ *  override), then `XDG_CONFIG_HOME`, then `~/.config`. Spawned `opencode`
+ *  commands inherit these vars via restrictedEnv, so direct read-modify-writes
+ *  and CLI writes land in the SAME file. */
+export async function configPath(): Promise<string> {
+  const { homedir } = await import('node:os')
+  const { join } = await import('node:path')
+  if (process.env.OPENCODE_CONFIG) return process.env.OPENCODE_CONFIG
+  const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+  return join(base, 'opencode', 'opencode.json')
+}
+
+/** Skills dir under the same config root as configPath(). */
+export async function skillsRoot(): Promise<string> {
+  const { homedir } = await import('node:os')
+  const { join } = await import('node:path')
+  const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+  return join(base, 'opencode', 'skills')
+}
+
+/** Skill permission `{action:'skill', resource:id, effect}` in opencode.json —
+ *  shared by GUI main and TUI. mode null removes the entry (back to default). */
+export async function writeSkillPermission(
+  cfgPath: string, id: string, mode: 'allow' | 'deny' | 'ask' | null,
+): Promise<Record<string, string>> {
+  if (typeof id !== 'string' || !id || id.length > 200 || /[\\/]/.test(id))
+    throw new Error('invalid skill id')
+  if (mode !== 'allow' && mode !== 'deny' && mode !== 'ask' && mode !== null)
+    throw new Error('invalid permission mode')
+  const d = await readJson(cfgPath)
+  const raw = d.permissions
+  const perms = (Array.isArray(raw) ? raw : [])
+    .filter((r): r is { action: string; resource: string; effect: string } =>
+      !!r && typeof r === 'object' &&
+      typeof (r as { action?: unknown }).action === 'string' &&
+      typeof (r as { resource?: unknown }).resource === 'string' &&
+      typeof (r as { effect?: unknown }).effect === 'string')
+  const rest = perms.filter(r => !(r.action === 'skill' && r.resource === id))
+  if (mode) rest.push({ action: 'skill', resource: id, effect: mode })
+  d.permissions = rest
+  await writeJsonAtomic(cfgPath, d)
+  return Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
 }
 
 const LOG_MAX = 256 * 1024
@@ -108,11 +153,16 @@ function mkdirSyncSafe(fs: typeof import('node:fs'), dir: string): void {
 /** Minimal env for spawning processes that load untrusted plugin code — a
  *  raw process.env spread leaks ambient CI/agent tokens (ACTIONS_*,
  *  *_TOKEN, *_KEY, GH_TOKEN) into code that can write them to its own log.
- *  OPENCODE_* stays: those are the user's own config overrides. */
+ *  OPENCODE_* stays: those are the user's own config overrides.
+ *  XDG_* and *_PROXY are forwarded — routing/config-location vars that keep
+ *  spawned `opencode` commands writing to the same files configPath() reads;
+ *  secret credentials still stay out. */
 export function restrictedEnv(over: Record<string, string> = {}): Record<string, string> {
   const out: Record<string, string> = {}
   for (const k of ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE',
     'TERM', 'TMPDIR', 'TMP', 'TEMP', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE',
+    'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME',
+    'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
     'SystemRoot', 'COMSPEC', 'PATHEXT'])
     if (process.env[k]) out[k] = process.env[k] as string
   for (const [k, v] of Object.entries(process.env)) if (k.startsWith('OPENCODE_')) out[k] = v as string

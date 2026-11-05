@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 
 export function makeApi(over: Record<string, unknown> = {}) {
   return {
-    index: vi.fn(async () => ({ plugins: [{ name: '@x/old', latestVersion: '2.0.0', categories: [], contains: [] }, { name: '@y/new', latestVersion: '1.0.0', categories: [], contains: [] }] })),
+    index: vi.fn(async () => ({ plugins: [{ name: '@x/old', type: 'plugin', latestVersion: '2.0.0', categories: [], contains: [] }, { name: '@y/new', type: 'plugin', latestVersion: '1.0.0', categories: [], contains: [] }] })),
     refreshIndex: vi.fn(async () => ({ plugins: [] })),
     installed: vi.fn(async () => ({ versions: { '@x/old': '1.0.0' }, extras: [], features: {} })),
     install: vi.fn(async () => 'ok'), update: vi.fn(async () => 'updated'),

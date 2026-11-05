@@ -104,12 +104,13 @@ describe('catalog helpers', () => {
     expect(search(es, '')).toHaveLength(3)
   })
 })
-  it('sortEntries verified: verified first even with redFlags, failed last', async () => {
+  it('sortEntries verified: verified first, redFlags sink to the bottom', async () => {
     const { sortEntries } = await import('../src/catalog.ts')
     const mk = (n: string, st: string, rf = 0): MarketEntry => ({ name: n, slug: n, type: 'p', category: [], verification: { status: st }, capabilities: { scannedAt: '', findings: [], redFlags: Array(rf).fill('x') } })
     const r = sortEntries([mk('z', 'failed'), mk('a', 'verified'), mk('m', 'verified', 2), mk('q', 'unverified', 1)], 'verified')
-    expect(r.slice(0, 2).map(e => e.name)).toEqual(['a', 'm'])   // verified first even with redFlags
-    expect(r[r.length - 1]!.name).toBe('z')                     // failed sinks below unverified
+    // DATA-FLOWS contract: verified 优先·红旗沉底 — flagged entries rank below
+    // everything else regardless of their verification status
+    expect(r.map(e => e.name)).toEqual(['a', 'z', 'm', 'q'])
   })
   it('search matches description too', async () => {
     const { search } = await import('../src/catalog.ts')
@@ -401,6 +402,11 @@ describe('install routing + contract', () => {
     expect(installPlan(npm({ latestVersion: null }))).toEqual({ plugin: false, skill: null })
     // malformed repo id → not installable as github
     expect(installPlan(gh({ contains: ['skill'], latestVersion: null, source: { kind: 'github', id: 'x', repo: 'bad repo!' } }))).toEqual({ plugin: false, skill: null })
+    // legacy entry without contains falls back on type — mcp has no plugin
+    // payload to `plugin add`; type-skill still routes to the npm skill path
+    expect(installPlan(npm({ type: 'mcp' }))).toEqual({ plugin: false, skill: null })
+    expect(installPlan(npm({ type: 'skill' }))).toEqual({ plugin: false, skill: 'npm' })
+    expect(installPlan(npm({ type: 'plugin' }))).toEqual({ plugin: true, skill: null })
   })
   it('canInstall mirrors deliverable parts — github skill repo is installable', async () => {
     const { canInstall } = await import('../src/catalog.ts')
@@ -600,5 +606,188 @@ describe('hostx id guards', () => {
     expect(assertSkillId('o/myrepo')).toBe('myrepo')
     expect(skillId('o/myrepo')).toBe('o--myrepo')
     expect(assertSkillId('@scope/pkg')).toBe('pkg')
+  })
+  it('restrictedEnv forwards proxies + XDG, still strips ambient secrets', async () => {
+    const { restrictedEnv } = await import('../src/hostx.ts')
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    env.HTTPS_PROXY = 'http://127.0.0.1:8888'; env.XDG_CONFIG_HOME = '/tmp/xdg-cfg'; env.MY_SECRET_TOKEN = 'leak-me-not'
+    const e = restrictedEnv()
+    expect(e.HTTPS_PROXY).toBe('http://127.0.0.1:8888')
+    expect(e.XDG_CONFIG_HOME).toBe('/tmp/xdg-cfg')
+    expect(e.MY_SECRET_TOKEN).toBeUndefined()
+    delete env.HTTPS_PROXY; delete env.XDG_CONFIG_HOME; delete env.MY_SECRET_TOKEN
+  })
+  it('configPath: OPENCODE_CONFIG > XDG_CONFIG_HOME > ~/.config', async () => {
+    const { configPath } = await import('../src/hostx.ts')
+    const { homedir } = await import('node:os')
+    const { join } = await import('node:path')
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    delete env.OPENCODE_CONFIG; delete env.XDG_CONFIG_HOME
+    expect(await configPath()).toBe(join(homedir(), '.config', 'opencode', 'opencode.json'))
+    env.XDG_CONFIG_HOME = '/tmp/xdg-cfg'
+    expect(await configPath()).toBe('/tmp/xdg-cfg/opencode/opencode.json')
+    env.OPENCODE_CONFIG = '/tmp/custom-opencode.json'
+    expect(await configPath()).toBe('/tmp/custom-opencode.json')
+    delete env.OPENCODE_CONFIG; delete env.XDG_CONFIG_HOME
+  })
+  it('writeSkillPermission: set/update/clear round-trip preserves other permissions', async () => {
+    const { writeSkillPermission } = await import('../src/hostx.ts')
+    const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const cfg = join(mkdtempSync(join(tmpdir(), 'perm-')), 'opencode.json')
+    writeFileSync(cfg, JSON.stringify({ permissions: [{ action: 'tool', resource: 'bash', effect: 'deny' }] }))
+    const m1 = await writeSkillPermission(cfg, 'semantic-commit', 'deny')
+    expect(m1['semantic-commit']).toBe('deny')
+    const m2 = await writeSkillPermission(cfg, 'semantic-commit', 'allow')
+    expect(m2['semantic-commit']).toBe('allow')
+    const m3 = await writeSkillPermission(cfg, 'semantic-commit', null)
+    expect(m3['semantic-commit']).toBeUndefined()
+    // unrelated permission untouched through the whole cycle
+    const d = JSON.parse(readFileSync(cfg, 'utf8')) as { permissions: { action: string; resource: string }[] }
+    expect(d.permissions).toEqual([{ action: 'tool', resource: 'bash', effect: 'deny' }])
+    await expect(writeSkillPermission(cfg, 'bad/id', 'allow')).rejects.toThrow('invalid skill id')
+    await expect(writeSkillPermission(cfg, 'x', 'yolo' as 'allow')).rejects.toThrow('invalid permission mode')
+  })
+})
+
+describe('catalog sanitize + version helpers', () => {
+  it('sanitizeIndex: enum-clamps verification status, sanitizes generatedAt + removed + categories', async () => {
+    const { sanitizeIndex } = await import('../src/catalog.ts')
+    const out = sanitizeIndex({
+      version: '1',
+      generatedAt: 'g\x1b[31mX',
+      categories: { tools: { en: 'tools\x1b', zh: '工具' }, bogus: 7 as never },
+      removed: [{ name: 'gone\x1b-pkg', reason: 'manual', disappearedAt: '2026-01-01' }, { nope: 1 } as never],
+      plugins: [{
+        name: 'a', slug: 'a', type: 'p', category: [],
+        verification: { status: 'crafted-evil', level: 'l', runUrl: 'https://x/run', logExcerpt: 'log\x1b' },
+        pendingUpdate: { version: '9', reason: 'r', verification: { status: 'failed' } },
+        deprecated: true, deprecatedMessage: 'use b\x1b', replacement: 'b',
+        compat: { engines: '>=2.0', peer: 'x' },
+      } as MarketEntry],
+    } as MarketIndex)
+    const e = out.plugins[0]!
+    expect(e.verification?.status).toBe('unverified')           // crafted → fail-safe enum
+    expect(e.verification?.logExcerpt).toBe('log')               // control chars stripped
+    expect(e.verification?.runUrl).toBe('https://x/run')
+    expect(e.pendingUpdate?.verification?.status).toBe('failed')
+    expect(e.deprecatedMessage).toBe('use b')
+    expect(e.replacement).toBe('b')
+    expect(e.compat?.engines).toBe('>=2.0')
+    expect(out.generatedAt).toBe('gX')                           // top-level sanitized
+    expect(out.categories?.['tools']).toEqual({ en: 'tools', zh: '工具' })
+    expect(out.categories?.['bogus']).toBeUndefined()
+    expect(out.removed).toEqual([{ name: 'gone-pkg', reason: 'manual', disappearedAt: '2026-01-01' }])
+  })
+  it('versionCmp/isDowngrade: semver order, ISO dates, unorderable stays 0', async () => {
+    const { versionCmp, isDowngrade } = await import('../src/catalog.ts')
+    expect(versionCmp('2.0.0', '1.0.0')).toBeGreaterThan(0)
+    expect(versionCmp('1.0.0', '2.0.0')).toBeLessThan(0)
+    expect(versionCmp('2026-03-01', '2026-02-01')).toBeGreaterThan(0)   // pushedAt markers
+    expect(versionCmp('abc123', 'def456')).toBe(0)                      // tree sha — never claim
+    const e = { name: 'x', slug: 'x', type: 'p', category: [], latestVersion: '1.0.0' } as MarketEntry
+    expect(isDowngrade(e, '2.0.0')).toBe(true)   // installed newer than approved → revert label
+    expect(isDowngrade(e, '0.9.0')).toBe(false)
+    expect(isDowngrade(e, 'local')).toBe(false)
+    expect(isDowngrade(e)).toBe(false)
+  })
+  it('siteDetailUrl derives p/<slug>.html from the index origin dir', async () => {
+    const { siteDetailUrl } = await import('../src/catalog.ts')
+    expect(siteDetailUrl({ slug: 'a b' }, 'https://x.example/i/index.json')).toBe('https://x.example/i/p/a%20b.html')
+    expect(siteDetailUrl({ slug: 'x' }, 'not a url')).toBeNull()
+  })
+  it('removedReasonLabel maps pipeline reasons', async () => {
+    const { removedReasonLabel } = await import('../src/catalog.ts')
+    expect(removedReasonLabel('manual')).not.toBe('reason unknown')
+    expect(removedReasonLabel('totally-new')).toBeTruthy()
+    expect(removedReasonLabel(undefined)).toBeTruthy()
+  })
+  it('setCatDict: index-shipped category names beat the hardcoded table', async () => {
+    const { setCatDict, catLabel } = await import('../src/catalog.ts')
+    setCatDict({ 'brand-new-cat': { en: 'fresh', zh: '全新' } })
+    expect(catLabel('brand-new-cat')).toBe('fresh')
+    expect(catLabel('totally-unknown')).toBe('totally-unknown')   // passthrough
+    setCatDict(undefined)
+  })
+  it('fetchIndexCached: oversize content-length fails closed, keeps old cache', async () => {
+    const { fetchIndexCached } = await import('../src/catalog.ts')
+    const store: Record<string, string> = {}
+    globalThis.localStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    } as unknown as Storage
+    const srv = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.setHeader('content-length', '33554433')   // > 32MB cap, small real body
+      res.end(JSON.stringify(CANNED))
+    })
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r))
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/index.json`
+    await expect(fetchIndexCached(url)).rejects.toThrow('too large')
+    expect(store['opencode-market.index.v1']).toBeUndefined()      // nothing pinned
+    srv.close()
+    delete (globalThis as Record<string, unknown>).localStorage
+  }, 20000)
+})
+
+describe('skill-install foreign-dir protection', () => {
+  const mkTgz = (files: Record<string, string>) => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require('node:fs') as typeof import('node:fs')
+    const { tmpdir } = require('node:os')
+    const src = mkdtempSync(join(tmpdir(), 'skt-'))
+    for (const [p, c] of Object.entries(files)) {
+      const fp = join(src, 'package', p)
+      mkdirSync(dirname(fp), { recursive: true })
+      writeFileSync(fp, c)
+    }
+    const tgz = join(src, 'p.tgz')
+    execFileSync('tar', ['czf', tgz, '-C', src, 'package'])
+    return { tgz, out: mkdtempSync(join(tmpdir(), 'sko-')) }
+  }
+  it('unscoped package refuses to merge into a foreign basename dir', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+    const { tgz, out } = mkTgz({ 'SKILL.md': 'x' })
+    // pre-existing foreign 'suite' with no market manifest — unscoped installs
+    // have no namespaced fallback; mixing in would let uninstall delete user files
+    mkdirSync(join(out, 'suite'), { recursive: true })
+    writeFileSync(join(out, 'suite', 'user.txt'), 'mine')
+    await expect(installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })).rejects.toThrow('not managed by market')
+    expect(readFileSync(join(out, 'suite', 'user.txt'), 'utf8')).toBe('mine')   // foreign untouched
+    expect(existsSync(join(out, 'suite', '.market-skills.json'))).toBe(false)
+  })
+  it('scoped package namespaces around a foreign basename; foreign namespaced dir refused', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, existsSync, mkdirSync, writeFileSync } = await import('node:fs')
+    const { tgz, out } = mkTgz({ 'SKILL.md': 'x' })
+    mkdirSync(join(out, 'suite'), { recursive: true })          // foreign basename
+    await installSkillTar({ name: '@p/suite', gzipped: readFileSync(tgz), root: out })
+    expect(existsSync(join(out, 'p--suite', '.market-skills.json'))).toBe(true)   // namespaced
+    expect(existsSync(join(out, 'suite', '.market-skills.json'))).toBe(false)     // foreign untouched
+    // dangerous case: foreign basename AND foreign namespaced dir — no room
+    // left, refuse rather than merge a manifest into user files
+    const { tgz: tgz2, out: out2 } = mkTgz({ 'SKILL.md': 'x' })
+    mkdirSync(join(out2, 'suite'), { recursive: true })
+    mkdirSync(join(out2, 'q--suite'), { recursive: true })
+    writeFileSync(join(out2, 'q--suite', 'user.txt'), 'mine')
+    await expect(installSkillTar({ name: '@q/suite', gzipped: readFileSync(tgz2), root: out2 })).rejects.toThrow('not managed by market')
+    // free basename + foreign namespaced dir: install at basename is fine —
+    // the foreign namespaced dir is simply left alone
+    const { tgz: tgz3, out: out3 } = mkTgz({ 'SKILL.md': 'x' })
+    mkdirSync(join(out3, 'r--suite'), { recursive: true })
+    writeFileSync(join(out3, 'r--suite', 'user.txt'), 'mine')
+    await installSkillTar({ name: '@r/suite', gzipped: readFileSync(tgz3), root: out3 })
+    expect(existsSync(join(out3, 'suite', '.market-skills.json'))).toBe(true)
+    expect(readFileSync(join(out3, 'r--suite', 'user.txt'), 'utf8')).toBe('mine')
+  })
+  it('reinstall into an owned dir still works; manifest survives', async () => {
+    const { installSkillTar } = await import('../src/skill-install.ts')
+    const { readFileSync, existsSync } = await import('node:fs')
+    const { tgz, out } = mkTgz({ 'SKILL.md': 'x', 'file.txt': 'v1' })
+    await installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })
+    await installSkillTar({ name: 'suite', gzipped: readFileSync(tgz), root: out })   // owned → allowed
+    expect(existsSync(join(out, 'suite', '.market-skills.json'))).toBe(true)
+    expect(existsSync(join(out, 'suite', 'file.txt'))).toBe(true)
   })
 })

@@ -9,10 +9,10 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, type MarketEntry, type MarketIndex, type LocalState, type InstallPlan } from './catalog.js'
-import { dedupeToSpec, removeSpec } from './spec.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { dedupeToSpec, removeSpec, cleanSpec } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
+import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
@@ -61,6 +61,9 @@ export default Plugin.define({
       const [idx, setIdx] = createSignal<MarketIndex | null>(null)
       const [idxErr, setIdxErr] = createSignal('')
       const [installed, setInstalled] = createSignal<Record<string, string>>({})
+      // internal plugin ids keyed by catalog name — removeSpec needs them to
+      // match pinned specs whose id != package name (GUI parity)
+      const [installedIds, setInstalledIds] = createSignal<Record<string, string>>({})
       const [tab, setTab] = createSignal<Tab>('discover')
       const [query, setQuery] = createSignal(pendingQuery)
       const [cat, setCat] = createSignal('')
@@ -84,13 +87,25 @@ export default Plugin.define({
       const location = () => ctx.location ?? ctx.data.location.default()
       const refreshInstalled = async () => {
         const map: Record<string, string> = {}
+        const ids: Record<string, string> = {}
         try {
           const res = await ctx.client.plugin.list({ location: location() })
-          for (const p of res.data ?? [])
-            if (p.source.type === 'package') {
-              const clean = p.source.target.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+          for (const p of res.data ?? []) {
+            if (p.source?.type === 'package' && p.source.target) {
+              const clean = cleanSpec(String(p.source.target))
               map[clean] = p.source.version ?? '?'
+              if (p.id) ids[clean] = String(p.id)
+            } else if (p.source?.type === 'local' && p.id) {
+              // dir-installed plugins — GUI maps them under their internal id
+              const clean = String(p.id)
+              map[clean] = 'local'; ids[clean] = clean
+            } else if ((p.source?.type === 'git' || p.source?.type === 'github') && p.source?.target) {
+              // git-spec installs — visible but never claimed catalog-verified
+              const clean = cleanSpec(String(p.source.target)) || String(p.source.target)
+              map[clean] = p.source.version ?? 'local'
+              if (p.id) ids[clean] = String(p.id)
             }
+          }
         } catch { /* server list unavailable */ }
         try {
           await ctx.data.location.skill.sync(location())
@@ -102,7 +117,7 @@ export default Plugin.define({
         Object.assign(map, scanSkillKeys(
           [await globalSkillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
           d => readdirSync(d), p => existsSync(p)))
-        setInstalled(map)
+        setInstalled(map); setInstalledIds(ids)
       }
       onMount(() => {
         setLangMode(store.lang ?? 'auto')
@@ -112,6 +127,19 @@ export default Plugin.define({
       })
       ctx.data.on('plugin.updated', () => void refreshInstalled())
 
+      // tombstone lookup — installed names found in removed[] left the catalog
+      // (npm-404 / filtered / manual …); surfaced on badges + detail, not
+      // silently treated as a normal uncataloged plugin
+      const removedIdx = createMemo(() =>
+        new Map((idx()?.removed ?? []).filter(r => r.name).map(r => [r.name!, r])))
+      const removedOf = (name: string): RemovedEntry | undefined => removedIdx().get(name)
+      // feature-part filter — GUI parity (server/tui/gui/rpc chips)
+      const [featSel, setFeatSel] = createSignal<Set<string>>(new Set())
+      const toggleFeatSel = (k: string) => {
+        const s = new Set(featSel())
+        s.has(k) ? s.delete(k) : s.add(k)
+        setFeatSel(s)
+      }
       // installed-but-uncataloged plugins get synthetic cards (GUI parity)
       const extras = createMemo<MarketEntry[]>(() => {
         const names = new Set((idx()?.plugins ?? []).map(p => p.name))
@@ -131,6 +159,7 @@ export default Plugin.define({
         }
         if (days()) list = list.filter(p => inDays(p, days()))
         if (cat()) list = list.filter(p => categoriesOf(p).includes(cat()))
+        if (featSel().size) list = list.filter(p => (p.features ?? []).some(f => featSel().has(f)))
         if (query()) list = search(list, query())
         const s = sortEntries(list, sortKey())
         return asc() ? s.reverse() : s
@@ -176,13 +205,16 @@ export default Plugin.define({
         }, 0)
       })
 
-      const install = async (e: MarketEntry) => {
+      // resolves when the spawned `plugin add` (and any config rewrite) has
+      // fully settled — updateAll awaits it, so serialized sweeps can't race
+      const install = async (e: MarketEntry): Promise<void> => {
+        if (jobs.has(e.name)) { setStatus(t('installRunning')); return }
         const plan = installPlan(e)
         log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
-        if (!plan.plugin) { if (plan.skill) void installSkill(e, plan); return }
+        if (!plan.plugin) { if (plan.skill) await installSkill(e, plan); return }
         // dual-nature entries deliver BOTH parts — skill install runs async
         // alongside the plugin spawn (independent surfaces)
-        if (plan.skill) void installSkill(e, plan)
+        const skillDone = plan.skill ? installSkill(e, plan) : Promise.resolve()
         setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
         const ver = installed()[e.name]
@@ -195,35 +227,38 @@ export default Plugin.define({
           if (!updating) return
           // `plugin add` appends rather than dedupes — rewrite config down to
           // exactly the pinned spec so no stale/duplicate specs linger
-          const { homedir } = await import('node:os')
-          const { join } = await import('node:path')
-          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+          const cfg = await configPath()
           const d = await readJson(cfg)
           const list = strArrayField(d, 'plugins')
           d.plugins = dedupeToSpec(list, pin)
           await writeJsonAtomic(cfg, d)
         }
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
-        const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
-        jobs.set(e.name, p)
-        // 90s ceiling — a wedged `plugin add` must not hold the dialog status
-        // forever (GUI main already kills at 90s; the TUI had none)
-        let timedOut = false
-        const kill = setTimeout(() => { timedOut = true; p.kill('SIGTERM') }, 90_000)
-        const push = (d: Buffer) => setStatus(String(d).trim().split('\n').filter(Boolean).pop() ?? '')
-        p.stdout?.on('data', push); p.stderr?.on('data', push)
-        p.on('close', code => {
-          clearTimeout(kill); jobs.delete(e.name)
-          if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`) }
-          else if (code === 0) {
-            void afterAdd().then(() => {
-              setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
-              void refreshInstalled()
-            }).catch(x => setStatus(tf('updateFail', { err: String(x) })))
-          }
-          else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`) }
+        await new Promise<void>(resolve => {
+          const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
+          jobs.set(e.name, p)
+          // 90s ceiling — a wedged `plugin add` must not hold the dialog status
+          // forever (GUI main already kills at 90s; the TUI had none)
+          let timedOut = false
+          const kill = setTimeout(() => { timedOut = true; p.kill('SIGTERM') }, 90_000)
+          // child output is untrusted terminal text — strip control sequences
+          // before it can reach the status line (custom-index ANSI injection)
+          const push = (d: Buffer) => setStatus(sanitize(String(d).trim()).split('\n').filter(Boolean).pop() ?? '')
+          p.stdout?.on('data', push); p.stderr?.on('data', push)
+          p.on('close', code => {
+            clearTimeout(kill); jobs.delete(e.name)
+            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve() }
+            else if (code === 0) {
+              void afterAdd().then(() => {
+                setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
+                void refreshInstalled(); resolve()
+              }).catch(x => { setStatus(tf('updateFail', { err: String(x) })); resolve() })
+            }
+            else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve() }
+          })
+          p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve() })
         })
-        p.on('error', x => { clearTimeout(kill); jobs.delete(e.name); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`) })
+        await skillDone
       }
       const installSkill = async (e: MarketEntry, plan: InstallPlan) => {
         try {
@@ -290,14 +325,13 @@ export default Plugin.define({
         if (doPlugin) {
           // rewrite config plugins[] directly — CLI `plugin remove` takes a
           // spec, not the catalog name, and silently misses pinned specs
-          // (same fix as the GUI host uninstall)
+          // (same fix as the GUI host uninstall). installedIds lets removeSpec
+          // match specs whose internal id differs from the package name.
           try {
-            const { homedir } = await import('node:os')
-            const { join } = await import('node:path')
-            const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+            const cfg = await configPath()
             const d = await readJson(cfg)
             const list = strArrayField(d, 'plugins')
-            d.plugins = removeSpec(list, e.name)
+            d.plugins = removeSpec(list, e.name, installedIds())
             await writeJsonAtomic(cfg, d)
           } catch (x) { setStatus(tf('uninstallFail', { err: String(x), key: 'u' })); return }
           const next = { ...installed() }; delete next[e.name]
@@ -323,6 +357,9 @@ export default Plugin.define({
         const p = prompt(); setPrompt(null)
         if (v !== null && p) p.done(v)
       }
+      // memoized so tab labels re-render on language switch — a bare TABS()
+      // in the JSX evaluated once and froze the labels at mount-time locale
+      const tabsList = createMemo(() => TABS())
       const pickCategory = () =>
         openMenu(t('cat'), [{ label: t('all'), run: () => setCat('') },
           ...cats().map(c => ({ label: catLabel(c), run: () => toggleCat(c) }))])
@@ -331,10 +368,45 @@ export default Plugin.define({
           ...SORTS().map(([k, label]) => ({ label: `${sortKey() === k ? '✓ ' : ''}${label}`, run: () => setSortKey(k) })),
           { label: `${asc() ? '✓ ' : ''}${t('sortAsc')}`, run: () => setAsc(!asc()) },
           ...RANGES().map(([d, label]) => ({ label: `${days() === d ? '✓ ' : ''}${label}`, run: () => setDays(d) })),
+          // feature parts — same toggles as the GUI chips row
+          ...(['server', 'tui', 'gui', 'rpc'] as const).map(k =>
+            ({ label: `${featSel().has(k) ? '✓ ' : ''}${t('featFilter')} ${k}`, run: () => toggleFeatSel(k) })),
         ])
 
       const langLabel = () => store.lang === 'zh' ? t('langZh') : store.lang === 'en' ? t('langEn') : t('langAuto')
       const setLang = (m: 'auto' | 'zh' | 'en') => { void mutate(d => { d.lang = m }); setLangMode(m) }
+      // per-skill permission control — allow/ask/deny written to
+      // opencode.json permissions[] via the shared host helper; 'clear'
+      // removes the entry (back to the default ask behavior)
+      const readSkillPerms = async (): Promise<Record<string, string>> => {
+        const d = await readJson(await configPath())
+        const raw = d.permissions
+        const perms = (Array.isArray(raw) ? raw : [])
+          .filter((r): r is { action: string; resource: string; effect: string } =>
+            !!r && typeof r === 'object' &&
+            typeof (r as { action?: unknown }).action === 'string' &&
+            typeof (r as { resource?: unknown }).resource === 'string' &&
+            typeof (r as { effect?: unknown }).effect === 'string')
+        return Object.fromEntries(perms.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
+      }
+      const setPerm = async (id: string, mode: 'allow' | 'ask' | 'deny' | null) => {
+        try { await writeSkillPermission(await configPath(), id, mode); setStatus(`${id}: ${mode ?? t('permOff')}`) }
+        catch (x) { setStatus(String(x)) }
+      }
+      const openSkillPerms = async () => {
+        const ids = Object.keys(installed()).filter(k => k.startsWith('__skill_')).map(k => k.slice('__skill_'.length))
+        if (!ids.length) { setStatus(t('noMatch')); return }
+        const eff = await readSkillPerms().catch(() => ({} as Record<string, string>))
+        openMenu(t('permTitle'), ids.map(id => ({
+          label: `${id}${eff[id] ? ` [${eff[id]}]` : ''}`,
+          run: () => openMenu(`${id} — ${t('permTitle')}`, [
+            { label: t('permAllow'), run: () => void setPerm(id, 'allow') },
+            { label: t('permAsk'), run: () => void setPerm(id, 'ask') },
+            { label: t('permDeny'), run: () => void setPerm(id, 'deny') },
+            { label: t('permOff'), run: () => void setPerm(id, null) },
+          ]),
+        })))
+      }
       const settingsItems = createMemo<{ label: string; run: () => void }[]>(() => [
         { label: `${t('lang')}: [${langLabel()}]`, run: () => openMenu(t('lang'), [
           { label: t('langAuto'), run: () => setLang('auto') },
@@ -360,7 +432,9 @@ export default Plugin.define({
           } catch (x) { setStatus(tf('restoreFail', { err: String(x) })) }
         }) },
         { label: t('clearDataTui'), run: () => openMenu(t('confirmClearTui'), [
-          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {} }) },
+          // same scope as GUI clearData — favorites + version bookkeeping +
+          // devlog + language, not just the favorites blob
+          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {}; delete d.devlog; delete d.lang }) },
           { label: t('cancel'), run: noop },
         ]) },
         { label: `${t('devlogTui')}: [${store.devlog ? t('devlogOn') : t('devlogOff')}]（${LOG_FILE}）`, run: () => {
@@ -374,16 +448,19 @@ export default Plugin.define({
           openMenu(t('devlogMenu'), tail.map(line => ({ label: line, run: noop })))
         })() },
         { label: t('useHttpCatalog'), run: () => void (async () => {
-          const { homedir } = await import('node:os')
-          const { join } = await import('node:path')
-          const cfg = join(homedir(), '.config', 'opencode', 'opencode.json')
+          const cfg = await configPath()
           try {
             const d = await readJson(cfg)
             const list = strArrayField(d, 'skills')
-            if (!list.includes(CATALOG_URL)) await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
-            setStatus(`catalog source ${list.includes(CATALOG_URL) ? t('catalogAlready') : t('catalogEnabled')} — ${t('restartNeeded')}`)
+            const on = list.includes(CATALOG_URL)
+            // reversible — enable appends the url, re-running disables it
+            // (other skills[] entries are preserved either way)
+            if (on) await writeJsonAtomic(cfg, { ...d, skills: list.filter(u => u !== CATALOG_URL) })
+            else await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
+            setStatus(`catalog source ${on ? t('catalogDisabled') : t('catalogEnabled')} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
+        { label: t('permTitle'), run: () => void openSkillPerms() },
       ])
 
       // github-kind entries carry no npm version — their marker is pushedAt
@@ -391,16 +468,25 @@ export default Plugin.define({
       const actionLabel = (e: MarketEntry) => {
         const ver = verOf(e)
         if (ver && !hasUpdate(e, ver)) return `✓ ${t('installed')}`
-        if (ver) return `${t('update')} → ${dispVer(e)}`
+        // installed > approved = revert to the reviewed artifact — honest
+        // label, not "update" (hold semantics)
+        if (ver) return `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${dispVer(e)}`
+        // entries with no deliverable part show an inert label — a clickable
+        // control that only errors is a trap (AGENTS: 好理解)
+        if (!canInstall(e)) return t('noInstallTarget')
         return t('add')
       }
       const badge = (e: MarketEntry) => {
-        if (installed()[e.name] || skillInstalledVer(installed(), e.name)) return `[${t('installed')}]`
+        const rm = removedOf(e.name)
+        if (rm) return `[${t('removedFrom')}:${removedReasonLabel(rm.reason)}]`
+        const iv = installed()[e.name] || skillInstalledVer(installed(), e.name)
+        if (iv) return `[${t('installed')}]${e.approval === 'legacy' ? `[${t('legacy')}]` : ''}`
         // nothing this client can deliver gets the honest "no target" label —
         // not a fake verification status (honest-label rule, AGENTS.md)
         if (!canInstall(e)) return `[${t('noInstallTarget')}]`
         const s = e.verification?.status
-        return s ? `[${s === 'verified' ? t('verified') : s === 'failed' ? t('failed') : s === 'skipped' ? t('skipped') : t('unverified')}]` : ''
+        const base = s ? `[${s === 'verified' ? t('verified') : s === 'failed' ? t('failed') : s === 'skipped' ? t('skipped') : t('unverified')}]` : ''
+        return base + (e.deprecated ? `[${t('deprecated')}]` : '') + (e.approval === 'legacy' ? `[${t('legacy')}]` : '')
       }
       const openDetail = (e: MarketEntry) => { setFindingsOpen(false); setDetail(e) }
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
@@ -409,7 +495,18 @@ export default Plugin.define({
         const targets = (idx()?.plugins ?? []).filter(e => { const v = verOf(e); return v && hasUpdate(e, v) })
         if (!targets.length) { setStatus(t('allLatest')); return }
         setStatus(tf('updateN', { n: targets.length }))
-        targets.forEach(install)
+        // sequential — concurrent `plugin add` + concurrent read-modify-write
+        // of opencode.json raced: two afterAdd dedupes based on the same stale
+        // read overwrote each other and lost specs (GUI is serial already)
+        void (async () => {
+          let ok = 0, fail = 0
+          for (const e of targets) {
+            try { await install(e); ok++ } catch { fail++ }
+            setStatus(tf('updatingN', { n: ok + fail, total: targets.length }))
+          }
+          setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
+          void refreshInstalled()
+        })()
       }
 
       // dialogs run in the "modal" input mode — a plugin keymap layer must
@@ -521,6 +618,17 @@ export default Plugin.define({
         if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }
 
         if (k === 'x') { if (detail()?.capabilities) setFindingsOpen(!findingsOpen()); return }
+        // C = cancel the running install for the picked entry (GUI cards have
+        // a cancel button; the TUI jobs map existed but had no trigger)
+        if (k === 'C') {
+          const e = detail() ?? pick()
+          const j = e && jobs.get(e.name)
+          if (j && typeof (j as { kill?: (s?: string) => void }).kill === 'function') {
+            (j as { kill: (s?: string) => void }).kill('SIGTERM')
+            jobs.delete(e.name); setStatus(t('cancelled'))
+          }
+          return
+        }
         // r = force refresh — TTL must not swallow a user-initiated reload;
         // the outcome label distinguishes "still fresh" from "actually pulled"
         if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); setStatus(fetchOutcome() === 'fresh' ? t('dataFresh') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
@@ -532,7 +640,7 @@ export default Plugin.define({
       }
       const BINDS = 'escape up down left right return tab backspace delete space pageup pagedown ' +
         'a b c d e f g h i j k l m n o p q r s t u v w x y z ' +
-        '0 1 2 3 4 5 6 7 8 9 / * - _ . : ~ @ U'
+        '0 1 2 3 4 5 6 7 8 9 / * - _ . : ~ @ U C'
       ctx.keymap.layer(() => ({
         mode: 'modal',
         enabled: () => !searchOn(),
@@ -549,22 +657,35 @@ export default Plugin.define({
         }
       })
 
+      // CJK/fullwidth codepoints occupy TWO terminal cells — naive .length
+      // wrapping overflows the card edge on zh text
+      const cellW = (s: string): number => {
+        let w = 0
+        for (const ch of s) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? 2 : 1
+        return w
+      }
+      const cellClip = (s: string, n: number): string => {
+        if (cellW(s) <= n) return s
+        let out = '', w = 0
+        for (const ch of s) { const cw = (ch.codePointAt(0) ?? 0) >= 0x2e80 ? 2 : 1; if (w + cw > n - 1) break; out += ch; w += cw }
+        return `${out}…`
+      }
       const wrap2 = (s: string, w: number): string[] => {
         const words = s.split(/\s+/)
         const lines: string[] = ['']
         for (const word of words) {
           const cur = lines[lines.length - 1]
           const next = cur ? `${cur} ${word}` : word
-          if (next.length > w && cur) lines.push(word)
+          if (cellW(next) > w && cur) lines.push(word)
           else lines[lines.length - 1] = next
           if (lines.length > 2) break
         }
-        if (lines.length > 2 || words.join(' ').length > lines.join(' ').length)
-          lines[1] = `${lines[1].slice(0, Math.max(0, w - 1))}…`
-        return lines.slice(0, 2)
+        if (lines.length > 2 || cellW(words.join(' ')) > cellW(lines.join(' ')))
+          lines[1] = cellClip(lines[1], w)
+        return lines.slice(0, 2).map(l => cellClip(l, w))
       }
 
-      const clip = (s: string, n: number) => s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s
+      const clip = (s: string, n: number) => cellW(s) > n ? cellClip(s, n) : s
       const Card = (props: { e: MarketEntry; i: number }) => {
         const e = props.e
         const active = () => props.i === sel() && !detail() && zone() === 'grid'
@@ -583,7 +704,10 @@ export default Plugin.define({
                       onMouseDown={(ev) => {
                         ev.stopPropagation(); ev.preventDefault()
                         const ver = verOf(e)
-                        if (ver) uninstall(e); else install(e)
+                        if (ver) uninstall(e)
+                        // no deliverable target → explain, don't dead-click
+                        else if (canInstall(e)) install(e)
+                        else setStatus(t('noInstallTarget'))
                       }}>{actionLabel(e)}</text>
               </box>
             </box>
@@ -609,7 +733,7 @@ export default Plugin.define({
               </box>
             </box>
             <box flexDirection="row" paddingLeft={1}>
-              <For each={TABS()}>{([id, label], i) => (
+              <For each={tabsList()}>{([id, label], i) => (
                 <box backgroundColor={chromeFocused(1, i()) ? theme.background.action.primary.focused : undefined}>
                   <text fg={chromeFocused(1, i()) ? theme.text.action.primary.focused : id === tab() ? theme.text.base : theme.text.faint}
                         onMouseOver={() => { setZone('chrome'); setChromeRow(1); setChromeSel(i()) }}
@@ -706,12 +830,38 @@ export default Plugin.define({
                     </box>
                     <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
                     <Show when={e.pendingUpdate?.version}><text fg={theme.text.muted}>{tf('heldReview', { v: e.pendingUpdate!.version! })}</text></Show>
+                    <Show when={e.pendingUpdate?.reason}><text fg={theme.text.muted}>  {t('heldReason')}: {e.pendingUpdate!.reason}</text></Show>
+                    <Show when={e.pendingUpdate?.verification?.status}><text fg={theme.text.muted}>  {t('verifyLevel')}: {e.pendingUpdate!.verification!.status}</text></Show>
+                    {/* tombstone — installed name left the catalog; reason + date, never auto-uninstall */}
+                    <Show when={removedOf(e.name)}>{(rm) => (
+                      <text fg={theme.text.base}>{t('removedFrom')}: {removedReasonLabel(rm().reason)}{rm().disappearedAt ? ` · ${rm().disappearedAt!.slice(0, 10)}` : ''}</text>
+                    )}</Show>
+                    <Show when={e.deprecated}><text fg={theme.text.base}>{t('deprecated')}{e.deprecatedMessage ? `: ${e.deprecatedMessage}` : ''}</text></Show>
+                    <Show when={e.replacement}><text fg={theme.text.muted}>{tf('replacedBy', { name: e.replacement! })}</text></Show>
+                    <Show when={e.license || e.createdAt || e.maintainers?.length}>
+                      <text fg={theme.text.muted}>{[e.license ? `license: ${e.license}` : '', e.createdAt ? `created: ${e.createdAt.slice(0, 10)}` : '', e.maintainers?.length ? `maintainers: ${e.maintainers.join(', ')}` : ''].filter(Boolean).join(' · ')}</text>
+                    </Show>
+                    <Show when={e.compat?.engines || e.compat?.peer}>
+                      <text fg={theme.text.muted}>{t('compat')}: {[e.compat?.engines ? `opencode ${e.compat.engines}` : '', e.compat?.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}</text>
+                    </Show>
                     <Show when={e.source?.version}><text fg={theme.text.muted}>tree: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
+                    <Show when={e.integrity}><text fg={theme.text.muted}>integrity: {(e.integrity ?? '').slice(0, 32)}…</text></Show>
+                    {/* verify story — status/level/date + run link + log excerpt
+                        (AGENTS: 报错三件套 — 发生了什么/为什么/下一步) */}
+                    <text fg={theme.text.muted}>verify: {e.verification?.status ?? 'unverified'}{e.verification?.level ? ` · ${t('verifyLevel')}: ${e.verification.level}` : ''}{e.verification?.verifiedAt ? ` · ${e.verification.verifiedAt.slice(0, 10)}` : ''}{e.verification?.opencodeVersion ? ` (opencode ${e.verification.opencodeVersion})` : ''}</text>
+                    <Show when={e.verification?.runUrl && /^https:\/\//.test(e.verification!.runUrl!)}>
+                      <text fg={theme.text.muted}>{t('verifyRun')}: {e.verification!.runUrl}</text>
+                    </Show>
+                    <Show when={findingsOpen() && e.verification?.logExcerpt}>
+                      <For each={(e.verification!.logExcerpt ?? '').split('\n').slice(0, 12)}>{(l) => <text fg={theme.text.muted}>  {l}</text>}</For>
+                    </Show>
+                    <Show when={siteDetailUrl(e, INDEX_URL)}>{(u) => (
+                      <text fg={theme.text.muted}>{t('viewOnSite')}: {u()}</text>
+                    )}</Show>
                     <box height={1} />
-                    <text fg={theme.text.base}>{e.description?.en ?? ''}</text>
-                    <Show when={e.description?.zh}><text fg={theme.text.muted}>{e.description?.zh}</text></Show>
+                    <text fg={theme.text.base}>{descOf(e)}</text>
                     <box height={1} />
-                    <text fg={theme.text.base}>[i] {t('add')}/{t('update')}   [u] {t('uninstall')}   [*] {t('favorites')}</text>
+                    <text fg={theme.text.base}>[i] {t('add')}/{t('update')}   [u] {t('uninstall')}   [*] {t('favorites')}   [C] {t('cancel')}</text>
                     <Show when={caps?.redFlags?.length}>
                       <box height={1} />
                       <text fg={theme.text.base}>{t('redFlags')} ({caps!.redFlags.length}){!findingsOpen() ? `  [x] ${t('expand')}` : ''}</text>

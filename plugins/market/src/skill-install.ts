@@ -5,7 +5,7 @@
  *  skills are lifted to the source root preserving author IDs, prefixed with
  *  the package basename only on foreign collision. A .market-skills.json
  *  manifest records lifted paths so uninstall removes exactly what we made. */
-import { assertSkillId, skillId } from './hostx.js'
+import { assertSkillId, skillId, skillsRoot } from './hostx.js'
 
 /** A tar entry path must stay inside `dest`: reject absolute paths, `.`/`..`
  *  segments (incl. after ./ or package/ prefix stripping), and backslashes
@@ -52,6 +52,12 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
   }
   const dest = join(opts.root, id)
   if (!resolve(dest).startsWith(resolve(opts.root) + sep)) throw new Error(`dest escapes skills root: ${dest}`)
+  // A dir we didn't create (or one created under another package's ownership)
+  // is foreign. Unscoped names have no namespaced fallback at all, and even
+  // scoped ones never merge into a foreign dir at the namespaced path — refuse
+  // rather than drop a manifest into it (uninstall would delete user files).
+  if (existsSync(dest) && manifestOwner(dest) !== opts.name)
+    throw new Error(`skill dir '${id}' already exists and is not managed by market — refusing to overwrite`)
   mkdirSync(dest, { recursive: true })
   let off = 0, wrote = 0
   // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
@@ -139,7 +145,9 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
       rmSync(target, { recursive: true, force: true })
       renameSync(join(nd, sub), target); paths.push(rel)
     }
-    rmSync(nd, { recursive: true, force: true })
+    // only remove the emptied nest — a sub that couldn't be lifted (all 100
+    // prefixed name variants collided) must survive, not be silently deleted
+    try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
   }
   writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
   return `wrote ${wrote}, lifted ${paths.length}`
@@ -178,7 +186,5 @@ export async function uninstallSkillDir(name: string, root: string): Promise<str
 }
 
 export async function globalSkillsRoot(): Promise<string> {
-  const { homedir } = await import('node:os')
-  const { join } = await import('node:path')
-  return join(homedir(), '.config', 'opencode', 'skills')
+  return skillsRoot()
 }

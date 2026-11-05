@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { execSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { scanLabel, verifyLabel, buildSite, listPage, detailPage } from '../pipeline/site/build.ts'
@@ -286,6 +286,87 @@ describe('skill catalog hardening (S-1/S-4/S-5/S-12)', () => {
     expect(names).toContain('a--x')        // one of them claims the bare id
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
+
+  it('all skill payload files ship — scripts/configs included, url-unsafe names filtered', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const url = tgz(src, {
+      'SKILL.md': '# x', 'scripts/run.py': 'print(1)', 'data/cfg.json': '{}',
+      'a#b.md': '# fragment-name must not ship', 'sp ace.md': '# spaced ok',
+    })
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-files', contains: ['skill'], latestVersion: '1' })], removed: [] }
+    await buildSkillCatalog(idx, out, () => url)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    const files: string[] = cat.skills[0].files
+    expect(files).toContain('SKILL.md')
+    expect(files).toContain('scripts/run.py')
+    expect(files).toContain('data/cfg.json')
+    expect(files).toContain('sp ace.md')
+    expect(files).not.toContain('a#b.md')
+    expect(existsSync(join(out, 'skills', 'sk-files', 'a#b.md'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('over-sized single files are dropped, oversized payload skips the skill', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const url = tgz(src, { 'SKILL.md': '# x', 'big.bin': Buffer.alloc(3 * 1024 * 1024, 65).toString() })
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-big', contains: ['skill'], latestVersion: '1' })], removed: [] }
+    await buildSkillCatalog(idx, out, () => url)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills[0].files).toEqual(['SKILL.md'])
+    expect(existsSync(join(out, 'skills', 'sk-big', 'big.bin'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('SRI: index-announced integrity gates the served tarball — mismatch skips', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const url = tgz(src, { 'SKILL.md': '# pinned' })
+    const tgzPath = new URL(url).pathname
+    const good = `sha512-${createHash('sha512').update(readFileSync(tgzPath)).digest('base64')}`
+    const idx = (integrity: string | null): CatalogIndex => ({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-sri', contains: ['skill'], latestVersion: '1', integrity })], removed: [] })
+    // match → landed + cache keyed by integrity, not version
+    const cache = mkdtempSync(join(tmpdir(), 'cache-'))
+    const r = await buildSkillCatalog(idx(good), out, () => url, cache)
+    expect(r.landed).toBe(1)
+    expect([...readdirSync(cache)].some(d => decodeURIComponent(d).startsWith('sk-sri@sha512-'))).toBe(true)
+    // mismatch → skipped (re-tag / corrupted artifact never ships)
+    const r2 = await buildSkillCatalog(idx('sha512-deadbeef'), out, () => url)
+    expect(r2.landed).toBe(0)
+    // integrity null → unverifiable, proceeds (same contract as the client)
+    const r3 = await buildSkillCatalog(idx(null), out, () => url)
+    expect(r3.landed).toBe(1)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true }); rmSync(cache, { recursive: true, force: true })
+  })
+
+  it('warm cache rides out an outage; bump keys are kept even when the fetch fails', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const cache = mkdtempSync(join(tmpdir(), 'cache-'))
+    const url = tgz(src, { 'SKILL.md': '# v1' })
+    const idx = (ver: string): CatalogIndex => ({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-k', contains: ['skill'], latestVersion: ver })], removed: [] })
+    await buildSkillCatalog(idx('1.0.0'), out, () => url, cache)
+    expect(existsSync(join(cache, 'sk-k%401.0.0'))).toBe(true)
+    // outage run: pinned cache hit serves the skill with zero network — the
+    // catalog doesn't degrade at all while the same pin holds
+    const r = await buildSkillCatalog(idx('1.0.0'), out, () => null, cache)
+    expect(r.landed).toBe(1)
+    // version bumped during the outage → new key misses, fetch fails → the
+    // old pin is obsolete and pruned, the new key is kept for retry
+    const r2 = await buildSkillCatalog(idx('1.1.0'), out, () => null, cache)
+    expect(r2.landed).toBe(0)
+    expect(existsSync(join(cache, 'sk-k%401.0.0'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true }); rmSync(cache, { recursive: true, force: true })
+  })
 })
 
 describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
@@ -319,6 +400,9 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     expect(healthGate(null, { entries: 500, skills: { candidates: 20, landed: 5, degraded: true } })).toContain('skills degraded')
     expect(healthGate(null, { entries: 500, skills: { candidates: 20, landed: 15, degraded: false } })).toBeNull()
     expect(healthGate(null, { entries: 500, skills: { candidates: 3, landed: 1, degraded: true } })).toBeNull()   // tiny set → warn only
+    // floor is a parameter — a small curated catalog must publish below 200
+    expect(healthGate(null, { entries: 50 }, 40)).toBeNull()
+    expect(healthGate(null, { entries: 50 }, 60)).toContain('floor 60')
   })
 
   it('index.json is the only data file — full catalog incl pending; lite dropped (no consumer)', async () => {
@@ -394,5 +478,77 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     expect(installHint(ghSkill)).toContain('skills catalog')
     // versionless npm entry → browse only
     expect(installHint(mk({ latestVersion: null }))).toContain('browse only')
+    // github skill with malformed repo — catalog skips it, hint must not promise it
+    const ghBad = mk({ latestVersion: null, contains: ['skill'],
+      source: { kind: 'github', id: 'x', repo: 'not a repo' } })
+    expect(installHint(ghBad)).toContain('browse only')
+    expect(installHint(ghBad)).not.toContain('skills catalog')
+    // mcp-type without contains — no plugin payload to `plugin add`
+    expect(installHint(mk({ type: 'mcp' }))).toContain('browse only')
+  })
+
+  it('detailPage nested slug → root links carry one "../" per slug segment', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const h = detailPage(mk({ slug: 'owner/repo', contains: ['skill'] }))
+    expect(h).toContain('href="../../index.html"')
+    expect(h).toContain('href="../../skills.html"')
+    const flat = detailPage(mk({ slug: 'flat' }))
+    expect(flat).toContain('href="../index.html"')
+    expect(flat).not.toContain('href="../../index.html"')
+  })
+
+  it('detailPage pendingUpdate renders held version verify+scan state', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const h = detailPage(mk({ pendingUpdate: {
+      version: '9.9.9', heldAt: '2026-02-02T00:00:00Z', reason: 'awaiting-review',
+      publishedAt: '2026-02-01T00:00:00Z',
+      capabilities: { scannedAt: 't', findings: ['net:x'], redFlags: [] },
+      verification: { status: 'failed', level: 'install', logExcerpt: 'boom' } } }))
+    expect(h).toContain('v9.9.9')
+    expect(h).toContain('under review')
+    expect(h).toContain('verification failed (install)')
+    expect(h).toContain('finding')
+    expect(h).toContain('next version findings')
+    expect(h).toContain('next version failure log')
+  })
+
+  it('listPage: categories registry labels, aliases, deprecated + under-review badges', async () => {
+    const { listPage } = await import('../pipeline/site/build.ts')
+    const html = listPage({
+      version: '1', generatedAt: 't',
+      categories: { tools: { en: 'tools & capabilities', zh: '工具与能力' } },
+      plugins: [
+        mk({ name: 'a', category: ['tools'], aliases: ['old-a'], deprecated: true }),
+        mk({ name: 'b', pendingUpdate: { version: '2', heldAt: 't', capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' } } }),
+      ], removed: [] })
+    expect(html).toContain('tools &amp; capabilities · 工具与能力')
+    expect(html).toContain('aka old-a')
+    expect(html).toContain('>deprecated</span>')
+    expect(html).toContain('update under review')
+    expect(html).toContain('JSON.parse')   // category filter parses the JSON array back
+    const empty = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [], removed: [] })
+    expect(empty).toContain('no entries yet')
+  })
+
+  it('removedPage: human-readable reasons + lastSource link', async () => {
+    const { removedPage } = await import('../pipeline/site/build.ts')
+    const html = removedPage({ version: '1', generatedAt: 't', categories: {}, plugins: [], removed: [
+      { slug: 'o/x', name: 'x', disappearedAt: '2026-01-02T00:00:00Z', reason: 'npm-404' },
+      { slug: 'o/y', name: 'y', disappearedAt: '2026-01-01T00:00:00Z', reason: 'manual',
+        lastSource: { kind: 'github', id: 'o/y', repo: 'o/y' } },
+    ] })
+    expect(html).toContain('unpublished from npm')
+    expect(html).toContain('removed by maintainer')
+    expect(html).toContain('href="https://github.com/o/y"')
+  })
+
+  it('404.html uses absolute site-base links — survives any missing-path depth', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [mk()], removed: [] }, out)
+    const h = readFileSync(join(out, '404.html'), 'utf8')
+    expect(h).toMatch(/href="\/[^"]*removed\.html"/)
+    expect(h).toMatch(/href="\/[^"]*index\.html"/)
+    expect(h).not.toContain('href="removed.html"')   // relative link would die on deep 404s
+    rmSync(out, { recursive: true, force: true })
   })
 })

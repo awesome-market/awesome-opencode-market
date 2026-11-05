@@ -9,9 +9,9 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, type MarketEntry, type MarketIndex, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv } from './hostx.js'
+import { assertPkgName, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 const Market = Ipc.define({
@@ -49,7 +49,7 @@ type Api = {
   cancelInstall(name: string): Promise<string>
   verifyActivation(spec: string): Promise<string>
   uninstall(name: string): Promise<string>
-  writeSkill(p: { name: string; b64?: string; url?: string; integrity?: string | null }): Promise<string>
+  writeSkill(p: { name: string }): Promise<string>
   uninstallSkill(name: string): Promise<string>
   skillSource(p?: { url?: string; enable?: boolean }): Promise<{ url: string; enabled: boolean }>
   skillPermission(p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }): Promise<Record<string, string>>
@@ -77,6 +77,15 @@ export default Plugin.define({
     // new build replaces the previous handler instead of accumulating listeners
     let docClick: ((ev: Event) => void) | null = null
     const [data, setData] = createSignal<MarketIndex | null>(null)
+    // tombstone lookup — an installed entry whose name is in removed[] has
+    // left the catalog (npm-404 / filtered / manual …). Index rebuilt every
+    // setData so refreshes pick up new tombstones.
+    let removedIdx = new Map<string, RemovedEntry>()
+    const removedOf = (name: string) => removedIdx.get(name)
+    const setDataWrap = (i: MarketIndex) => {
+      setData(i)
+      removedIdx = new Map((i?.removed ?? []).filter(r => r.name).map(r => [r.name!, r]))
+    }
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
     const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
     const [refText, setRefText] = createSignal('')
@@ -142,7 +151,7 @@ export default Plugin.define({
       })
     } catch { /* older host: no events */ }
 
-    safe.index({ url: INDEX_URL }).then(i => setData(i), e => setErr(String(e)))
+    safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e)))
     safe.installed?.().then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
 
     // tab scope — shared by filtered() and the 全部(N) category chips so the
@@ -154,7 +163,7 @@ export default Plugin.define({
         case 'skills': return all.filter(p => p.contains?.includes('skill'))
         case 'installed':
           return [...all.filter(p => installed()[p.name]),
-            ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, categories: [], contains: [], uncataloged: true } as unknown as MarketEntry))]
+            ...installedExtra().map(x => ({ name: x.name, latestVersion: x.version, description: undefined, category: [], contains: [], uncataloged: true } as unknown as MarketEntry))]
         case 'mySkills': return all.filter(p => p.contains?.includes('skill') && skillInstalledVer(installed(), p.name))
         case 'favorites': return all.filter(p => state().favorites[p.name])
         case 'advanced': return []   // settings panel renders controls, not cards
@@ -194,6 +203,7 @@ export default Plugin.define({
       return n
     }
     const badge = (e: MarketEntry) => {
+      const wrap = el('span', 'display:inline-flex;gap:4px;align-items:center;flex-shrink:0')
       const s = statusOf(e)
       const b = el('span', 'margin-left:8px;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0', s)
       b.style.color = '#fff'
@@ -201,25 +211,25 @@ export default Plugin.define({
       // translated text to English literals silently breaks in zh mode
       const st = installed()[e.name] || skillInstalledVer(installed(), e.name) ? 'installed' : e.verification?.status ?? 'unverified'
       b.style.background = st === 'installed' || st === 'verified' ? '#1a7' : st === 'failed' ? '#c33' : st === 'skipped' ? '#885' : '#666'
-      return b
-    }
-    // tarball fetch + SRI check happen host-side (writeSkill url-mode): the
-    // webview has no CORS grant for codeload.github.com, and enforcing the
-    // digest in main means a renderer can't skip it. npm entries verify
-    // against the index-recorded SRI (reviewed artifact); github repo
-    // tarballs carry no SRI — their identity is source.version's tree sha.
-    const installSkillNet = async (e: MarketEntry): Promise<string> => {
-      const plan = installPlan(e)
-      if (plan.skill === 'github')
-        return safe.writeSkill({ name: e.name, url: `https://codeload.github.com/${e.source!.repo}/tar.gz/HEAD` })
-      if (plan.skill === 'npm') {
-        if (!e.latestVersion) throw new Error('no approved version to install')
-        const meta = await fetchPkgVersionMeta(e.name, e.latestVersion)
-        if (!meta.tarball) throw new Error(`no tarball for approved v${e.latestVersion}`)
-        return safe.writeSkill({ name: e.name, url: meta.tarball, integrity: e.integrity ?? meta.integrity })
+      wrap.appendChild(b)
+      // tombstone: the installed name left the catalog — stronger than a
+      // status chip because the reason may be 'manual' (blocklisted)
+      const rm = removedOf(e.name)
+      if (rm) {
+        const rb = el('span', 'font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0', `${t('removedFrom')}: ${removedReasonLabel(rm.reason)}`)
+        rb.style.color = '#fff'
+        rb.style.background = rm.reason === 'manual' ? '#c33' : '#885'
+        wrap.appendChild(rb)
       }
-      throw new Error('no skill part to install')
+      if (e.deprecated) wrap.appendChild(el('span', 'font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0;background:#a74;color:#fff', t('deprecated')))
+      if (e.approval === 'legacy') wrap.appendChild(el('span', 'font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0;opacity:.55;border:1px solid rgba(128,128,128,.45)', t('legacy')))
+      return wrap
     }
+    // download + SRI enforcement live in the main process: the renderer only
+    // names the entry — the host resolves URL/tree-sha and the index-announced
+    // SRI itself, so a compromised renderer can't fetch arbitrary tarballs or
+    // skip the digest by passing integrity:null (was the url-mode hole).
+    const installSkillNet = async (e: MarketEntry): Promise<string> => safe.writeSkill({ name: e.name })
     // two-step confirm: first click arms (3s window), second click executes
     const uninstallBtn = (e: MarketEntry) => {
       const isSkill = e.contains?.includes('skill') && !installed()[e.name]
@@ -309,7 +319,11 @@ export default Plugin.define({
       // only errors on click is a trap, not an affordance
       if (!canInstall(e))
         return el('span', 'font-size:11px;opacity:.55;white-space:nowrap;flex-shrink:0', t('noInstallTarget'))
-      const label = ver ? `${t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}` : t('add')
+      // installed > approved = a revert to the reviewed artifact, not an
+      // "update" — label it honestly (hold semantics, AGENTS: 好理解)
+      const label = ver
+        ? `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}`
+        : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
       b.onclick = ev => {
         ev.stopPropagation()
@@ -356,7 +370,11 @@ export default Plugin.define({
               const okNow = (fresh?.versions ?? installed())[e.name]
               b.textContent = okNow ? t('verifying') : t('installedPending')
               const verdict = await safe.verifyActivation?.(pinSpec(e)).catch(() => '')
-              b.textContent = verdict === 'activated' ? `${t('installed')} · ${t('activated')}` : okNow ? `${t('installed')} — ${t('restartNeeded')}` : t('installedPending')
+              // 'not-loaded' is a confident negative; 'unknown' means the probe
+              // itself couldn't run — don't dress uncertainty as a diagnosis
+              b.textContent = verdict === 'activated' ? `${t('installed')} · ${t('activated')}`
+                : verdict === 'not-loaded' && okNow ? `${t('installed')} — ${t('restartNeeded')}`
+                : okNow ? `${t('installed')} — ${t('restartNeeded')}` : t('installedPending')
               b.style.color = verdict === 'activated' ? '#4a4' : '#da3'
             }
           },
@@ -451,7 +469,9 @@ export default Plugin.define({
         ex.onclick = ev => {
           ev.stopPropagation()
           const txt = redactLog(p.lines.join('\n'))
-          void navigator.clipboard?.writeText(txt).catch(() => {})
+          // silent clipboard failure left the button looking like a no-op —
+          // flip the label either way (next-step affordance, not a trap)
+          void navigator.clipboard?.writeText(txt).then(() => { ex.textContent = '✓' }, () => { ex.textContent = '✗' })
         }
         errBox.appendChild(ex)
         d.appendChild(errBox)
@@ -699,8 +719,24 @@ export default Plugin.define({
         // held-back newer version — the index knows it exists; review hasn't
         // cleared it, so the client must never install it (hold semantics)
         ...(e.pendingUpdate?.version ? [tf('heldReview', { v: e.pendingUpdate.version })] : []),
+        ...(e.pendingUpdate?.reason ? [`  ${t('heldReason')}: ${e.pendingUpdate.reason}`] : []),
+        ...(e.pendingUpdate?.verification?.status ? [`  ${t('verifyLevel')}: ${e.pendingUpdate.verification.status}`] : []),
+        // tombstone: installed name left the catalog — say why, don't
+        // silently treat it as a normal uncataloged plugin
+        ...(() => { const rm = removedOf(e.name); return rm ? [`${t('removedFrom')}: ${removedReasonLabel(rm.reason)}${rm.disappearedAt ? ` · ${rm.disappearedAt.slice(0, 10)}` : ''}`] : [] })(),
+        // deprecated upstream + the suggested replacement the pipeline parsed
+        ...(e.deprecated ? [`${t('deprecated')}${e.deprecatedMessage ? `: ${e.deprecatedMessage}` : ''}`] : []),
+        ...(e.replacement ? [tf('replacedBy', { name: e.replacement })] : []),
+        ...(e.license ? [`license: ${e.license}`] : []),
+        ...(e.createdAt ? [`created: ${e.createdAt.slice(0, 10)}`] : []),
+        ...(e.maintainers?.length ? [`maintainers: ${e.maintainers.join(', ')}`] : []),
+        ...(e.compat?.engines || e.compat?.peer
+          ? [`${t('compat')}: ${[e.compat.engines ? `opencode ${e.compat.engines}` : '', e.compat.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}`]
+          : []),
         // github-kind identity: the tree sha the evidence gate + scan saw
         ...(e.source?.version ? [`tree: ${e.source.version.slice(0, 12)}`] : []),
+        ...(e.integrity ? [`integrity: ${e.integrity.slice(0, 32)}…`] : []),
+        `verify: ${v?.status ?? 'unverified'}${v?.level ? ` · ${t('verifyLevel')}: ${v.level}` : ''}`,
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
         `findings: ${caps?.findings?.length ?? 0} · redFlags: ${caps?.redFlags?.length ?? 0}`,
         `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
@@ -718,8 +754,23 @@ export default Plugin.define({
       }
       if (caps?.redFlags?.length) root.appendChild(fold(t('redFlags'), caps.redFlags, true))
       if (caps?.findings?.length) root.appendChild(fold(t('findings'), caps.findings, false))
+      // verify-log excerpt — the failed/skipped story in the pipeline's own
+      // words; collapsed like findings (AGENTS: 默认收起进详情页)
+      if (v?.logExcerpt) root.appendChild(fold(t('verifyLog'), [v.logExcerpt], v.status === 'failed'))
       if (!caps?.findings?.length && !caps?.redFlags?.length)
         root.appendChild(el('div', 'font-size:11px;opacity:.55;margin:8px 0', t('notSafe')))
+      // audit-trail links: pipeline verify run + the site detail page that
+      // aggregates evidence — https-only so a crafted runUrl can't open file:
+      const links = el('div', 'display:flex;gap:10px;margin:8px 0;flex-wrap:wrap')
+      const linkBtn = (label: string, url: string | null | undefined) => {
+        if (!url || !/^https:\/\//.test(url)) return
+        const lb = el('button', 'font-size:11px;cursor:pointer;background:transparent;border:1px solid rgba(128,128,128,.4);border-radius:6px;padding:2px 10px;color:inherit', label) as HTMLButtonElement
+        lb.onclick = ev => { ev.stopPropagation(); try { ctx.system?.openExternal?.(url) } catch { /* noop */ } }
+        links.appendChild(lb)
+      }
+      linkBtn(t('verifyRun'), v?.runUrl)
+      linkBtn(t('viewOnSite'), siteDetailUrl(e, INDEX_URL))
+      if (links.childElementCount) root.appendChild(links)
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
       // detail page keeps an uninstall affordance even on non-manage tabs,
@@ -772,7 +823,7 @@ export default Plugin.define({
         const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('timeout25'))), 25_000))])
         try {
           const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
-          if (idx) setData(idx)
+          if (idx) setDataWrap(idx)
           // honest refresh result — a manifest-same hit isn't "refreshed N".
           // read BEFORE installed(): that call refetches the index and would
           // stamp 'fresh' over this refresh's real outcome
@@ -831,14 +882,48 @@ export default Plugin.define({
       root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
       const ssStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:6px')
       const ssBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('useHttpCatalog')) as HTMLButtonElement
+      // reversible toggle — enable writes the skills[] url, disable removes it
+      // (leaving any other entries untouched). One-way 'enable' used to lock
+      // users into a remote source with no off switch.
+      let ssOn = false
       const ssRefresh = () => void safe.skillSource?.().then(r => {
-        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : SKILLS_URL
-        ssBtn.textContent = r.enabled ? t('catalogAlready') : t('useHttpCatalog')
-        ssBtn.disabled = !!r.enabled
+        ssOn = !!r.enabled
+        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${SKILLS_URL} — ${t('catalogDisabled')}`
+        ssBtn.textContent = r.enabled ? t('disable') : t('useHttpCatalog')
       }).catch(() => { ssStatus.textContent = SKILLS_URL })
       ssRefresh()
-      ssBtn.onclick = () => void safe.skillSource?.({ url: SKILLS_URL, enable: true }).then(ssRefresh).catch(() => {})
+      ssBtn.onclick = () => void safe.skillSource?.({ url: SKILLS_URL, enable: !ssOn }).then(ssRefresh).catch(() => {})
       root.append(ssStatus, ssBtn)
+      // skill permissions — per installed skill id, allow/ask/deny written to
+      // opencode.json permissions[]; 'clear' returns to the default (ask).
+      if (typeof safe.skillPermission === 'function') {
+        root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('permTitle')))
+        const permBox = el('div', 'font-size:12px')
+        const paintPerms = async () => {
+          const [perms, inv] = await Promise.all([
+            safe.skillPermission({ id: '', mode: null }).catch(() => ({}) as Record<string, string>),
+            safe.installed?.().catch(() => null),
+          ])
+          const ids = Object.keys(inv?.versions ?? {})
+            .filter(k => k.startsWith('__skill_')).map(k => k.slice('__skill_'.length))
+          permBox.replaceChildren()
+          if (!ids.length) { permBox.appendChild(el('div', 'opacity:.6', t('noMatch'))); return }
+          for (const id of ids) {
+            const r = el('div', 'display:flex;align-items:center;gap:6px;padding:3px 0')
+            r.appendChild(el('span', 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', id))
+            const cur = el('span', 'font-size:10px;opacity:.6;min-width:32px;text-align:right', perms[id] ?? '')
+            r.appendChild(cur)
+            for (const [mode, key] of [['allow', 'permAllow'], ['ask', 'permAsk'], ['deny', 'permDeny'], [null, 'permOff']] as const) {
+              const mb = el('button', 'font-size:10px;cursor:pointer;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:5px;background:transparent;color:inherit', t(key)) as HTMLButtonElement
+              mb.onclick = ev => { ev.stopPropagation(); void safe.skillPermission({ id, mode }).then(() => { cur.textContent = mode ?? '' }).catch(() => {}) }
+              r.appendChild(mb)
+            }
+            permBox.appendChild(r)
+          }
+        }
+        void paintPerms()
+        root.appendChild(permBox)
+      }
       return root
     }
 
@@ -854,7 +939,7 @@ export default Plugin.define({
         if (err()) {
           const d = el('div', 'padding:12px;color:#c66', `error: ${err()}`)
           const rb = el('button', 'margin-left:8px;font-size:12px;cursor:pointer', t('retry')) as HTMLButtonElement
-          rb.onclick = () => { setErr(''); safe.index().then(i => setData(i), e => setErr(String(e))) }
+          rb.onclick = () => { setErr(''); safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e))) }
           d.appendChild(rb)
           return d
         }
@@ -905,11 +990,10 @@ export default Plugin.define({
       if (!devlogOn) return
       void marketLogPath().then(p => appendBounded(p, `${new Date().toLocaleString('sv-SE')} ${s}\n`)).catch(() => {})
     }
-    const cfgPath = async () => {
-      const { homedir } = require('node:os') as typeof import('node:os')
-      const { join } = require('node:path') as typeof import('node:path')
-      return join(homedir(), '.config', 'opencode', 'opencode.json')
-    }
+    // env-aware resolution (OPENCODE_CONFIG > XDG_CONFIG_HOME > ~/.config) —
+    // spawned `opencode` commands inherit the same vars via restrictedEnv, so
+    // CLI writes and our direct read-modify-writes land in the same file
+    const cfgPath = () => configPath()
     // renderer-supplied catalog URL (plugin options) validated + env fallback;
     // lastIndexUrl keeps installed()'s extras lookup on the SAME catalog the
     // renderer asked for — a second fetch at the default would double-pull
@@ -925,6 +1009,11 @@ export default Plugin.define({
           const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
           const { homedir } = require('node:os') as typeof import('node:os')
           const { join } = require('node:path') as typeof import('node:path')
+          // rebuild per call — these grew monotonically so an uninstalled
+          // entry's spec/id lingered for the rest of the process lifetime
+          for (const k of Object.keys(specByName)) delete specByName[k]
+          for (const k of Object.keys(idByName)) delete idByName[k]
+          for (const k of Object.keys(featByName)) delete featByName[k]
           const map: Record<string, string> = {}
           // host API first — source.target is the npm package name, which is
           // what catalog entries match on (CLI list reports internal ids)
@@ -942,6 +1031,14 @@ export default Plugin.define({
                 } else if (p.source?.type === 'local' && p.id) {
                   const clean = String(p.id)
                   map[clean] = 'local'; specByName[clean] = clean; idByName[clean] = clean
+                } else if ((p.source?.type === 'git' || p.source?.type === 'github') && p.source?.target) {
+                  // git-spec installs (owner/repo, github:, git urls) — shown
+                  // as 'local' unless the host reports a pinned version; never
+                  // claimed catalog-verified (unpinned refs move)
+                  const clean = cleanSpec(p.source.target) || String(p.source.target)
+                  map[clean] = p.source.version ?? 'local'
+                  specByName[clean] = p.source.target
+                  if (p.id) idByName[clean] = String(p.id)
                 }
               }
             }
@@ -963,18 +1060,28 @@ export default Plugin.define({
             }
           } catch { /* plugin list unavailable — skills are still reported */ }
           Object.assign(map, scanSkillKeys(
-            [join(homedir(), '.config', 'opencode', 'skills'), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
+            [await skillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
             d => readdirSync(d), p => existsSync(p)))
-          // installed plugins with no catalog entry still get a card
-          const idxNames = new Set(((await fetchIndexCached(lastIndexUrl))?.plugins ?? []).map(p => p.name))
-          const extras = buildExtras(specByName, idByName, map, idxNames)
-          for (const x of extras) map[x.name] = x.version
+          // installed plugins with no catalog entry still get a card — but a
+          // catalog outage must NOT blank the whole inventory: degrade extras
+          // (can't tell installed-but-uncataloged from installed-and-listed)
+          // and keep the versions/skills already gathered
+          let idxNames = new Set<string>()
+          let extras: { name: string; version: string }[] = []
+          try {
+            idxNames = new Set(((await fetchIndexCached(lastIndexUrl))?.plugins ?? []).map(p => p.name))
+            extras = buildExtras(specByName, idByName, map, idxNames)
+            for (const x of extras) map[x.name] = x.version
+          } catch { lg('installed(): catalog unreachable — extras degraded (no uncataloged split)') }
           return { versions: map, extras, features: featByName }
         },
         install: (p: { name: string; spec?: string }) =>
           new Promise<string>((resolve, reject) => {
             const { spawn } = require('node:child_process') as typeof import('node:child_process')
             try { assertSpecForName(p.name, p.spec) } catch (e) { reject(e); return }
+            // double-click / retry-during-flight guard — jobs.set would orphan
+            // the first child while its stdout handlers still emit progress
+            if (jobs.has(p.name)) { reject(new Error('install already running')); return }
             const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
             const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
             jobs.set(p.name, child)
@@ -991,6 +1098,7 @@ export default Plugin.define({
           }),
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
+          if (jobs.has(p.name)) throw new Error('install already running')
           lg(`update ${p.name}: called`)
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
@@ -1045,35 +1153,41 @@ export default Plugin.define({
           return 'removed'
         },
         // skills are file-system installs: extract tarball → config/skills/<name>.
-        // url-mode is preferred — downloads + the index-announced sha512 SRI
-        // check stay in the host process (webview has no codeload CORS, and a
-        // renderer can't bypass integrity enforcement it never sees). b64 is
-        // the legacy renderer-buffered path.
-        writeSkill: async (p: { name: string; b64?: string; url?: string; integrity?: string }) => {
-          const { homedir } = require('node:os') as typeof import('node:os')
-          const { join } = require('node:path') as typeof import('node:path')
+        // The renderer only NAMES the entry — the host resolves the download
+        // URL (github: the scanned tree sha, never HEAD) and the SRI (index-
+        // announced, packument fallback) from the cached catalog itself, so a
+        // compromised renderer can't fetch arbitrary tarballs or pass
+        // integrity:null to skip the digest.
+        writeSkill: async (p: { name: string }) => {
           assertSkillId(p.name)
-          let bytes: Uint8Array
-          if (typeof p.url === 'string' && p.url) {
-            if (!/^https:\/\//.test(p.url)) throw new Error('skill url must be https')
-            const res = await fetch(p.url, { signal: AbortSignal.timeout(30_000) })
-            if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
-            const cl = Number(res.headers.get('content-length') ?? 0)
-            if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
-            bytes = new Uint8Array(await res.arrayBuffer())
-          } else {
-            if (typeof p.b64 !== 'string' || p.b64.length > 64 * 1024 * 1024) throw new Error('invalid skill payload')
-            bytes = Buffer.from(p.b64, 'base64')
-          }
+          const entry = (await fetchIndexCached(lastIndexUrl))?.plugins?.find(e => e.name === p.name)
+          if (!entry) throw new Error(`not in catalog: ${p.name}`)
+          const plan = installPlan(entry)
+          let url: string
+          let integrity: string | null = null
+          if (plan.skill === 'github') {
+            url = `https://codeload.github.com/${entry.source!.repo}/tar.gz/${entry.source?.version ?? 'HEAD'}`
+          } else if (plan.skill === 'npm') {
+            if (!entry.latestVersion) throw new Error('no approved version to install')
+            const meta = await fetchPkgVersionMeta(entry.name, entry.latestVersion)
+            if (!meta.tarball) throw new Error(`no tarball for approved v${entry.latestVersion}`)
+            url = meta.tarball
+            integrity = entry.integrity ?? meta.integrity
+          } else throw new Error('no skill part to install')
+          const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
+          if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
+          const cl = Number(res.headers.get('content-length') ?? 0)
+          if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
+          const bytes = new Uint8Array(await res.arrayBuffer())
           if (bytes.byteLength > MAX_SKILL_TGZ) throw new Error('skill tarball too large')
           // fail closed on a KNOWN mismatch; null = unverifiable (no SRI /
           // no subtle crypto) and proceeds — github repo tarballs carry none
-          const ok = await integrityMatches(bytes, typeof p.integrity === 'string' ? p.integrity : null)
+          const ok = await integrityMatches(bytes, integrity)
           if (ok === false) throw new Error('integrity mismatch — downloaded bytes do not match the reviewed artifact')
-          return installSkillTar({ name: p.name, gzipped: bytes,
-            root: join(homedir(), '.config', 'opencode', 'skills') })
+          return installSkillTar({ name: p.name, gzipped: bytes, root: await skillsRoot() })
         },
-        // read when no input; {url, enable:true} writes opencode.json skills[]
+        // read when no input; enable:true appends the url, enable:false strips
+        // it — other skills[] entries are preserved either way
         skillSource: async (p: { url?: unknown; enable?: unknown } = {}) => {
           const url = typeof p?.url === 'string' && /^https:\/\/\S+\/$/.test(p.url) ? p.url : skillsUrl(urlOrDefault(null))
           const cfg = await cfgPath()
@@ -1081,24 +1195,24 @@ export default Plugin.define({
           const list = strArrayField(d, 'skills')
           const wasEnabled = list.includes(url)
           if (p?.enable === true && !wasEnabled) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
-          return { url, enabled: p?.enable === true ? true : wasEnabled }
+          if (p?.enable === false && wasEnabled) { d.skills = list.filter(u => u !== url); await writeJsonAtomic(cfg, d) }
+          return { url, enabled: p?.enable === true ? true : p?.enable === false ? false : wasEnabled }
         },
         skillPermission: async (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) => {
-          if (typeof p.id !== 'string' || !p.id || p.id.length > 200 || /[\\/]/.test(p.id))
-            throw new Error('invalid skill id')
-          if (p.mode !== 'allow' && p.mode !== 'deny' && p.mode !== 'ask' && p.mode !== null)
-            throw new Error('invalid permission mode')
           const cfg = await cfgPath()
-          const d = await readJson(cfg)
-          const raw = d.permissions
-          const perms = (Array.isArray(raw) ? raw : []).filter(
-            (r): r is { action: string; resource: string; effect: string } =>
-              !!r && typeof r === 'object' && typeof r.action === 'string' && typeof r.resource === 'string' && typeof r.effect === 'string')
-          const rest = perms.filter(r => !(r.action === 'skill' && r.resource === p.id))
-          if (p.mode) rest.push({ action: 'skill', resource: p.id, effect: p.mode })
-          d.permissions = rest
-          await writeJsonAtomic(cfg, d)
-          return Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
+          // empty id = read-only listing (renderer enumerates installed skills
+          // then asks which permissions are set)
+          if (!p?.id) {
+            const d = await readJson(cfg)
+            const perms = (Array.isArray(d.permissions) ? d.permissions : [])
+              .filter((r): r is { action: string; resource: string; effect: string } =>
+                !!r && typeof r === 'object' &&
+                typeof (r as { action?: unknown }).action === 'string' &&
+                typeof (r as { resource?: unknown }).resource === 'string' &&
+                typeof (r as { effect?: unknown }).effect === 'string')
+            return Object.fromEntries(perms.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
+          }
+          return writeSkillPermission(cfg, p.id, p.mode ?? null)
         },
         readDevlog: async () => {
           try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
@@ -1118,12 +1232,9 @@ export default Plugin.define({
         },
         setDevlog: async (on: boolean) => { devlogOn = !!on; return 'ok' },
         uninstallSkill: (name: string) =>
-          new Promise<string>((resolve, reject) => {
-            const { homedir } = require('node:os') as typeof import('node:os')
-            const { join } = require('node:path') as typeof import('node:path')
-            try { assertSkillId(name); resolve(uninstallSkillDir(name, join(homedir(), '.config', 'opencode', 'skills'))) }
-            catch (e) { reject(e instanceof Error ? e : new Error(String(e))) }
-          }),
+          skillsRoot()
+            .then(root => { assertSkillId(name); return uninstallSkillDir(name, root) })
+            .catch(e => { throw e instanceof Error ? e : new Error(String(e)) }),
         // self-confirm: isolated serve + API hit → real "did it load" verdict.
         // input is the pinned spec (name@approvedVersion) — a bare name would
         // resolve dist-tags.latest and test a version the user never got.
@@ -1148,9 +1259,13 @@ export default Plugin.define({
             // poll the log for the canary instead of a fixed sleep (races writer)
             const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'; for i in $(seq 1 16); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done; kill $SPID 2>/dev/null; true`
             const logEnv = { ...env, LOG: join(home, 'data', 'opencode', 'log', 'opencode.log') }
-            execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, () => {
+            execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, (err) => {
               const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
-              const ok = existsSync(log) && new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
+              // tri-state: 'unknown' when the probe itself couldn't run (no sh
+              // on Windows, serve never wrote a log) — the caller must not
+              // dress that up as a confident not-loaded diagnosis
+              if (err || !existsSync(log)) return resolve('unknown')
+              const ok = new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
               resolve(ok ? 'activated' : 'not-loaded')
             })
           }),

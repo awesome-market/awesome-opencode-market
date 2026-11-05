@@ -27,6 +27,13 @@ jobs:
       - run: |
           git fetch origin catalog
           git show origin/catalog:index.json > index.json
+          # the redirection above creates the file even when git show fails —
+          # check content like catalog.yml's WF-1 rule instead of letting a
+          # bare JSON.parse error stand in for "fetch failed"
+          if [ ! -s index.json ]; then
+            echo "::error::catalog index.json missing or empty — refusing to build"
+            exit 1
+          fi
       # S-1: extracted skill docs are version-pinned — cache by <id>@<ver> so
       # unchanged skills cost zero network on redeploys (rolling cache key;
       # the build prunes entries no longer referenced).
@@ -38,6 +45,8 @@ jobs:
       - run: npx tsx pipeline/site/build.ts index.json /tmp/site
         env:
           SKILL_CACHE: .skill-cache
+          # absolute base path for 404.html links — served at arbitrary depth
+          SITE_BASE: /${{ github.event.repository.name }}/
       # S-3: deploy gate — an empty/broken catalog published is worse than a
       # stale one. Compare against the LIVE site's health.json; if that fetch
       # fails the absolute floor still applies (never gate on network flakiness).
@@ -45,7 +54,17 @@ jobs:
         run: |
           curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" -o /tmp/prev-health.json \
             || echo '{"entries":null}' > /tmp/prev-health.json
-          npx tsx -e "import {readFileSync} from 'node:fs'; import {healthGate} from './pipeline/site/build.ts'; const msg = healthGate(JSON.parse(readFileSync('/tmp/prev-health.json','utf8')), JSON.parse(readFileSync('/tmp/site/health.json','utf8'))); if (msg) { console.error('deploy gate: '+msg); process.exit(1) } console.log('deploy gate: ok')"
+          npx tsx -e "
+            import {readFileSync} from 'node:fs';
+            import {healthGate} from './pipeline/site/build.ts';
+            let prev;
+            try { prev = JSON.parse(readFileSync('/tmp/prev-health.json','utf8')) }
+            catch { prev = { entries: null } }   // corrupt live health → degrade to floor-only, like a fetch failure
+            const floor = Number(process.env.SITE_FLOOR) || 200;
+            const msg = healthGate(prev, JSON.parse(readFileSync('/tmp/site/health.json','utf8')), floor);
+            if (msg) { console.error('deploy gate: '+msg); process.exit(1) }
+            console.log('deploy gate: ok')
+          "
       - uses: actions/upload-pages-artifact@v3
         with: { path: /tmp/site }
       - uses: actions/deploy-pages@v4
