@@ -15,7 +15,7 @@
  *  Usage:
  *    tsx pipeline/ai/digest.ts --index index.json --verdicts ai-verdicts.jsonl \
  *      --state digest-state.json --out-dir . [--date YYYY-MM-DD] [--dry] */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { exit } from 'node:process'
 import { join } from 'node:path'
@@ -561,7 +561,15 @@ export async function main(args: string[] = process.argv): Promise<void> {
     return
   }
   mkdirSync(join(outDir, 'digest'), { recursive: true })
-  writeFileSync(digestPath, md)
+  // tmp+rename for BOTH artifacts: a crash mid-write must not leave a torn
+  // file for the workflow to `git add` and push — a truncated
+  // digest-state.json makes the NEXT render refuse via the state-loss guard
+  // (frozen until manual restore), a torn md is a corrupted public document.
+  // Tmp files live in outDir's ROOT: `git add digest/` globs the directory
+  // and would happily stage a stray inside it (same-dir rename stays atomic).
+  const mdTmp = join(outDir, `.digest-${day}.tmp`)
+  writeFileSync(mdTmp, md)
+  renameSync(mdTmp, digestPath)
   // --date = backfill a missed day's DOCUMENT only. Writing state with a
   // backdated `now` would stamp day/dayAnnounced as that day and wedge the
   // same-day accumulation semantics; the skipped announcements re-enter
@@ -570,7 +578,9 @@ export async function main(args: string[] = process.argv): Promise<void> {
     console.log(`[digest] backfilled ${digestPath} — digest-state.json left untouched (next real render advances the anchor)`)
     return
   }
-  writeFileSync(statePath, JSON.stringify(next, null, 2))
+  const stateTmp = `${statePath}.tmp`
+  writeFileSync(stateTmp, JSON.stringify(next, null, 2))
+  renameSync(stateTmp, statePath)
   console.log(`[digest] wrote ${digestPath}; lastDigestAt=${next.lastDigestAt}; announced=${next.announced.length}`)
 }
 

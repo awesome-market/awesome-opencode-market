@@ -78,12 +78,14 @@ alert() {
 
 # pinned code checkout — 钉 origin/main;lockfile 变化才 npm ci
 if ! git -C "$CODED" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git clone --single-branch --branch main "$URL" "$CODED" \
+  git clone --depth=1 --single-branch --branch main "$URL" "$CODED" \
     || { log "code checkout clone failed ($URL) — check auth/network"; exit 1; }
 fi
 git -C "$CODED" remote get-url origin >/dev/null 2>&1 || git -C "$CODED" remote add origin "$URL"
 [ "$(git -C "$CODED" remote get-url origin)" = "$URL" ] || git -C "$CODED" remote set-url origin "$URL"
-git -C "$CODED" fetch -q origin main || { log "code fetch failed (offline?) — silent, retry next tick"; exit 0; }
+# 与 §4/§5 同款浅化:持久 checkout 无限积累历史;tip 即所需(渲染只看最新态)。
+# forced refspec 在远端被改写时仍能更新跟踪引用。
+git -C "$CODED" fetch -q --depth=1 origin '+refs/heads/main:refs/remotes/origin/main' || { log "code fetch failed (offline?) — silent, retry next tick"; exit 0; }
 git -C "$CODED" reset -q --hard origin/main || { log "code checkout reset failed"; exit 1; }
 LOCKHASH=$(shasum -a 256 "$CODED/package-lock.json" | cut -d' ' -f1)
 if [ "$(cat "$CODED/.deps-stamp" 2>/dev/null)" != "$LOCKHASH" ]; then
@@ -100,7 +102,7 @@ if ! git -C "$CATDG" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       || { log "cannot reach remote $URL (auth/network) — silent, retry next tick"; exit 0; }
     log "catalog branch not found on remote — nothing to publish"; exit 0
   fi
-  git clone --single-branch --branch catalog "$URL" "$CATDG" \
+  git clone --depth=1 --single-branch --branch catalog "$URL" "$CATDG" \
     || { log "catalog clone failed ($URL) — check auth/network/disk"; exit 1; }
 fi
 git -C "$CATDG" remote get-url origin >/dev/null 2>&1 || git -C "$CATDG" remote add origin "$URL"
@@ -113,7 +115,9 @@ cd "$CATDG" || exit 1
 for i in 1 2 3 4; do
   # fetch+reset at the TOP of every iteration: a previous failed commit is
   # discarded and the digest re-renders against the freshest remote state
-  git fetch origin catalog -q || { log "fetch attempt $i failed (offline?)"; sleep 3; continue; }
+  # --depth=1:渲染只看 tip(index.json 每提交 ~14MB,全史无界膨胀同 §4);
+  # forced refspec 防远端重写楔死重试环。
+  git fetch -q --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' || { log "fetch attempt $i failed (offline?)"; sleep 3; continue; }
   # reset 失败必须重试——没有 -e,失败会继续拿陈旧状态渲染并推失真日报
   git reset --hard origin/catalog -q || { log "reset attempt $i failed"; sleep 3; continue; }
   # reset 不碰 untracked:上轮的残留渲染产物会混进 git add,先清掉
