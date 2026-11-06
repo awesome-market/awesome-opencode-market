@@ -63,6 +63,11 @@ jobs:
           # catalog branch is data-only — dedicated worktree, never the main
           # checkout; clear a stale one first (crashed runs can leave /tmp/cat)
           git worktree remove /tmp/cat --force 2>/dev/null || true
+          # the other two wedge shapes (same fix as catalog-append/verify):
+          # a stray NON-worktree dir and a missing-but-registered registration
+          # both make `worktree add` fail on every attempt, not just retry 1
+          rm -rf /tmp/cat
+          git worktree prune
           # no "-b catalog" fallback: origin/catalog was verified above, so a
           # failed add means a real worktree problem — "-b" would branch off
           # MAIN's HEAD (no index.json there) and burn 4 dumb retries
@@ -150,10 +155,15 @@ jobs:
           # daily job. Page until a match, or until the oldest listed commit
           # already sits outside the window (anything deeper is older still →
           # that floor still fires the leg). Cap 5 pages.
-          last_touch() {   # $1=path $2=commit-msg-prefix|"" → epoch|0
+          last_touch() {   # $1=path $2=commit-msg-prefix|"" → epoch|0|-1
+            # -1 = probe failed (API outage/rate-limit): DISTINCT from 0
+            # (paged to exhaustion, no match). Callers' `>0` staleness gates
+            # skip both, but leg5's "never wired" check keys on `=0` exactly —
+            # a verdicts-probe failure must not read as "worker never wired".
             local page=1 body first oldest
             while [ "$page" -le 5 ]; do
-              body=$(gh api "repos/$GH_REPO/commits?sha=catalog&path=$1&per_page=100&page=$page" 2>/dev/null) || break
+              body=$(gh api "repos/$GH_REPO/commits?sha=catalog&path=$1&per_page=100&page=$page" 2>/dev/null) \
+                || { echo -1; return; }
               [ "$(printf '%s' "$body" | jq 'length // 0')" = "0" ] && break
               if [ -z "$2" ]; then
                 first=$(printf '%s' "$body" | jq -r '.[0].commit.committer.date // empty')

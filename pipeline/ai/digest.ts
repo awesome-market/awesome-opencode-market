@@ -525,11 +525,23 @@ generated ${now.toISOString()}（UTC 计日）
 
 export async function main(args: string[] = process.argv): Promise<void> {
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
-  const [idxPath, verdictsPath, statePath, outDir] = ['--index', '--verdicts', '--state', '--out-dir'].map(arg)
+  const usage = 'usage: --index <p> --verdicts <p> --state <p> --out-dir <d> [--date YYYY-MM-DD] [--dry]'
+  // process.exit(string) throws ERR_INVALID_ARG_TYPE at runtime — the usage
+  // text never printed (same class fixed in diagnose.ts)
+  const die = (m: string): never => { console.error(m); exit(1) }
+  // `?? die(...)`: die returns never, so the result type is string — a plain
+  // `if (!x) die()` does not narrow these bindings (same as diagnose.ts)
+  const idxPath = arg('--index') ?? die(usage)
+  const verdictsPath = arg('--verdicts') ?? die(usage)
+  const statePath = arg('--state') ?? die(usage)
+  const outDir = arg('--out-dir') ?? die(usage)
   const dry = args.includes('--dry')
-  const now = args.includes('--date') ? new Date(`${arg('--date')}T21:00:00Z`) : new Date()
-  if (!idxPath || !verdictsPath || !statePath || !outDir)
-    exit('usage: --index <p> --verdicts <p> --state <p> --out-dir <d> [--date YYYY-MM-DD] [--dry]')
+  // an unparseable --date makes every toISOString() downstream throw a bare
+  // RangeError — validate the backfill shape up front
+  const dateArg = arg('--date')
+  if (dateArg !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(dateArg))
+    die(`${usage} — --date must be YYYY-MM-DD, got '${dateArg}'`)
+  const now = dateArg !== undefined ? new Date(`${dateArg}T21:00:00Z`) : new Date()
 
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   // tolerant parse — one malformed line must not kill the whole daily digest
