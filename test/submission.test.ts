@@ -281,9 +281,10 @@ describe('run: JSONL seed declared metadata', () => {
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'o/drift')!
     // identity-level signal → redFlag (flag surface + skipIfFlagged), not a
-    // buried finding — the moved bytes fail-closed into human review
-    expect(e.capabilities.redFlags).toContain('sec:repo-moved-since-review')
-    expect(e.capabilities.findings).not.toContain('sec:repo-moved-since-review')
+    // buried finding — the moved bytes fail-closed into human review; the
+    // embedded sha makes each subsequent move a NEW flag set
+    expect(e.capabilities.redFlags.some(x => x.startsWith('sec:repo-moved-since-review:'))).toBe(true)
+    expect(e.capabilities.findings.some(x => x.startsWith('sec:repo-moved-since-review'))).toBe(false)
     expect(e.verification.status).toBe('skipped')
   })
 

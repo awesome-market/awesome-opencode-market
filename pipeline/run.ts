@@ -941,10 +941,12 @@ export async function run(opts: RunOptions = {}) {
         if (metaRes.status === 'rate-limited') rateLimitedCalls++
         if (metaRes.meta) {
           const m = metaRes.meta
-          if (m.archived) {
+          if (m.archived || m.fork) {
             ghStats.archived++
             rejectedGh.add(lower)
-            if (isSeedRepo(cand)) seedOutcomes.set(lower, 'archived')
+            // submissions must nominate the maintained canonical repo — a
+            // fork inherits the parent's tree/evidence wholesale
+            if (isSeedRepo(cand)) seedOutcomes.set(lower, m.fork ? 'archived-or-fork' : 'archived')
             return null
           }
           canonicalName = m.fullName
@@ -960,6 +962,15 @@ export async function run(opts: RunOptions = {}) {
             defaultBranch: cand.defaultBranch === 'HEAD' ? (m.defaultBranch ?? cand.defaultBranch) : cand.defaultBranch,
           }
         }
+      }
+      // fork guard for candidates that never entered the backfill branch —
+      // their payload (code-search/topic hit) already carried pushedAt+id so
+      // meta wasn't re-fetched; a truthful fork bit must still reject the same
+      // way (preAdmit's fork arm only fires on proven no-own-commits)
+      if (cand.fork) {
+        rejectedGh.add(lower)
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'archived-or-fork')
+        return null
       }
       // incremental reuse: pushedAt unchanged + same ruleset → carry the prior
       // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
@@ -1011,11 +1022,14 @@ export async function run(opts: RunOptions = {}) {
           ? fetchRepoPackage(cand.fullName, { fetchFn: f })
           : Promise.resolve<{ pkg: null; status: RepoMetaStatus }>({ pkg: null, status: 'not-found' }),
       ])
-      // codeload resolves HEAD → default branch too, so no meta lookup needed
+      // scan the bytes the resolved sha anchors — the tree call above pinned
+      // treeRes.sha (a commit); a second HEAD resolution here races a push and
+      // would scan code the recorded pin doesn't describe (codeload accepts a
+      // commit sha verbatim — archives are immutable)
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
       try {
-        const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/HEAD`, { fetchFn: f })
+        const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/${treeRes.sha ?? 'HEAD'}`, { fetchFn: f })
         const r = await scanTarball(tgz)
         const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
         scanFiles = r.files.map(strip)
@@ -1050,7 +1064,10 @@ export async function run(opts: RunOptions = {}) {
       // stale review sha would otherwise flag forever.
       const drifted = !!(sub?.version && treeRes.sha && sub.version !== treeRes.sha
         && (ghPrev?.approval ?? 'pending') === 'pending')
-      if (drifted) scan.redFlags.push('sec:repo-moved-since-review')
+      // sha embedded for the same reason as the release variant below — a
+      // second move while still pending is a NEW flag set, so flaggedAt
+      // re-stamps and the docket re-asks instead of inheriting "decided"
+      if (drifted && treeRes.sha) scan.redFlags.push(`sec:repo-moved-since-review:${treeRes.sha.slice(0, 12)}`)
       // repo drift, release anchor: a standing human pass stamped sha X at
       // verdict time (submit/concern now record it) but HEAD moved — the
       // displayed install pin now points at bytes no decision covers.
@@ -1239,7 +1256,9 @@ export async function run(opts: RunOptions = {}) {
       const tree = await fetchRepoTree(repo, 'HEAD', { token: opts.ghToken, fetchFn: f })
       if (tree.status === 'rate-limited') rateLimitedCalls++
       if (!tree.paths) return e
-      const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/HEAD`, { fetchFn: f })
+      // same pin discipline as ghWorker: scan the resolved commit, not a
+      // second HEAD resolution that could have moved between the two calls
+      const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/${tree.sha ?? 'HEAD'}`, { fetchFn: f })
       const r = await scanTarball(tgz)
       const strip = (p: string) => p.replace(/^[^/]+\//, '')
       return {

@@ -42,12 +42,14 @@ export function markNotified(
       }
       // repo-only submissions carry `repo` not `name` — match either the entry
       // name (github-kind entries are named owner/repo) or source.repo, else
-      // their issue never gets notified+closed
-      const e = s.name ? byName.get(s.name.toLowerCase())
-        : s.repo ? index.plugins.find(p =>
+      // their issue never gets notified+closed. A name+repo seed whose npm
+      // name missed (admission reject, publish-later) still falls through to
+      // the repo identity — the entry may have landed github-kind instead.
+      const e = (s.name ? byName.get(s.name.toLowerCase()) : undefined)
+        ?? (s.repo ? index.plugins.find(p =>
             p.source.repo?.toLowerCase() === s.repo!.toLowerCase() ||
             p.name.toLowerCase() === s.repo!.toLowerCase())
-        : undefined
+          : undefined)
       const key = s.name ?? s.repo
       const unlanded = !e || e.approval === 'pending'
       // dead is terminal for scanning but a late landing still deserves the

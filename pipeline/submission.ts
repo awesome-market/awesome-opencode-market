@@ -47,7 +47,7 @@ function fieldFull(map: Map<string, string>, ...labels: string[]): string | null
 const PKG_RE = /^(@[a-z0-9-]+\/)?[a-z0-9-_.]+$/i
 const LANG_LINE = /^([a-z]{2,3}(?:-[A-Za-z]{2,8})?)\s*[:：]\s*(.+)$/
 
-export function parseSubmission(body: string): Submission {
+export function parseSubmission(body: string, title?: string | null): Submission {
   const map = sections(body)
   let name = field(map, 'npm package name / npm 包名', 'npm 包名', 'npm 包名或 owner/repo', 'package', 'npm package', 'npm package name', '包名')
   if (name && !PKG_RE.test(name)) name = null
@@ -61,6 +61,13 @@ export function parseSubmission(body: string): Submission {
         break
       }
     }
+  }
+  // title fallback: '[submit] lodash' — a bare single-word package name has
+  // no dash/slash/@ to survive the freeform filter, but the title tail is an
+  // unambiguous nomination (its only job is to carry the subject)
+  if (!name && title) {
+    const t = title.match(/^\[submit\]\s*(.+)$/i)?.[1]?.trim().split(/\s+/)[0]
+    if (t && PKG_RE.test(t)) name = t
   }
   const repoRaw = field(map, 'GitHub repository / GitHub 仓库地址', 'GitHub 仓库地址', 'repo', 'repository', 'github', '仓库')
   const repoM = repoRaw?.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/) ?? body.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/)
@@ -128,7 +135,7 @@ export function seedLine(s: Submission, issue: number, extra: { version?: string
 //        npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
 /* v8 ignore next 5 */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const s = parseSubmission(process.env.ISSUE_BODY ?? '')
+  const s = parseSubmission(process.env.ISSUE_BODY ?? '', process.env.ISSUE_TITLE)
   const i = process.argv.indexOf('--seedline')
   console.log(i > 0
     ? seedLine(s, Number(process.argv[i + 1]), { version: process.env.SEED_VERSION ?? null, pkg: process.env.SEED_PKG ?? null, author: process.env.SEED_AUTHOR ?? null })
