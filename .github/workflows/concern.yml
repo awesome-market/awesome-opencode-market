@@ -242,7 +242,11 @@ jobs:
             // keeps its old meaning: resolve to the held/displayed slot.
             const pkgAll = v === "*"
             if (isRepo || pkgAll) v = ""
-            else if (!v && !isRepo) v = (e?.pendingUpdate?.version ?? e?.latestVersion) || ""
+            // mirror candidateVer's slot rule: a PENDING entry's candidate is
+            // the entry itself — a residual pendingUpdate is the B3 inverted
+            // state (publish-merge drops it), so the hold's version must not
+            // shadow latestVersion as the verdict target
+            else if (!v && !isRepo) v = (e?.approval === 'pending' ? e?.latestVersion : e?.pendingUpdate?.version ?? e?.latestVersion) || ""
             // vstatus keyed to the RESOLVED slot (HV-4): a verdict on the
             // displayed version while a hold exists must not report the held
             // slot verification; a dead-slot version has no known status
@@ -256,7 +260,7 @@ jobs:
                   // pass must not promise release either)
                   : (isRepo ? (e?.verification?.status ?? "") : ""))
             console.log(JSON.stringify({
-              v, heldver: e?.pendingUpdate?.version ?? "",
+              v, heldver: e?.approval === 'pending' ? '' : e?.pendingUpdate?.version ?? "",
               displayed: e?.latestVersion ?? "", vstatus,
               pkgAll: pkgAll ? "1" : "",
               approval: e?.approval ?? "",
