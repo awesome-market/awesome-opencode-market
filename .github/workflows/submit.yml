@@ -138,8 +138,24 @@ jobs:
           # be clean — a flagged/invalid target change deserves a real scan.
           SKIPSCAN=""
           if [ "$ACTION" = "edited" ] && [ "$KIND" != none ] && [ -n "${SEEDROW:-}" ]; then
-            gh api "repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/prior.txt 2>/dev/null || touch /tmp/prior.txt
+            # this job runs permissions:{} — the GITHUB_TOKEN has NO scopes, so
+            # `gh api` on the issues endpoint 403s and the skip silently never
+            # fires (every edit burns a full tarball scan). Fall back to
+            # anonymous REST: public-repo comments are world-readable. Pages
+            # stay ASC so `tail -1` below still lands on the newest review's
+            # REAL trailing marker — a package-controlled 'verdict:'/'createdAt:'
+            # string inside findings can only shadow EARLIER matches.
+            if ! gh api "repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
+                --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/prior.txt 2>/dev/null; then
+              : > /tmp/prior.txt
+              for p in 1 2 3 4 5; do
+                page=$(curl -sf "https://api.github.com/repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100&page=$p&sort=created&direction=asc" 2>/dev/null) || break
+                n=$(printf '%s' "$page" | jq 'length' 2>/dev/null) || break
+                [ "${n:-0}" -eq 0 ] && break
+                printf '%s' "$page" | jq -r '.[] | select(.user.login == "github-actions[bot]") | .body' >> /tmp/prior.txt
+                [ "$n" -lt 100 ] && break
+              done
+            fi
             PV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/prior.txt | tail -1 | awk '{print $2}')
             PVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
             PSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
@@ -960,16 +976,39 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
-      # gh api calls only — the narrowest allowlist
+      # gh api calls + one anonymous git clone of the catalog branch (the
+      # live-seed check below) — github.com carries the git smart-http endpoint
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: block
-          allowed-endpoints: api.github.com:443
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
       - name: close stale submission issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # live-seed set for the approved-stalled arm below: that arm exists
+          # for approved issues whose ingest NEVER landed a seed ("nothing
+          # else watches them") — an issue WITH a live seed is watched (status
+          # upserts, catalog dead-sweep, notify), and status-comment PATCHes
+          # may not refresh issue.updated_at, so a healthy queued submission
+          # could otherwise be closed at 30d while the pipeline still works it.
+          # Anonymous clone: this job holds only issues:write and public-repo
+          # git needs no token scope. Clone/parse failure → empty set → the
+          # arm behaves exactly as before (status quo, never wider).
+          : > /tmp/live-seeds.txt
+          if git clone --depth 1 --branch catalog "https://github.com/$GH_REPO" /tmp/cat-sweep >/dev/null 2>&1; then
+            node -e '
+              const fs=require("fs")
+              try {
+                for (const l of fs.readFileSync("/tmp/cat-sweep/submissions.txt","utf8").split("\n")) {
+                  try { const s=JSON.parse(l); if (s.issue && !s.dead && !s.notified) console.log(s.issue) } catch {}
+                }
+              } catch {}
+            ' | sort -un > /tmp/live-seeds.txt
+          fi
           # --limit must exceed the label's plausible backlog or the oldest
           # issues starve forever once the queue grows past one page (F-11)
           for LBL in submission:invalid submission:needs-work submission:error submission:rejected; do
@@ -984,9 +1023,11 @@ jobs:
           # approved issues that stalled — a queued-but-never-landed seed is
           # dead-closed by the catalog at the same 30d horizon; this arm is
           # the backstop for approved issues whose ingest never landed a
-          # seed row at all (nothing else watches them)
+          # seed row at all (nothing else watches them). Issues whose seed is
+          # still LIVE are exempt — the catalog pipeline owns their lifecycle
+          # and a PATCHed status comment may not have refreshed updatedAt.
           gh issue list --label submission:approved --state open --limit 1000 --json number,updatedAt |
-            node -e "const i=require('fs').readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut).forEach(x=>console.log(x.number))" |
+            node -e "const fs=require('fs');const live=new Set(fs.readFileSync('/tmp/live-seeds.txt','utf8').split('\n').filter(Boolean));const i=fs.readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut&&!live.has(String(x.number))).forEach(x=>console.log(x.number))" |
             while read -r N; do
               gh issue comment "$N" --body "投稿已入队超过 30 天仍未完成收录，本单自动关闭——如需继续请重新投稿或联系 maintainer。" || true
               gh issue close "$N" || true
@@ -1073,6 +1114,43 @@ jobs:
           else
             gh issue comment "$ISSUE" --body "⚠️ 撤回失败——收录队列写入重试耗尽，种子可能仍在队列中。失败详情：$RUN_URL ——稍后可再次评论 /withdraw 重试。"
           fi
+
+  # the withdraw job's association gate used to live in its `if` — a
+  # non-author/non-collaborator /withdraw died there with ZERO feedback (the
+  # verdict job's perm step exists precisely because silent refusals leave
+  # users guessing). This lightweight job only answers; it never touches seeds.
+  withdraw-deny:
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.event.action == 'created'
+      && github.event.issue.state == 'open'
+      && !github.event.issue.pull_request
+      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
+          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W'))
+      && !endsWith(github.event.comment.user.login, '[bot]')
+      && !(github.event.comment.user.login == github.event.issue.user.login
+          || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      # gh issue comment only — the narrowest allowlist
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
+      - name: refuse with the rule, not silence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          LOW=${COMMENT_BODY,,}
+          # only answer real withdraw-shaped commands — '/watch' et al. stay silent
+          [[ "$LOW" =~ ^[[:space:]]*/w([[:space:]]|$) || "$LOW" =~ ^[[:space:]]*/withdraw[^[:space:]] || "$LOW" =~ ^[[:space:]]*/withdraw([[:space:]]|$) ]] \
+            || { echo "not a withdraw command — skip"; exit 0; }
+          gh issue comment "$ISSUE" -R "$GH_REPO" --body "⛔ 仅投稿人本人或仓库协作者（OWNER/MEMBER/COLLABORATOR）可撤回投稿。如你是投稿人请用投稿账号评论 \`/withdraw\`；如需下架他人投稿或已上架条目请联系 maintainer。" || true
 
   # F-6: review/report/ingest failures were silent — the issue hung forever
   # (sweep only watches verdict labels). Surface the failure on the issue
