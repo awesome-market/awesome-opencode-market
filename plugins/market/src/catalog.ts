@@ -387,7 +387,15 @@ let memIdx: CachedIndex | null = null
 let lsQuotaFailed = false
 const readIdxCache = (): CachedIndex | null => {
   if (lsQuotaFailed) return memIdx
-  try { const l = lsIdx(); return l ? JSON.parse(l.getItem(LS_IDX) ?? 'null') as CachedIndex | null : memIdx } catch { return null }
+  try {
+    const l = lsIdx()
+    const c = l ? JSON.parse(l.getItem(LS_IDX) ?? 'null') as CachedIndex | null : memIdx
+    // shape-check — a corrupt blob (primitive, missing .index, non-array
+    // .plugins) is TRUTHY but unusable: the health-match and stale-fallback
+    // paths deref cached.index.categories (TypeError) and the TTL path would
+    // serve `undefined` as the catalog. Absent = fetch fresh.
+    return c && typeof c === 'object' && c.index && typeof c.index === 'object' && Array.isArray(c.index.plugins) ? c : null
+  } catch { return null }
 }
 const writeIdxCache = (c: CachedIndex) => {
   const l = lsIdx()
@@ -880,9 +888,14 @@ const npmRegistry = (): string => {
   return 'https://registry.npmjs.org'
 }
 export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ tarball: string | null; integrity: string | null }> {
-  const hit = pkMetaCache.get(name)
+  // registry-scoped key — npm_config_registry is user-controlled env read at
+  // call time; a bare `name` key would serve the previous registry's
+  // packument for up to 10min after a switch (private packages 404 "no
+  // tarball" against the public-registry metadata)
+  const ck = `${npmRegistry()}${name}`
+  const hit = pkMetaCache.get(ck)
   let pk = hit && Date.now() - hit.at < 600_000 ? hit.pk : null
-  if (hit) { pkMetaCache.delete(name); pkMetaCache.set(name, hit) }
+  if (hit) { pkMetaCache.delete(ck); pkMetaCache.set(ck, hit) }
   if (!pk) {
     const res = await fetch(`${npmRegistry()}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`packument fetch failed: ${res.status}`)
@@ -891,7 +904,7 @@ export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ 
     // must not balloon the host process on an unbounded res.json()
     const buf = await readBodyBounded(res, 64 * 1024 * 1024, 'packument')
     pk = JSON.parse(new TextDecoder().decode(buf)) as Packument
-    pkMetaCache.set(name, { at: Date.now(), pk })
+    pkMetaCache.set(ck, { at: Date.now(), pk })
     if (pkMetaCache.size > PK_META_MAX) pkMetaCache.delete(pkMetaCache.keys().next().value!)
   }
   const d = pk.versions?.[ver]?.dist
