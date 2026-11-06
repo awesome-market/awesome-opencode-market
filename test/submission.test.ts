@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +7,7 @@ import { markNotified } from '../pipeline/notify-published.ts'
 import { submissionStatuses, concernOn } from '../pipeline/submission-status.ts'
 import { latestVerdicts, latestHumanVerdicts } from '../pipeline/verdicts.ts'
 import { AiVerdict } from '../src/schema.ts'
-import { applySeedOutcomes } from '../pipeline/seed-outcome.ts'
+import { applySeedOutcomes, main as seedOutcomeMain } from '../pipeline/seed-outcome.ts'
 import { run } from '../pipeline/run.ts'
 import { CatalogIndex } from '../src/schema.ts'
 
@@ -307,6 +307,33 @@ describe('run: JSONL seed declared metadata', () => {
     expect(idx.plugins.find(p => p.name === 'dead-pkg')).toBeUndefined()
     expect(idx.plugins.find(p => p.name === 'live-pkg')).toBeDefined()
   })
+
+  it('--seed-outcomes writes per-seed rejection codes (S-7 receipt pipeline)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'so-'))
+    const seed = join(dir, 'submissions.txt')
+    const outcomesPath = join(dir, 'outcomes.json')
+    writeFileSync(seed,
+      JSON.stringify({ name: 'gone-pkg', repo: null, issue: 10, notified: false }) + '\n' +
+      JSON.stringify({ name: 'live-pkg', repo: null, issue: 11, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('registry.npmjs.org/gone-pkg')) return mkRes({}, 404)
+      if (url.includes('registry.npmjs.org/live-pkg')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/t.tgz')) return mkRes({}, 404)
+      if (url.includes('api.github.com')) return mkRes({}, 404)
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't', seedOutcomesPath: outcomesPath })
+    const outcomes = JSON.parse(readFileSync(outcomesPath, 'utf8'))
+    expect(outcomes['gone-pkg']).toBe('pkg-not-found')
+    expect(outcomes['live-pkg']).toBeUndefined()
+  })
 })
 
 describe('submissionStatuses', () => {
@@ -491,5 +518,35 @@ describe('applySeedOutcomes', () => {
     expect(JSON.parse(a!).rejected).toBe('pkg-not-found')
     const [b] = applySeedOutcomes([line], { p: 'fetch-error' }, { plugins: [] })
     expect(b).toBe(line)
+  })
+
+  it('main(): usage error exits; missing/unparseable outcomes = empty; valid run rewrites the seed file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'som-'))
+    const ip = join(dir, 'i.json'), sp = join(dir, 's.txt'), op = join(dir, 'o.json')
+    writeFileSync(ip, JSON.stringify({ plugins: [{ name: 'landed', source: {} }] }))
+    writeFileSync(sp, '{"name":"rej","issue":1}\n{"name":"landed","issue":2,"rejected":"x"}\n')
+
+    // missing args → usage error exit
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit1') }) as never)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => seedOutcomeMain(['node', 'x', ip])).toThrow('exit1')
+    exitSpy.mockRestore(); errSpy.mockRestore()
+
+    // outcomes path missing entirely → treated as empty → only the landed clear applies
+    seedOutcomeMain(['node', 'x', ip, sp, join(dir, 'nonexistent.json')])
+    expect(readFileSync(sp, 'utf8')).not.toContain('"rejected"')
+
+    // unparseable outcomes → warn + still writes (rejections all dropped)
+    writeFileSync(sp, '{"name":"rej","issue":1}\n')
+    writeFileSync(op, '{not json')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    seedOutcomeMain(['node', 'x', ip, sp, op])
+    warnSpy.mockRestore()
+    expect(readFileSync(sp, 'utf8')).toBe('{"name":"rej","issue":1}\n')
+
+    // valid outcomes → stamps; keys normalize to lowercase
+    writeFileSync(op, JSON.stringify({ 'REJ': 'blocklisted', '': '', num: 5 }))
+    seedOutcomeMain(['node', 'x', ip, sp, op])
+    expect(JSON.parse(readFileSync(sp, 'utf8').split('\n')[0]!).rejected).toBe('blocklisted')
   })
 })
