@@ -696,6 +696,8 @@ describe('catalog sanitize + version helpers', () => {
   it('siteDetailUrl derives p/<slug>.html from the index origin dir', async () => {
     const { siteDetailUrl } = await import('../src/catalog.ts')
     expect(siteDetailUrl({ slug: 'a b' }, 'https://x.example/i/index.json')).toBe('https://x.example/i/p/a%20b.html')
+    // nested slugs take the canonical per-segment path the site writes — o/p → p/o/p.html, not o%2Fp
+    expect(siteDetailUrl({ slug: 'o/p' }, 'https://x.example/i/index.json')).toBe('https://x.example/i/p/o/p.html')
     expect(siteDetailUrl({ slug: 'x' }, 'not a url')).toBeNull()
   })
   it('removedReasonLabel maps pipeline reasons', async () => {

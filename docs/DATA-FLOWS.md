@@ -1295,13 +1295,25 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
       index.json      全量 catalog（含 pending——可审计数据面；唯一索引面，
                       lite 已砍——无消费者，死工件会腐化）
       index.html      列表页（filter isVisible：pending 不渲染；
-                      搜索框 + category 下拉组合过滤，data-cats 精确匹配）
+                      排序与客户端 sortEntries 同序——verified 优先、
+                      unverified/skipped/failed 次之、redFlags 沉底、name
+                      决胜；搜索框 + category + parts 双下拉组合过滤，
+                      data-cats/data-parts JSON 精确匹配；详情链接逐段
+                      encodeURIComponent=p/o/p.html 嵌套规范路径）
       p/<slug>.html   详情页（pendingUpdate 行"under review — not installable yet"
-                      +held reason；findings 全列、integrity/verifiedAt/logExcerpt/
-                      runUrl 回链；installHint 按 installPlan 同规则出：
-                      npm 插件 pin 批准版 / skill 指 skills catalog /
-                      github 插件 "no client install path"——不印装不上的命令）
+                      +held reason+pu.integrity+failed retries；findings 全列
+                      ——scannedAt:null 时明示"未扫描"而非"无"；integrity/
+                      verifiedAt/logExcerpt/runUrl/retries 透出；installHint
+                      按 installPlan 同规则出：npm 插件 pin 批准版 / skill 指
+                      skills catalog（未落地技能降级为"客户端仍可装"注记）
+                      / github 插件 "no client install path"——不印装不上
+                      的命令；裁决记录理由双语——AI 行 reasonEn/reason 按
+                      界面语言切换）
       skills/index.json + skills/<id>/  HTTP skill catalog：
+                      候选 = entryParts 含 'skill'（contains 权威、
+                      缺字段按 type 回落——与 installPlan/installHint/
+                      verifyPartsOf 第四个路由点同规则，legacy type:skill
+                      条目不漏）；
                       npm 条目 = packument GET $npm_config_registry/<name>
                       （默认 registry.npmjs.org；@scope 名 %2F 编码）
                       取 versions[<latestVersion>].dist.tarball——钉到批准版
@@ -1313,7 +1325,9 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       两者都 latestVersion/modifiedAt/sha 为空 → 跳过；
                       <id>@<pin> 缓存（actions/cache 滚动键，pin=SRI 优先
                       ——re-tag 同版本换字节必换键）——未变技能零网络，
-                      失效键自动 prune；id 碰撞 → -x 确定性后缀；
+                      失效键自动 prune；命中路径清理掉的文件（毒化/规则变
+                      更）回写 hit 自愈——同一坏项不再每次构建重删重 warn；
+                      id 碰撞 → -x 确定性后缀；
                       拉取走 SKILL_POOL 限界 worker 池（S-14——冷缓存下
                       串行拉取会超时，pool 化才跑得完）；
                       curl 加固：--proto-redir '=https'（重定向不降级 http）、
@@ -1326,7 +1340,12 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       类型双闸滤除——市场自有 github.io 域不托管可执行内容，
                       客户端 npm tarball 安装路径不受影响）；
                       files[] 排序保证输出逐字节稳定
-      skills.html     技能浏览页（id+版本+文件链接；npm skill 的 version 串
+      skills.html     技能浏览页（顶部消费指引：`"skills": ["<SITE_URL>/skills/"]`
+                      配置片段——SITE_URL env 优先，否则按 remote 推导
+                      owner.github.io/<repo>，org-page 仓退 origin；
+                      卡片 = id+版本+文件链接+详情页回链（slug 是页面元
+                      数据，发布 index.json 时剥除保 {name,version,files}
+                      契约不变）；npm skill 的 version 串
                       = <semver>+<integrity短哈希>——opencode 按 version
                       缓存，同版本 re-tag 必须让缓存失效）
       removed.html    墓碑页（disappearedAt 倒序最新 300，超出注明
@@ -1347,11 +1366,16 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
      否则刹车永远到不了公开站（拉不到 live health 只退绝对地板，
      网络抖动不拦发布）；
      skills degraded 且 candidates≥10 → 拦（抓取故障不该发半空目录）；
+     SITE_FLOOR 显式解析——'0' 是合法地板（小型策展目录），仅未设/
+     非数字回落 200；
      workflow_dispatch inputs：force=绕过 gate 应急重发 /
-     skip_skills=跳过技能抓取发空技能目录（registry 大面积故障逃生门）
+     skip_skills=跳过技能抓取发空技能目录（registry 大面积故障逃生门）；
+     workflow_call：re-features 复用同一发布者+闸门（V-8）
   → deploy-pages → github.io
   → 收尾：prune skill-cache-* 只留最新 3 份（per-run 键累积，10GB 配额共享 npm）
-alert job：失败查重——已有 pipeline-alert open issue 则评论追加，不轰炸
+alert job：失败查重——已有 pipeline-alert open issue 则评论追加，不轰炸；
+上游 dispatch 连败（catalog/verify/concern/submit 四处）→ 同款去重
+pipeline-alert 快报——刹车/索引变更卡在 dispatch 不再等 watchdog 36h 腿
 ```
 
 诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。version-less（github-kind）条目渲染为 `nothing to install`（muted）——skipped 主要是"没有可装的东西"；经 codeload 静态扫描后带 redFlags 时兼有"高危没跑"含义。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。

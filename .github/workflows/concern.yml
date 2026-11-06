@@ -320,7 +320,17 @@ jobs:
           # would keep listing the braked entry as approved for up to ~16h
           # (GITHUB_TOKEN pushes can't trigger on:push — dispatch is the only
           # channel, HV-1). Retry once: a blip must not silently stale the site.
-          gh workflow run site.yml -R "$REPO" || { sleep 10; gh workflow run site.yml -R "$REPO" || echo "site dispatch failed twice — next catalog/verify run will rebuild"; }
+          gh workflow run site.yml -R "$REPO" || { sleep 10; gh workflow run site.yml -R "$REPO" || {
+            # a brake that can't reach the site is the worst silent failure in
+            # this pipeline — escalate to a deduped alert instead of waiting
+            # for the digest watchdog's 36h leg (HV-1 is minute-scale by intent)
+            echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$REPO" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+            BODY="site.yml dispatch failed twice — a concern/brake may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$REPO" --body "$BODY" || true
+            else gh issue create -R "$REPO" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          }; }
       - name: acknowledge + mark decided
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1'
         uses: actions/github-script@v7
