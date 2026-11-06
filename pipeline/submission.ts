@@ -23,7 +23,11 @@ export function sections(body: string): Map<string, string> {
     if (nl < 0) continue
     const label = p.slice(0, nl).trim()
     const value = p.slice(nl + 1).trim()
-    if (value && !NO_RESPONSE.test(value)) map.set(label, value)
+    // first occurrence wins: issue forms emit labels in template order, so a
+    // duplicate can only come from a `### <label>` line inside a free-text
+    // field — e.g. a reason textarea containing `### npm 包名或 owner/repo`
+    // — which must not silently retarget the record
+    if (value && !NO_RESPONSE.test(value) && !map.has(label)) map.set(label, value)
   }
   return map
 }
