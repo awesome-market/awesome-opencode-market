@@ -50,7 +50,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { t as tarList } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning } from '../verdicts.ts'
+import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
@@ -544,8 +544,14 @@ export function candidateHeldAt(e: CatalogIndex['plugins'][number]): number {
  *  on the same sha could silently resurrect via version reuse. */
 export function latestShaVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
   const m = new Map<string, AiVerdict>()
+  const now = Date.now()
   for (const v of verdicts) {
     if (!v.sha) continue
+    // same future-stamp exemption latestVerdicts applies: a far-future `at`
+    // would otherwise pin its judgment on top of every later real verdict
+    // for these bytes — and sha reuse would then copy it onto NEW versions
+    // forever, propagating one bad line across the queue
+    if (!rankable(v.at, now)) continue
     const k = `${v.name.toLowerCase()}\0${v.sha}`
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)

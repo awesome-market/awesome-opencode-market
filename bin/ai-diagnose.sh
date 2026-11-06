@@ -127,11 +127,15 @@ case "${1:-}" in
       (cd "$CAT" && git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
         && git reset --hard origin/catalog -q) \
         || { log "sync attempt $i failed"; sleep 3; continue; }
+      # ask the REMOTE tip, not the worktree file: reset --hard never touches
+      # untracked files, so a stray flag left by a crashed pause (written but
+      # never committed) would report "already paused" while origin never
+      # paused — and every diagnose run would self-skip on it forever.
       if [ "$1" = pause ]; then
-        [ -f "$CAT/$FLAG" ] && { log "already paused"; exit 0; }
+        git -C "$CAT" cat-file -e "origin/catalog:$FLAG" 2>/dev/null && { log "already paused"; exit 0; }
         printf 'diagnose paused at %s%s\n' "$(date -u +%FT%TZ)" "${2:+ — $2}" > "$CAT/$FLAG"
       else
-        [ -f "$CAT/$FLAG" ] || { log "not paused"; exit 0; }
+        git -C "$CAT" cat-file -e "origin/catalog:$FLAG" 2>/dev/null || { log "not paused"; exit 0; }
         rm -f "$CAT/$FLAG"
       fi
       (cd "$CAT" && git add -A "$FLAG" && ! git diff --cached --quiet) \
@@ -254,9 +258,12 @@ git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
 # reset 失败必须退出——没有 -e,失败会拿陈旧 index 审一遍,产出错配 verdict
 git reset --hard origin/catalog -q || { log "reset failed — refusing to review stale state"; exit 1; }
 # 声明暂停在数据面生效——本机也认它(防止"pause 了但忘了 launchd 还在跑"
-# 继续空烧 LLM)。翻转开关:`$0 pause|resume`(在脚本开头处理,不等诊断锁、
+# 继续空烧 LLM)。判 origin/catalog 上的真 flag 而非 worktree 文件:reset --hard
+# 不清未跟踪文件,crash 残留的 stray diagnose.paused 会让本机永远自跳过
+# (远端从未暂停)。翻转开关:`$0 pause|resume`(在脚本开头处理,不等诊断锁、
 # 不需要 ai.env)。手动想强制跑:直接跑 pipeline/ai/diagnose.ts。
-[ -f diagnose.paused ] && { log "declared pause (catalog:diagnose.paused) — skipping; resume: $0 resume"; exit 0; }
+git cat-file -e origin/catalog:diagnose.paused 2>/dev/null \
+  && { log "declared pause (catalog:diagnose.paused) — skipping; resume: $0 resume"; exit 0; }
 touch ai-verdicts.jsonl
 
 cd "$CODE"

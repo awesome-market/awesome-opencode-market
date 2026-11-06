@@ -97,7 +97,7 @@ export function digestStateOf(lastDigestAt: string, verdicts: AiVerdict[], dayAn
 const FUTURE_GRACE_MS = 10 * 60 * 1000
 // unparseable `at` stays rankable: production lines passed AiVerdict.parse's
 // iso check (always a real date), and caller-built test fixtures stamp 't'
-const rankable = (at: string, now: number) => { const t = Date.parse(at); return !Number.isFinite(t) || t <= now + FUTURE_GRACE_MS }
+export const rankable = (at: string, now: number) => { const t = Date.parse(at); return !Number.isFinite(t) || t <= now + FUTURE_GRACE_MS }
 
 /** Newest verdict per name@version — the file is append-only, `at` wins. */
 export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
