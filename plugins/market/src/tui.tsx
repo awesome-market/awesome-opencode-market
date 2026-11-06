@@ -335,7 +335,14 @@ export default Plugin.define({
           // the render-time entry can lag the publication — resolve the
           // CURRENT catalog entry (moved health sha forces a re-pull) and
           // build the download from IT, never the possibly-stale click.
-          const fresh = (await fetchIndexCached(INDEX_URL).catch(() => null))?.plugins?.find(x => x.name === e.name) ?? e
+          // No `?? e` fallback: an entry that dropped from the fresh index was
+          // removed/concern'd inside the TTL window — installing the stale pin
+          // anyway is exactly the bypass assertApprovedPin exists to close
+          // (GUI writeSkill refuses the same case). A fetch failure surfaces
+          // as its real error instead of silently installing anyway.
+          const freshIdx = await fetchIndexCached(INDEX_URL)
+          const fresh = freshIdx?.plugins?.find(x => x.name === e.name)
+          if (!fresh) throw new Error(t('catalogMoved'))
           const planNow = installPlan(fresh)
           if (!planNow.skill) throw new Error(t('catalogMoved'))
           let url: string
@@ -345,7 +352,9 @@ export default Plugin.define({
             // installed bytes equal what the pipeline reviewed; gitPinRef
             // fails closed on a malformed pin (crafted/custom index), HEAD
             // only for pre-pin index data (no SRI exists for git archives)
-            url = `https://codeload.github.com/${fresh.source!.repo}/tar.gz/${gitPinRef(fresh.source?.version)}`
+            const repo = fresh.source?.repo
+            if (!repo) throw new Error(t('catalogMoved'))
+            url = `https://codeload.github.com/${repo}/tar.gz/${gitPinRef(fresh.source?.version)}`
           } else {
             // pin to the catalog-approved version — dist-tags.latest is the
             // pendingUpdate users are NOT allowed to get yet (hold semantics)
@@ -629,7 +638,6 @@ export default Plugin.define({
         // re-entrancy guard — 'U' while a sweep is in flight would start a
         // second pair of lanes racing the same config/skills surfaces
         if (updateAllRunning) { setStatus(t('installRunning')); return }
-        updateAllRunning = true
         // per-half targeting — only halves installed AND outdated; the old
         // merged-version filter missed whichever half lagged behind
         const items = (idx()?.plugins ?? [])
@@ -640,7 +648,10 @@ export default Plugin.define({
             return sync.plugin || sync.skill ? { e, sync } : null
           })
           .filter((j): j is { e: MarketEntry; sync: { plugin: boolean; skill: boolean } } => !!j)
+        // flag goes on only once a real sweep commits — an early return here
+        // left it stuck true and every later 'U' reported "already running"
         if (!items.length) { setStatus(t('allLatest')); return }
+        updateAllRunning = true
         setStatus(tf('updateN', { n: items.length }))
         // two serial LANES that overlap each other: plugin adds rewrite
         // opencode.json (must serialize against each other — concurrent
@@ -649,31 +660,34 @@ export default Plugin.define({
         // no longer block config writes → roughly half the wall time on
         // mixed sweeps. An entry fails if ANY of its attempted halves failed.
         void (async () => {
-          let done = 0
-          const total = items.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
-          const bump = () => setStatus(tf('updatingN', { n: ++done, total }))
-          const results = items.map(j => ({ ...j, pOk: undefined as boolean | undefined, sOk: undefined as boolean | undefined }))
-          const pluginLane = (async () => {
-            for (const j of results) if (j.sync.plugin) {
-              bump()
-              j.pOk = await installPluginHalf(j.e, true)
+          try {
+            let done = 0
+            const total = items.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
+            const bump = () => setStatus(tf('updatingN', { n: ++done, total }))
+            const results = items.map(j => ({ ...j, pOk: undefined as boolean | undefined, sOk: undefined as boolean | undefined }))
+            const pluginLane = (async () => {
+              for (const j of results) if (j.sync.plugin) {
+                bump()
+                j.pOk = await installPluginHalf(j.e, true)
+              }
+            })()
+            const skillLane = (async () => {
+              for (const j of results) if (j.sync.skill) {
+                bump()
+                j.sOk = await installSkill(j.e, installPlan(j.e))
+              }
+            })()
+            await Promise.all([pluginLane, skillLane])
+            let ok = 0, fail = 0
+            for (const j of results) {
+              const bad = (j.sync.plugin && j.pOk === false) || (j.sync.skill && j.sOk === false)
+              bad ? fail++ : ok++
             }
-          })()
-          const skillLane = (async () => {
-            for (const j of results) if (j.sync.skill) {
-              bump()
-              j.sOk = await installSkill(j.e, installPlan(j.e))
-            }
-          })()
-          await Promise.all([pluginLane, skillLane])
-          let ok = 0, fail = 0
-          for (const j of results) {
-            const bad = (j.sync.plugin && j.pOk === false) || (j.sync.skill && j.sOk === false)
-            bad ? fail++ : ok++
-          }
-          setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
-          void refreshInstalled()
-          updateAllRunning = false
+            setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
+            void refreshInstalled()
+          // a lane throwing must not wedge 'U' for the rest of the dialog —
+          // reset in finally, not just on the happy path
+          } finally { updateAllRunning = false }
         })()
       }
       // passive "N updatable" count on the [U] button — the sweep used to be

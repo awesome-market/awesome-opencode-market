@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   sha256Hex, sha256HexBytes, enginesSatisfied, assertApprovedPin, pinSpec,
   search, skillsUrl, healthUrl, sanitizeState, versionCmp, fmtN, readBodyBounded,
+  sanitizeIndex, installPlan,
 } from '../src/catalog.ts'
 import type { MarketEntry, MarketIndex } from '../src/catalog.ts'
 import {
@@ -41,6 +42,51 @@ describe('catalog.ts integrity/version helpers', () => {
     await expect(assertApprovedPin(async () => idx, 'p', 'p@1')).rejects.toThrow('catalog moved')
     await expect(assertApprovedPin(async () => idx, 'ghost', 'ghost')).rejects.toThrow('not in catalog')
     await expect(assertApprovedPin(async () => null, 'p', 'p@2')).rejects.toThrow('not in catalog')
+  })
+
+  it('assertApprovedPin — bare-name spec refused even when entry has no pin', async () => {
+    // a versionless entry's pinSpec fallback is the bare name — allowing it
+    // through resolves dist-tags.latest = the unapproved version
+    const idx = { plugins: [mkEntry('p')] } as MarketIndex
+    await expect(assertApprovedPin(async () => idx, 'p', 'p')).rejects.toThrow('catalog moved')
+  })
+
+  it('sanitizeIndex — wrong-typed fields cannot ride the spread through', () => {
+    const out = sanitizeIndex({
+      version: '1', generatedAt: 'x',
+      plugins: [mkEntry('a', {
+        latestVersion: 1,          // number → pinSpec would coerce "1" → `a@1` range pin
+        contains: 'skill',         // string → installPlan crash/misroute
+        aliases: 'zzz',            // string → search .some crash
+        pendingUpdate: '1.2.3',    // string → not a held-update object
+        approval: 'pending ',      // non-enum → must not read as real pending
+        integrity: 42,
+        metrics: 'fast',
+        maintainers: 'bob',
+        compat: 'yes',
+      })],
+    } as unknown as MarketIndex)
+    const e = out.plugins[0]!
+    expect(e.latestVersion).toBeNull()
+    expect(e.contains).toBeUndefined()      // malformed → falls back on type
+    // no crash, and with latestVersion nulled the plugin half can't be claimed
+    expect(installPlan(e)).toEqual({ plugin: false, skill: null })
+    expect(e.aliases).toEqual([])
+    expect(e.pendingUpdate).toBeNull()
+    expect(e.approval).toBe('approved')
+    expect(e.integrity).toBeNull()
+    expect(e.metrics).toBeUndefined()
+    expect(e.maintainers).toEqual([])
+    expect(e.compat).toBeUndefined()
+  })
+
+  it('sanitizeIndex — contains:[] stays authoritative-empty; installPlan tolerates unsanitized junk', () => {
+    const out = sanitizeIndex({ version: '1', generatedAt: 'x', plugins: [mkEntry('a', { contains: [] })] } as unknown as MarketIndex)
+    expect(out.plugins[0]!.contains).toEqual([])
+    // defensive: installPlan never .includes on a non-array — direct call on
+    // raw crafted data must not throw (sanitize is not the only caller)
+    expect(installPlan(mkEntry('x', { contains: 5 as never }))).toEqual({ plugin: false, skill: null })
+    expect(installPlan(mkEntry('x', { contains: null as never }))).toEqual({ plugin: false, skill: null })
   })
 
   it('enginesSatisfied — opencode clause, bare range, operators, wildcard, unparseable', () => {

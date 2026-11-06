@@ -7,9 +7,9 @@ export interface MarketEntry {
   name: string
   slug: string
   type: string
-  source?: { kind?: string; id?: string; repo?: string; version?: string }
+  source?: { kind?: string; id?: string; repo?: string; version?: string } | undefined
   aliases?: string[]
-  contains?: ('plugin' | 'skill' | 'mcp' | 'command' | 'agent' | 'hook')[]
+  contains?: ('plugin' | 'skill' | 'mcp' | 'command' | 'agent' | 'hook')[] | undefined
   description?: { en?: string; zh?: string }
   category: string[]
   latestVersion?: string | null
@@ -17,24 +17,24 @@ export interface MarketEntry {
   integrity?: string | null
   modifiedAt?: string | null           // github-kind: pushedAt = version marker
   publishedAt?: string | null
-  firstSeenAt?: string
+  firstSeenAt?: string | undefined
   createdAt?: string | null            // packument birth — re-registration signal
   license?: string | null
   deprecated?: boolean
   deprecatedMessage?: string | null
   replacement?: string | null          // parsed from deprecatedMessage upstream
   maintainers?: string[]
-  compat?: { engines?: string; peer?: string }
+  compat?: { engines?: string; peer?: string } | undefined
   /** held-back newer version (hold-by-default) — display only, never installed */
   pendingUpdate?: { version?: string; heldAt?: string; reason?: string; verification?: { status?: string } } | null
   /** approval state (hold-by-default index); absent = pre-approval index = legacy */
   approval?: 'approved' | 'pending' | 'legacy'
   capabilities?: { scannedAt: string | null; findings: string[]; redFlags: string[] }
   verification?: { status: string; level?: string; verifiedAt?: string; opencodeVersion?: string; runUrl?: string; logExcerpt?: string }
-  metrics?: { stars: number | null; npmDownloads30d: number | null }
+  metrics?: { stars: number | null; npmDownloads30d: number | null } | undefined
   /** npm dist-tags as published (latest/beta/…) — display-only context; the
    *  install pin always comes from latestVersion, never dist-tags.latest */
-  distTags?: Record<string, string>
+  distTags?: Record<string, string> | undefined
 }
 
 /** Tombstone — an entry that disappeared from the catalog with a recorded cause. */
@@ -68,6 +68,7 @@ export function sanitize(s: string): string {
 const strArr = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map(sanitize) : []
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? sanitize(v) : null)
+const strOrUndef = (v: unknown): string | undefined => (typeof v === 'string' ? sanitize(v) : undefined)
 
 /** index.json is untrusted network data: drop entries without a usable
  *  name/slug, sanitize EVERY string field that can reach a terminal/DOM
@@ -86,27 +87,39 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
         ...e,
         name: sanitize(e.name),
         slug: sanitize(e.slug),
-        ...(typeof e.latestVersion === 'string' ? { latestVersion: sanitize(e.latestVersion) } : {}),
-        ...(typeof e.publishedAt === 'string' ? { publishedAt: sanitize(e.publishedAt) } : {}),
-        ...(typeof e.firstSeenAt === 'string' ? { firstSeenAt: sanitize(e.firstSeenAt) } : {}),
-        ...(typeof e.createdAt === 'string' ? { createdAt: sanitize(e.createdAt) } : {}),
-        ...(typeof e.license === 'string' ? { license: sanitize(e.license) } : {}),
-        ...(typeof e.deprecatedMessage === 'string' ? { deprecatedMessage: sanitize(e.deprecatedMessage) } : {}),
-        ...(typeof e.replacement === 'string' ? { replacement: sanitize(e.replacement) } : {}),
-        ...(Array.isArray(e.maintainers) ? { maintainers: strArr(e.maintainers) } : {}),
-        ...(e.compat && typeof e.compat === 'object' ? { compat: {
+        // wrong-typed scalars must NOT ride the `...e` spread through — a
+        // numeric latestVersion reaches pinSpec where VER_SAFE.test coerces
+        // 1 → "1" and produces `name@1`, a RANGE pin that resolves the
+        // pending version and bypasses the hold gate. Non-string = absent.
+        latestVersion: strOrNull(e.latestVersion),
+        publishedAt: strOrNull(e.publishedAt),
+        firstSeenAt: strOrUndef(e.firstSeenAt),
+        createdAt: strOrNull(e.createdAt),
+        license: strOrNull(e.license),
+        deprecatedMessage: strOrNull(e.deprecatedMessage),
+        replacement: strOrNull(e.replacement),
+        maintainers: strArr(e.maintainers),
+        // enum-clamp approval — a crafted value like 'pending ' (trailing
+        // space) or a non-string must not silently read as 'approved'
+        approval: (e.approval === 'pending' ? 'pending' : e.approval === 'legacy' ? 'legacy' : 'approved') as NonNullable<MarketEntry['approval']>,
+        compat: e.compat && typeof e.compat === 'object' && !Array.isArray(e.compat) ? {
             ...(typeof e.compat.engines === 'string' ? { engines: sanitize(e.compat.engines) } : {}),
             ...(typeof e.compat.peer === 'string' ? { peer: sanitize(e.compat.peer) } : {}),
-          } } : {}),
+          } : undefined,
         ...(e.description
           ? { description: { ...(e.description.en ? { en: sanitize(e.description.en) } : {}), ...(e.description.zh ? { zh: sanitize(e.description.zh) } : {}) } }
           : {}),
         category: strArr(e.category),
-        ...(Array.isArray(e.aliases) ? { aliases: strArr(e.aliases) } : {}),
-        ...(typeof e.integrity === 'string' ? { integrity: sanitize(e.integrity) } : {}),
-        ...(typeof e.modifiedAt === 'string' ? { modifiedAt: sanitize(e.modifiedAt) } : {}),
-        ...(pu && typeof pu === 'object'
-          ? { pendingUpdate: {
+        aliases: strArr(e.aliases),
+        // non-array `contains` crashes installPlan (`contains: 5` →
+        // 5.includes → TypeError on every render); a STRING like "skill"
+        // silently misroutes install halves. Normalize to array-or-absent:
+        // absent falls back on type, malformed has no claim to authority.
+        contains: Array.isArray(e.contains) ? strArr(e.contains) as MarketEntry['contains'] : undefined,
+        integrity: strOrNull(e.integrity),
+        modifiedAt: strOrNull(e.modifiedAt),
+        pendingUpdate: pu && typeof pu === 'object' && !Array.isArray(pu)
+          ? {
               ...(typeof pu.version === 'string' ? { version: sanitize(pu.version) } : {}),
               ...(typeof pu.heldAt === 'string' ? { heldAt: sanitize(pu.heldAt) } : {}),
               ...(typeof pu.reason === 'string' ? { reason: sanitize(pu.reason) } : {}),
@@ -115,18 +128,18 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
               ...(pu.verification && typeof pu.verification === 'object'
                 ? { verification: { status: typeof pu.verification.status === 'string' && (VERIFICATION_STATUSES as readonly string[]).includes(pu.verification.status) ? pu.verification.status : 'unverified' } }
                 : {}),
-            } }
-          : {}),
-        ...(e.source ? { source: {
+            }
+          : null,
+        ...(e.source && typeof e.source === 'object' && !Array.isArray(e.source) ? { source: {
             ...(typeof e.source.kind === 'string' ? { kind: sanitize(e.source.kind) } : {}),
             ...(typeof e.source.id === 'string' ? { id: sanitize(e.source.id) } : {}),
             ...(typeof e.source.repo === 'string' ? { repo: sanitize(e.source.repo) } : {}),
             ...(typeof e.source.version === 'string' ? { version: sanitize(e.source.version) } : {}),
-          } } : {}),
-        ...(Array.isArray(e.features) ? { features: e.features.filter((f): f is NonNullable<MarketEntry['features']>[number] => ['server', 'tui', 'gui', 'rpc'].includes(String(f))) } : {}),
-        ...(e.distTags && typeof e.distTags === 'object' && !Array.isArray(e.distTags)
-          ? { distTags: Object.fromEntries(Object.entries(e.distTags as Record<string, unknown>).filter((kv): kv is [string, string] => typeof kv[1] === 'string').map(([k, v]) => [sanitize(k), sanitize(v)])) }
-          : {}),
+          } } : { source: undefined }),
+        features: Array.isArray(e.features) ? e.features.filter((f): f is NonNullable<MarketEntry['features']>[number] => ['server', 'tui', 'gui', 'rpc'].includes(String(f))) : [],
+        distTags: e.distTags && typeof e.distTags === 'object' && !Array.isArray(e.distTags)
+          ? Object.fromEntries(Object.entries(e.distTags as Record<string, unknown>).filter((kv): kv is [string, string] => typeof kv[1] === 'string').map(([k, v]) => [sanitize(k), sanitize(v)]))
+          : undefined,
         ...(caps ? { capabilities: { scannedAt: strOrNull(caps.scannedAt), findings: strArr(caps.findings), redFlags: strArr(caps.redFlags) } } : {}),
         ...(v ? { verification: {
             // enum-clamped, not just sanitized — a crafted status must not
@@ -141,10 +154,10 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
         // metrics are NUMBERS, not strings — a crafted string value rides
         // through fmtN's String() fallback into the terminal unsanitized
         // (ANSI injection via a hostile custom index). Clamp to finite|null.
-        ...(e.metrics && typeof e.metrics === 'object' ? { metrics: {
+        metrics: e.metrics && typeof e.metrics === 'object' && !Array.isArray(e.metrics) ? {
             stars: typeof e.metrics.stars === 'number' && Number.isFinite(e.metrics.stars) ? e.metrics.stars : null,
             npmDownloads30d: typeof e.metrics.npmDownloads30d === 'number' && Number.isFinite(e.metrics.npmDownloads30d) ? e.metrics.npmDownloads30d : null,
-          } } : {}),
+          } : undefined,
       }
     })
   const categories: MarketIndex['categories'] = {}
@@ -531,7 +544,10 @@ export async function assertApprovedPin(getIndex: () => Promise<MarketIndex | nu
   const idx = await getIndex()
   const e = idx?.plugins?.find(x => x.name === name)
   if (!e) throw new Error(`not in catalog: ${name}`)
-  if (pinSpec(e) !== pin) throw new Error('catalog moved — refresh data and retry')
+  // `pin === e.name` refuses the bare-name spec: it matches pinSpec's
+  // latestVersion-less fallback but resolves dist-tags.latest — the
+  // unapproved version this gate exists to hold back.
+  if (pinSpec(e) !== pin || pin === e.name) throw new Error('catalog moved — refresh data and retry')
   return e
 }
 
@@ -727,7 +743,8 @@ export function installPlan(e: MarketEntry): InstallPlan {
   // an explicit `contains` — including [] — is authoritative ([] = no
   // installable payload); only a MISSING field (legacy) falls back on type.
   // Same rule as the site's installHint — the routing sites must not drift.
-  const parts = e.contains !== undefined ? e.contains
+  const parts = Array.isArray(e.contains) ? e.contains
+    : e.contains !== undefined ? []          // malformed explicit value = no payload claim (fail closed)
     : e.type === 'skill' ? ['skill']
     : e.type === 'plugin' ? ['plugin']
     : []

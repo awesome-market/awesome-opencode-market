@@ -1315,7 +1315,7 @@ export default Plugin.define({
           assertSpecForName(p.name, p.spec)
           // double-click / retry-during-flight guard — jobs.set would orphan
           // the first child while its stdout handlers still emit progress
-          if (jobs.has(p.name)) throw new Error('install already running')
+          if (jobs.has(p.name)) throw new Error(t('installRunning'))
           const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
           // the renderer's entry can lag the publication by up to TTL — a
           // version concern'd inside that window must NOT install. Health-
@@ -1339,7 +1339,7 @@ export default Plugin.define({
         },
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
-          if (jobs.has(p.name)) throw new Error('install already running')
+          if (jobs.has(p.name)) throw new Error(t('installRunning'))
           lg(`update ${p.name}: called`)
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
