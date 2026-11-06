@@ -53,6 +53,17 @@ jobs:
     concurrency: concern-verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write, actions: write }
     steps:
+      # write-side job parsing untrusted issue text — same eBPF egress posture
+      # as the other catalog writers. Covers npm ci + `npm view` (registry),
+      # gh api/issue calls (api.github.com), and checkout + catalog fetch/push
+      # (github.com).
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -108,6 +119,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
           EVENT: ${{ github.event_name }}
+          TITLE: ${{ github.event.issue.title }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # The gate over-matches on purpose (/a /c prefixes). Only comment
@@ -115,6 +127,10 @@ jobs:
           # `/check`, `/ack` and friends must not earn usage help + a
           # verdict:blocked label on an unrelated issue (HV-9). Kept looser
           # than the parser: `/concerned`-style typos still get help.
+          # `[review] (...)` sentinel titles (repo-only aggregate) can't
+          # resolve a target by design — a stray label tap there is a noop,
+          # not a blocked verdict worth flagging.
+          case "$TITLE" in "[review] ("*) echo "sentinel aggregate — no target to resolve"; exit 0 ;; esac
           if [ "$EVENT" = "issue_comment" ]; then
             printf '%s' "$COMMENT_BODY" | grep -qiE '^/(concern|approve)' \
               || { echo "not a verdict command — silent skip"; exit 0; }
@@ -145,7 +161,12 @@ jobs:
           # a hand-typed `Owner/Repo` or `@Scope/Pkg` must verdict-key to the
           # indexed spelling, not to the typed one (HV-14). Case-fold compare
           # for lookup, then emit the entry's canonical name downstream.
-          CNAME=$(node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const n=process.argv[1].toLowerCase();const e=i.plugins.find(p=>p.name.toLowerCase()===n);process.stdout.write(e?e.name:"")' "$NAME")
+          # source.repo is a second key: a repo-shaped spec ('o/r') can name
+          # an npm entry through its repository identity — name match wins
+          # first so the gh twin never shadows its npm namesake.
+          CNAME=$(node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const n=process.argv[1].toLowerCase();const e=i.plugins.find(p=>p.name.toLowerCase()===n)??i.plugins.find(p=>(p.source?.repo??"").toLowerCase()===n);process.stdout.write(e?e.name+"\t"+(e.source?.kind??""):"")' "$NAME")
+          EKIND="${CNAME##*$'\t'}"
+          CNAME="${CNAME%%$'\t'*}"
           if [ -z "$CNAME" ]; then
             echo "exists=0" >> "$GITHUB_OUTPUT"
             gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
@@ -155,6 +176,11 @@ jobs:
           fi
           echo "exists=1" >> "$GITHUB_OUTPUT"
           echo "cname=$CNAME" >> "$GITHUB_OUTPUT"
+          # entry KIND drives the repo semantics below — the spec's typed
+          # shape is only a hint. An `o/r` spec on an npm twin must resolve as
+          # npm (index-first version + dist.integrity anchor): stamping
+          # version:null + commit sha there would wedge shaOk permanently.
+          echo "kind=$EKIND" >> "$GITHUB_OUTPUT"
       - name: resolve version (index-first) + tarball sha + slot status
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1'
         id: n
@@ -163,7 +189,6 @@ jobs:
           VER: ${{ steps.v.outputs.ver }}
           VERDICT: ${{ steps.v.outputs.verdict }}
           REASON: ${{ steps.v.outputs.reason }}
-          ISREPO: ${{ steps.v.outputs.isrepo || '0' }}
           ACTOR: ${{ github.actor }}
           ISSUE: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -177,7 +202,10 @@ jobs:
           INFO=$(node -e '
             const i = JSON.parse(require("fs").readFileSync("/tmp/index.json", "utf8"))
             const e = i.plugins.find(p => p.name === process.argv[1])
-            const isRepo = process.argv[3] === "1"
+            // entry truth, not the typed spec shape — a repo-shaped spec can
+            // resolve to an npm twin via source.repo, and an npm entry has a
+            // real version slot + integrity anchor (never version:null/commit)
+            const isRepo = e?.source?.kind === 'github'
             let v = process.argv[2]
             // `pkg@*` = explicit whole-package scope → a version:null verdict,
             // which applyMatureVerdicts reads as a package-level brake (every
@@ -192,22 +220,35 @@ jobs:
             const slot = v && e?.pendingUpdate?.version === v ? e.pendingUpdate : e
             const vstatus = v && e?.pendingUpdate?.version === v
               ? (e?.pendingUpdate?.verification?.status ?? "")
-              : (v && e?.latestVersion === v ? (e?.verification?.status ?? "") : "")
+              : (v && e?.latestVersion === v
+                  ? (e?.verification?.status ?? "")
+                  // repo entries have exactly one slot — its status IS the
+                  // verdict's target status (H-17 parity: an unverified repo
+                  // pass must not promise release either)
+                  : (isRepo ? (e?.verification?.status ?? "") : ""))
             console.log(JSON.stringify({
               v, heldver: e?.pendingUpdate?.version ?? "",
               displayed: e?.latestVersion ?? "", vstatus,
               pkgAll: pkgAll ? "1" : "",
               approval: e?.approval ?? "",
               flags: slot?.capabilities?.redFlags?.length ?? 0,
+              // github-kind byte anchor — repo verdicts pin the entry's
+              // current commit (source.version): the bytes under review now
+              srcver: e?.source?.version ?? "",
+              isrepo: isRepo ? "1" : "0",
             }))
-          ' "$NAME" "$VER" "${ISREPO:-0}")
+          ' "$NAME" "$VER")
           V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
           HELDVER=$(node -pe 'JSON.parse(process.argv[1]).heldver' "$INFO")
           DISPLAYED=$(node -pe 'JSON.parse(process.argv[1]).displayed' "$INFO")
           VSTATUS=$(node -pe 'JSON.parse(process.argv[1]).vstatus' "$INFO")
+          # entry kind wins over the typed spec shape — all downstream
+          # branches read the resolved INFO.isrepo, not the parser's guess
+          ISREPO=$(node -pe 'JSON.parse(process.argv[1]).isrepo' "$INFO")
           PKGALL=$(node -pe 'JSON.parse(process.argv[1]).pkgAll' "$INFO")
           APPROVAL=$(node -pe 'JSON.parse(process.argv[1]).approval' "$INFO")
           FLAGS=$(node -pe 'JSON.parse(process.argv[1]).flags' "$INFO")
+          SRCVER=$(node -pe 'JSON.parse(process.argv[1]).srcver' "$INFO")
           # pkgAll: empty V is the INTENDED package scope, not an unresolved
           # target — only a truly version-less npm verdict with no `*` blocks
           if [ "$ISREPO" != "1" ] && [ -z "$V" ] && [ "$PKGALL" != "1" ]; then
@@ -222,7 +263,15 @@ jobs:
           # reason-only change reuses the prior human line's `at` so its
           # announcement key — hence digest maturity — is preserved. Both
           # verdict lines stay in the append-only audit log.
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
+          # cat-file -e distinguishes "file missing" (first verdict ever —
+          # legitimate empty) from "exists but unreadable" — a corrupt-blob
+          # dedupe run on a silently-empty file could miss a dup/amend/prev
+          # signal; read failure must fail the step, not degrade (D-Z shape)
+          if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl || { echo "verdicts blob unreadable — refusing to dedupe on partial state"; exit 1; }
+          else
+            touch /tmp/av.jsonl
+          fi
           DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$NAME" "$V" "$VERDICT" "$REASON" "$ISSUE")
           printf '%s\n' "$DEDUPE" >> "$GITHUB_OUTPUT"
           AMEND=$(printf '%s\n' "$DEDUPE" | sed -n 's/^amend=//p')
@@ -238,6 +287,11 @@ jobs:
               [ "$t" -lt 3 ] && sleep 2
             done
           fi
+          # repo verdicts have no registry integrity — pin the entry's current
+          # commit instead: the human is deciding on the bytes the index pins
+          # right now, and shaOk refuses the release if HEAD moves before it
+          # matures (same discipline as npm's dist.integrity anchor)
+          if [ "$ISREPO" = "1" ] && [ -z "$SHA" ] && [ -n "$SRCVER" ]; then SHA="$SRCVER"; fi
           node -e '
             const rec = {
               name: process.argv[1],
@@ -359,8 +413,11 @@ jobs:
             const ref = { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number }
             // arg-spec pointed at a different target than this issue's — the
             // verdict landed on the arg; closing THIS issue would mark the
-            // wrong target decided (H-4). Leave it open with a pointer.
+            // wrong target decided (H-4). Leave it open with a pointer. The
+            // verdict DID land though — a stale verdict:blocked label from
+            // an earlier failed attempt must not linger.
             if (process.env.MISMATCH) {
+              try { await github.rest.issues.removeLabel({ ...ref, name: 'verdict:blocked' }) } catch {}
               await github.rest.issues.createComment({ ...ref,
                 body: `⚠️ verdict 已记录（${process.env.TARGET}），但 ${process.env.MISMATCH} ——本单保持打开。要对本单目标裁决：裸 \`/approve\`、\`/concern 理由\`，或勾选 verdict 标签。` })
               return
@@ -459,9 +516,12 @@ jobs:
       - name: write-failure feedback
         # The ONLY write-path workflow without failure alerting otherwise —
         # a catalog-append 3×-retry failure leaves the issue silent while the
-        # maintainer believes a brake landed (HV-3). Comment with the run link
-        # so the gap is visible where the decision was made.
-        if: failure() && steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != 'submit' && steps.v.outputs.skip != 'noresolve'
+        # maintainer believes a brake landed (HV-3). cancelled() included:
+        # the per-issue concurrency group keeps 1 running + 1 pending, so a
+        # burst evicts the PENDING event — the whole run is cancelled before
+        # any step ran and the verdict would otherwise vanish without a
+        # trace (the label stays on the issue; the comment names the gap).
+        if: (failure() || cancelled()) && steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != 'submit' && steps.v.outputs.skip != 'noresolve'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
@@ -488,6 +548,11 @@ jobs:
     concurrency: concern-retest-${{ github.event.issue.number }}
     permissions: { issues: write, contents: read, actions: write }
     steps:
+      # gh CLI only — REST calls to api.github.com (comment/api/run/dispatch)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: resolve targets + dispatch verify
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -530,7 +595,10 @@ jobs:
               const e = idx.plugins.find(p => p.name === n)
               const v = e?.pendingUpdate?.version ?? e?.latestVersion
               if (!e) { notes.push(`${n} 不在目录`); continue }
-              if (!v) { notes.push(`${n} 无可验证版本`); continue }
+              // github-kind entries have latestVersion=null but ARE verifiable —
+              // the planner installs `owner/repo#sha` from source.repo/version
+              const ghInstallable = !v && e.source?.kind === "github" && !!(e.source.repo || e.source.id)
+              if (!v && !ghInstallable) { notes.push(`${n} 无可验证版本`); continue }
               const caps = e.pendingUpdate?.capabilities ?? e.capabilities
               if ((caps?.redFlags ?? []).length) notes.push(`${n} 带高危标记——计划会跳过`)
               ok.push(n)
@@ -562,6 +630,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # gh issue comment/close only
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: explain + close
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

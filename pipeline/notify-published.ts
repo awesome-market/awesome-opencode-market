@@ -14,7 +14,9 @@ export function markNotified(
 ): { lines: string[]; issues: number[]; stale: number[]; dead: number[]; slugs: Map<number, string> } {
   // "已收录" = user-visible. A pending entry is in the index but not displayed —
   // notify only once it actually publishes (approved or legacy), AI-DIAGNOSIS §9.
-  const byName = new Map(index.plugins.map(e => [e.name, e]))
+  // name keys are canonical lowercase — legacy seed rows can carry typed
+  // casing ('My-Pkg') while catalog entries always land lowercase
+  const byName = new Map(index.plugins.map(e => [e.name.toLowerCase(), e]))
   const issues = new Set<number>()
   // issue → detail-page slug: the notify comment links straight to the
   // landed entry instead of sending the author hunting through the list
@@ -40,12 +42,14 @@ export function markNotified(
       }
       // repo-only submissions carry `repo` not `name` — match either the entry
       // name (github-kind entries are named owner/repo) or source.repo, else
-      // their issue never gets notified+closed
-      const e = s.name ? byName.get(s.name)
-        : s.repo ? index.plugins.find(p =>
+      // their issue never gets notified+closed. A name+repo seed whose npm
+      // name missed (admission reject, publish-later) still falls through to
+      // the repo identity — the entry may have landed github-kind instead.
+      const e = (s.name ? byName.get(s.name.toLowerCase()) : undefined)
+        ?? (s.repo ? index.plugins.find(p =>
             p.source.repo?.toLowerCase() === s.repo!.toLowerCase() ||
             p.name.toLowerCase() === s.repo!.toLowerCase())
-        : undefined
+          : undefined)
       const key = s.name ?? s.repo
       const unlanded = !e || e.approval === 'pending'
       // dead is terminal for scanning but a late landing still deserves the

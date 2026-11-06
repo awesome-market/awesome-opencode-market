@@ -1,11 +1,15 @@
 /** GitHub fetch: repo metadata + file probes (SKILL.md, opencode.json, plugin entries). */
 import { ghHeaders } from '../discover/github.ts'
-import { withTimeout } from './npm.ts'
+import { withTimeout, readJsonCapped } from './npm.ts'
 
 export interface RepoMeta {
   id: number | null              // numeric repo id — repojacking detection (id changes on recreation)
   stars: number
   archived: boolean
+  /** true when the repo is a fork — submissions should nominate the canonical
+   *  upstream; a fork inherits the parent's whole tree and would sail through
+   *  the evidence gate on code it didn't write */
+  fork: boolean
   pushedAt: string | null
   createdAt: string | null
   license: string | null
@@ -42,12 +46,12 @@ export async function fetchRepoMeta(
   if (!res.ok) return { meta: null, status: 'error' }
   let b: {
     id?: number
-    stargazers_count?: number; archived?: boolean; pushed_at?: string; created_at?: string
+    stargazers_count?: number; archived?: boolean; fork?: boolean; pushed_at?: string; created_at?: string
     license?: { spdx_id?: string }; topics?: string[]; default_branch?: string
     full_name?: string
   }
   try {
-    b = (await res.json()) as typeof b
+    b = await readJsonCapped<typeof b>(res, 4 * 1024 * 1024)
   } catch {
     return { meta: null, status: 'error' }
   }
@@ -57,6 +61,7 @@ export async function fetchRepoMeta(
       stars: b.stargazers_count ?? 0,
       topics: b.topics ?? [],
       archived: b.archived ?? false,
+      fork: b.fork ?? false,
       pushedAt: b.pushed_at ?? null,
       createdAt: b.created_at ?? null,
       license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
@@ -88,7 +93,9 @@ export async function fetchRepoTree(
   if (!res.ok) return { paths: null, status: 'error', truncated: false }
   let b: { tree?: Array<{ path?: string }>; truncated?: boolean; sha?: string }
   try {
-    b = (await res.json()) as typeof b
+    // GitHub truncates huge trees server-side (~7MB + truncated flag); the
+    // cap is a second wall, not the primary bound
+    b = await readJsonCapped<typeof b>(res, 16 * 1024 * 1024)
   } catch {
     return { paths: null, status: 'error', truncated: false }
   }
@@ -123,7 +130,7 @@ export async function fetchRepoPackageName(
     if (res.status === 404) return { pkgName: null, status: 'not-found' }
     if (rateLimited(res)) return { pkgName: null, status: 'rate-limited' }
     if (!res.ok) return { pkgName: null, status: 'error' }
-    const b = (await res.json()) as { name?: unknown }
+    const b = await readJsonCapped<{ name?: unknown }>(res, 2 * 1024 * 1024)
     return { pkgName: typeof b.name === 'string' ? b.name : null, status: 'ok' }
   } catch {
     return { pkgName: null, status: 'error' }
@@ -144,7 +151,7 @@ export async function fetchRepoPackage(
     if (res.status === 404) return { pkg: null, status: 'not-found' }
     if (rateLimited(res)) return { pkg: null, status: 'rate-limited' }
     if (!res.ok) return { pkg: null, status: 'error' }
-    const b = (await res.json()) as { name?: unknown; main?: unknown; exports?: unknown; engines?: unknown; peerDependencies?: unknown }
+    const b = await readJsonCapped<{ name?: unknown; main?: unknown; exports?: unknown; engines?: unknown; peerDependencies?: unknown }>(res, 2 * 1024 * 1024)
     return {
       pkg: {
         ...(typeof b.name === 'string' ? { name: b.name } : {}),
@@ -175,7 +182,8 @@ export async function fetchMarketMeta(
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/.opencode-market.json`,
       { headers: ghHeaders(opts.token) })
     if (!res.ok) return null
-    const b = (await res.json()) as { category?: unknown; description?: unknown }
+    // author-controlled file — a hostile repo can serve an unbounded body
+    const b = await readJsonCapped<{ category?: unknown; description?: unknown }>(res, 2 * 1024 * 1024)
     const out: MarketMeta = {}
     // author-declared, attacker-controlled — cap counts/lengths so a hostile
     // meta file can't bloat the catalog index

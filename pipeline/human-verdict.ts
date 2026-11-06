@@ -109,14 +109,25 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     reason = `via label ${e.label} by ${e.actor} (issue #${e.issueNumber})`
   } else if (e.event === 'issue_comment') {
     // case-insensitive: phone keyboards autocapitalize `/Approve`/`/Concern`
-    const m = e.commentBody.match(/^\/(concern|approve)(?:\s+([\s\S]*))?$/i)
+    // leading whitespace is tolerated — a padded '  /concern x' is still a
+    // command, not prose (same leniency as submit.yml's verdict parse)
+    const m = e.commentBody.match(/^\s*\/(concern|approve)(?:\s+([\s\S]*))?$/i)
     if (!m) return { skip: 'noresolve' }
     verdict = m[1]!.toLowerCase() === 'approve' ? 'pass' : 'concern'
     const rest = (m[2] ?? '').trim()
     if (rest && !rest.startsWith('#')) {
       const sp = rest.split(/\s+/)
       const t = splitSpec(sp[0]!)
+      // The issue's own target — a [review] title, or a [concern] form's
+      // package field. An arg-spec diverging from EITHER must not close the
+      // issue: the form's target would never get judged while its issue is
+      // marked decided (H-4 semantics extended to the form channel).
       const tt = titleTarget(e.issueTitle)
+      const it = tt ?? (e.issueTitle.startsWith('[concern]')
+        ? (() => { const map = sections(e.issueBody)
+            const fn = formField(map, 'npm 包名或 owner/repo', '包名')
+            return fn ? { name: fn, ver: formField(map, '版本（可留空）', '版本') } : null })()
+        : null)
       // Spec shape = '@' or '/' in the first token (pkg@ver, owner/repo,
       // @scope/p). On a TITLED issue a bare charset word is far more likely
       // the start of a reason (`/concern steals data`) than a cross-target
@@ -132,9 +143,12 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
         name = t.name; ver = t.ver === '*' ? '*' : cleanVer(t.ver); reason = sp.slice(1).join(' ')
         // arg-spec on a titled issue that points somewhere else: land the
         // verdict on the ARG (explicit intent), but flag it so the workflow
-        // doesn't close the wrong review issue (H-4)
-        if (specShape && tt && (tt.name !== name || (tt.ver !== '' && ver !== '' && tt.ver !== ver)))
-          mismatch = `评论参数指向 ${name}${ver ? `@${ver}` : ''}，但本单目标是 ${tt.name}${tt.ver ? `@${tt.ver}` : ''}`
+        // doesn't close the wrong review issue (H-4). Names compare
+        // case-insensitively — `Owner/Repo` vs `owner/repo` is the same
+        // target, not a divergence.
+        if (specShape && it && (it.name.toLowerCase() !== name.toLowerCase()
+            || (it.ver !== '' && ver !== '' && it.ver !== ver)))
+          mismatch = `评论参数指向 ${name}${ver ? `@${ver}` : ''}，但本单目标是 ${it.name}${it.ver ? `@${it.ver}` : ''}`
       }
     }
     if (!name) {
@@ -193,7 +207,7 @@ export function isDupVerdict(lines: string[], name: string, version: string | nu
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string }
-      if (v.name !== name || (v.version ?? null) !== version) continue
+      if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       // normalize BOTH sides — a writer that stored a multi-line reason vs a
       // caller passing the raw comment text must still dedupe correctly
       return v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') === oneLine(reason)
@@ -219,7 +233,7 @@ export function overriddenHuman(lines: string[], name: string, version: string |
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; source?: string; at?: string }
-      if (v.source !== 'human' || v.name !== name || (v.version ?? null) !== version) continue
+      if (v.source !== 'human' || v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       if (typeof v.verdict === 'string' && v.verdict !== verdict && typeof v.at === 'string')
         return { verdict: v.verdict, at: v.at }
       return null
@@ -240,7 +254,7 @@ export function retargetedIssueTarget(lines: string[], issue: number, name: stri
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number }
-      if (v.source !== 'human' || v.issue !== issue || v.name === name) continue
+      if (v.source !== 'human' || v.issue !== issue || v.name?.toLowerCase() === name.toLowerCase()) continue
       return { name: v.name!, version: v.version ?? null }
     } catch { continue }
   }
@@ -263,7 +277,7 @@ export function amendAt(lines: string[], name: string, version: string | null, v
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string; at?: string }
-      if (v.name !== name || (v.version ?? null) !== version) continue
+      if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       if (v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') !== oneLine(reason)
           && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v.at))
         return v.at

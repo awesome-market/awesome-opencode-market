@@ -17,6 +17,11 @@ export type PluginType = z.infer<typeof PluginType>
 
 export const SourceKind = z.enum(['npm', 'github'])
 export const PluginFeature = z.enum(['server', 'tui', 'gui', 'rpc'])
+/** Producers today: 'npm-keyword' (registry search), 'github-topic' (topic
+ *  search), 'code-search' (GitHub code search — .opencode/, opencode.json,
+ *  SKILL.md mentions), 'submission' (issue seeds). 'topic-list' is RESERVED —
+ *  declared for a future curated-list channel; no file currently emits it
+ *  (kept in the enum so old indexes carrying it still parse). */
 export const DiscoveryChannel = z.enum(['npm-keyword', 'github-topic', 'code-search', 'topic-list', 'submission'])
 
 export const VerificationStatus = z.enum(['verified', 'failed', 'unverified', 'skipped'])

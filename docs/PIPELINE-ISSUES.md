@@ -827,7 +827,6 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 小项 | ✅ | `submission:approved` 标签打给不可解析 issue → skipmsg=unparseable 回执评论；notify 评论附详情页 `p/<slug>.html` 链接（notify-published 输出 `issue\tslug`）；投稿表单 repo 字段改 optional（npm-only 包此前无法走表单）；flagged 页脚明示 maintainer /approve 放行路径；DATA-FLOWS §0/§1/§2/§5/§12 同步 |
 
 **验证**：typecheck 0 错；新增 seed-outcome/submission-status rejected/markNotified slug 测试随套件全绿；vitest.config 别名 fileURLToPath（非 ASCII checkout 路径修复）。
->>>>>>> origin/main
 
 ## 附二十：审核单流四审（docket.yml 全流程，flaggedAt / 相位诚实化 / 工作流硬化）
 
@@ -854,7 +853,50 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 
 **验证**：typecheck 0 错；全量 vitest 套件绿（docket 新例：聚合阈值边界/行级信号/相位阻断文案/并入关单/verdict:* 摘签/dry 标记；audit9 新例：flaggedAt 三态/merge 盖章四态）；DATA-FLOWS §0/§8/§12 同步。
 
-## 附二十一：AI 诊断流专项审计（bin/ai-diagnose.sh 全流程，A 系列 + health 孤儿补齐）
+## 附二十一：收录发现流三审（N 系列，catalog.yml ↔ 裁决/投稿/发现面全量落地）
+
+对照 DATA-FLOWS §0/§1/§11/§12/§15 逐行复核后落地。核心主题：**github-kind 与 npm 同构的钉字节语义**（verdict.sha ↔ source.version）、**投稿身份全链小写**（写入侧归一 + 消费端防御）、**publish 取消静默**、**code-search 第三发现通道**。另清除附十九尾部残留的 git 冲突标记行。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| N-1 publish 被 `catalog-branch` 写锁排队取消 → 整轮静默丢失（alert 只钩 `failure()`；digest.yml 同病） | ✅ | catalog/digest alert 同改 `failure() \|\| cancelled()`（verify G-1 同型补齐） |
+| N-2 github-kind 裁决无字节锚定：`sec:repo-moved-since-review` 只在 findings 无评审面；`shaOk` 对 gh 恒真——人工 pass 审 commit A 放行 commit B | ✅ | 双重锚：**review 锚**——pending 条目 treeRes.sha ≠ seed.version → `sec:repo-moved-since-review` 升 **redFlag**（flaggedAt 盖章/docket flag 目标/skipIfFlagged 诚实降级，进 R-14 评审面）；**release 锚**——已放行条目 latestHuman pass 的 verdict.sha ≠ HEAD → `sec:repo-moved-since-release:<新sha12>` redFlag（sha 入旗名=每次前移新 flag 集合→重新提问）；`shaAnchor`：github-kind 比 `source.version`、npm 比 `integrity`，`applyMatureVerdicts`/`explainEntry` 同用——npm 侧钉字节语义平移至 repo 条目 |
+| N-2b repo 裁决不盖 reviewed commit：`submit`/`concern` 写盘 sha 恒空 | ✅ | submit.yml verdict job：seed.version → index source.version → repo 当前 ref 三级回退盖 sha；concern.yml 同样从 catalog entry source.version 盖戳 |
+| N-3 投稿名大小写：`PKG_RE` 放行大写 → 种子行原始 case → `byName.get`/`concernOn`/verdict 键三路漏配（已收录判未收录→dead-close；"已被拦截"相位漏） | ✅ | `seedLine` 写入侧小写归一（一处根除）；notify-published/submission-status 查找端 `.toLowerCase()` 防御；`vkey` 归一 name 侧（gh 显示大小写 `Owner/Repo` 与种子小写 `owner/repo` 不再裂键）；human-verdict dedupe/改判/跨目标比较、digest index 命中/落地查询、diagnose sha 键同步小写 |
+| N-4 findings 插值攻击者文本无界（repo package.json name/repository 自由文本成 MB 级 finding） | ✅ | `run.ts clip(v,120)` 收口全部 `sec:*:<value>`/`sec:*@<value>` 插值点（repo-mismatch/dir-traversal/declared-mismatch/repo-pkg-changed/entries-mismatch/pkg-evidence-dropped/moved-since-review/moved-since-release） |
+| N-5 `refreshMeta` 不刷 repo 侧：版本钉住期间 marketMeta desc/category/repo 根 package.json 名全冻结到下版 | ✅ | 五探针并行：packument/repoMeta/downloads/**marketMeta/repoPkg**；repo-mismatch/dir-traversal/declared-mismatch 身份级 finding 随包件重算；bump/pin 路径同口径（既有行为） |
+| N-6 publish `git worktree add /tmp/cat` 无预清（verify/digest 已修同型） | ✅ | `git worktree remove /tmp/cat --force` 前置 |
+| N-7 `coveredRepos` 对既有 gh 条目"豁免"是谎言：照删→gone-check 探活复活，metrics 永久冻结、每轮白烧一次 repoMeta | ✅ | `ghMissing` 过滤放行 `oldByName` 命中的既有条目与**投稿种子**（有 npm 孪生也走全流程——人工点名不饿），走 ghWorker 正常复用/刷新路径 |
+| N-8 publish job 无 harden-runner egress 白名单 | ✅ | allowed-endpoints：registry.npmjs.org / api.github.com / github.com |
+| N-9 alert 去重 `--search "catalog workflow failed"` 未 `in:title`——正文含同句的他类告警误吞 dedupe 位 | ✅ | `in:title` 限定 |
+| N-10 `code-search`/`topic-list` 枚举无生产者 | ✅ | `code-search` 落地为第三 gh 发现通道：`searchCode`（`/search/code`，≤2 页 100/页，串行——独立配额 ~10/min，无 token 401 即整条降级跳过）；queries：filename:opencode.json / opencode.jsonc / path:/\\.opencode\\// / filename:SKILL.md+opencode；候选缺 pushed_at/id → ghWorker 身份回填门按"缺字段"判定不限种子；`topic-list` 标注**预留枚举值**（schema+DATA-FLOWS 同注） |
+| N-11 explainEntry 对 gh 条目比 `e.integrity`（恒 null）——解释层漏锚 | ✅ | 签名加 `source:{kind,version?}`，与 applyMatureVerdicts 同一 `shaAnchor` 口径；why 文案改「槽位锚（integrity / github commit）」 |
+| 清理 | ✅ | PIPELINE-ISSUES 附十九尾部 `>>>>>>> origin/main` 残留冲突标记行删除；DATA-FLOWS §15 两行过时表述修正（github 云验证 ❌→✅、验证槽位无位→已按 commit 钉）、§0 字段表枚举注生产者、§1 全链同步（code-search 段、refreshMeta 五探针、coveredRepos 豁免真实化、alert cancelled()+in:title、双锚漂移旗） |
+
+**验证**：typecheck 0 错；新增 `test/catalog-audit-n.test.ts` 15 例（gh sha 锚放行/拒放、repo-moved-since-release 旗、vkey 大小写、markNotified/submissionStatuses 小写匹配、seedLine 小写、refreshMeta repo 刷新、coveredRepos 豁免走 ghWorker、clip 收口、searchCode/discoverGithub）；全量 vitest 1176 例绿。
+
+## 附二十二：人工裁决流三审（H 系列续，concern.yml + submit.yml verdict job 全量落地）
+
+对照 DATA-FLOWS §5/§7/§12 逐行复核后落地。主题：**表单单异目标盲区补齐、npm 孪生 repo 可裁决、取消静默消除、写盘 job egress 硬化**；另修复附二十一小写化引入的两处大小写回归。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| R-1 submit.yml 种子查找大小写回归：附二十一 `seedLine` 写入侧小写化后，`s.name===n` 对 typed-case `SUB_NAME` 失配 → `/approve` 误判 noseed 被拒 | ✅ | `s.name?.toLowerCase()===n.toLowerCase()` / `s.repo?.toLowerCase()===r.toLowerCase()`（兼容 legacy 混合大小写行） |
+| R-2 `argignored` 两处大小写：`p.name===TOKNAME` 对 typed-case spec 漏配真条目；`TOKNAME != ENTRY` 对同包异大小写误报 | ✅ | 两侧均小写比较 |
+| H-A write-failure 只钩 `failure()`：per-issue 并发组驱逐 pending 事件 → 整条裁决无痕迹丢失（concern/submit 同病，N-1 同型） | ✅ | 两 job 同改 `(failure() \|\| cancelled())`——被驱逐 run 给 issue 留"verdict 可能未落盘"+run 链接，残留从不可见变可见 |
+| H-B `[concern]` 单上 arg-spec 偏离**表单目标**无 mismatch：裁决写到异目标且表单单被关单（表单目标永远没被裁决却被标 decided——H-4 的表单通道版） | ✅ | `resolveVerdictEvent` 的 issue-target 改为 `[review]` 标题 \|\| `[concern]` 表单字段（`npm 包名或 owner/repo`+`版本`）；名比较全小写——`Owner/Repo` vs `owner/repo` 不再误报 mismatch |
+| H-C `exists` 只按 `p.name` 查：npm 条目的 `source.repo` 不可裁决（`/concern o/r` 回"不在目录"）；且 naive source.repo 匹配会埋坑——typed repo spec + npm 条目 → version:null+commit sha → shaOk 永久失配 | ✅ | `exists` 双键匹配（`p.name` 优先，`source.repo` 兜底，全小写）+ 输出条目 kind；`isrepo` 在 `n` 步内按 `e.source.kind` 重算——`o/r` 打 npm 孪生走 index-first 版本+dist.integrity，打真 github-kind 走 version:null+commit sha |
+| H-D concern/submit verdict job 无 harden-runner（解析不可信 issue 文本 + npm ci/npm view + catalog push 全裸） | ✅ | verdict job：registry.npmjs.org+api.github.com+github.com；retest/triage：api.github.com |
+| H-E repo 槽 `vstatus` 恒空 → pass ack 不带 H-17 验证态提示（unverified repo pass 成熟后不放行，ack 却空诺"进入上架流程"） | ✅ | `vstatus` 对 github-kind 条目发 `e.verification.status`（单槽即目标槽） |
+| H-F `mismatch` 早退不清 `verdict:blocked`——裁决已落地（异目标）而旧 blocked 签残留 | ✅ | mismatch 分支先 `removeLabel verdict:blocked` 再评论返回 |
+| H-H `git show ...:ai-verdicts.jsonl \|\| touch` 把"存在但读失败"当"不存在"——dedupe/amend/prev 面瞬断静默降级 | ✅ | `git cat-file -e` 判存在：缺失→touch（首轮合法态），存在但读失败→exit 1（D-Z 同型，concern/submit 同改） |
+| H-I labeled noresolve 对 `[review] (...)` 哨兵总单贴 verdict:blocked+评论——误触标签累积噪音 | ✅ | noresolve feedback 步对 `[review] (` 前缀直接跳过 |
+
+**评估未改**：`/retest` 三种拼写闸（宽前缀会把 `/remove` 类词误判为 bare retest——窄拼写是刻意取舍，/rEtEsT 静默丢的代价可接受）；`issues.edited` 对 [review] 标题不重解析（标题是 docket 生成的，编辑无裁决语义）；dedupe 的 `git show` 输出中途截断（`git show` 失败先于读文件，cat-file -e 已卡主路径）。
+
+**验证**：typecheck 0 错；human-verdict.test.ts 新增 3 例（mismatch@[concern] 偏离/同版异名/同名牌异版）；DATA-FLOWS §5 同步（sha 锚双通道、mismatch 表单目标、source.repo 双键+kind 判定、vstatus repo 槽、cancelled 注记）。
+
+## 附二十三：AI 诊断流专项审计（bin/ai-diagnose.sh 全流程，A 系列 + health 孤儿补齐）
 
 > 范围：`docs/DATA-FLOWS.md` 全文 + 壳脚本锁/spool/push/schema-gate 全路径 + diagnose.ts/l05_score.py/digest.ts/digest.yml 交叉核对。两处 PoC 实证 + Galvanize-2 真实模型冒烟验证。
 
@@ -862,7 +904,7 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 |---|---|---|
 | A-1 同 rank 文件名排序挤出评审：8 个良性同 rank md 按 localeCompare 排在恶意 SKILL.md 前，`slice(0,8)` 名额全被诱饵占据——LLM 与 L0.5 双双不可见（PoC 实证） | ✅ | contentMaterial 废除文件数上限：≤384 成员收集、单文件 ≤32KB 整存/超出首16KB+尾8KB、总量 ≤384KB 按 contentRank 序填充、溢出 ≤2KB 首尾 stub（≤128）、再溢出 content-coverage 块显式披露；rank 只排序预算不再排除 |
 | A-2 截断链三层叠加：收集 12KB 头截断 → prompt 每块前 4000 字符 → L0.5 仅前 512 token，尾部注入对双通道隐形 | ✅ | 单文件存 首16KB+尾8KB；materialPrompt content 块 首2KB+尾2KB 采样；l05_score.py `no_truncation()`+整流编码+512 窗/448 stride/头30尾10窗/全局6000窗预算/max-pool（实测深埋 payload 0.159→0.946）；预算耗尽项保持"无分"不当良性 |
-| A-3 `diagnose-health.json` 孤儿：270f648 加的 `--health` 无任何消费者，两处注释谎称 digest/watchdog 在读 | ✅ | 壳侧 publish_health：状态翻转/24h 心跳才提交 catalog 分支（≤2h 新鲜戳；写文件移到 reset 后——reset --hard 会抹掉已跟踪文件的预写版本，顺序测试实证）；watchdog 第五腿 + digest §⑤ 消费 l05/omlx 降级（fresh<48h 才算，stale=worker 死归第一腿） |
+| A-3 `diagnose-health.json` 孤儿：270f648 加的 `--health` 无任何消费者，两处注释谎称 digest/watchdog 在读 | ✅ | 壳侧 publish_health：状态翻转/24h 心跳才提交 catalog 分支（≤2h 新鲜戳；写文件移到 reset 后——reset --hard 会抹掉已跟踪文件的预写版本，顺序测试实证）；watchdog 第六腿 + digest §⑤ 消费 l05/omlx 降级（fresh<48h 才算，stale=worker 死归第一腿） |
 | A-4 壳脚本关键路径零测试：锁回收/spool 回放/comm 去重/push 重试/schema 门/pause-resume 全裸奔 | ✅ | `test/ai-diagnose-shell.test.ts`：本地 bare remote + tsx shim（拦截 diagnose.ts 放行真实 -e schema 门）端到端 6 例——pause/resume、fresh/stale 锁、推送+health 发布、schema 丢弃畸形行、spool∩payload 去重、push 失败→spool→恢复回放 |
 | A-5 l05_score.py `snaps[0]` glob 序不定，多 snapshot 可能拿旧版 | ✅ | `sorted(snaps)[-1]` 取最新 |
 | A-6 HF_HOME 外置卷未挂载时 L0.5 静默降级无标记 | ✅ | ai-diagnose.sh 目录缺失时 log 醒目告警（health 戳是唯一可见处） |

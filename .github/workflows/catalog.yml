@@ -41,10 +41,14 @@ jobs:
       - run: npm ci
       - name: fetch old index + aux files (merge base)
         run: |
-          # WF-1: distinguish "remote branch exists" (→ fetch MUST succeed and
-          # index MUST be present+valid) from "first run ever" (branch absent).
-          # A failed fetch or empty/corrupt index must hard-fail, never run blind.
-          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+          # WF-1: three-way — "remote branch exists" (→ fetch MUST succeed and
+          # index MUST be present+valid) vs "first run ever" (branch absent)
+          # vs "can't reach origin". ls-remote exit 2 means the ref is truly
+          # absent; any other failure means origin is unreachable and running
+          # blind would publish a re-pended catalog over a network hiccup.
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0)
             git fetch origin catalog
             git show origin/catalog:index.json > /tmp/old-index.json
             if [ ! -s /tmp/old-index.json ]; then
@@ -60,9 +64,10 @@ jobs:
             # missing digest-state = -∞: all pass verdicts stay frozen until the
             # first daily digest publishes (fail-closed bootstrap, AI-DIAGNOSIS §4)
             git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null || rm -f /tmp/digest-state.json
-          else
-            touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl   # first run ever — no blocklist yet (absent = disabled, not corrupt)
-          fi
+            ;;
+            2) touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl ;;   # first run ever — no blocklist yet (absent = disabled, not corrupt)
+            *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc}) — refusing to run blind (WF-1)" >&2; exit 1 ;;
+          esac
       - name: run pipeline
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
@@ -79,9 +84,23 @@ jobs:
   publish:
     needs: generate
     runs-on: ubuntu-latest
+    # bounded like every other writer job — a hung gh api/git push inside the
+    # retry loops must not burn the default 6h budget behind the writer lock
+    timeout-minutes: 20
     concurrency: catalog-branch   # writer lock shared with verify/digest/ingest — only the write phase holds it (C-3)
     permissions: { contents: write, issues: write, actions: write }   # contents+issues: catalog writer + submission notify (WF-3); actions: dispatches site.yml (V-8)
     steps:
+      # write-side job — same eBPF egress posture as verify/digest writers.
+      # Covers git fetch/push (github.com), gh api/issue/dispatch calls
+      # (api.github.com), and npm ci (registry.npmjs.org); artifact download
+      # uses GitHub-internal endpoints like every other hardened job.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -98,16 +117,27 @@ jobs:
           git config user.name "market-bot"
           # catalog branch is data-only (no pipeline sources) — use a worktree so
           # the main checkout keeps pipeline/*.ts runnable throughout the loop.
-          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+          # stray worktree from a crashed prior run must not fail the add below
+          # (verify/digest hit this for real — V-T / D-Z)
+          git worktree remove /tmp/cat --force 2>/dev/null || true
+          # same three-way as generate: exit 2 = truly absent → orphan bootstrap;
+          # any other failure = unreachable → fail now instead of building an
+          # orphan whose every push gets rejected anyway
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0)
             git fetch origin catalog
             git worktree add /tmp/cat origin/catalog
-          else
+            ;;
+            2)
             # first run ever: no catalog branch — create it as an ORPHAN so the
             # data-only branch never inherits the whole main source tree
             git worktree add --detach /tmp/cat
             git -C /tmp/cat checkout --orphan catalog
             git -C /tmp/cat rm -rf . >/dev/null 2>&1 || true
-          fi
+            ;;
+            *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc})" >&2; exit 1 ;;
+          esac
           ok=0
           RELEASE_FAILED=0
           for i in 1 2 3 4; do
@@ -169,7 +199,7 @@ jobs:
           # (publish itself was green), so file a deduped pipeline-alert.
           if [ "$RELEASE_FAILED" = 1 ]; then
             gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-            EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "release apply failed" --json number --jq '.[0].number' 2>/dev/null || true)
+            EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "release apply failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
             RBODY="catalog publish landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [ -n "$EXISTING" ]; then
               gh issue comment "$EXISTING" --repo "$GH_REPO" --body "$RBODY" || true
@@ -222,6 +252,9 @@ jobs:
             touch /tmp/stale.list /tmp/dead.list
             while read -r N; do
               [ -n "$N" ] || continue
+              # closed issues get no status noise — the sweep may have already
+              # posted its own close comment on the same 30d horizon
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
               gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || true
               echo "stale-warned issue #$N"
             done < /tmp/stale.list
@@ -230,6 +263,7 @@ jobs:
             # submissions can't hang open forever (F-11); resubmit = new issue.
             while read -r N; do
               [ -n "$N" ] || continue
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
               gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || true
               gh issue close "$N" || true
               echo "dead-closed issue #$N"
@@ -265,7 +299,11 @@ jobs:
 
   alert:
     needs: [generate, publish]
-    if: failure()
+    # cancelled() included: publish shares the catalog-branch writer lock — a
+    # queued publish can be evicted by a later writer (verify-merge/digest/
+    # ingest), which drops the whole run's compute AND index update silently.
+    # verify.yml hardened the same shape in G-1.
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
@@ -276,8 +314,10 @@ jobs:
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           # dedupe (same S-6 pattern as site.yml): a failing streak comments on
-          # the one open alert issue instead of opening one per run
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          # the one open alert issue instead of opening one per run. in:title —
+          # an unrelated pipeline-alert issue whose BODY mentions "catalog
+          # workflow failed" must not swallow this alert's dedupe slot
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

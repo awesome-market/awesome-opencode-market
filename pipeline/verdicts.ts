@@ -51,8 +51,14 @@ export function loadLastDigestAt(path?: string): string | null {
 
 /** verdict lookup key — NUL separator (a '@' join collides with scoped names
  *  like @kyan-plugins/x@1.0 and silently broke diagnose's seen-check: every
- *  entry always looked unreviewed → re-reviewed every tick) */
-export const vkey = (name: string, version: string | null | undefined) => `${name}\0${version ?? ''}`
+ *  entry always looked unreviewed → re-reviewed every tick). The name side is
+ *  canonicalized lowercase so case can never split a verdict from its entry:
+ *  catalog entries keep canonical casing ('Owner/Repo' for github-kind,
+ *  lowercase npm names) while verdict lines arrive with typed/mixed casing
+ *  ('owner/repo' from a lowercased submission, 'Owner/Repo' from a
+ *  maintainer's title). Every keying surface (slotVerdict, packageBrake,
+ *  maturity akey, docket, submission-status) goes through this function. */
+export const vkey = (name: string, version: string | null | undefined) => `${name.toLowerCase()}\0${version ?? ''}`
 
 /** The version currently under review (K-12): a hold's own version, else the
  *  pinned display version when the entry itself is the pending candidate.
@@ -222,11 +228,18 @@ export function applyMatureVerdicts(
   // sha pins the REVIEWED bytes: a same-version registry re-tag after the
   // verdict was written means the judgment no longer describes what would
   // ship — the release gate refuses rather than certify new bytes. Missing
-  // sha (github-kind, legacy verdicts) or missing slot integrity (legacy
-  // holds) can't be compared → allowed; run.ts's anchorIntegrity drift flag
-  // is the scheduled backstop for those.
+  // sha (legacy verdicts) or missing anchor (unpinned/legacy slots) can't be
+  // compared → allowed; run.ts's anchorIntegrity drift flag is the scheduled
+  // backstop for those.
   const shaOk = (v: AiVerdict, integrity: string | null | undefined) =>
     !v.sha || !integrity || v.sha === integrity
+  // github-kind entries carry no tarball SRI — their reviewed-byte anchor is
+  // the pinned commit (`source.version`, the ref-resolved tree sha). Repo
+  // verdicts written through submit/concern now stamp that sha into `v.sha`,
+  // giving repo entries the same pin discipline npm gets from dist.integrity:
+  // a human pass on commit A must not release commit B.
+  const shaAnchor = (e: PluginEntry): string | null | undefined =>
+    e.source.kind === 'github' ? e.source.version : e.integrity
   // package-level brake + R-4 stickiness: shared with every other surface
   // (run.ts pin checks, digest phases, docket) via slotVerdict so "which
   // verdict governs this key" cannot drift into per-callsite semantics
@@ -319,7 +332,7 @@ export function applyMatureVerdicts(
             e = { ...e, approvalReason: 'awaiting-review' }
           if (mature(v)
             && !(v.source === 'ai' && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
-            && shaOk(v, e.integrity)
+            && shaOk(v, shaAnchor(e))
             && RELEASABLE.has(e.verification.status)) {
             e = { ...e, approval: 'approved', approvalReason: undefined }
             releases.push(`${e.name}@${e.latestVersion ?? 'null'}`)
@@ -370,7 +383,10 @@ export interface SlotExplain {
  *  instead of a bare releases/held count. */
 export function explainEntry(
   e: Pick<PluginEntry, 'name' | 'latestVersion' | 'approval' | 'capabilities' | 'verification' | 'integrity'>
-    & { pendingUpdate?: Pick<PendingUpdate, 'version' | 'capabilities' | 'verification' | 'integrity'> | undefined },
+    & { pendingUpdate?: Pick<PendingUpdate, 'version' | 'capabilities' | 'verification' | 'integrity'> | undefined
+      // optional so test/partial fixtures stay valid — same shaAnchor rule as
+      // applyMatureVerdicts: github-kind verdicts pin source.version, not SRI
+      source?: Pick<PluginEntry['source'], 'kind' | 'version'> | undefined },
   verdicts: AiVerdict[],
   digest: DigestState | null,
 ): SlotExplain[] {
@@ -432,7 +448,7 @@ export function explainEntry(
     // membership), same gate applyMatureVerdicts applies
     if (dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
     if (v.sha && integrity && v.sha !== integrity)
-      return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位 integrity 不符 — 疑似同版本换包，等 drift 复审` }
+      return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位锚（integrity / github commit）不符 — 疑似同版本换包或仓库前移，等复审` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }
     return { ...base, outcome: 'release', why: `${pre}pass 成熟 + 可放行 → 生效` }
   }
@@ -443,6 +459,7 @@ export function explainEntry(
       e.pendingUpdate.verification.status, e.pendingUpdate.integrity))
   }
   out.push(slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length,
-    e.capabilities.scannedAt === null, e.verification.status, e.integrity))
+    e.capabilities.scannedAt === null, e.verification.status,
+    e.source?.kind === 'github' ? e.source.version : e.integrity))
   return out
 }

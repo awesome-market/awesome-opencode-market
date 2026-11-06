@@ -177,6 +177,23 @@ describe('G5: legacy + mature pass → approved', () => {
     expect(r.index.plugins[0]!.approval).toBe('pending')
     expect(r.index.plugins[0]!.approvalReason).toBe('bad')
   })
+  // D3 regression: the G5 cases above hand-build `announced` via digestStateOf,
+  // which bypassed the announce layer entirely — heldSlotKeys only listed
+  // 'pending' display slots, so a pass on a LEGACY entry's shown version could
+  // never enter `announced` and the release branch above was unreachable in
+  // production. End-to-end: the real nextDigestState must announce it.
+  it('a pass on a legacy display slot is announce-able end-to-end', () => {
+    const idx = mkIndex([mkEntry('p', { approval: 'legacy' })])
+    const v = mkVerdict('p', '1.0.0', 'pass', BEFORE, 'human')
+    const day1 = nextDigestState([v], null, new Date(DIGEST), idx)
+    expect(day1.announced).toContain(akey(v))
+    // still inside its own render — not yet mature (objection window holds)
+    expect(day1.dayAnnounced).toContain(akey(v))
+    const day2 = nextDigestState([v], day1, new Date('2026-02-02T21:00:00Z'), idx)
+    expect(day2.dayAnnounced).not.toContain(akey(v))
+    const r = applyMatureVerdicts(idx, [v], day2)
+    expect(r.index.plugins[0]!.approval).toBe('approved')
+  })
 })
 
 // ————— G6: stale approvalReason resets on a superseding pass —————

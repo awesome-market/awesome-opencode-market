@@ -1,7 +1,10 @@
 name: submission-review
 # scope: prod-only — formal submission processing + abandonment sweep
 on:
-  issues: { types: [opened, edited, labeled] }
+  issues: { types: [opened, edited, labeled, reopened] }
+  # reopened included: a submission issue closed by mistake (or by the stale
+  # sweep and then revived) must re-enter review — without the event its
+  # labels stay frozen at the last phase and the seed just ages out dead
   # edited included for the VERDICT job (fixing a typo'd /concern re-resolves
   # idempotently via dedupe/amend) — the review job stays created-only so an
   # edited comment can't burn a tarball re-scan
@@ -25,7 +28,9 @@ jobs:
               && github.event.action == 'created'
               && !endsWith(github.event.comment.user.login, '[bot]')
               && !startsWith(github.event.comment.body, '/')
-              && !contains(github.event.issue.labels.*.name || 'x', 'submission:approved')))
+              && !startsWith(github.event.comment.body, ' /')
+              && (!contains(github.event.issue.labels.*.name || 'x', 'submission:approved')
+                || contains(github.event.issue.labels.*.name || 'x', 'submission:rejected'))))
     outputs:
       pkg: "${{ steps.parse.outputs.pkg }}"
       verdict: "${{ steps.scan.outputs.v }}"
@@ -47,6 +52,7 @@ jobs:
         id: parse
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           npx tsx pipeline/submission.ts > /tmp/sub.json
           PKG=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
@@ -54,12 +60,19 @@ jobs:
           KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
           echo "pkg=${PKG:-$REPO}" >> "$GITHUB_OUTPUT"     # repo-only skills identify by repo
           echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "name=$PKG" >> "$GITHUB_OUTPUT"
+          echo "repo=$REPO" >> "$GITHUB_OUTPUT"
       - name: static review
         id: scan
         env:
           PKG: ${{ steps.parse.outputs.pkg }}
           KIND: ${{ steps.parse.outputs.kind }}
+          PNAME: ${{ steps.parse.outputs.name }}
+          PREPO: ${{ steps.parse.outputs.repo }}
+          ACTION: ${{ github.event.action }}
+          GH_REPO: ${{ github.repository }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENTER: ${{ github.event.comment.user.login || github.event.issue.user.login }}
@@ -87,9 +100,47 @@ jobs:
                 process.stdout.write(hit ? "1" : "")
               } catch { /* unparseable blocklist → catalog gate still enforces */ }
             ' || true)
+            # this issue's live seed row — feeds the edited-skip and the
+            # third-party-flip lineage checks below
+            SEEDROW=$(git show FETCH_HEAD:submissions.txt 2>/dev/null | node -e '
+              let last = null
+              for (const l of require("fs").readFileSync(0, "utf8").split("\n")) {
+                try { const s = JSON.parse(l); if (s.issue === Number(process.env.ISSUE_NUM)) last = s } catch {}
+              }
+              process.stdout.write(last ? JSON.stringify(last) : "")
+            ' || true)
+          fi
+          # edited-issue shortcut: an edit that didn't touch the submission
+          # TARGET (name/repo identical to the live seed) doesn't change the
+          # artifact — re-emitting the prior clean verdict is honest and saves
+          # a whole tarball scan. The fresh seed line still emits so desc/
+          # category edits DO propagate; the pin stays the original reviewed
+          # version (markers are copied, not regenerated). Prior verdict must
+          # be clean — a flagged/invalid target change deserves a real scan.
+          SKIPSCAN=""
+          if [ "$ACTION" = "edited" ] && [ "$KIND" != none ] && [ -n "${SEEDROW:-}" ]; then
+            gh api "repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/prior.txt 2>/dev/null || touch /tmp/prior.txt
+            PV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PCRE=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            if [ "$PV" = "clean" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
+              const s = JSON.parse(process.env.SEEDROW)
+              const n = (process.env.PNAME || "").toLowerCase(), r = (process.env.PREPO || "").toLowerCase()
+              process.exit((s.name ?? null) === (n || null) && (s.repo ?? null) === (r || null) ? 0 : 1)
+            '; then SKIPSCAN=1; fi
           fi
           if [ -n "${BLOCKED:-}" ]; then
             printf '**%s** — ⛔ 该包/仓库在收录黑名单（blocklist）中，目录不会收录。如认为误封请联系 maintainer。\n\n<!-- verdict: invalid -->\n' "$PKG" > /tmp/review.md
+          elif [ -n "$SKIPSCAN" ]; then
+            printf '**%s** — 投稿目标未变化（与在队种子一致），沿用上次初审结论：clean——本次编辑仅更新描述/分类等元数据，未重复扫描。\n\n<!-- createdAt: %s -->\n<!-- reviewedVersion: %s -->\n<!-- repoSha: %s -->\n<!-- repoPkg: %s -->\n<!-- verdict: clean -->\n' \
+              "$PKG" "${PCRE:-null}" "${PVER:-null}" "${PSHA:-null}" "${PPKG:-null}" > /tmp/review.md
+            # pin stays what the ORIGINAL scan reviewed — not re-derived
+            [ "$PVER" = "null" ] && PVER=""; [ "$PSHA" = "null" ] && PSHA=""; [ "$PPKG" = "null" ] && PPKG=""
+            SEED_VERSION="${PVER:-$PSHA}"
+            SEED_PKG="$PPKG"
           elif [ "$KIND" = npm ]; then
             npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
             SEED_VERSION=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
@@ -109,15 +160,24 @@ jobs:
           { echo 'subline<<SUBLINE_EOF'; cat /tmp/sub.line; echo 'SUBLINE_EOF'; } >> "$GITHUB_OUTPUT"
           # name-squatting guard: a re-review driven by someone other than the
           # issue author can attach the ORIGINAL author's declared metadata to
-          # a different package (author deleted, name re-registered). Auto-approve
-          # only trusts author-driven iterations — third party forces human review.
-          # Collaborators are exempt: they can write verdicts directly anyway, so
-          # forcing a flagged round-trip on a maintainer's "please re-review" is
-          # pure friction (they ARE the human review).
+          # a different package (author deleted, name re-registered). The flip
+          # fires only when lineage can't be PROVEN same — no seed row, no
+          # creation stamp, or the artifact registered NEWER than the seed's
+          # ingest (a live seed whose package predates it is the same lineage:
+          # flipping that is just a grief button for any passerby).
+          # Collaborators are exempt: they can write verdicts directly anyway,
+          # so forcing a flagged round-trip on a maintainer's "please re-review"
+          # is pure friction (they ARE the human review).
           if [ "${{ github.event_name }}" = issue_comment ] && [ "$COMMENTER" != "$ISSUE_AUTHOR" ] \
             && ! echo " $COMMENT_ASSOC " | grep -qE ' (OWNER|MEMBER|COLLABORATOR) '; then
-            printf '\n\n⚠️ 本次重审由非投稿人 @%s 触发（投稿人 @%s）——包名可能已易主，转人工复核。\n' "$COMMENTER" "$ISSUE_AUTHOR" >> /tmp/review.md
-            sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
+            SEED_AT=$(SEEDROW="${SEEDROW:-}" node -e 'try{console.log(JSON.parse(process.env.SEEDROW).at??"")}catch{console.log("")}')
+            PCN=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            # ISO strings compare lexicographically — createdAt strictly AFTER
+            # the seed's `at` proves the artifact is not what the seed anchored
+            if [ -z "$SEED_AT" ] || [ -z "$PCN" ] || [ "$PCN" \> "$SEED_AT" ]; then
+              printf '\n\n⚠️ 本次重审由非投稿人 @%s 触发（投稿人 @%s）——包名可能已易主，转人工复核。\n' "$COMMENTER" "$ISSUE_AUTHOR" >> /tmp/review.md
+              sed -i 's/<!-- verdict: clean -->/<!-- verdict: flagged -->/' /tmp/review.md
+            fi
           fi
           # name-age guard: a package/repo registered SHORTLY AFTER an issue that
           # has been open >24h means the name changed hands since submission
@@ -193,13 +253,17 @@ jobs:
           gh label create "submission:needs-work" --color d93f0b -d "red flags present"   --force 2>/dev/null || true
           gh label create "submission:invalid"    --color 6e5494 -d "package not found"   --force 2>/dev/null || true
           gh label create "submission:error"      --color fbca04 -d "review infra failed — retry" --force 2>/dev/null || true
+          gh label create "submission:rejected"   --color b60205 -d "admission gate refused" --force 2>/dev/null || true
           case "$V" in
             clean)   LBL=submission:approved ;;
             flagged) LBL=submission:needs-work ;;
             error)   LBL=submission:error ;;
             *)       LBL=submission:invalid ;;
           esac
-          for L in approved needs-work invalid error; do gh issue edit "$ISSUE" --remove-label "submission:$L" 2>/dev/null || true; done
+          # 'rejected' is catalog-side (seed-outcome), not a review verdict —
+          # a fresh review always clears it: re-review IS the documented
+          # recovery path from a rejected submission
+          for L in approved needs-work invalid error rejected; do gh issue edit "$ISSUE" --remove-label "submission:$L" 2>/dev/null || true; done
           gh issue edit "$ISSUE" --add-label "$LBL"
           # the base 'submission' label is load-bearing: the abuse gate counts
           # by it, the sweep covers orphans by it, and the comment re-review
@@ -282,7 +346,9 @@ jobs:
           && github.event.sender.login != 'github-actions[bot]')
         || (github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
           && (startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A')
-              || startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C'))
+              || startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')
+              || startsWith(github.event.comment.body, ' /a') || startsWith(github.event.comment.body, ' /A')
+              || startsWith(github.event.comment.body, ' /c') || startsWith(github.event.comment.body, ' /C'))
           && !endsWith(github.event.comment.user.login, '[bot]'))
       )
     runs-on: ubuntu-latest
@@ -294,6 +360,15 @@ jobs:
     concurrency: submit-verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write, actions: write }
     steps:
+      # write-side job parsing untrusted issue text — same eBPF egress posture
+      # as concern.yml's verdict job (npm ci/npm view, gh api, catalog push)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - name: association gate — non-collaborator commands get told, not dropped
         if: github.event_name == 'issue_comment'
         id: perm
@@ -305,21 +380,25 @@ jobs:
           BODY: ${{ github.event.comment.body }}
         run: |
           LOW=${BODY,,}
-          if [[ "$LOW" =~ ^/(approve|concern)([[:space:]]|$) ]]; then
+          if [[ "$LOW" =~ ^[[:space:]]*/(approve|concern)([[:space:]]|$) ]]; then
             case " $ASSOC " in
               *" OWNER "*|*" MEMBER "*|*" COLLABORATOR "*) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
               *) gh issue comment "$ISSUE" -R "$GH_REPO" --body "⛔ 仅仓库协作者（OWNER/MEMBER/COLLABORATOR）可使用裁决命令 /approve、/concern——投稿进度由机器审查与目录流水线推进。" || true
                  echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
             esac
+          elif [[ "$LOW" =~ ^[[:space:]]*/[ac][a-z]+ ]]; then
+            # looks like a verdict command but isn't one — '/concerned', '/apply',
+            # '/a ok' typos deserve the usage hint instead of a silent skip
+            # (same feedback contract concern.yml's noresolve path keeps)
+            gh issue comment "$ISSUE" -R "$GH_REPO" --body "用法：`/approve` 或 `/concern [原因]`——在本投稿单上裁决投稿目标；如需指定其他包或版本请走 [concern] 表单。" || true
+            echo "allowed=0" >> "$GITHUB_OUTPUT"
           else
             # not actually a verdict command (the job-if prefix is broad) —
             # same silent skip as before, no comment
             echo "allowed=0" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
+      # permission gates run BEFORE checkout+npm ci — a denied label/comment
+      # shouldn't burn ~40s of runner install to discover 'no'
       - name: actor gate — labeled events carry no author_association for the labeler
         if: github.event_name == 'issues' && github.event.action == 'labeled'
         id: gate
@@ -352,22 +431,30 @@ jobs:
                gh issue comment "$ISSUE" -R "$REPO" --body "⚠️ 无法确认 @$ACTOR 的仓库权限（API 暂时不可用）——标签已保留，请稍后重试。" || true
                echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
           esac
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
       - name: parse submission + resolve verdict record
         if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0'
         id: v
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           ISSUE_NUM: ${{ github.event.issue.number }}
           EVENT: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
+          LABEL: ${{ github.event.label.name }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npx tsx pipeline/submission.ts > /tmp/sub.json
           NAME=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??'')")
-          REPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
+          # SUBREPO, not REPO: env REPO is THIS repository — clobbering it used
+          # to make the marker fetch below query the submitted repo's issues
+          SUBREPO=$(node -e "const s=require('/tmp/sub.json');console.log(s.repo??'')")
           KIND=$(node -e "const s=require('/tmp/sub.json');console.log(s.kind??'none')")
           # command parse — [[:space:]] covers tab/newline, ${,,} covers case;
           # anything else on a widened gate must SKIP, never fall through to
@@ -376,23 +463,26 @@ jobs:
           VERDICT=""; REASON=""
           if [ "$EVENT" = "issue_comment" ]; then
             LOW=${COMMENT_BODY,,}
-            if [[ "$LOW" =~ ^/concern([[:space:]]|$) ]]; then
+            if [[ "$LOW" =~ ^[[:space:]]*/concern([[:space:]]|$) ]]; then
               VERDICT=concern
-              REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^/concern[[:space:]]*||I')
-            elif [[ "$LOW" =~ ^/approve([[:space:]]|$) ]]; then
+              REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^[[:space:]]*/concern[[:space:]]*||I')
+            elif [[ "$LOW" =~ ^[[:space:]]*/approve([[:space:]]|$) ]]; then
               VERDICT=pass
-              REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^/approve[[:space:]]*||I')
+              REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's|^[[:space:]]*/approve[[:space:]]*||I')
             else
               echo "not a verdict command — skip"; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
             fi
           else
             VERDICT=pass   # labeled submission:approved
+            # label taps carry no prose — synthesize the same audit reason
+            # concern.yml emits so the verdict line stays self-describing
+            REASON="via label ${LABEL:-submission:approved} by $ACTOR (issue #$ISSUE_NUM)"
           fi
           # reason → single-line audit text (multiline would break the digest
           # table + dedupe compare); code-point slice, not byte truncate
           REASON=$(printf '%s' "$REASON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log([...s.replace(/\s+/g," ").trim()].slice(0,2000).join(""))})')
           # repo-only submissions identify by repo as the entry name
-          ENTRY="${NAME:-$REPO}"
+          ENTRY="${NAME:-$SUBREPO}"
           [ -n "$ENTRY" ] || { echo "no parseable submission — skip"; echo "skip=1" >> "$GITHUB_OUTPUT"; echo "skipmsg=unparseable" >> "$GITHUB_OUTPUT"; exit 0; }
           # H-18: on a [submit] issue the verdict always lands on THE SUBMITTED
           # package — command args are never a retarget. An arg token that
@@ -422,14 +512,24 @@ jobs:
           # matching seed wins: re-reviews append new lines and the newest
           # reviewedVersion is the current intent (F-5).
           VER=""; SHA=""; NOSEED=""
+          # bootstrap: no catalog branch = data plane not initialized — say so
+          # instead of dying later in catalog-append as a generic "may not
+          # have landed" write failure (concern.yml parity)
+          if ! git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+            gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
+            echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           git fetch origin catalog --quiet 2>/dev/null || true
-          export SUB_NAME="$NAME" SUB_REPO="$REPO"
+          export SUB_NAME="$NAME" SUB_REPO="$SUBREPO"
           SEED=$(git show FETCH_HEAD:submissions.txt 2>/dev/null | node -e '
             const i=require("fs").readFileSync(0,"utf8")
             const n=process.env.SUB_NAME||"", r=process.env.SUB_REPO||""
             let hit=null
             for(const l of i.split("\n")){try{const s=JSON.parse(l)
-              if(n&&s.name===n)hit=s;else if(!n&&r&&s.repo===r)hit=s}catch{}}
+              // case-insensitive both sides — seedLine stores canonical
+              // lowercase names while SUB_NAME keeps the typed form case, and
+              // legacy rows predate the write-side normalization
+              if(n&&s.name?.toLowerCase()===n.toLowerCase())hit=s;else if(!n&&r&&s.repo?.toLowerCase()===r.toLowerCase())hit=s}catch{}}
             if(hit)console.log(JSON.stringify(hit))' || true)
           git show FETCH_HEAD:index.json > /tmp/index.json 2>/dev/null || true
           # flagged-override recovery: a pass on a submission that was reviewed
@@ -441,8 +541,11 @@ jobs:
           # no override target: not-found has no artifact, infra errors retry.
           LATE=""
           if [ -z "$SEED" ] && [ "$VERDICT" = pass ]; then
+            # github-actions[bot] ONLY — endswith('[bot]') would let any
+            # third-party app bot plant a fake 'verdict:/reviewedVersion:'
+            # marker that a later late-ingest then trusts as the pin
             gh api "repos/$REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
-              --jq '.[] | select(.user.login | endswith("[bot]")) | .body' > /tmp/rvc.txt 2>/dev/null || touch /tmp/rvc.txt
+              --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/rvc.txt 2>/dev/null || touch /tmp/rvc.txt
             RV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/rvc.txt | tail -1 | awk '{print $2}')
             RVVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
             RVSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
@@ -468,7 +571,7 @@ jobs:
           # prose, not a cross-target attempt
           if [ -n "$SPEC_TOK" ] && [ -s /tmp/index.json ]; then
             TOKNAME=$(node -e 'const s=process.argv[1];const at=s.lastIndexOf("@");console.log(at>0?s.slice(0,at):s)' "$SPEC_TOK")
-            if [ "$TOKNAME" != "$ENTRY" ] && node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$TOKNAME"; then
+            if [ "${TOKNAME,,}" != "${ENTRY,,}" ] && node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const k=process.argv[1].toLowerCase();process.exit(i.plugins.some(p=>p.name.toLowerCase()===k)?0:1)' "$TOKNAME"; then
               echo "argignored=$SPEC_TOK" >> "$GITHUB_OUTPUT"
             fi
           fi
@@ -498,16 +601,34 @@ jobs:
               VER="$CUR"
             else
               # concern is a brake — pinning current latest is the safe
-              # direction even without a reviewed seed; an unresolvable
-              # version would write a verdict that matches no catalog slot
+              # direction even without a reviewed seed. When even latest
+              # can't resolve (unpublished/renamed/registry outage) the
+              # verdict still lands — as the package-level brake name@null:
+              # braking every version is the fail-closed interpretation of
+              # an explicit human concern, and the ack reports it as such.
               VER="$CUR"
-              [ -z "$VER" ] && NOSEED=1
             fi
             [ -n "$VER" ] && for t in 1 2 3; do
               SHA=$(npm view "$NAME@$VER" dist.integrity 2>/dev/null || true)
               [ -n "$SHA" ] && break
               [ "$t" -lt 3 ] && sleep 2
             done
+          fi
+          if [ "$KIND" = repo ]; then
+            # repo verdicts pin a COMMIT, not a registry integrity — same
+            # discipline as npm's dist.integrity: the reviewed sha lives on
+            # the seed line (or the late-ingest review marker), with the
+            # index's current source.version as the fallback anchor. shaOk
+            # then refuses a release when HEAD moved past the review.
+            [ -n "$SEED" ] && SHA=$(node -e 'const s=JSON.parse(process.argv[1]);console.log(s.version||"")' "$SEED" 2>/dev/null || true)
+            [ -z "$SHA" ] && SHA="$RVSHA"
+            if [ -z "$SHA" ] && [ -s /tmp/index.json ] && [ -n "$ENTRY" ]; then
+              SHA=$(node -e '
+                const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"))
+                const k=(process.argv[1]||"").toLowerCase()
+                const e=i.plugins.find(p=>p.name.toLowerCase()===k||(p.source?.repo??"").toLowerCase()===k)
+                console.log(e?.source?.version??"")' "$ENTRY" 2>/dev/null || true)
+            fi
           fi
           [ -n "$NOSEED" ] && echo "noseed=1" >> "$GITHUB_OUTPUT"
           # slot context for the ack — same checks concern.yml does: does the
@@ -535,8 +656,15 @@ jobs:
           fi
           # Semantic dedupe (HV-2) + reason-only amend BEFORE the record —
           # identical re-runs are no-ops; a reason-only change reuses the
-          # prior line's `at` so digest maturity isn't restarted by an edit
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
+          # prior line's `at` so digest maturity isn't restarted by an edit.
+          # cat-file -e distinguishes a legitimately-missing verdicts file
+          # from an unreadable one — deduping on a silently-empty file could
+          # miss a dup/amend/prev signal (D-Z shape, concern.yml parity)
+          if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl || { echo "verdicts blob unreadable — refusing to dedupe on partial state"; exit 1; }
+          else
+            touch /tmp/av.jsonl
+          fi
           DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$ENTRY" "$VER" "$VERDICT" "$REASON" "$ISSUE_NUM")
           printf '%s\n' "$DEDUPE" >> "$GITHUB_OUTPUT"
           AMEND=$(printf '%s\n' "$DEDUPE" | sed -n 's/^amend=//p')
@@ -547,7 +675,7 @@ jobs:
               version: process.argv[2] || null,
               verdict: process.argv[3],
               ...(process.argv[4] ? { reason: process.argv[4] } : {}),
-              // amend: reason-only edit — reuse the prior line's timestamp
+              // amend: reason-only edit — reuse the prior line timestamp
               at: process.argv[8] || new Date().toISOString(),
               source: "human",
               ...(process.argv[5] ? { sha: process.argv[5] } : {}),
@@ -560,6 +688,7 @@ jobs:
           [ "$DUP" != "1" ] && echo "line=$(cat /tmp/verdict.line)" >> "$GITHUB_OUTPUT"
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
+          echo "entry=$ENTRY" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
         if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.noseed != '1'
@@ -622,6 +751,24 @@ jobs:
             if [ -n "$EX" ]; then gh issue comment "$EX" -R "$REPO" --body "$BODY" || true
             else gh issue create -R "$REPO" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
           }; }
+      - name: retire the live seed — a decided concern stops burning scan budget
+        # The issue closes below; leaving the seed row would keep injecting the
+        # package into every catalog run for ~30d until markNotified dead-ends
+        # it. withdraw also tombstones a submission-only pending entry (organic
+        # entries are untouched — a brake, not a takedown). Late-ingest rebuilds
+        # the seed if a later /approve reverses the decision.
+        if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.verdict == 'concern'
+          && (steps.heal.outputs.apply == 'ok' || steps.app.outputs.apply == 'ok')
+        id: conseed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+          ENTRY: ${{ steps.v.outputs.entry }}
+        run: |
+          ISSUE="$ISSUE" MSG="concern verdict — submission seed retired (issue #$ISSUE)" ENTRY="$ENTRY" \
+            ./bin/catalog-withdraw.sh \
+            && echo "ret=1" >> "$GITHUB_OUTPUT" \
+            || echo "::warning::seed retire failed — row stays live until the dead-sweep"
       - name: acknowledge on issue
         if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && (steps.v.outputs.skip != '1' || steps.v.outputs.skipmsg == 'unparseable')
         uses: actions/github-script@v7
@@ -633,6 +780,7 @@ jobs:
           DUP: ${{ steps.v.outputs.dup }}
           NOSEED: ${{ steps.v.outputs.noseed }}
           APPLY: ${{ steps.heal.outputs.apply || steps.app.outputs.apply }}
+          SEEDRET: ${{ steps.conseed.outputs.ret }}
           PREV: ${{ steps.v.outputs.prev }}
           PREVISSUE: ${{ steps.v.outputs.previssue }}
           SKIPMSG: ${{ steps.v.outputs.skipmsg }}
@@ -647,7 +795,9 @@ jobs:
         with:
           script: |
             let msg = process.env.V === 'concern'
-              ? `⚠️ 已记录人工 concern（${process.env.TARGET}）——该版本的发布已被阻断，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
+              ? (process.env.VER
+                ? `⚠️ 已记录人工 concern（${process.env.TARGET}）——该版本的发布已被阻断，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
+                : `⚠️ 已记录人工 concern（${process.env.TARGET}）——发布已被阻断（按包级键记录，作用于该包/仓库的全部版本；可用 /approve 解除），记录可在 catalog 分支 ai-verdicts.jsonl 审计。`)
               : `✅ 已记录人工 pass（${process.env.TARGET}）——将在下次日报公示后进入上架流程，记录可在 catalog 分支 ai-verdicts.jsonl 审计。`
             // the comment carried a spec for a DIFFERENT package — on a submit
             // issue the verdict always lands on the submission itself; say so
@@ -699,8 +849,6 @@ jobs:
               }
               msg = `⛔ 未记录裁决：找不到已审版本可钉定——**人工 pass 不能放行从未扫描过的包**。${why[process.env.LASTREVIEW] ?? '请等初审完成（或先按初审报告修复）后再 `/approve`；如需直接裁决请走 [concern] 表单显式指定版本。'}`
             }
-            else if (process.env.NOSEED === '1')
-              msg += `\n\n注意：未找到初审种子行，裁决按当前 npm latest 记录——若该版本之后有更新，需重新裁决。`
             // identical verdict already on file — append skipped so the
             // original `at` (and its maturity window) stands (HV-2)
             if (process.env.DUP === '1')
@@ -722,6 +870,10 @@ jobs:
             // parsed — previously skip=1 died silently; say what happened
             if (process.env.SKIPMSG === 'unparseable')
               msg = `⚠️ 无法从本 issue 解析出投稿目标（npm 包名或 GitHub 仓库）——裁决未记录。请修正 issue 内容后重新标记或评论命令。`
+            // seed retired with the brake — say so plainly (the status comment
+            // will stop updating; that's expected, not a stuck pipeline)
+            if (process.env.V === 'concern' && process.env.SEEDRET === '1')
+              msg += `\n\n投稿队列中的种子行已一并清理——本轮投稿到此结束。`
             // comment-post failure must not read as a lost verdict — the
             // line is already committed by now; swallow so failure() doesn't
             // misfire "may not have landed" (HV-12)
@@ -739,8 +891,10 @@ jobs:
                 issue_number: context.issue.number, state: 'closed' })
       - name: write-failure feedback
         # a failed append otherwise leaves the issue silent while the
-        # maintainer believes the verdict landed (HV-3)
-        if: failure() && steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1'
+        # maintainer believes the verdict landed (HV-3). cancelled() too —
+        # a concurrency-evicted pending event loses the whole run before any
+        # step ran; the comment is the only residue that names the gap
+        if: (failure() || cancelled()) && steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
@@ -760,7 +914,7 @@ jobs:
         run: |
           # --limit must exceed the label's plausible backlog or the oldest
           # issues starve forever once the queue grows past one page (F-11)
-          for LBL in submission:invalid submission:needs-work submission:error; do
+          for LBL in submission:invalid submission:needs-work submission:error submission:rejected; do
             gh issue list --label "$LBL" --state open --limit 1000 --json number,updatedAt |
               node -e "const i=require('fs').readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut).forEach(x=>console.log(x.number))" |
               while read -r N; do
@@ -802,7 +956,8 @@ jobs:
       && github.event.issue.state == 'open'
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
-      && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W'))
+      && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
+          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W'))
       && (github.event.comment.user.login == github.event.issue.user.login
           || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
@@ -823,12 +978,13 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           # the gate is a broad first-letter prefix — withdraw is destructive,
           # so validate the real command shape here before touching seeds
           LOW=${COMMENT_BODY,,}
-          [[ "$LOW" =~ ^/withdraw([[:space:]]|$) ]] || { echo "not a withdraw command — skip"; exit 0; }
+          [[ "$LOW" =~ ^[[:space:]]*/withdraw([[:space:]]|$) ]] || { echo "not a withdraw command — skip"; exit 0; }
           # ENTRY drives pending-entry retraction: a queued (never published)
           # entry that exists only because of submissions is tombstoned too —
           # otherwise a withdrawn submission keeps consuming scan/verify/AI

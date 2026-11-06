@@ -51,7 +51,7 @@ import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor } from '../verdicts.ts'
-import { fetchPackument, fetchTarball, type Packument } from '../fetch/npm.ts'
+import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -402,7 +402,9 @@ export async function ornithReview(e: CatalogIndex['plugins'][number], material:
     body: JSON.stringify(body), signal: AbortSignal.timeout(300_000),
   })
   if (!res.ok) throw new Error(`omlx ${res.status}`)
-  const data = await res.json() as { choices: { message: { content?: string } }[] }
+  // bounded like every other network read — a misbehaving endpoint must not
+  // OOM the diagnosis job (chat responses are small; 4MB is generous)
+  const data = await readJsonCapped<{ choices: { message: { content?: string } }[] }>(res, 4 * 1024 * 1024)
   const content = data.choices?.[0]?.message?.content ?? ''
   const parsed = extractVerdictJson(content) as {
     verdict?: string; reason_zh?: string; reason_en?: string; reason?: string
@@ -530,7 +532,7 @@ export function latestShaVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict>
   const m = new Map<string, AiVerdict>()
   for (const v of verdicts) {
     if (!v.sha) continue
-    const k = `${v.name}\0${v.sha}`
+    const k = `${v.name.toLowerCase()}\0${v.sha}`
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)
   }
@@ -691,7 +693,7 @@ export async function main(
     // same tarball under another version → reuse the NEWEST judgment on
     // those bytes (a re-tag/re-publish of identical content carries zero new
     // signal — but a pass overturned since must not resurrect)
-    const t = sha ? bySha.get(`${e.name}\0${sha}`) : undefined
+    const t = sha ? bySha.get(`${e.name.toLowerCase()}\0${sha}`) : undefined
     const twin = t && t.version !== verOf(e) ? t : undefined
     // §5/§6: npm candidates get REAL package content in the material —
     // twins and terminal verify-failed short-circuits never reach the model

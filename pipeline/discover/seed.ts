@@ -1,6 +1,6 @@
 /** Seed ingestion: awesome-list README → high-star repos → npm-candidate list → import into pipeline. */
 import { ghHeaders, normalizeRepoUrl } from './github.ts'
-import { withTimeout } from '../fetch/npm.ts'
+import { withTimeout, readJsonCapped } from '../fetch/npm.ts'
 
 export const AWESOME_URL = 'https://raw.githubusercontent.com/awesome-opencode/awesome-opencode/main/README.md'
 
@@ -24,7 +24,7 @@ export async function filterByStars(
   for (const repo of repos) {
     const res = await f(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(opts.token) })
     if (!res.ok) continue
-    const b = (await res.json()) as { stargazers_count?: number; archived?: boolean; default_branch?: string }
+    const b = await readJsonCapped<{ stargazers_count?: number; archived?: boolean; default_branch?: string }>(res, 4 * 1024 * 1024)
     if (!b.archived && (b.stargazers_count ?? 0) >= minStars)
       out.push({ repo, stars: b.stargazers_count!, branch: b.default_branch ?? null })
   }
@@ -41,7 +41,7 @@ export async function repoToNpm(
     const res = await f(`https://raw.githubusercontent.com/${repo}/${br}/package.json`)
     if (!res.ok) continue
     try {
-      const pkg = (await res.json()) as { name?: string }
+      const pkg = await readJsonCapped<{ name?: string }>(res, 2 * 1024 * 1024)
       if (pkg.name) return pkg.name
     } catch { /* not json */ }
   }

@@ -41,7 +41,17 @@ jobs:
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
-      - run: git fetch origin catalog 2>/dev/null || echo "no catalog branch yet"
+      - run: |
+          # fetch failure ≠ absent branch: `fetch || echo` silently green-no-ops
+          # a whole day of verification on a network hiccup. ls-remote asks the
+          # remote directly — exit 2 means the ref truly doesn't exist (legal
+          # bootstrap), anything else non-zero is "can't reach origin" → fail.
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0) git fetch origin catalog ;;
+            2) echo "no catalog branch yet" ;;
+            *) echo "cannot reach origin for catalog — refusing an empty green plan" >&2; exit 1 ;;
+          esac
       - run: |
           if git show origin/catalog:index.json > /tmp/index.json 2>/dev/null; then
             echo "index fetched"
@@ -78,7 +88,9 @@ jobs:
         run: npm ci
       # verdicts feed the plan's condemned-slot filter — a concern-marked
       # version shouldn't burn a shard re-measuring a judged verdict
-      - run: git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || true
+      - run: |
+          git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null \
+            || echo "::warning::ai-verdicts.jsonl unreadable — planning without the concern filter (legit only on a fresh catalog branch)"
       - id: shards
         env: { VERIFY_CAP: "${{ inputs.cap }}" }
         run: |
@@ -102,7 +114,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 35                 # 12 targets ÷ 2 intra-shard lanes ≈ 22min worst-case; margin kept for slow tail targets
+    timeout-minutes: 35                 # 12 targets ÷ 2 intra-shard lanes ≈ 30min worst-case (wider API-load window since V-4); margin kept for slow tails
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
@@ -166,7 +178,20 @@ jobs:
     # issues: write — a persistent release.ts failure during merge files a
     # deduped pipeline-alert (G10); the job still never executes untrusted code
     permissions: { contents: write, actions: write, issues: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
+    timeout-minutes: 15                 # fetch+merge+push-retry loop is a couple minutes; bound a hung gh api / push
     steps:
+      # no untrusted code here, but the job pushes to catalog and files issues —
+      # the same egress posture keeps a compromised runner image from
+      # exfiltrating the write token to somewhere unlisted
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -179,25 +204,31 @@ jobs:
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
       # cancelled-merge recovery: when the catalog-branch concurrency lock
       # evicts a PENDING merge (another writer queued in), its verify shards'
-      # results-* artifacts sit unmerged on that run. Sweep the previous
-      # run's leftovers — merge.ts's verifiedAt freshness guard makes replay
-      # idempotent, so recovered rows land once and never clobber newer data.
+      # results-* artifacts sit unmerged on that run. Sweep up to 3 previous
+      # runs' leftovers — consecutive evictions strand results on EACH run,
+      # not just the last one. merge.ts's verifiedAt freshness guard makes
+      # replay idempotent, so recovered rows land once and never clobber
+      # newer data. Best-effort throughout: artifacts expire after 7d.
       - id: prev
         env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
         run: |
+          mkdir -p /tmp/results-prev
           # GITHUB_RUN_ID is numeric — jq compares .id (number) to it UNQUOTED
-          RID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?per_page=4" \
-            --jq '[.workflow_runs[] | select(.status == "completed" and .id != '${GITHUB_RUN_ID}')][0].id // empty' || true)
-          echo "rid=$RID" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@v4
-        if: steps.prev.outputs.rid != ''
-        continue-on-error: true                    # artifacts may have expired — optional sweep
-        with:
-          pattern: results-*
-          path: /tmp/results-prev
-          merge-multiple: true
-          run-id: ${{ steps.prev.outputs.rid }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?per_page=5" \
+            --jq '[.workflow_runs[] | select(.status == "completed" and .id != '${GITHUB_RUN_ID}')][0:3] | .[].id' \
+            > /tmp/prev-rids.txt || true
+          while read -r rid; do
+            [ -n "$rid" ] || continue
+            dl="/tmp/prev-dl-$rid"
+            gh run download "$rid" -R "$GITHUB_REPOSITORY" -p 'results-*' -D "$dl" 2>/dev/null || continue
+            # gh run download nests each artifact under its own dir; flatten
+            # with the run-id in the name so a shard number that recurs
+            # across runs doesn't collide-and-drop (cp -n on the filename
+            # would lose the other run's distinct target set)
+            find "$dl" -name 'results-*.json' | while read -r f; do
+              cp "$f" "/tmp/results-prev/results-prev-${rid}-$(basename "$f")"
+            done
+          done < /tmp/prev-rids.txt
       - name: "merge results + commit to catalog (rebase-retry: re-merge against fresh head each attempt, WF-2)"
         id: merge
         env:
@@ -208,15 +239,23 @@ jobs:
           # download-artifact only creates the dir when artifacts exist — a
           # fully-empty shard set must not ENOENT the merge
           mkdir -p /tmp/results
-          # cancelled-merge recovery: fold the previous run's stranded results
-          # in beside this run's. `cp -n` keeps the CURRENT run's row when a
-          # shard number collides — newer evidence always wins.
+          # cancelled-merge recovery: fold prior runs' stranded results in
+          # beside this run's. Filenames are already run-id-namespaced, and
+          # merge.ts dedupes replayed rows by (name,version,verifiedAt) —
+          # the CURRENT run's fresher evidence always wins.
           if [ -d /tmp/results-prev ]; then
-            cp -n /tmp/results-prev/results-*.json /tmp/results/ 2>/dev/null || true
+            cp /tmp/results-prev/results-*.json /tmp/results/ 2>/dev/null || true
           fi
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
-          git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
+          # same three-way split as the plan job — a fetch hiccup exiting 0
+          # here would strand the whole shard set silently
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0) git fetch origin catalog ;;
+            2) echo "no catalog branch yet — nothing to merge into"; exit 0 ;;
+            *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
+          esac
           # catalog branch is data-only — keep pipeline sources reachable via a worktree.
           # clear a stale worktree first — a crashed run leaves /tmp/cat behind and
           # bare `add` then fails twice (path exists, branch exists) for the whole job
@@ -261,7 +300,7 @@ jobs:
           # workflow alert job stays silent; file a deduped pipeline-alert.
           if [ "$RELEASE_FAILED" = 1 ]; then
             gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-            EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "release apply failed" --json number --jq '.[0].number' 2>/dev/null || true)
+            EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "release apply failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
             RBODY="verify merge landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [ -n "$EXISTING" ]; then
               gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$RBODY" || true
@@ -302,8 +341,14 @@ jobs:
     # it happened; an evicted merge must page like a failure.
     if: failure() || cancelled()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: { issues: write }
     steps:
+      # only gh api calls — the narrowest allowlist
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -311,8 +356,9 @@ jobs:
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           # dedupe: a persistent failure (npm outage, broken pin) must not open
-          # a fresh issue every 12h — append to the open one instead
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "verify workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          # a fresh issue every 12h — append to the open one instead. in:title
+          # scopes the match — a body mention in an unrelated issue isn't a hit.
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "verify workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

@@ -78,10 +78,15 @@ export interface RepoReview {
   stars: number | null
   pkgName: string | null          // repo's own package.json name — npm↔repo audit link
   truncated: boolean
+  /** catalog rejects archived repos and forks regardless of evidence — the
+   *  review must say so up front instead of letting a clean scan sail into a
+   *  seed row that admission then refuses ('archived'/'archived-or-fork') */
+  archived?: boolean
+  fork?: boolean
 }
 
 export async function reviewRepo(repo: string, opts: { token?: string | undefined; fetchFn?: typeof fetch } = {}): Promise<RepoReview> {
-  const base = { repo, exists: false, treeStatus: null as RepoMetaStatus | null, evidenceOk: false, evidence: [] as string[], scanned: false, scanError: null as string | null, findings: [] as string[], redFlags: [] as string[], resolvedSha: null as string | null, createdAt: null as string | null, stars: null as number | null, pkgName: null as string | null, truncated: false }
+  const base = { repo, exists: false, treeStatus: null as RepoMetaStatus | null, evidenceOk: false, evidence: [] as string[], scanned: false, scanError: null as string | null, findings: [] as string[], redFlags: [] as string[], resolvedSha: null as string | null, createdAt: null as string | null, stars: null as number | null, pkgName: null as string | null, truncated: false, archived: false, fork: false }
   const { meta, status } = await fetchRepoMeta(repo, opts)
   if (status === 'not-found' || !meta) return { ...base, status }
   const tree = await fetchRepoTree(repo, 'HEAD', opts)
@@ -90,7 +95,10 @@ export async function reviewRepo(repo: string, opts: { token?: string | undefine
   let scanned = false, scanError: string | null = null
   if (ev.ok) {
     try {
-      const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/HEAD`, opts)
+      // fetch the tarball by the RESOLVED commit sha, not HEAD — the tree call
+      // above already resolved HEAD→sha; a second HEAD resolution here races a
+      // push and would scan bytes different from the recorded anchor
+      const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/${tree.sha ?? 'HEAD'}`, opts)
       const r = await scanTarball(tgz)
       scanned = true
       const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ wrapper
@@ -109,6 +117,7 @@ export async function reviewRepo(repo: string, opts: { token?: string | undefine
     resolvedSha: tree.sha ?? null, createdAt: meta.createdAt, stars: meta.stars,
     pkgName: typeof repoPkg.pkg?.name === 'string' ? repoPkg.pkg.name : null,
     truncated: tree.truncated,
+    archived: meta.archived, fork: meta.fork,
   }
 }
 
@@ -128,10 +137,13 @@ export function verdict(r: Pick<Review, 'exists' | 'status' | 'evidenceOk' | 'sc
 
 /** Repo verdict mirrors the catalog's github-kind admission: opencode-specific
  *  tree evidence required, red flags escalate to human. */
-export function repoVerdict(r: Pick<RepoReview, 'exists' | 'status' | 'treeStatus' | 'evidenceOk' | 'scanned' | 'redFlags'>): 'clean' | 'flagged' | 'invalid' | 'error' {
+export function repoVerdict(r: Pick<RepoReview, 'exists' | 'status' | 'treeStatus' | 'evidenceOk' | 'scanned' | 'redFlags' | 'archived' | 'fork'>): 'clean' | 'flagged' | 'invalid' | 'error' {
   if (r.status === 'error' || r.status === 'rate-limited') return 'error'
   if (r.treeStatus === 'error' || r.treeStatus === 'rate-limited') return 'error'
   if (!r.exists) return 'invalid'
+  // admission rejects archived/fork upstream of evidence — same verdict as a
+  // missing artifact: it will never be listed as submitted
+  if (r.archived || r.fork) return 'invalid'
   if (!r.evidenceOk) return 'invalid'
   if (!r.scanned || r.redFlags.length) return 'flagged'
   return 'clean'
@@ -180,7 +192,13 @@ export function renderRepoReview(r: RepoReview): string {
     `Scanned commit: \`${r.resolvedSha ?? 'unknown'}\`${r.truncated ? ' (tree listing truncated — 深层路径可能漏检)' : ''}`,
     scanLine(r.scanned, r.scanError, r.findings.length, r.redFlags.length),
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,
-    !r.evidenceOk
+    r.archived
+      ? `### ⚠️ 仓库已归档\n目录只收仍在维护的项目——归档仓库即使证据齐全也会在收录端被拒。如需收录请先解除归档，或以仍在维护的继任仓库重新投稿。`
+      : '',
+    r.fork
+      ? `### ⚠️ 该仓库是 fork\n目录只收仍在维护的主仓库——fork 继承了上游全部代码与证据，无法证明自身是可独立维护的项目。请改投上游主仓库；若 fork 已是独立项目请先脱离 fork 关系。`
+      : '',
+    !r.evidenceOk && !r.archived && !r.fork
       ? `### ⚠️ 证据不足\n缺少 opencode 专属信号（\`.opencode/\` 目录、\`opencode.json\` 或 \`opencode-*\` topic）——目录收录端同样会被证据门拒收，请确认这是 OpenCode 插件/技能仓库。`
       : '',
     r.redFlags.length ? `### ⚠️ Red flags (${r.redFlags.length})\n${r.redFlags.slice(0, 30).map(f => `- ${f}`).join('\n')}${r.redFlags.length > 30 ? `\n- … +${r.redFlags.length - 30} more` : ''}` : '### Red flags: none',

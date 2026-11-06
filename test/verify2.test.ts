@@ -604,7 +604,7 @@ describe('skill structure check (skill-only + dual-nature parts)', () => {
   it('structure-level result rows pass the merge artifact boundary', () => {
     expect(VerifyResultFile.safeParse({
       name: 's', version: '1', status: 'verified', level: 'structure',
-      opencodeVersion: '2.2.5', verifiedAt: 't',
+      opencodeVersion: '2.2.5', verifiedAt: '2026-01-02T00:00:00Z',
     }).success).toBe(true)
   })
 })
@@ -1088,5 +1088,115 @@ describe('coverage: last branch stragglers', () => {
     const r = await verifyPackage('sk', { version: '1.0.0', parts: ['skill'],
       home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
     expect(r.status).toBe('failed')
+  })
+})
+
+describe('verify audit batch — replay bounds, git-gui, tar cap, api states', () => {
+  const base = { level: 'load' as const, opencodeVersion: OPENCODE_VERSION }
+
+  it('equal-timestamp replay is idempotent — retries do NOT double-count', () => {
+    // the cancelled-merge sweep replays an artifact carrying the very
+    // verifiedAt it already wrote — a second application must not burn
+    // another retry of the budget
+    const e = entry({
+      verification: verf('failed', { verifiedAt: '2026-01-02T00:00:00Z', retries: 1 }),
+    })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'failed', verifiedAt: '2026-01-02T00:00:00Z', ...base },
+    ])
+    expect(m.plugins[0]!.verification.status).toBe('failed')
+    expect(m.plugins[0]!.verification.retries).toBe(1)   // was 2 under `>`
+  })
+  it('duplicate result rows in one batch apply once (swept + current both present)', () => {
+    const e = entry({ verification: verf('unverified') })
+    const row = { name: 'p', version: '1.0.0', status: 'failed' as const,
+      verifiedAt: '2026-01-02T00:00:00Z', ...base }
+    const m = mergeResults(idx([e]), [row, { ...row }])
+    expect(m.plugins[0]!.verification.retries).toBe(1)
+  })
+  it('artifact boundary: over-long logExcerpt and unparseable verifiedAt drop the row', () => {
+    const ok = { name: 'p', status: 'failed', level: 'install', opencodeVersion: 'x',
+      verifiedAt: '2026-01-02T00:00:00Z' }
+    expect(VerifyResultFile.safeParse({ ...ok, logExcerpt: 'x'.repeat(3000) }).success).toBe(false)
+    expect(VerifyResultFile.safeParse({ ...ok, verifiedAt: 'not a date' }).success).toBe(false)
+    expect(VerifyResultFile.safeParse({ ...ok, logExcerpt: 'x'.repeat(2048) }).success).toBe(true)
+  })
+  it('logExcerpt is sanitized at the index boundary — ANSI/control chars stripped', () => {
+    const e = entry({ verification: verf('unverified') })
+    const m = mergeResults(idx([e]), [
+      { name: 'p', version: '1.0.0', status: 'failed',
+        verifiedAt: '2026-01-02T00:00:00Z', ...base,
+        logExcerpt: 'ok\x1b[31mred\x1b[0m\x07' },
+    ])
+    expect(m.plugins[0]!.verification.logExcerpt).toBe('okred')
+  })
+  it('level structure is NOT host-stale — the check never ran the host', () => {
+    const structStale = entry({
+      type: 'skill', contains: ['skill'],
+      verification: verf('verified', { level: 'structure', opencodeVersion: 'oc-old' }),
+    })
+    const runStale = entry({ name: 'r',
+      verification: verf('verified', { level: 'load', opencodeVersion: 'oc-old' }),
+    })
+    expect(verifyTargetOf(structStale).hostStale).toBe(false)
+    expect(verifyTargetOf(runStale).hostStale).toBe(true)
+    // the structure slot stays out of the staleHost priority tier entirely
+    expect(planTargets(idx([structStale, runStale])).map(t => t.name)).toEqual(['r'])
+  })
+  it('targetWeight charges staged routes, not free features', async () => {
+    const { targetWeight } = await import('../pipeline/verify/plan.ts')
+    expect(targetWeight({ name: 'a' })).toBe(1)
+    expect(targetWeight({ name: 'a', features: ['server', 'rpc'] })).toBe(1)
+    expect(targetWeight({ name: 'a', features: ['tui'] })).toBe(2)
+    expect(targetWeight({ name: 'a', features: ['gui'] })).toBe(2)
+    expect(targetWeight({ name: 'a', features: ['tui', 'gui'], parts: ['plugin', 'skill'] })).toBe(4)
+  })
+  it('findGuiBundle locates a git-install cache dir (git-<slug>-<hash>) by spec', async () => {
+    const { createHash } = await import('node:crypto')
+    const spec = 'O/R#abc123'
+    const dir = `git-R-${createHash('sha256').update(spec).digest('hex').slice(0, 12)}`
+    const home = mkdtempSync(join(tmpdir(), 'gh3-'))
+    // a git install's package name needn't equal the repo name — the gui
+    // export identifies it
+    const pkg = join(home, 'cache', 'opencode', 'npm', dir, '999', 'node_modules', 'real-name')
+    mkdirSync(pkg, { recursive: true })
+    writeFileSync(join(pkg, 'package.json'), JSON.stringify({ exports: { '.': './s.js', './gui': './g.js' } }))
+    writeFileSync(join(pkg, 'g.js'), 'module.exports={}')
+    const found = findGuiBundle(home, 'o/r', spec)
+    expect('src' in found && found.src).toBe('module.exports={}')
+    // without the spec the dir can't be located — honest 'not found', not a
+    // false render verdict on a bundle that was never there
+    expect('error' in findGuiBundle(home, 'o/r')).toBe(true)
+  })
+  it('skill tgz member probes are bounded — a stuffed tarball fails fast', async () => {
+    const { checkSkillTgz } = await import('../pipeline/verify/verify.ts')
+    let probes = 0
+    const fake = (async (_cmd: string, args: string[]) => {
+      if (args[0] === 'tzf')
+        return { stdout: Array.from({ length: 100 }, (_, i) => `package/skills/s${i}/SKILL.md`).join('\n'), stderr: '' }
+      probes++
+      return { stdout: 'no frontmatter\n', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await checkSkillTgz('f.tgz', fake, /^package\//, 'x')
+    expect(r.ok).toBe(false)
+    expect(probes).toBe(64)
+    expect(r.log).toContain('truncated')
+  })
+  it('api entry stuck in a non-terminal state fails honestly, not as absent', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'vx-'))
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'p@1.0.0' }, state: { status: 'loading' } }]))
+    const fake = (async (cmd: string) => ({
+      stdout: cmd === 'curl' ? '200' : 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const r = await verifyPackage('p', { version: '1.0.0', home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 40 })
+    expect(r.status).toBe('failed')
+    expect(r.logExcerpt).toContain("non-terminal state 'loading'")
+  })
+  it('serve API refusing auth with no scraped password → harness throw, not a package verdict', async () => {
+    const fake = (async (cmd: string) => ({
+      stdout: cmd === 'curl' ? '401' : 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')),
+      execFn: fake, spawnFn: liveSpawn, apiWaitMs: 40 }))
+      .rejects.toThrow('upstream output/auth drift')
   })
 })

@@ -273,8 +273,14 @@ export async function checkSkillTgz(
   const skillEntries = list.stdout.split('\n').map(p => p.trim())
     .filter(p => /(^|\/)SKILL\.md$/.test(p.replace(stripPrefix, '')))
   if (!skillEntries.length) return { ok: false, log: `no SKILL.md in ${label} tarball` }
+  // bound member probes: each candidate costs a full `tar xzf` pass, so a
+  // hostile tarball stuffed with thousands of SKILL.md members could burn
+  // the shard's whole time budget here. Any parseable manifest passes, so
+  // a bounded prefix keeps the verdict semantics — it just stops the bleed.
+  const MAX_SKILL_MEMBERS = 64
+  const probe = skillEntries.slice(0, MAX_SKILL_MEMBERS)
   const rejected: string[] = []
-  for (const entry of skillEntries) {
+  for (const entry of probe) {
     const body = (await run('tar', ['xzf', tgz, '-O', entry], { timeout: 30_000 })).stdout
     // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
     // SKILL.md files picked up both from Windows editors; neither changes
@@ -283,7 +289,8 @@ export async function checkSkillTgz(
     if (fm?.[1] && /^name:\s*\S/m.test(fm[1])) return { ok: true }
     rejected.push(entry)
   }
-  return { ok: false, log: `no parseable SKILL.md frontmatter in ${label} (checked ${skillEntries.length}: ${rejected.join(', ')})` }
+  return { ok: false, log: `no parseable SKILL.md frontmatter in ${label} ` +
+    `(checked ${probe.length}${probe.length < skillEntries.length ? ` of ${skillEntries.length} — member list truncated at ${MAX_SKILL_MEMBERS}` : ''}: ${rejected.join(', ')})` }
 }
 
 /** npm-sourced skill check: `npm pack` of the pinned spec doubles as the
@@ -309,8 +316,14 @@ export async function checkSkillStructureGit(
 ): Promise<{ ok: boolean; log?: string }> {
   try {
     const tgz = join(home, 'repo.tar.gz')
-    await run('curl', ['-sfL', `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`, '-o', tgz],
-      { timeout: 60_000 })
+    // same hardening as site/build's skill fetch: HTTPS-only redirect,
+    // a byte cap (a repo tarball should never approach the 48MB client
+    // install cap), bounded retries — -sfL alone would follow an http://
+    // redirect and stream an unbounded body.
+    await run('curl', ['-sfL', '--proto-redir', '=https', '--max-filesize', String(48 * 1024 * 1024),
+      '--max-time', '60', '--retry', '2', '--retry-delay', '1',
+      `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`, '-o', tgz],
+      { timeout: 90_000 })
     return await checkSkillTgz(tgz, run, /^[^/]+\//, `${repo}${sha ? `#${sha}` : ''}`)
   } catch (e) {
     return { ok: false, log: String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(0, 2000) }
@@ -461,6 +474,9 @@ export async function verifyPackage(
     dead = true   // spawn refused outright (bad cwd/argv) — no serve, no evidence
   }
   const apiPath = join(home, 'plugins.json')   // runner-owned — nobody can't write here
+  // last parsed /api/plugin entry state for OUR candidates — feeds the
+  // failure message below (a non-terminal end-state isn't 'absent')
+  let apiState: string | null = null
   try {
     let port = '', pw = ''
     // SECURITY ASSUMPTION: the listening+password markers are scraped from
@@ -498,14 +514,29 @@ export async function verifyPackage(
         `${api}/session`, '-H', 'content-type: application/json', '-d', '{}'], { timeout: 15_000 }).catch(() => {})
       // poll the SERVER's plugin inventory — judged on the PARSED entry
       // (apiPluginState), not a name substring, so '"core-x"' can't early-exit
-      // a 'core' target. ~20s window like before (V-4); the loop breaks as
-      // soon as OUR entry lands in the listing — active OR terminal-failed —
-      // so a deterministic load failure exits in ~1s.
+      // a 'core' target. ~20s window like before (V-4); the loop breaks only
+      // on a TERMINAL entry state — an intermediate listing state (loading/
+      // idle, if a host version reports one) is not a verdict, keep polling.
+      // A deterministic load failure still exits in ~1s.
+      let lastHttp = ''
       for (const t1 = Date.now(); Date.now() - t1 < (opts.apiWaitMs ?? 20_000);) {
-        await run('curl', ['-s', ...auth, '-o', apiPath, `${api}/plugin`], { timeout: 15_000 }).catch(() => {})
+        const res = await run('curl', ['-s', ...auth, '-o', apiPath, '-w', '%{http_code}',
+          `${api}/plugin`], { timeout: 15_000 }).catch(() => null)
+        if (res?.stdout) lastHttp = res.stdout.trim()
         const body = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
-        if (apiPluginState(body, apiNames) !== null) break
+        const st = apiPluginState(body, apiNames)
+        if (st !== null) apiState = st
+        if (st === 'active' || st === 'failed') break
         await sleep(500)
+      }
+      if (apiState === null && (lastHttp === '401' || lastHttp === '403')) {
+        // the entry never listed AND the API kept refusing auth — the
+        // credentials we scraped are unusable (upstream serve output/auth
+        // drift). A package can't 401 the server it runs inside; this is a
+        // harness breakage signal, not a 'plugin absent' package verdict.
+        throw new Error(`serve API answered ${lastHttp} on every poll — ` +
+          `${pw ? 'a password line was scraped but the server rejects it' : 'no password line was scraped'}` +
+          ` (upstream output/auth drift, not a package failure):\n${tail(serveOut)}`)
       }
     }
   } finally {
@@ -521,68 +552,80 @@ export async function verifyPackage(
   const log = readLog(uh)
   const api = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
   if (!apiLoaded(api, apiNames)) {
-    // why: deterministic (server moved the plugin to 'failed') vs timeout (the
-    // entry never showed up) — the distinction surfaces in the published
-    // logExcerpt so a flake is visibly different from a broken plugin (V-4)
+    // why: deterministic (server moved the plugin to 'failed') vs a stuck
+    // non-terminal state vs the entry never listing at all — the distinction
+    // surfaces in the published logExcerpt so a flake is visibly different
+    // from a broken plugin (V-4)
     const why = apiFailed(api, apiNames)
       ? 'serve reports the plugin failed to load'
-      : 'plugin absent from /api/plugin after the load window'
+      : apiState !== null
+        ? `plugin entry stuck in non-terminal state '${apiState}' after the load window`
+        : 'plugin absent from /api/plugin after the load window'
     return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${serveOut}\n${log}\n/api/plugin: ${api}`) }
   }
 
-  // feature-routed depth checks (L2/L3a) — level records deepest stage passed
-  const feats = opts.features ?? []
-  let level: VerifyResult['level'] = 'load'
+  try {
+    // feature-routed depth checks (L2/L3a) — level records deepest stage passed
+    const feats = opts.features ?? []
+    let level: VerifyResult['level'] = 'load'
 
-  if (feats.includes('tui')) {
-    const { checkTui } = await import('./tui.ts')
-    const tui = await checkTui(env, run, { ...opts.tuiOpts, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
-    if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
-    level = 'interactive'
-  }
-
-  if (feats.includes('gui')) {
-    const { checkGuiBundle, findGuiBundle } = await import('./gui.ts')
-    const found = findGuiBundle(uh, name)
-    if ('error' in found) {
-      return { ...base, status: 'failed', level: 'render', logExcerpt: found.error }
+    if (feats.includes('tui')) {
+      const { checkTui } = await import('./tui.ts')
+      const tui = await checkTui(env, run, { ...opts.tuiOpts, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
+      if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
+      level = 'interactive'
     }
-    let gui: { ok: boolean; stage?: string; error?: string }
-    if (sb) {
-      // evaluate the bundle OUTSIDE the shard process: a vm-realm escape then
-      // lands on the nobody uid, which still cannot touch the results file
-      const guiEntry = fileURLToPath(new URL('./gui.ts', import.meta.url))
-      try {
-        const { stdout } = await urun('npx', ['tsx', guiEntry, found.path],
-          { cwd: process.cwd(), timeout: 90_000 })
-        gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
-      } catch (e) {
-        gui = { ok: false, stage: 'evaluate', error: `gui subprocess: ${String(e).slice(0, 500)}` }
+
+    if (feats.includes('gui')) {
+      const { checkGuiBundle, findGuiBundle } = await import('./gui.ts')
+      // git installs cache under git-<slug>-<hash>, not name@version — pass
+      // the spec so the finder can compute that dir
+      const found = findGuiBundle(uh, name, opts.git ? spec : undefined)
+      if ('error' in found) {
+        return { ...base, status: 'failed', level: 'render', logExcerpt: found.error }
       }
-    } else {
-      gui = await checkGuiBundle(found.src)
+      let gui: { ok: boolean; stage?: string; error?: string }
+      if (sb) {
+        // evaluate the bundle OUTSIDE the shard process: a vm-realm escape then
+        // lands on the nobody uid, which still cannot touch the results file
+        const guiEntry = fileURLToPath(new URL('./gui.ts', import.meta.url))
+        try {
+          const { stdout } = await urun('npx', ['tsx', guiEntry, found.path],
+            { cwd: process.cwd(), timeout: 90_000 })
+          gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
+        } catch (e) {
+          gui = { ok: false, stage: 'evaluate', error: `gui subprocess: ${String(e).slice(0, 500)}` }
+        }
+      } else {
+        gui = await checkGuiBundle(found.src)
+      }
+      if (!gui.ok) {
+        return { ...base, status: 'failed', level: 'render', logExcerpt: `gui ${gui.stage}: ${gui.error}` }
+      }
+      level = 'render'
     }
-    if (!gui.ok) {
-      return { ...base, status: 'failed', level: 'render', logExcerpt: `gui ${gui.stage}: ${gui.error}` }
-    }
-    level = 'render'
-  }
 
-  // dual-nature (plugin + skill): the plugin half just proved itself — check
-  // the skill payload too so 'verified' honestly covers both advertised parts
-  if (parts.includes('skill')) {
-    const s = opts.git
-      ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
-      : await checkSkillStructure(uh, urun, spec)
-    if (!s.ok) {
-      return {
-        ...base, status: 'failed', level,
-        logExcerpt: tail(`plugin half passed (${level}); skill payload failed:\n${s.log}`),
+    // dual-nature (plugin + skill): the plugin half just proved itself — check
+    // the skill payload too so 'verified' honestly covers both advertised parts
+    if (parts.includes('skill')) {
+      const s = opts.git
+        ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
+        : await checkSkillStructure(uh, urun, spec)
+      if (!s.ok) {
+        return {
+          ...base, status: 'failed', level,
+          logExcerpt: tail(`plugin half passed (${level}); skill payload failed:\n${s.log}`),
+        }
       }
     }
-  }
 
-  return { ...base, status: 'verified', level }
+    return { ...base, status: 'verified', level }
+  } finally {
+    // L2's tmux session can outlive a wedged TUI check (kill-session is
+    // best-effort in tui.ts) — one more scoped sweep catches any nobody-uid
+    // leftover before the next target reuses this lane.
+    if (sb) await sweepSandboxProcs(run, sb.user, uh)
+  }
 }
 
 export async function ocVersion(env: NodeJS.ProcessEnv, run: ExecFn): Promise<string> {
@@ -620,7 +663,12 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
         await probe('sudo', ['-n', '-u', sandboxUser, 'touch', join(ph, 'u', '.probe')],
           { timeout: 10_000 })
       } finally {
-        rmSync(ph, { recursive: true, force: true })
+        // cleanup is best-effort: `u` was chowned to the sandbox uid, so a
+        // runner without group-write on it (umask 022, self-hosted) gets
+        // EACCES unlinking nobody's .probe — and a successful probe would
+        // fail the shard on cleanup alone. The probe dir lives under /tmp;
+        // a leftover is harmless.
+        try { rmSync(ph, { recursive: true, force: true }) } catch { /* leave it */ }
       }
     }
   }
