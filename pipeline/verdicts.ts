@@ -63,9 +63,12 @@ export const vkey = (name: string, version: string | null | undefined) => `${nam
 /** The version currently under review (K-12): a hold's own version, else the
  *  pinned display version when the entry itself is the pending candidate.
  *  Shared by diagnose (queue selection) and docket (review-target resolution)
- *  so the two never drift apart again. */
+ *  so the two never drift apart again. Order is load-bearing: a pending
+ *  entry's candidate IS latestVersion — a residual pendingUpdate is the B3
+ *  inverted state applyMatureVerdicts refuses to adjudicate (and drops), so
+ *  the stale hold must not shadow the real candidate here either. */
 export const candidateVer = (e: Pick<PluginEntry, 'approval' | 'latestVersion' | 'pendingUpdate'>) =>
-  e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : undefined)
+  e.approval === 'pending' ? e.latestVersion : e.pendingUpdate?.version ?? undefined
 
 /** `at` ordering must be chronological, not lexicographic — ISO strings with
  *  non-Z offsets ('+08:00') misorder under string compare. Numeric parse wins;

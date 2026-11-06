@@ -309,7 +309,12 @@ describe('issueBody', () => {
     expect(none).toContain('无 AI 判词')
     expect(none).not.toContain('覆盖 AI concern')
     const pass = issueBody({ name: 'p', version: '1', verdict: 'pass' })
-    expect(pass).toContain('覆盖 AI concern')
+    // a pass issue has no concern to override — the label text must say so
+    // honestly instead of claiming the human "覆盖 AI concern" (audit #8)
+    expect(pass).not.toContain('覆盖 AI concern')
+    expect(pass).toContain('与 AI 判定一致')
+    const con = issueBody({ name: 'p', version: '1', verdict: 'concern' })
+    expect(con).toContain('覆盖 AI concern')
   })
   it('stuck verdict:* label produces a warning block', () => {
     const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass' }, { stuckLabel: 'verdict:pass' })

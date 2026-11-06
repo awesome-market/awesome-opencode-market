@@ -26,9 +26,9 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
 const idx = (plugins: PluginEntry[]): CatalogIndex => ({
   version: '1', generatedAt: '2026-01-01T00:00:00Z', categories: {}, plugins, removed: [],
 })
-const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
-const flaggedHeld = e({ name: 'bad', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['net:exfil'] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
-const failedHeld = e({ name: 'broken', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3 }, heldAt: '2026-01-01T00:00:00Z' } })
+const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
+const flaggedHeld = e({ name: 'bad', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['net:exfil'] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
+const failedHeld = e({ name: 'broken', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3 }, heldAt: '2026-01-01T00:00:00Z' } })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '2.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
@@ -79,7 +79,7 @@ describe('D-1 omlx preflight', () => {
     // the 2025-11-04 sandbox incident wrote 'harness error:' excerpts onto
     // packages that were never measured; shortcutting those to concern would
     // permanently detain innocent packages on an infrastructure bug
-    const harnessFailed = e({ name: 'infra', pendingUpdate: {
+    const harnessFailed = e({ name: 'infra', approval: 'approved', pendingUpdate: {
       version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'failed', level: 'install', logExcerpt: 'harness error: mkdir: Permission denied' },
       heldAt: '2026-01-01T00:00:00Z' } })
@@ -148,7 +148,7 @@ describe('D-3 chronic ornith failure → tooling concern', () => {
 describe('D-6 bounded defaults', () => {
   it('no --limit → at most 50 candidates per run', async () => {
     const many = Array.from({ length: 60 }, (_, i) =>
-      e({ name: `p${i}`, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } }))
+      e({ name: `p${i}`, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } }))
     let calls = 0
     const { argv } = files(many)
     await diagnoseMain(argv, { l05: cleanL05, ornith: async () => { calls++; return okOrnith() }, sha: noSha, ping: async () => true })
@@ -161,8 +161,8 @@ describe('D-9 sha-drift re-tags front-run the review queue', () => {
     // 'a' waits in the ordinary queue; 'b' already had a verdict but its
     // registry sha no longer matches — the re-tag is the suspicious event
     // and must be judged first even though 'a' was held longer
-    const a = e({ name: 'a', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-12-01T00:00:00Z' } })
-    const b = e({ name: 'b', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
+    const a = e({ name: 'a', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-12-01T00:00:00Z' } })
+    const b = e({ name: 'b', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
     const { argv, op } = files([a, b], [v({ name: 'b', sha: 'sha-old' })])
     await diagnoseMain(argv, {
       l05: cleanL05, ornith: okOrnith,
@@ -182,7 +182,7 @@ describe('D-12 mid-run LLM circuit breaker', () => {
     // The server dies after preflight: exactly CIRCUIT_MAX real calls burn,
     // everything later stays held — no per-candidate timeout parade.
     const mk = (name: string, heldAt: string, redFlags: string[] = []) =>
-      e({ name, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags }, verification: { status: 'verified' }, heldAt } })
+      e({ name, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags }, verification: { status: 'verified' }, heldAt } })
     const targets = [
       mk('t1', '2025-12-01T00:00:00Z'), mk('t2', '2025-12-02T00:00:00Z'),
       mk('t3', '2025-12-03T00:00:00Z'), mk('t4', '2025-12-04T00:00:00Z'),
@@ -203,7 +203,7 @@ describe('D-12 mid-run LLM circuit breaker', () => {
   })
   it('a success mid-run resets the streak — the circuit does not open on intermittent failures', async () => {
     const mk = (name: string, heldAt: string) =>
-      e({ name, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt } })
+      e({ name, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt } })
     const targets = [mk('a', '2025-12-01T00:00:00Z'), mk('b', '2025-12-02T00:00:00Z'), mk('c', '2025-12-03T00:00:00Z'), mk('d', '2025-12-04T00:00:00Z')]
     let calls = 0
     const { argv, op } = files(targets)

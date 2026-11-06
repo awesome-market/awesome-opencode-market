@@ -33,7 +33,7 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '2.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 const held = (over: Record<string, unknown> = {}, name = 'pkg') =>
-  e({ name, pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z', ...over } })
+  e({ name, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z', ...over } })
 
 const files = (plugins: PluginEntry[], verdicts: AiVerdict[] = [], state?: string, health?: string) => {
   const d = mkdtempSync(join(tmpdir(), 'ah-'))
@@ -336,7 +336,7 @@ describe('audit #4 re-do: tar parses in memory, case-correct keying', () => {
     // case. The sweep compared raw e.name → a targeted run silently skipped
     // the drift check for exactly the entries it was asked about.
     const gh = e({
-      name: 'Owner/Repo', latestVersion: null,
+      name: 'Owner/Repo', latestVersion: null, approval: 'approved',
       source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', version: 'abc123' } as PluginEntry['source'],
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z' },
     })
@@ -356,7 +356,7 @@ describe('audit #4 re-do: tar parses in memory, case-correct keying', () => {
     const sp = join(d, 'attempts.json')
     writeFileSync(sp, JSON.stringify({ 'owner/repo\x002.0.0': { n: 4, last: 'err' } }))
     const gh = e({
-      name: 'Owner/Repo', latestVersion: null,
+      name: 'Owner/Repo', latestVersion: null, approval: 'approved',
       source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', version: 'abc123' } as PluginEntry['source'],
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z' },
     })

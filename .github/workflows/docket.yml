@@ -112,7 +112,11 @@ jobs:
           # reads as "queue looks dead".
           rm -f /tmp/diagnose.paused
           git show origin/catalog:diagnose.paused > /tmp/diagnose.paused 2>/dev/null || true
-          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ github.event.inputs.dry == true && '--dry' || '' }} \
+          # inputs.* is TYPED for workflow_dispatch (boolean → real bool);
+          # github.event.inputs.* is always a string, so `== true` coerces
+          # 'true'→NaN vs 1 and NEVER matched — a dry-run dispatch would
+          # silently run live issue writes (fail-open on the safety flag)
+          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ inputs.dry && '--dry' || '' }} \
             --digest-state /tmp/digest-state.json
 
   # the ONLY failure surface for the review-issue sync — without it a broken

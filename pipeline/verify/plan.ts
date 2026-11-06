@@ -12,7 +12,10 @@ import type { VerifyTarget } from './verify.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
 export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: { repo: string; sha?: string }; unverified: boolean; flagged: boolean; features: string[]; hostStale: boolean; verification: PluginEntry['verification'] } {
-  const slot = e.pendingUpdate ?? null
+  // a pending entry's candidate is the ENTRY itself — a leftover
+  // pendingUpdate is the B3 inverted state (dropped by the R-9 cleanup);
+  // verifying the stale hold's version would measure bytes not under review
+  const slot = e.approval === 'pending' ? null : e.pendingUpdate ?? null
   const version = slot ? slot.version : e.latestVersion
   const verification = slot ? slot.verification : e.verification
   const caps = slot ? slot.capabilities : e.capabilities

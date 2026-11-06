@@ -555,6 +555,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     ] : t.verdict === 'none' ? [
       '- `verdict:pass` — 人工放行（无 AI 判词，直接进入公告/放行链）',
       '- `verdict:concern` — 人工拦截（锁死该版本）',
+    ] : t.verdict === 'pass' ? [
+      '- `verdict:pass` — 人工放行（与 AI 判定一致，即刻进入公告/放行链）',
+      '- `verdict:concern` — 人工拦截（推翻 AI pass，锁死该版本）',
     ] : [
       '- `verdict:pass` — 人工放行（覆盖 AI concern）',
       '- `verdict:concern` — 人工拦截（锁死该版本）',

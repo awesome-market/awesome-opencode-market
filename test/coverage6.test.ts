@@ -86,7 +86,7 @@ describe('ai/diagnose.main', () => {
   }
   const argv = (ip: string, vp: string, op: string, extra: string[] = []) =>
     ['tsx', 'diagnose.ts', '--index', ip, '--verdicts', vp, '--out', op, ...extra]
-  const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
 
   const noSha = () => undefined
   it('l05 clean + ornith pass → pass verdict written', async () => {
@@ -146,7 +146,7 @@ describe('ai/diagnose.main', () => {
     expect(readFileSync(op, 'utf8')).toBe('')
   })
   it('verify-failed → direct concern with excerpt, LLM never called', async () => {
-    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
+    const failed = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
     const { ip, vp, op } = files([failed])
     let called = false
     await diagnoseMain(argv(ip, vp, op), {
@@ -162,7 +162,7 @@ describe('ai/diagnose.main', () => {
     expect(called).toBe(false)
   })
   it('red-flagged entry → concern draft even when LLM says pass', async () => {
-    const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => l05Map(),
@@ -175,7 +175,7 @@ describe('ai/diagnose.main', () => {
     expect(got.reason).toContain('没问题')
   })
   it('red-flagged + ornith down → still concern (fail-safe), flags as reason', async () => {
-    const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => l05Map(),
@@ -845,7 +845,7 @@ describe('verdicts + merge + misc uncovered arms', () => {
     expect(r.held).toEqual([])
   })
   it('applyMatureVerdicts: concern with same reason does not double-hold', () => {
-    const en = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't', reason: 'bad' } })
+    const en = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't', reason: 'bad' } })
     const r = applyMatureVerdicts(idx([en]), [v({ version: '2.0.0', verdict: 'concern', reason: 'bad' })], null)
     expect(r.held).toEqual([])
   })
@@ -875,7 +875,7 @@ describe('verdicts + merge + misc uncovered arms', () => {
 })
 
 describe('ornithReview (mocked global fetch)', () => {
-  const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
   const withFetch = async (res: () => Response | Promise<Response>, fn: () => Promise<unknown>) => {
     const orig = globalThis.fetch
     globalThis.fetch = (async () => res()) as typeof fetch
