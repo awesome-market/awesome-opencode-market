@@ -1010,6 +1010,19 @@ export async function run(opts: RunOptions = {}) {
             archived: m.archived,
             defaultBranch: cand.defaultBranch === 'HEAD' ? (m.defaultBranch ?? cand.defaultBranch) : cand.defaultBranch,
           }
+        } else if (metaRes.status === 'not-found') {
+          // definitive 404 — let the tree probe record the repo-not-found
+          // rejection below (two endpoints agreeing beats one)
+        } else {
+          // 'error'/'rate-limited': the identity probe FAILED — proceeding
+          // would evaluate every gate below on the fabricated values
+          // (archived:false, fork:false, id:null, createdAt:null), silently
+          // bypassing the archived/fork guard, repojack repoId check and
+          // name-reuse createdAt tombstone. Same posture as a tree failure:
+          // keep the old entry / defer a new seed to the next run.
+          ghStats.treeTransient++
+          if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-fetch-error')
+          return ghPrev ?? null
         }
       }
       // fork guard for candidates that never entered the backfill branch —

@@ -46,6 +46,7 @@ export const REJECT_REASONS: Record<string, string> = {
   'archived-or-fork': '仓库已归档或为 fork——目录只收录仍在维护的主仓库。',
   'archived': '仓库已归档——目录只收录仍在维护的仓库。',
   'repo-not-found': 'GitHub 仓库不存在或不可访问（404）。确认仓库地址后回复本 issue 重新审查。',
+  'repo-fetch-error': 'GitHub 暂时不可达（网络错误或限流），收录端没能取到仓库信息——下一轮目录构建会自动重试，无需操作。',
   'no-opencode-evidence': '仓库缺少 opencode 专属信号（`.opencode/` 目录、`opencode.json` 或 `opencode-*` topic）。补齐后回复本 issue 重新审查。',
   'invalid-repo': '仓库地址格式不正确——需要 `owner/repo` 形式（如 `alice/my-plugin`）。修正后回复本 issue 重新审查。',
 }

@@ -43,8 +43,16 @@ export function trustFlags(prev: PluginEntry | undefined, e: PluginEntry): { fin
   if (prev.source.repoId && e.source.repoId && prev.source.repoId !== e.source.repoId) {
     redFlags.push('sec:repo-recreated')
   }
-  // dist-tags.latest rolled backwards (vs the held target when a hold exists)
-  if (versionCmp(e.latestVersion, prev.pendingUpdate?.version ?? prev.latestVersion) < 0) redFlags.push('sec:version-rollback')
+  // dist-tags.latest rolled backwards — compare UPSTREAM markers on both
+  // sides. For a held bump e.latestVersion is the pinned HOLD version, not
+  // upstream latest, so the old hold-vs-hold comparison always read 0 and a
+  // registry rollback under a pinned hold was invisible exactly where the
+  // pin hides upstream from every other surface (fresh upstream latest is
+  // only observable via distTags). Legacy entries without distTags fall
+  // back to the held/displayed markers as before.
+  const curUpstream = e.distTags?.latest ?? e.latestVersion
+  const prevUpstream = prev.distTags?.latest ?? prev.pendingUpdate?.version ?? prev.latestVersion
+  if (versionCmp(curUpstream, prevUpstream) < 0) redFlags.push('sec:version-rollback')
   // delta scan: rules present in new findings but absent from previous findings.
   // Only meaningful when both sides were scanned by the SAME ruleset — a ruleset
   // upgrade surfaces pre-existing issues, which is not a behavior change.
