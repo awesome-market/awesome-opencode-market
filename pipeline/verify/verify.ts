@@ -281,7 +281,11 @@ export async function checkSkillTgz(
   const probe = skillEntries.slice(0, MAX_SKILL_MEMBERS)
   const rejected: string[] = []
   for (const entry of probe) {
-    const body = (await run('tar', ['xzf', tgz, '-O', entry], { timeout: 30_000 })).stdout
+    // `--` before the member name: tar option-parses every argv slot, so a
+    // member literally named '--something' would be consumed as an option.
+    // The SKILL.md suffix filter happens to block an exploitable payload
+    // today — the delimiter makes member-only semantics not depend on it.
+    const body = (await run('tar', ['xzf', tgz, '-O', '--', entry], { timeout: 30_000 })).stdout
     // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
     // SKILL.md files picked up both from Windows editors; neither changes
     // whether opencode can parse the manifest
@@ -398,10 +402,14 @@ export async function verifyPackage(
   // candidates can't misattribute). GitHub names are case-insensitive —
   // opencode may normalize either direction.
   const repoBase = opts.git?.repo.split('/').pop()!   // split() always yields ≥1 element
+  // basename candidates for npm too: a scoped '@s/p' install may be reported
+  // by the server as bare 'p' (same "unknown shape" defense the git path
+  // takes). One plugin per shard — loose candidates can't misattribute.
+  const npmBase = name.split('/').pop()!
   const apiNames: string[] = opts.git
     ? [name, opts.git.repo, repoBase, opts.git.repo.toLowerCase(), repoBase.toLowerCase()]
       .filter((v, i, a) => a.indexOf(v) === i)
-    : [name]
+    : [name, npmBase].filter((v, i, a) => a.indexOf(v) === i)
   const base = {
     name,
     ...(opts.version ? { version: opts.version } : {}),

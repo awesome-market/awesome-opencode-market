@@ -289,7 +289,22 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
       const cand = join(nm, name)
       if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }
       if (isGit) {
-        pkgDir = scanForGuiPackage(nm)[0] ?? null
+        // every gui-export package under the install tree is a candidate —
+        // including DEPENDENCIES, which can carry a gui export and sort ahead
+        // of the real one. Prefer the package whose name matches the repo's
+        // basename; several non-matching candidates = unprovable which one is
+        // the plugin — honest error over measuring the wrong bundle.
+        const hits = scanForGuiPackage(nm)
+        if (hits.length > 1) {
+          const repoBase = spec?.split('#')[0]?.split('/').pop()?.toLowerCase()
+          const hit = repoBase
+            ? hits.find(h => h.split('/').pop()?.toLowerCase() === repoBase)
+            : undefined
+          pkgDir = hit ?? null
+          if (!pkgDir) return { error: `ambiguous gui bundle under ${dir}: ${hits.map(h => h.split('/').pop()).join(', ')} — cannot identify the plugin's own` }
+        } else {
+          pkgDir = hits[0] ?? null
+        }
         if (pkgDir) break
       }
     }

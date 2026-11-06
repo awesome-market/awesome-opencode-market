@@ -269,6 +269,11 @@ jobs:
           # clear a stale worktree first — a crashed run leaves /tmp/cat behind and
           # bare `add` then fails twice (path exists, branch exists) for the whole job
           git worktree remove /tmp/cat --force 2>/dev/null || true
+          # a leftover LOCAL 'catalog' branch (crashed run on a persistent
+          # checkout) makes the DWIM add fail AND the -b fallback fail —
+          # the merge dies before the retry loop. Drop the stale branch; the
+          # worktree add recreates it from origin/catalog.
+          git branch -D catalog 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
           ok=0; pushed=0
           RELEASE_FAILED=0

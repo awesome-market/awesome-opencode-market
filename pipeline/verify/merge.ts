@@ -117,10 +117,17 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
         // instead of silently re-testing whatever the tag serves tomorrow.
         if (!r.integrity || !anchor || r.integrity === anchor) return r
         drifted.push(`${r.name}${r.version ? `@${r.version}` : ''}`)
-        return { ...r, status: 'failed', level: 'install',
-          logExcerpt: `measured bytes differ from the pinned anchor — the version was re-tagged ` +
-            `(tested ${r.integrity.slice(0, 64)}, pinned ${anchor.slice(0, 64)}); ` +
-            `the next catalog scan re-pins the slot before retest` }
+        const driftNote = `measured bytes differ from the pinned anchor — the version was re-tagged ` +
+          `(tested ${r.integrity.slice(0, 64)}, pinned ${anchor.slice(0, 64)}); ` +
+          `the next catalog scan re-pins the slot before retest`
+        // already-failed: the drift note PREPENDS to the real evidence — the
+        // actual failing stage + log are still the audit trail. A drifted
+        // 'verified' becomes a failed install (the byte mismatch is itself an
+        // install-level rejection of unreviewed bytes).
+        return { ...r, status: 'failed',
+          level: r.status === 'verified' ? 'install' : r.level,
+          logExcerpt: r.status === 'verified' ? driftNote
+            : `${driftNote}\n${r.logExcerpt ?? ''}` }
       }
       // freshness guard: leftover-artifact replay (a cancelled merge's
       // results swept into the next run) must not clobber evidence recorded
