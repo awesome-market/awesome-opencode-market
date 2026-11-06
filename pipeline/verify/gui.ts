@@ -224,9 +224,17 @@ function gitSpecDir(spec: string): string {
 function scanForGuiPackage(nm: string): string[] {
   if (!existsSync(nm)) return []
   const roots: string[] = []
-  for (const top of readdirSync(nm)) {
+  // every readdirSync is inside the installed tree — plugin-influenced
+  // content (a file named '@scope', a deleted dir raced mid-read) throwing
+  // ENOTDIR/ENOENT would escape findGuiBundle as a shard-level crash, which
+  // the lane records as harness:true — the package is then unverifiable
+  // forever (every retry crashes identically) instead of failing honestly
+  const safeReaddir = (d: string): string[] => {
+    try { return readdirSync(d) } catch { return [] }
+  }
+  for (const top of safeReaddir(nm)) {
     if (top.startsWith('.')) continue
-    if (top.startsWith('@')) for (const s of readdirSync(join(nm, top))) roots.push(join(top, s))
+    if (top.startsWith('@')) for (const s of safeReaddir(join(nm, top))) roots.push(join(top, s))
     else roots.push(top)
   }
   return roots.filter(r => {
@@ -277,14 +285,17 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
   const norm = name.split('/').pop() ?? name
   const gitDir = spec ? gitSpecDir(spec) : null
   let pkgDir: string | null = null
-  for (const dir of readdirSync(npmRoot)) {
+  const safeReaddir = (d: string): string[] => {
+    try { return readdirSync(d) } catch { return [] }
+  }
+  for (const dir of safeReaddir(npmRoot)) {
     // name-prefix dirs pin the package name — a 'p@x' dir that turns out to
     // hold package 'p' must NOT vouch for '@s/p'. The any-package scan only
     // applies inside the git spec dir, where the installed package name
     // legitimately differs from the entry name.
     const isGit = gitDir !== null && dir === gitDir
     if (!dir.startsWith(`${name}@`) && !dir.startsWith(`${norm}@`) && !isGit) continue
-    for (const ts of readdirSync(join(npmRoot, dir))) {
+    for (const ts of safeReaddir(join(npmRoot, dir))) {
       const nm = join(npmRoot, dir, ts, 'node_modules')
       const cand = join(nm, name)
       if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }

@@ -318,6 +318,11 @@ export async function checkSkillStructure(
 export async function checkSkillStructureGit(
   home: string, run: ExecFn, repo: string, sha: string | undefined,
 ): Promise<{ ok: boolean; log?: string }> {
+  // same refusal as the plugin path: sha-less git verification measures
+  // whatever HEAD serves — bytes the scan never reviewed, with no anchor for
+  // merge's drift check. Throw, never silently fall back to HEAD.
+  if (!sha)
+    throw new Error(`git skill check for ${repo} has no pinned commit sha — refusing to certify unreviewed HEAD`)
   try {
     const tgz = join(home, 'repo.tar.gz')
     // same hardening as site/build's skill fetch: HTTPS-only redirect,
@@ -326,9 +331,9 @@ export async function checkSkillStructureGit(
     // redirect and stream an unbounded body.
     await run('curl', ['-sfL', '--proto-redir', '=https', '--max-filesize', String(48 * 1024 * 1024),
       '--max-time', '60', '--retry', '2', '--retry-delay', '1',
-      `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`, '-o', tgz],
+      `https://codeload.github.com/${repo}/tar.gz/${sha}`, '-o', tgz],
       { timeout: 90_000 })
-    return await checkSkillTgz(tgz, run, /^[^/]+\//, `${repo}${sha ? `#${sha}` : ''}`)
+    return await checkSkillTgz(tgz, run, /^[^/]+\//, `${repo}#${sha}`)
   } catch (e) {
     return { ok: false, log: String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(0, 2000) }
   }
@@ -423,6 +428,13 @@ export async function verifyPackage(
   // payload the client actually consumes (tarball → SKILL.md). (DEV §4.5)
   const parts = opts.parts ?? ['plugin']
   if (!parts.includes('plugin')) {
+    // only 'skill' has a non-plugin check — a parts list with neither (a
+    // hand-crafted shard for an mcp/command/agent-only entry) has NO honest
+    // verification to run. Throw: the harness can't answer an unasked
+    // question, and a structure check on an unshipped payload class would
+    // stamp 'verified' on bytes never exercised as what they claim to be.
+    if (!parts.includes('skill'))
+      throw new Error(`no verifiable payload in parts [${parts.join(',')}] — plan only emits plugin/skill targets`)
     const s = opts.git
       ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
       : await checkSkillStructure(uh, urun, spec)

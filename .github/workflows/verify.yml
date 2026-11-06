@@ -93,8 +93,16 @@ jobs:
       # verdicts feed the plan's condemned-slot filter — a concern-marked
       # version shouldn't burn a shard re-measuring a judged verdict
       - run: |
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null \
-            || echo "::warning::ai-verdicts.jsonl unreadable — planning without the concern filter (legit only on a fresh catalog branch)"
+          # absent file = legit fresh-catalog state; exists-but-unreadable is
+          # corruption — fail closed (same split as index.json above) rather
+          # than planning without the concern filter
+          if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl \
+              || { echo "ai-verdicts.jsonl exists but is unreadable" >&2; exit 1; }
+          else
+            echo "no ai-verdicts.jsonl on catalog yet — planning without the concern filter"
+            : > /tmp/ai-verdicts.jsonl
+          fi
       - id: shards
         env: { VERIFY_CAP: "${{ inputs.cap }}" }
         run: |
@@ -269,6 +277,12 @@ jobs:
           # clear a stale worktree first — a crashed run leaves /tmp/cat behind and
           # bare `add` then fails twice (path exists, branch exists) for the whole job
           git worktree remove /tmp/cat --force 2>/dev/null || true
+          # ...a stray NON-worktree dir (pruned registration, killed run) breaks
+          # `worktree add` just as hard — /tmp/cat is dedicated scratch, safe to clear
+          rm -rf /tmp/cat
+          # ...and a registration WITHOUT a dir wedges add the same way
+          # ('missing but registered worktree') — prune clears it
+          git worktree prune
           # a leftover LOCAL 'catalog' branch (crashed run on a persistent
           # checkout) makes the DWIM add fail AND the -b fallback fail —
           # the merge dies before the retry loop. Drop the stale branch; the

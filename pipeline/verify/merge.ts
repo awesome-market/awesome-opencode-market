@@ -103,11 +103,26 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
     byName.set(r.name, [...(byName.get(r.name) ?? []), r])
   }
   const drifted: string[] = []
+  const staleGh: string[] = []
   const plugins = index.plugins.map(p => {
     const rs = byName.get(p.name)
     if (!rs?.length) return p
     let out = p
     for (const r of rs) {
+      // github-kind anchors are the version identity (source.version = the
+      // scanned commit). A mismatch means the pin moved between plan and
+      // merge — the measurement describes bytes the slot no longer points at:
+      // stale, same class as a version matching neither slot → drop. This is
+      // deliberately NOT npm's failed/drift rewrite: a repo commit is routine
+      // forward motion, and stamping 'failed' on sha2's never-installed bytes
+      // would lie about the slot AND burn one of the 3 retry attempts per
+      // routine push — three ordinary commits inside three verify windows
+      // terminal-fails a slot nobody ever failed to install.
+      const ghAnchor = out.source.kind === 'github' ? out.source.version : null
+      if (ghAnchor && r.integrity && r.integrity !== ghAnchor) {
+        staleGh.push(`${r.name} ${r.integrity.slice(0, 12)}≠${String(ghAnchor).slice(0, 12)}`)
+        continue
+      }
       const driftCheck = (anchor: string | null | undefined): VerifyResult => {
         // measured bytes ≠ pinned bytes → the run answered a different question
         // than the slot asked (registry re-tag between scan and verify). A
@@ -158,6 +173,7 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
     return out
   })
   if (drifted.length) console.warn(`verify drift (measured ≠ pinned): ${drifted.join(', ')}`)
+  if (staleGh.length) console.warn(`verify stale git pin (measured ≠ current commit): ${staleGh.join(', ')}`)
   return { ...index, plugins: reuseVerified(plugins) }
 }
 

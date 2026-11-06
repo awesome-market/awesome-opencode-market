@@ -676,15 +676,26 @@ describe('verify/merge drift, freshness, reuse', () => {
     ])
     expect(m.plugins[0]!.verification.status).toBe('verified')
   })
-  it('github-kind: source.version anchors the display slot', () => {
+  it('github-kind: source.version anchors the display slot — a moved pin drops the stale measurement', () => {
     const e = entry({
       latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'abc123' },
       verification: verf('unverified'),
     })
-    const drifted = mergeResults(idx([e]), [
+    // the sha IS the version identity — a measurement for def456 on a slot
+    // pinned to abc123 is stale (the pin moved between plan and merge), same
+    // class as a version matching neither slot: drop, don't stamp 'failed'
+    // on bytes nobody installed (that would also burn a retry attempt per
+    // routine commit)
+    const dropped = mergeResults(idx([e]), [
       { name: 'p', status: 'verified', integrity: 'def456', ...base },
     ])
-    expect(drifted.plugins[0]!.verification.status).toBe('failed')
+    expect(dropped.plugins[0]!.verification.status).toBe('unverified')
+    // an install failure on the OLD pin is equally stale — sha2 was never
+    // exercised either, so the slot keeps its honest "还没验" and re-queues
+    const droppedFail = mergeResults(idx([e]), [
+      { name: 'p', status: 'failed', integrity: 'def456', ...base },
+    ])
+    expect(droppedFail.plugins[0]!.verification.status).toBe('unverified')
     const ok = mergeResults(idx([e]), [
       { name: 'p', status: 'verified', integrity: 'abc123', ...base },
     ])
