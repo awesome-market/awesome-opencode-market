@@ -229,12 +229,16 @@ describe('applyMatureVerdicts — pendingUpdate release', () => {
     expect(e.integrity).toBe('sha512-new==')
     expect(e.contains).toEqual(['skill'])
   })
-  it('legacy hold without pu.integrity falls back to the displayed anchor (heals via needsIntegrity backfill)', () => {
+  it('legacy hold without pu.integrity releases with integrity:null (heals via needsIntegrity backfill)', () => {
+    // the displayed version's SRI must NOT be inherited: v_new + v_old's hash
+    // fails closed at every install AND freezes a WRONG anchor that trips a
+    // permanent bogus sec:integrity-drift. null is honest — needsIntegrity
+    // re-anchors the real tarball SRI on the next refreshMeta (null→newsha)
     const pu = mkPu('1.1.0')   // no integrity/contains — pre-field hold
     const idx = mkIndex([mkEntry('p', { pendingUpdate: pu, integrity: 'sha512-old==', contains: ['plugin'] })])
     const r = apply(idx, [mkVerdict('p', '1.1.0', 'pass', BEFORE, 'human')])
     const e = r.index.plugins[0]!
-    expect(e.integrity).toBe('sha512-old==')
+    expect(e.integrity).toBeNull()
     expect(e.contains).toEqual(['plugin'])
   })
   it('legacy entry releasing held version → self-heals to approved', () => {

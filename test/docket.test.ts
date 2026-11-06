@@ -24,8 +24,9 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
 describe('docketTargets', () => {
   it('pending entry + ai pass → open decision', () => {
     const t = docketTargets(idx([e()]), [v()])
+    // 't' fixtures are unparseable → heldAt is OMITTED, never rendered as garbage
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: 't' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0 }])
   })
   it('ai pass maturity phase follows digest-state membership', () => {
     const ver = v()
@@ -39,7 +40,7 @@ describe('docketTargets', () => {
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })]), [v({ version: '2.0.0', verdict: 'concern' })])
     expect(t).toEqual([{ name: 'pkg', version: '2.0.0', verdict: 'concern', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: 't' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0 }])
   })
   it('human verdict already rules → no docket entry', () => {
     expect(docketTargets(idx([e()]), [v({ source: 'human' })])).toEqual([])
@@ -103,8 +104,52 @@ describe('docketTargets', () => {
   })
   it('repo-only pendings aggregate into ONE standing backlog issue (no per-entry flood)', () => {
     const t = docketTargets(idx([e({ latestVersion: null }), e({ name: 'o/r2', slug: 'o/r2', latestVersion: null })]), [])
+    // 't' stamps unparseable → heldAt omitted; scanned entries carry no marks
     expect(t).toEqual([{ name: '(repo-only backlog)', version: null, verdict: 'none',
-      backlog: [{ name: 'pkg', heldAt: 't' }, { name: 'o/r2', heldAt: 't' }] }])
+      backlog: [{ name: 'pkg' }, { name: 'o/r2' }] }])
+  })
+  it('repo-only backlog rows carry scan counters — a flagged repo must not look clean', () => {
+    const t = docketTargets(idx([
+      e({ name: 'o/flagged', slug: 'o/flagged', latestVersion: null,
+        capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: ['sec:x'] } }),
+      e({ name: 'o/blind', slug: 'o/blind', latestVersion: null,
+        capabilities: { scannedAt: null, findings: [], redFlags: [] } }),
+      e({ latestVersion: null }),
+    ]), [])
+    const rows = t[0]!.backlog!
+    expect(rows.find(r => r.name === 'o/flagged')).toMatchObject({ redFlags: 1, findings: 2 })
+    expect(rows.find(r => r.name === 'o/blind')).toMatchObject({ unscanned: true })
+    const body = issueBody(t[0]!)
+    expect(body).toContain('o/flagged`（⚠️ 红旗 1 / findings 2')
+    expect(body).toContain('o/blind`（⚠️ 未跑过静态扫描（不等于安全）')
+  })
+  it('aged versioned holds past NONE_ISSUE_CAP fold into ONE (unreviewed backlog) aggregate', () => {
+    const aged = (n: string) => e({ name: n, slug: `o/${n}`, firstSeenAt: '2020-01-01T00:00:00Z' })
+    const nine = Array.from({ length: 9 }, (_, i) => aged(`p${i}`))
+    const t = docketTargets(idx(nine), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(t).toHaveLength(1)
+    expect(t[0]).toMatchObject({ name: '(unreviewed backlog)', version: null, verdict: 'none' })
+    expect(t[0]!.backlog).toHaveLength(9)
+    expect(t[0]!.backlog![0]).toMatchObject({ name: 'p0', version: '1.0.0', verification: 'verified' })
+    // at the threshold → per-entry issues keep the rich surface
+    const eight = docketTargets(idx(nine.slice(0, 8)), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(eight).toHaveLength(8)
+    expect(eight.every(x => x.verdict === 'none' && x.name !== '(unreviewed backlog)')).toBe(true)
+  })
+  it('(unreviewed backlog) rows show verify state + flags; /approve routes name@ver per line', () => {
+    const aged = (n: string, over: Partial<PluginEntry> = {}) =>
+      e({ name: n, slug: `o/${n}`, firstSeenAt: '2020-01-01T00:00:00Z', ...over })
+    const eleven = [
+      ...Array.from({ length: 8 }, (_, i) => aged(`p${i}`)),
+      aged('flagged', { capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] },
+        verification: { status: 'skipped' } }),
+    ]
+    const t = docketTargets(idx(eleven), [], null, { now: '2026-01-05T00:00:00Z' })
+    const body = issueBody(t[0]!)
+    expect(body).toContain('未评审积压总单')
+    expect(body).toContain('`flagged@1.0.0`（⚠️ 红旗 1 / 有高危信号没跑）')
+    expect(body).toContain('`p0@1.0.0`（已实测可装可用）')
+    expect(body).toContain('/approve 包名@版本')
   })
   it('repo-only pending WITH a human verdict → decided, no standing issue', () => {
     const t = docketTargets(idx([e({ latestVersion: null })]),
@@ -153,10 +198,19 @@ describe('docketTargets', () => {
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'flag', reason: 'sec:repo-recreated',
       verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, publishedAt: '2026-01-01T00:00:00Z' }])
   })
-  it('flag retired by any human verdict on the displayed key; pending entries never flag', () => {
-    const flagged = e({ approval: 'approved',
-      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:name-reused'] } })
-    expect(docketTargets(idx([flagged]), [v({ source: 'human' })])).toEqual([])
+  it('flag retired only by a human verdict that POSTDATES the flag (flaggedAt)', () => {
+    const flaggedAt = (stamp?: string) => e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:name-reused'], ...(stamp ? { flaggedAt: stamp } : {}) } })
+    // verdict at 2026-01-01 postdates flag observed 2020-01-01 → decided
+    expect(docketTargets(idx([flaggedAt('2020-01-01T00:00:00Z')]), [v({ source: 'human' })])).toEqual([])
+    // flag observed AFTER the human verdict — the verdict decided the bytes,
+    // not a repojack that arrived later → the flag still needs a surface
+    expect(docketTargets(idx([flaggedAt('2027-01-01T00:00:00Z')]), [v({ source: 'human' })])
+      .some(t => t.verdict === 'flag')).toBe(true)
+    // flaggedAt absent (legacy data): can't prove the verdict saw the flag → surface
+    expect(docketTargets(idx([flaggedAt()]), [v({ source: 'human' })])
+      .some(t => t.verdict === 'flag')).toBe(true)
+    // pending entries never flag — their held version already has a channel
     expect(docketTargets(idx([e({
       capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:name-reused'] } })]), [])
       .every(t => t.verdict !== 'flag')).toBe(true)
@@ -211,6 +265,43 @@ describe('issueBody', () => {
     const blind = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', unscanned: true, maturity: 'announced' })
     expect(blind).toContain('放行闸被旗标/未扫描锁定')
     expect(blind).not.toContain('按班放行')
+  })
+  it('announced pass blocked by verify/sha names the real gate + next step — never 按班放行', () => {
+    const failed = issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'failed', maturity: 'announced' })
+    expect(failed).toContain('装测未过')
+    expect(failed).toContain('/retest')
+    expect(failed).not.toContain('按班放行')
+    const blind = issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'unverified', maturity: 'announced' })
+    expect(blind).toContain('但还没验')
+    expect(blind).not.toContain('按班放行')
+    const drift = issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'verified',
+      verdictSha: 'sha-a', integrity: 'sha-b', maturity: 'announced' })
+    expect(drift).toContain('re-tag')
+    expect(drift).not.toContain('按班放行')
+    // pending-announce carries the same blockers — the phase, not just the gate
+    const early = issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'failed', maturity: 'pending-announce' })
+    expect(early).toContain('已裁决·待日报公告')
+    expect(early).toContain('装测未过')
+    // all-clear announced keeps the original promise
+    expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'verified', maturity: 'announced' }))
+      .toContain('按班放行')
+  })
+  it('flag reason is markdown-escaped like every other external string', () => {
+    const body = issueBody({ name: 'p', version: '1', verdict: 'flag', reason: 'sec:x [click](https://evil.example) <b>' })
+    expect(body).toContain('\\[click\\]')
+    expect(body).not.toContain('[click](https://evil.example)')
+    expect(body).toContain('&lt;b&gt;')
+  })
+  it('phone decision labels match the target kind — flag/none are not "覆盖 AI concern"', () => {
+    const flag = issueBody({ name: 'p', version: '1', verdict: 'flag', reason: 'sec:x' })
+    expect(flag).toContain('确认身份信号无风险')
+    expect(flag).toContain('回 pending 下架')
+    expect(flag).not.toContain('覆盖 AI concern')
+    const none = issueBody({ name: 'p', version: '1', verdict: 'none' })
+    expect(none).toContain('无 AI 判词')
+    expect(none).not.toContain('覆盖 AI concern')
+    const pass = issueBody({ name: 'p', version: '1', verdict: 'pass' })
+    expect(pass).toContain('覆盖 AI concern')
   })
   it('stuck verdict:* label produces a warning block', () => {
     const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass' }, { stuckLabel: 'verdict:pass' })
@@ -363,7 +454,7 @@ describe('docket main', () => {
     // derives from GH_REPO
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: 't' },
+        slug: 'o/pkg', findings: 0, redFlags: 0 },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -546,7 +637,7 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: 't' },
+        slug: 'o/pkg', findings: 0, redFlags: 0 },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -800,5 +891,95 @@ describe('docket main', () => {
       else process.env.DOCKET_ASSIGNEE = savedA
     }
     expect(calls.some(c => c.includes('create'))).toBe(true)
+  })
+
+  it('versioned none past NONE_ISSUE_CAP → ONE (unreviewed backlog) issue; stale per-entry issues close as 并入', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk16-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const aged = (n: string) => e({ name: n, slug: `o/${n}`, firstSeenAt: '2020-01-01T00:00:00Z' })
+    writeFileSync(idxPath, JSON.stringify(idx(Array.from({ length: 11 }, (_, i) => aged(`p${i}`)))))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        // p0's old per-entry issue — now carried as an aggregate row → merged
+        { number: 31, title: '[review] p0@1.0.0', labels: [{ name: 'review:pending' }], body: 'old' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const creates = calls.filter(c => c.includes('create'))
+    expect(creates).toHaveLength(1)
+    expect(creates[0]!.join(' ')).toContain('[review] (unreviewed backlog)')
+    expect(creates[0]!.join(' ')).toContain('`p0@1.0.0`')
+    expect(calls.some(c => c.includes('comment') && c.join(' ').includes('并入未评审积压总单'))).toBe(true)
+    expect(calls.some(c => c.includes('close') && c.includes('31'))).toBe(true)
+  })
+
+  it('closing a decided issue strips stale verdict:* labels too', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk17-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v({ source: 'human' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        { number: 6, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'verdict:pass' }, { name: 'verdict:blocked' }],
+          body: 'x' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edits = calls.filter(c => c.includes('edit') && c.includes('6')).map(c => c.join(' ')).join('\n')
+    expect(edits).toContain('--remove-label verdict:pass')
+    expect(edits).toContain('--remove-label verdict:blocked')
+    expect(edits).toContain('--add-label review:decided')
+  })
+
+  it('--dry marks the step summary as a rehearsal, not real actions', async () => {
+    const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk18-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const summary = join(dir, 'summary.md')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const ghFn = (args: string[]) => args.includes('list') ? '[]' : ''
+    const saved = process.env.GH_REPO
+    const savedSummary = process.env.GITHUB_STEP_SUMMARY
+    process.env.GH_REPO = 'o/r'
+    process.env.GITHUB_STEP_SUMMARY = summary
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--dry'], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      if (savedSummary === undefined) delete process.env.GITHUB_STEP_SUMMARY
+      else process.env.GITHUB_STEP_SUMMARY = savedSummary
+    }
+    expect(readFileSync(summary, 'utf8')).toContain('预演')
   })
 })

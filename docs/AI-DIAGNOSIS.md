@@ -22,6 +22,9 @@
 >   （`digest-state.json` 的 `announced` 集合成员——上过日报的那一行
 >   才算；`lastDigestAt` 只作锚点记录）——固定 24h + 单槽
 >   pendingUpdate 会让高频发版条目永久饿死
+>   （落地修订：当期 `dayAnnounced` 成员本期不熟——公告后必须再活
+>   过一整期日报，≥24h 真异议窗回归 v3.1 原意，且不饿死：任何已
+>   公告行下期自动熟）
 > - **应用顺序钉死**：run 开头先对 old index 应用成熟 verdict 再跑
 >   发现比对——否则新版顶替 pendingUpdate 会丢弃"已审未放"版本数据
 > - pendingUpdate 的 AI 审**等 verify 结果**再跑（48h 降级硬审）
@@ -381,8 +384,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 ## 11. 本地组件
 
 - `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate →
-  verify-failed 短路（`verification.status==='failed'` → 直接写
-  concern、reason 带 verify 摘要，不调 LLM）→ L0.5 分类器 →
+  verify-failed **终态**短路（`verification.status==='failed'` 且
+  retries≥3 或超 7d 重试窗 → 直接写 concern、reason 带 verify
+  摘要，不调 LLM；**可重试 failed 归 verify 自愈队列、改走正常
+  LLM 评审**——瞬时失败不该钉成永久人工负债）→ L0.5 分类器 →
   全量审 → 写 ai-verdicts.jsonl + 推 catalog 分支；
   needs-work/invalid issue → 草稿评论
 - 本地素材边界：`fetchTarball` **下载阅读允许**（数据非执行），
@@ -392,13 +397,18 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   Horizon 全量闸 + Granite Guardian BYOC 第二判据 + PG2 第三
   票；皆信号源非裁决，`modelId+version` 记入审计元数据
 - L0.5 加载路径：Python sidecar（`tokenizers` 读 tokenizer.json +
-  torch 前向，依赖本机已装）经 `pipeline/l05/classify.py` 由 Node
-  spawn 调用；或 onnxruntime-node 走模型自带 onnx——launchd 进程
-  需显式带 `HF_HOME` env 才找得到缓存（不继承 shell env）
+  torch 前向，依赖本机已装）经 `pipeline/ai/l05_score.py` 由 Node
+  spawn 调用（批量打分、前向分块 64 行）；**canary 自检**——批次混入
+  已知良性/恶意样例，异常时全批分数丢弃（模型加载坏/tokenizer 错
+  必须可见失效，不能静默降级）；或 onnxruntime-node 走模型自带
+  onnx——launchd 进程需显式带 `HF_HOME` env 才找得到缓存（不继承
+  shell env）
 - 容量诚实账：Ornith 实测 ~21 tok/s，单件全量审约 1-3 min →
   每小时数十件上限；积压不丢——在日报 ② 排队显示深度，自然背压
-- `pipeline/ai/digest.ts`：日报五节（新放行/held 积压/concerns/
-  验证积压/评审积压）+ 发布时写 `digest-state.json`（`announced`
+- `pipeline/ai/digest.ts`：日报六节（新放行/held 积压/concerns/
+  验证积压/评审积压/信任信号；评审积压行附**最新 AI 裁决时间戳**——
+  本地 worker 被动心跳，>48h 且积压非空→⚠️停摆标注）+ 发布时写
+  `digest-state.json`（`announced`
   集合 + `lastDigestAt` 锚点）到 catalog 分支——run.ts 据此判
   verdict 成熟度；digest 必须先于承担释放的 catalog run 发布
   （21:15 日报 → 03:17 跑批）
@@ -475,7 +485,8 @@ skill 走 `installSkillTar` 独立路径，同步钉。
       pendingUpdate、身份级 flag 留展示层
 - [x] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 只降级
       物料，不降 release 门槛）
-- [x] verify-failed → 直接写 concern 带 verify 摘要，不调 LLM
+- [x] verify-failed **终态** → 直接写 concern 带 verify 摘要，不调
+  LLM（可重试 failed 归 verify 自愈，不提前钉死）
 - [x] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标
 - [ ] 客户端装 = `plugin add name@latestVersion`；升级 = 改写
       `plugins` spec → reload；**列表/搜索/详情过滤 pending**

@@ -113,6 +113,18 @@ jobs:
     timeout-minutes: 10
     permissions: { issues: write }
     steps:
+      # outbound: github (fetch/checkout), api.github.com (gh), *.github.io
+      # (health.json probe), npm (ci) — same posture as the digest job
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+            *.github.io:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -125,7 +137,11 @@ jobs:
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next run"; exit 0; }
           git worktree remove /tmp/cat --force 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog
-          LAST=$(git -C /tmp/cat log -1 --format=%ct -- ai-verdicts.jsonl 2>/dev/null || echo 0)
+          # freshness probe = last ai-diagnose LANDING, not last touch of the
+          # file — human verdicts / verdicts-compact / submit-verdict jobs all
+          # append the same file and would keep AGE_H green over a dead local
+          # worker. Diagnose commits carry the fixed 'ai-diagnose:' prefix.
+          LAST=$(git -C /tmp/cat log -1 --format=%ct --grep='^ai-diagnose:' -- ai-verdicts.jsonl 2>/dev/null || echo 0)
           AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
           # digest 的输入也要看:index.json 陈旧 = catalog.yml 挂了,digest 照样
           # 在旧数据上"成功"渲染——光盯 verdicts 会漏掉上游停摆
@@ -139,7 +155,9 @@ jobs:
           # catalog/verify 的 dispatch 失败只 echo 记日志、下个 run 才补——
           # 没有这条腿,站点静默冻结(新裁决/刹车到不了公开面)无人发现。
           # builtAt 是本次改动新增字段;旧版 health.json 回落 generatedAt。
-          SITE_JSON=$(curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" 2>/dev/null || true)
+          # GITHUB_REPOSITORY 是 runner 内置变量——github.event.repository
+          # 在 schedule 合成载荷上不可靠
+          SITE_JSON=$(curl -fsSL --max-time 15 "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/health.json" 2>/dev/null || true)
           SITE_AGE_H=0
           if [ -n "$SITE_JSON" ]; then
             SITE_TS=$(echo "$SITE_JSON" | jq -r '.builtAt // .generatedAt // empty' 2>/dev/null || true)
@@ -148,46 +166,76 @@ jobs:
           fi
           PENDING=$(npx tsx -e "
             import { CatalogIndex } from './src/schema.ts'
-            import { loadVerdicts, latestVerdicts } from './pipeline/verdicts.ts'
+            import { loadVerdicts } from './pipeline/verdicts.ts'
             import { unreviewedTargets } from './pipeline/ai/diagnose.ts'
             import { readFileSync } from 'node:fs'
             const idx = CatalogIndex.parse(JSON.parse(readFileSync('/tmp/cat/index.json','utf8')))
-            const seen = latestVerdicts(loadVerdicts('/tmp/cat/ai-verdicts.jsonl'))
-            console.log(unreviewedTargets(idx, seen).length)
+            console.log(unreviewedTargets(idx, loadVerdicts('/tmp/cat/ai-verdicts.jsonl')).length)
           ")
-          echo "ai-verdicts.jsonl age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}"
+          # diagnose.paused = 本地 AI 队列是“声明暂停”而不是“疑似停摆”——
+          # launchd 手动期/上线前的有意停机不该每班都报 pipeline-alert；
+          # 其余三条腿（index/digest-state/site）与本地诊断无关，照常检查。
+          PAUSED=$([ -f /tmp/cat/diagnose.paused ] && echo 1 || echo 0)
+          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}; diagnose paused: ${PAUSED}"
           REASONS=""
+          # leg fingerprint — REASONS embed changing counters (age grows every
+          # day), so dedupe compares WHICH legs fired instead of the text:
+          # same legs → the open issue already carries the alert, no daily
+          # comment spam; a new/changed leg set still comments immediately.
+          LEGS=""
           # LAST*=0 → the file has NO git history (never written). That is
           # bootstrap, not staleness — without the >0 guard a fresh deployment
           # false-alerts on every leg within its first day.
-          if [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
-            REASONS="本地 ai-diagnose 疑似停摆：ai-verdicts.jsonl ${AGE_H}h 未更新且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+          # diagnose.paused on the catalog branch = declared stop, not a
+          # dead worker — leg 1 skips a KNOWN pause (bin/ai-diagnose.sh
+          # pause|resume flips it); the other legs still check normally
+          if [ "$PAUSED" != 1 ] && [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" -gt 0 ] && [ "${AGE_H:-9999}" -gt 48 ]; then
+            REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
+            LEGS="${LEGS}1"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
+            LEGS="${LEGS}2"
           fi
           if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
+            LEGS="${LEGS}3"
           fi
           # 36h ≈ catalog 每天两次 dispatch 的 1.5 个周期——站点健康文件超龄
           # 说明 dispatch 连败或 site job 挂了;health.json 拉不到(404/网络)
           # 时 SITE_AGE_H=0 不误报(新站点/未启用 Pages 的仓库同样静默)。
           if [ "${SITE_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}线上 health.json ${SITE_AGE_H}h 未更新——site.yml 部署疑似停摆，catalog/verify 的新数据到不了公开站。检查 Actions 里 site workflow 最近 run；紧急可手动 dispatch（force/skip_skills 参数见 workflow）。"
+            LEGS="${LEGS}4"
           fi
           if [ -n "$REASONS" ]; then
             # in:title 限定——正文中提到同样字样的无关 open issue 不能被当成
             # dedupe 目标而评论追加
             EXISTING=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open \
-              --search "pipeline stale in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+              --search "pipeline stale in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
             if [ -n "$EXISTING" ]; then
-              gh issue comment "$EXISTING" -R "$GH_REPO" --body "$REASONS"
+              # daily spam guard: a persistent outage gets ONE comment per
+              # legs-change; an unchanged leg set means the open issue still
+              # carries a live alert — re-commenting trains the maintainer
+              # to ignore it
+              LAST_BODY=$(gh issue view "$EXISTING" -R "$GH_REPO" --json comments \
+                --jq 'if (.comments | length) > 0 then .comments[-1].body else "" end' 2>/dev/null || true)
+              if [ -z "$LAST_BODY" ]; then
+                LAST_BODY=$(gh issue view "$EXISTING" -R "$GH_REPO" --json body --jq '.body' 2>/dev/null || true)
+              fi
+              LAST_LEGS=$(printf '%s' "$LAST_BODY" | grep -o 'watchdog-legs:[0-9]*' | tail -1 | cut -d: -f2)
+              if [ "$LAST_LEGS" = "$LEGS" ]; then
+                echo "watchdog: same legs ($LEGS) already alerted on #$EXISTING — no repeat comment"
+              else
+                gh issue comment "$EXISTING" -R "$GH_REPO" --body "<!-- watchdog-legs:$LEGS -->$'\n\n'$REASONS"
+                echo "watchdog: legs ${LAST_LEGS:-none}→$LEGS — commented on #$EXISTING"
+              fi
             else
               gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
               gh issue create -R "$GH_REPO" --title "pipeline stale" \
-                --body "$REASONS" --label pipeline-alert
+                --body "<!-- watchdog-legs:$LEGS -->$'\n\n'$REASONS" --label pipeline-alert
+              echo "watchdog: alert raised (new issue, legs=$LEGS)"
             fi
-            echo "watchdog: alert raised (existing=${EXISTING:-none})"
           else
             echo "watchdog: healthy"
           fi
@@ -199,6 +247,11 @@ jobs:
     timeout-minutes: 5
     permissions: { issues: write }
     steps:
+      # gh api only — same egress posture as the other jobs
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -207,7 +260,7 @@ jobs:
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           # dedupe: a persistent failure (missing catalog branch, broken render)
           # must not open a fresh issue every day — append to the open one
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "digest workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "digest workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

@@ -210,14 +210,14 @@ describe('re-features.main edge branches', () => {
 describe('submission-status edges + gh upsert', () => {
   it('submissionStatuses: garbage lines, missing key, repo-match fallback', async () => {
     
-    const idx = mkIdx([mkEntry('o/r', { source: { kind: 'github', id: 'o/r', repo: 'O/R' } })])
+    const idx = mkIdx([mkEntry('o/r', { approval: 'pending', source: { kind: 'github', id: 'o/r', repo: 'O/R' } })])
     const rows = submissionStatuses(idx, [
       'plain text', '{bad json', '{"repo":"o/r","issue":7,"notified":false}',
       '{"issue":8,"notified":false}',          // no name/repo → skipped
       '{"name":"","issue":9,"notified":false}',
     ])
     expect(rows.map(r => r.issue)).toEqual([7])
-    expect(rows[0]!.phase).toBe('published')    // repo-seed matched the github entry (approved → published)
+    expect(rows[0]!.phase).toBe('review')       // repo-seed matched the github entry (pending → review)
   })
 })
 
@@ -509,12 +509,12 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
       verification: { status: 'verified', level: 'load', attempts: 1, opencodeVersion: 'oc-old', verifiedAt: '2026-01-01T00:00:00Z' } as never,
     } as Partial<PluginEntry>)
     expect(hostStaleVerify(flagged)).toBe(false)
-    // retryable windows
-    const now = new Date('2026-06-01T00:00:00Z')
-    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-05-30T00:00:00Z' } as never, now)).toBe(true)
-    expect(retryable({ status: 'failed', retries: 3, verifiedAt: '2026-05-30T00:00:00Z' } as never, now)).toBe(false)
-    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-01-01T00:00:00Z' } as never, now)).toBe(false)  // stale window
-    expect(retryable({ status: 'verified' } as never, now)).toBe(false)
+    // retryable: attempts-bound only — age alone no longer kills the budget
+    // (queue starvation must not mark a never-retried slot terminal)
+    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-05-30T00:00:00Z' } as never)).toBe(true)
+    expect(retryable({ status: 'failed', retries: 3, verifiedAt: '2026-05-30T00:00:00Z' } as never)).toBe(false)
+    expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-01-01T00:00:00Z' } as never)).toBe(true)  // old but unused budget survives
+    expect(retryable({ status: 'verified' } as never)).toBe(false)
     // verifyPartsOf: contains-driven + type fallback
     expect(verifyPartsOf(mkEntry('c1', { contains: ['plugin', 'skill'] }))).toEqual(['plugin', 'skill'])
     expect(verifyPartsOf(mkEntry('c2', { type: 'skill' }))).toEqual(['skill'])
@@ -527,7 +527,7 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
       mkEntry('flag', { approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: ['x'] } }),
       mkEntry('noparts', { contains: [], approval: 'pending' })   // explicit [] = no installable payload,
     ])
-    const targets = planTargets(idx, 48, false, now)
+    const targets = planTargets(idx, 48, false, new Date('2026-06-01T00:00:00Z'))
     expect(targets.every(t => t.name !== 'flag')).toBe(true)
     expect(targets.every(t => t.name !== 'noparts')).toBe(true)
   })
@@ -680,6 +680,25 @@ describe('verify/verify.checkSkillStructure + writeDummyProvider', () => {
     writeDummyProvider(home)
     const cfg = JSON.parse(readFileSync(join(cfgDir, 'opencode.json'), 'utf8'))
     expect(JSON.stringify(cfg)).toContain('keep-me')
+  })
+  it('writeDummyProvider rebuilds malformed/empty pre-existing config instead of throwing (G9)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'vs-'))
+    const cfgDir = join(home, '.config', 'opencode')
+    mkdirSync(cfgDir, { recursive: true })
+    const cfgPath = join(cfgDir, 'opencode.json')
+    writeFileSync(cfgPath, '{{{ not json')
+    writeDummyProvider(home)                                // catch arm — no throw
+    expect(() => JSON.parse(readFileSync(cfgPath, 'utf8'))).not.toThrow()
+    writeFileSync(cfgPath, '')
+    writeDummyProvider(home)                                // `|| '{}'` arm — no throw
+    expect(JSON.parse(readFileSync(cfgPath, 'utf8')).provider).toBeTruthy()
+  })
+  it('verify/merge: a version-less result lands on the display slot when no hold exists', () => {
+    const idx = mkIdx([mkEntry('v', { approval: 'approved', latestVersion: '1.0.0' })])
+    const out = mergeResults(idx, [
+      { name: 'v', status: 'verified', level: 'load', opencodeVersion: 'oc1', verifiedAt: '2026-06-01T00:00:00Z' },
+    ] as never)
+    expect(out.plugins.find(e => e.name === 'v')!.verification.status).toBe('verified')
   })
 })
 

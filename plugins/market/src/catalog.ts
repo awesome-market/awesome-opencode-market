@@ -822,7 +822,10 @@ export function canInstall(e: MarketEntry): boolean {
  *  Carries the audit trail (verify run link, log excerpt, full findings) the
  *  client detail view only summarizes. */
 export function siteDetailUrl(e: Pick<MarketEntry, 'slug'>, indexUrl: string): string | null {
-  try { return new URL(`p/${encodeURIComponent(e.slug)}.html`, indexUrl).href } catch { return null }
+  // per-segment encoding = the site's detailHref rule: o/p → p/o/p.html (the
+  // canonical nested file), a b → p/a%20b.html. Whole-slug encoding would
+  // emit o%2Fp — Pages decodes it, but the nested form is the real path.
+  try { return new URL(`p/${e.slug.split('/').map(encodeURIComponent).join('/')}.html`, indexUrl).href } catch { return null }
 }
 
 const REMOVED_REASON_KEY = {
