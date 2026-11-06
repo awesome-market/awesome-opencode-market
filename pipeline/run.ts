@@ -563,9 +563,13 @@ export async function run(opts: RunOptions = {}) {
 
       // packument.repository is authoritative; the submission-declared repo is
       // the fallback — and a disagreement between them is itself a signal.
-      // (organic search repoUrl is the same packument field — comparing it
-      // would only flag stale search indexes, so only submissions declare)
-      const declaredRepo = cand.discoveredVia.includes('submission') ? normalizeRepoUrl(cand.repoUrl) : null
+      // The DECLARED value lives in seedMeta — reading cand.repoUrl here was
+      // wrong for organically-discovered candidates that also carry a
+      // submission: repoUrl there is the search hit's links.repository (the
+      // same packument-derived field), so the check either no-oped or flagged
+      // stale search index drift while the actual submitted repo hint was
+      // never compared (refreshMeta's reuse path already reads seedMeta).
+      const declaredRepo = seedMeta.get(cand.name)?.repo ?? null
       const repo = normalizeRepoUrl(pk.repository) ?? declaredRepo
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
       if (isBlocked(cand.name, slug)) {
@@ -929,6 +933,9 @@ export async function run(opts: RunOptions = {}) {
       console.log(`  [${entries.length}] ${cand.name}`)
     } catch (e) {
       console.warn(`candidate ${cand.name} failed:`, (e as Error).message)
+      // a crashed seed still owes its issue an explanation — without an
+      // outcome the status comment sits at '排队中' until the 30d dead-close
+      if (seedNames.has(cand.name)) seedOutcomes.set(cand.name, 'run-error')
     }
   }
   await pool(queue, worker)
@@ -1264,6 +1271,7 @@ export async function run(opts: RunOptions = {}) {
       // same per-candidate isolation as the npm worker — one malformed repo
       // must not fail the whole generate after the npm side already produced
       console.warn(`github candidate ${c.fullName} failed:`, (err as Error).message)
+      if (isSeedRepo(c)) seedOutcomes.set(c.fullName.toLowerCase(), 'run-error')
     }
   })
   console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +

@@ -57,7 +57,8 @@ jobs:
             # a non-FF tracking update would otherwise fail and leave
             # origin/catalog stale (every consumer below reads that ref).
             git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
-            git show origin/catalog:index.json > /tmp/old-index.json
+            git show origin/catalog:index.json > /tmp/old-index.json \
+              || { echo "catalog branch exists but index.json is unreadable — refusing to run blind (WF-1)" >&2; exit 1; }
             if [ ! -s /tmp/old-index.json ]; then
               echo "catalog branch exists but index.json is empty — refusing to run blind (WF-1)"
               exit 1
@@ -287,12 +288,20 @@ jobs:
             # name produces a 404 detail link.
             SITE="https://${GITHUB_REPOSITORY_OWNER}.github.io"
             [ "${GITHUB_REPOSITORY#*/}" = "${GITHUB_REPOSITORY_OWNER}.github.io" ] || SITE="$SITE/${GITHUB_REPOSITORY#*/}"
+            # notify/dead/stale calls below are || true by design — but a FAILED
+            # call must not silently drop: the seed row is already terminal
+            # (notified/dead pushed above), so no later run will ever re-emit
+            # the comment or close the issue. Collect the failures and alert
+            # with the issue numbers — a maintainer sees "what needs a manual
+            # close" instead of an author left permanently uninformed.
+            NOTIFY_FAIL=""
             while IFS=$'\t' read -r N SLUG; do
               [ -n "$N" ] || continue
               LINK=""; [ -n "$SLUG" ] && LINK="——详情：$SITE/p/$SLUG.html"
-              gh issue comment "$N" --body "✅ 已收录进插件目录$LINK（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
-              gh issue close "$N" || true
-              echo "notified + closed issue #$N"
+              ok=1
+              gh issue comment "$N" --body "✅ 已收录进插件目录$LINK（run ${GITHUB_RUN_ID}）。感谢投稿！" || ok=0
+              gh issue close "$N" || ok=0
+              if [ "$ok" = 1 ]; then echo "notified + closed issue #$N"; else NOTIFY_FAIL="$NOTIFY_FAIL #$N"; fi
             done < /tmp/notify.list
             # approved-but-never-landed: seed aged 14d+ without becoming visible.
             # Honest status comment, once per seed (staleWarned flag); the issue
@@ -303,7 +312,7 @@ jobs:
               # closed issues get no status noise — the sweep may have already
               # posted its own close comment on the same 30d horizon
               [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
-              gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || true
+              gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || NOTIFY_FAIL="$NOTIFY_FAIL #$N"
               echo "stale-warned issue #$N"
             done < /tmp/stale.list
             # dead = terminal: seed aged 30d+ without landing — same horizon as
@@ -312,10 +321,21 @@ jobs:
             while read -r N; do
               [ -n "$N" ] || continue
               [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
-              gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || true
-              gh issue close "$N" || true
-              echo "dead-closed issue #$N"
+              ok=1
+              gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || ok=0
+              gh issue close "$N" || ok=0
+              if [ "$ok" = 1 ]; then echo "dead-closed issue #$N"; else NOTIFY_FAIL="$NOTIFY_FAIL #$N"; fi
             done < /tmp/dead.list
+            # loud failure path: seeds above are already terminal on the data
+            # branch — a lost comment/close will never self-heal, so escalate
+            # the affected issue numbers instead of letting them go silent
+            if [ -n "$NOTIFY_FAIL" ]; then
+              gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+              EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "submission notify failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+              BODY="catalog pushed the notified/dead seed marks, but these issue notify/close calls FAILED (the seeds are terminal — no later run retries them):${NOTIFY_FAIL}. Please close/comment manually. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+              else gh issue create -R "$GITHUB_REPOSITORY" --title "submission notify failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+            fi
             # progress visibility: refresh the pinned status comment on every
             # submission issue that still has a live seed — edit-in-place, one
             # comment per issue, best-effort (never fails the publish). The

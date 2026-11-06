@@ -49,6 +49,7 @@ export const REJECT_REASONS: Record<string, string> = {
   'repo-fetch-error': 'GitHub 暂时不可达（网络错误或限流），收录端没能取到仓库信息——下一轮目录构建会自动重试，无需操作。',
   'no-opencode-evidence': '仓库缺少 opencode 专属信号（`.opencode/` 目录、`opencode.json` 或 `opencode-*` topic）。补齐后回复本 issue 重新审查。',
   'invalid-repo': '仓库地址格式不正确——需要 `owner/repo` 形式（如 `alice/my-plugin`）。修正后回复本 issue 重新审查。',
+  'run-error': '目录构建处理该投稿时出错（流水线异常，非包本身问题）——下一轮目录构建会自动重试，无需操作；若多轮后仍停留在此状态请联系 maintainer。',
 }
 
 /** One-line bounded reason for the status comment — reviewer text rendered
