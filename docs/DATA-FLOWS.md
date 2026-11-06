@@ -1661,25 +1661,27 @@ UI（gui.ts webview / tui.tsx 终端）：
 | 事件 | 工作流/脚本 | 并发组 | 写什么 |
 |---|---|---|---|
 | cron 03:17/11:00 UTC + dispatch | catalog.yml | 仅 publish 持 catalog-branch（共享）；generate 无锁只读 | index.json、站点、tombstone、投稿通知 |
-| cron 04:47/16:47 UTC + dispatch(targets, cap) | verify.yml | catalog-branch（共享） | index.json（verification 槽）、站点 |
-| issue [submit] opened/edited/labeled/comment | submit.yml review | sub-review-N（cancel 幂等） | 评论、submission 标签 |
+| cron 04:47/16:47 UTC + dispatch(targets, cap, retest) | verify.yml | catalog-branch（共享，仅 merge 腿持锁） | index.json（verification 槽）、站点 |
+| issue [submit] opened/edited/labeled/**reopened**/comment | submit.yml review | sub-review-N（cancel 幂等） | 评论、submission 标签 |
 | review/report/ingest 任一失败 | submit.yml review-alert | — | issue 失败反馈评论（不再静默挂起） |
 | 同上 clean 后 | submit.yml ingest | submit-ingest-N per-issue | submissions.txt（防滥用门：作者 open≥5 拒入队） |
 | submission:approved 标签 / 投稿 issue 命令（评论 created/**edited**） | submit.yml verdict | submit-verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时 + APPLY_ONLY 自愈） |
 | 投稿 issue 评论 /withdraw | submit.yml withdraw | submit-withdraw-N per-issue | submissions.txt 删种子+pending 撤回、关单 |
 | cron 05:23 UTC | submit.yml sweep | — | 关 30d 僵尸投稿（invalid/needs-work/error/approved 停滞单/基标签孤儿，limit 1000） |
 | catalog publish 后 | catalog.yml notify+status | catalog-branch（共享） | 投稿评论/关单（含 dead 终态）、状态评论 edit-in-place |
-| issue [review]/[concern] opened/**edited**/labeled + 评论 created/**edited** | concern.yml | verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时 + APPLY_ONLY 自愈）、review 标签、关单 |
+| issue [review]/[concern] opened/**edited**/labeled + 评论 created/**edited** | concern.yml verdict | verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时 + APPLY_ONLY 自愈）、review 标签、关单 |
+| 同上单评论 /retest（仅协作者） | concern.yml retest | concern-retest-N（不 cancel） | verify dispatch（targets+retest inputs） |
 | hourly :40 + catalog/verify/digest 非取消完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
-| catalog/verify push 后 dispatch（+ 手动 force/skip_skills） | site.yml | site-deploy | Pages 站点（单发布者） |
-| cron 21:15 UTC + dispatch | digest.yml | catalog-branch（共享） | digest/*.md、digest-state.json |
+| catalog/verify publish 后 gh dispatch + re-features workflow_call（+ 手动 force/skip_skills） | site.yml | site-deploy | Pages 站点（单发布者） |
+| cron 21:15 UTC + dispatch | digest.yml | catalog-branch（共享） | digest/*.md、digest-state.json（watchdog 腿：评审队列非空而 ai-diagnose 无提交时告警） |
 | launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例；>2h 僵锁自动回收 D-11） | ai-verdicts.jsonl |
 | 手动兜底 | bin/publish-digest.sh | — | digest/*.md、digest-state.json |
 | push/PR | ci.yml | — | tsc + vitest ≥90%（合并门） |
+| workflow_dispatch（手动） | re-features.yml | catalog-branch（workflow 级整流） | index.json（features 全量重算，worktree 重试）+ site workflow_call |
 | workflow_dispatch（手动） | spike.yml | — | dev 演练（非数据面；曾 on:push 白烧 runner+模型，N-17） |
 | 用户 plugin add | 客户端 | — | 本机 opencode.json（不在本仓库数据面） |
 
-**并发组语义**：`catalog-branch` 是分支写锁（catalog+verify+digest 写段串行——数据完整性）；`verdict-N`/`submit-ingest-N`/`submit-withdraw-N` 按 issue 分（事件必须全落盘——共享锁会把 pending run 静默丢掉，HV-8 实锤过，跨 issue 写竞争由 catalog-append 重试吸收）；`sub-review-N` cancel-in-progress（重审幂等，burst 只留最新合理）；`review-docket` 串行化三触发源（cron/workflow_run/dispatch 可重叠，K-1）；`site-deploy` 串行化 Pages 发布（最后一个赢且拿最新数据）。
+**并发组语义**：`catalog-branch` 是分支写锁（catalog publish/verify merge/digest/re-features 写段串行——数据完整性）；`verdict-N`/`concern-retest-N`/`submit-ingest-N`/`submit-withdraw-N` 按 issue 分（事件必须全落盘——共享锁会把 pending run 静默丢掉，HV-8 实锤过，跨 issue 写竞争由 catalog-append 重试吸收）；`sub-review-N` cancel-in-progress（重审幂等，burst 只留最新合理）；`review-docket` 串行化三触发源（cron/workflow_run/dispatch 可重叠，K-1）；`site-deploy` 串行化 Pages 发布（最后一个赢且拿最新数据）。
 
 时序约定：digest(21:15 UTC CI) → catalog(03:17/11:00 UTC) → verify(04:47/16:47 UTC) → docket(每小时 :40)。launchd 迁移期暂停；恢复时需系统盘路径或 TCC 授权（外置卷会 `Operation not permitted`）。
 
