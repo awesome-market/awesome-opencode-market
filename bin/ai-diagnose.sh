@@ -299,7 +299,8 @@ if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileS
 # otherwise re-enter PAY every run, be dropped every run, and never land
 # nor clear. Syncing also persists this run's verdicts BEFORE the push
 # loop, so a SIGKILL mid-push replays them instead of re-burning the LLM.
-cp "$PAY" "$SPOOL" 2>/dev/null || true
+cp "$PAY" "$SPOOL" 2>/dev/null \
+  || log "WARN: spool sync failed ($SPOOL) — a failed push would lose this run's verdicts and re-burn the LLM next run"
 
 [ -s "$PAY" ] || { log "no new verdicts"; exit 0; }
 

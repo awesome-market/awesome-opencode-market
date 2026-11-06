@@ -338,6 +338,12 @@ describe('unreviewedTargets (diagnose candidate pick)', () => {
     expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']))).toEqual([])
     expect(unreviewedTargets(idx([pend]), s, new Set(['pkg']), { force: true })).toHaveLength(1)
   })
+  it('--name match is case-insensitive (github-kind names can carry case)', () => {
+    const gh = entry({ name: 'Owner/Repo', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
+    expect(unreviewedTargets(idx([gh]), [], new Set(['owner/repo']))).toHaveLength(1)
+    const npm = entry({ name: 'my-pkg', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
+    expect(unreviewedTargets(idx([npm]), [], new Set(['MY-PKG']))).toHaveLength(1)
+  })
 })
 
 describe('reviewMaterial', () => {

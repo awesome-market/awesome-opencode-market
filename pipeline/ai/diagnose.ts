@@ -485,8 +485,13 @@ export function unreviewedTargets(
   const seen = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
   const tomb = tombEpochs(index.removed)
+  // name match is case-insensitive: npm names are canonical-lowercase but
+  // github-kind entry names can carry case — --name 'Owner/Repo' and
+  // '--name owner/repo' must select the same target (verify's targets
+  // narrowing already normalizes the same way)
+  const wanted = names ? new Set([...names].map(n => n.toLowerCase())) : null
   return index.plugins.filter(e => {
-    if (names && !names.has(e.name)) return false
+    if (wanted && !wanted.has(e.name.toLowerCase())) return false
     const ver = candidateVer(e) ?? null
     if (!ver) return false
     if (opts.force) return true
@@ -579,7 +584,7 @@ export async function main(
   const limit = numArg('--limit', 50) // bounded by default — a bare run must not fan the whole backlog into the LLM
   const budgetMs = numArg('--budget', 120) * 60_000 // bounded even for manual runs — Infinity let a bare invocation burn days
   const names = args.includes('--name')
-    ? (arg('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim())) : exit('usage: --name needs a value'))
+    ? (arg('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)) : exit('usage: --name needs a value'))
     : null
   const force = args.includes('--force')
   if (force && !args.includes('--name')) console.warn('[diagnose] --force has no effect without --name')
