@@ -1,3 +1,5 @@
+import { normalizeRepoUrl } from './discover/github.ts'
+
 /** Parse a submission issue body → structured fields.
  *  Issue forms render `### <label>\n\n<value>` sections; freeform issues fall
  *  back to the legacy first-package-like-token extraction. */
@@ -70,9 +72,17 @@ export function parseSubmission(body: string, title?: string | null): Submission
     if (t && PKG_RE.test(t)) name = t
   }
   const repoRaw = field(map, 'GitHub repository / GitHub 仓库地址', 'GitHub 仓库地址', 'repo', 'repository', 'github', '仓库')
-  const repoM = repoRaw?.match(/github\.com\/([^/\s]+\/[^/\s?#]+)/) ?? body.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/)
+  // normalizeRepoUrl is the same canonicalization gate run.ts applies to seed
+  // repo fields — 'github:o/r' shorthand and bare owner/repo now parse, while
+  // dot-segments/charset garbage returns null instead of flowing into
+  // api.github.com URL paths at review time. Field value wins; body fallback
+  // scans for the first github.com link (descriptions may carry one).
+  const repoCand = [repoRaw, body.match(/github\.com\/[^\s)]+/)?.[0]]
+    .filter((x): x is string => !!x)
+    .map(c => normalizeRepoUrl(c))
+    .find((r): r is string => !!r)
   // canonical lowercase — repo identity must not split on typed/display casing
-  const repo = repoM ? repoM[1]!.replace(/\.git$/, '').replace(/\/$/, '').toLowerCase() : null
+  const repo = repoCand?.toLowerCase() ?? null
 
   // description is free text — keep the whole answer (newlines collapsed so a
   // catalog one-liner can't break layout), capped like every other seed field

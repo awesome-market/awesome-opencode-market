@@ -23,16 +23,29 @@ WT=${WT:-/tmp/catw}
 for i in 1 2 3; do
   git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
   git worktree remove "$WT" --force 2>/dev/null || true
+  # a stray NON-worktree dir at WT (killed run, pruned registration) breaks
+  # `worktree add` on every retry — same guard catalog-append.sh carries
+  rm -rf "$WT"
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
   touch "$WT/submissions.txt"
-  node -e '
+  # ENTRY ground truth = the seed rows actually removed, not the caller's
+  # re-parse of the CURRENT issue body — an author who edited the form after
+  # ingest would otherwise tombstone the wrong name (or none at all). Env
+  # ENTRY remains the fallback for re-runs where no rows are left.
+  DERIVED=$(node -e '
     const fs=require("fs"),f=process.argv[1],issue=Number(process.argv[2])
-    const keep=fs.readFileSync(f,"utf8").split("\n").filter(l=>{
-      if(!l.trim())return false
-      try{return JSON.parse(l).issue!==issue}catch{return true}
-    })
+    const rows=fs.readFileSync(f,"utf8").split("\n").filter(l=>l.trim())
+    const keep=[],removed=[]
+    for(const l of rows){
+      let drop=false
+      try{const s=JSON.parse(l);if(s.issue===issue){removed.push(s);drop=true}}catch{}
+      if(!drop)keep.push(l)
+    }
     fs.writeFileSync(f,keep.length?keep.join("\n")+"\n":"")
-  ' "$WT/submissions.txt" "$ISSUE"
+    const last=removed[removed.length-1]
+    if(last)console.log(last.name??last.repo??"")
+  ' "$WT/submissions.txt" "$ISSUE")
+  ENTRY="${DERIVED:-${ENTRY:-}}"
   git -C "$WT" add submissions.txt
   if [ -n "${ENTRY:-}" ] && [ -f "$WT/index.json" ]; then
     node -e '

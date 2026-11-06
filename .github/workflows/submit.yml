@@ -23,7 +23,8 @@ jobs:
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
       && (github.event_name == 'issues'
-          && (github.event.action != 'labeled' || github.event.label.name == 'submission')
+          && (github.event.action != 'labeled'
+          || (github.event.label.name == 'submission' && github.actor != 'github-actions[bot]'))
           || (github.event_name == 'issue_comment'
               && github.event.action == 'created'
               && !endsWith(github.event.comment.user.login, '[bot]')
@@ -39,6 +40,7 @@ jobs:
     concurrency:                       # one review per issue at a time — edited/opened
       group: sub-review-${{ github.event.issue.number }}   # bursts can't double-comment
       cancel-in-progress: true
+    timeout-minutes: 20               # attacker tarball + npm ci — a hang must not hold the slot for 6h
     # ZERO permissions: review.ts downloads + untars the ATTACKER-CONTROLLED
     # tarball in this job. A tar-parser exploit here must yield nothing —
     # comments/labels happen in the separate `report` job holding issues:write.

@@ -75,6 +75,15 @@ describe('submission parser', () => {
     expect(s.name).toBe('opencode-bar')
   })
 
+  it('repo field: github: shorthand + bare owner/repo parse; traversal rejected', () => {
+    // audit#2 — the repo value feeds api.github.com URL paths at review time;
+    // it must pass the same normalizeRepoUrl gate run.ts applies to seeds
+    expect(parseSubmission('### GitHub 仓库地址\n\ngithub:Owner/Repo\n').repo).toBe('owner/repo')
+    expect(parseSubmission('### GitHub 仓库地址\n\nOwner/Repo\n').repo).toBe('owner/repo')
+    expect(parseSubmission('### GitHub 仓库地址\n\nhttps://github.com/../repos/o/r\n').repo).toBeNull()
+    expect(parseSubmission('### GitHub 仓库地址\n\nhttps://github.com/a b/c\n').repo).toBeNull()
+  })
+
   it('rejects non-package names in the package field', () => {
     const s = parseSubmission('### npm 包名\n\nnot a package!!!\n')
     expect(s.name).not.toBe('not a package!!!')

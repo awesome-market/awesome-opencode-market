@@ -81,7 +81,10 @@ describe('normalizeRepoUrl — dot-segment / charset guard', () => {
     expect(normalizeRepoUrl('github:o/r')).toBe('o/r')
     expect(normalizeRepoUrl('https://github.com/o/r.git')).toBe('o/r')
     expect(normalizeRepoUrl('git@github.com:o/r.git')).toBe('o/r')
-    expect(normalizeRepoUrl('repo.with.dots/name_with_underscore')).toBe('repo.with.dots/name_with_underscore')
+    expect(normalizeRepoUrl('owner/re.po_with-dash')).toBe('owner/re.po_with-dash')
+    // GitHub owners are alnum+hyphen — 'github.com/a' is NOT owner/repo
+    expect(normalizeRepoUrl('github.com/a')).toBeNull()
+    expect(normalizeRepoUrl('git hub/o/r')).toBeNull()
   })
 })
 

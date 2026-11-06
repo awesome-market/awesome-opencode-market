@@ -181,11 +181,16 @@ export async function discoverGithub(
  *  'github.com/../repos/o/r' would silently retarget the fetch at a DIFFERENT
  *  repo's endpoints (and mint a traversal-shaped slug). Reject at the boundary
  *  instead of trusting downstream consumers to re-validate. */
-const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+const OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/
+const REPO_RE = /^[A-Za-z0-9._-]+$/
 const cleanRepo = (r: string): string | null => {
-  if (!REPO_RE.test(r)) return null
-  const [o, repo] = r.split('/')
+  const parts = r.split('/')
+  if (parts.length !== 2) return null
+  const [o, repo] = parts
+  // GitHub owners are alnum+hyphen only — a dotted "owner" ('github.com/a'
+  // parsed as owner/repo) is never a real repo and must not reach the API
   if (!o || !repo || o === '.' || o === '..' || repo === '.' || repo === '..') return null
+  if (!OWNER_RE.test(o) || !REPO_RE.test(repo)) return null
   return r
 }
 
