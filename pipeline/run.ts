@@ -5,7 +5,7 @@ import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d, compatStrings } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, type RepoMetaStatus } from './fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
@@ -368,6 +368,15 @@ export async function run(opts: RunOptions = {}) {
   const addFinding = (caps: PluginEntry['capabilities'], f: string): PluginEntry['capabilities'] =>
     caps.findings.includes(f) ? caps : { ...caps, findings: [...caps.findings, f] }
 
+  /** Findings that are NOT tarball-scan output — identity/observation signals
+   *  other layers wrote (sec:repo-*, sec:evidence-regressed, tree-truncated)
+   *  or merge-derived deltas (sec-delta:*). A ruleset rescan rebuilds
+   *  capabilities from scan output alone; without unioning these back, a
+   *  gone-check-kept entry silently loses signals nothing re-derives for it
+   *  (and flaggedAt resets, so the docket re-asks decided questions). */
+  const keepFindings = (caps: PluginEntry['capabilities']): string[] =>
+    caps.findings.filter(f => f.startsWith('sec:') || f.startsWith('sec-delta:'))
+
   // bounded worker pool (was 10-at-a-time batches): a slow candidate stalled
   // a whole batch's barrier — the pool lets the next candidate start as soon
   // as any worker frees, same concurrency without the tail latency
@@ -428,7 +437,7 @@ export async function run(opts: RunOptions = {}) {
       caps = { ...caps, findings: caps.findings.filter(x =>
         !x.startsWith('sec:repo-mismatch') && x !== 'sec:repo-dir-traversal' && !x.startsWith('sec:repo-declared-mismatch')) }
       const dir = pk.repositoryDir ?? undefined
-      if (dir && dir.split('/').some(s => s === '..' || s === '.')) {
+      if (unsafeRepoDir(dir)) {
         caps = addFinding(caps, 'sec:repo-dir-traversal')
       } else if (repoPkg?.status === 'ok' && repoPkg.pkgName
           && repoPkg.pkgName !== e.name && repoPkg.pkgName !== e.name.split('/').pop()) {
@@ -617,7 +626,7 @@ export async function run(opts: RunOptions = {}) {
           // the npm↔repo package-name correspondence check (dir-traversal
           // guard included — repository.directory is attacker-controlled)
           const dir = pk.repositoryDir ?? undefined
-          const dirTraversal = !!dir && dir.split('/').some(s => s === '..' || s === '.')
+          const dirTraversal = unsafeRepoDir(dir)
           const [repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
             repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
             fetchDownloads30d(cand.name, { fetchFn: f }),
@@ -649,7 +658,7 @@ export async function run(opts: RunOptions = {}) {
                 puCaps = {
                   scannedAt: now,
                   rulesetVersion: RULESET_VERSION,
-                  findings: r.findings.map(x => `${x.rule}:${x.file}`),
+                  findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(heldPin.capabilities)])],
                   // a confirmed re-tag stays flagged even after the fresh
                   // scan — "bytes changed under a stable version" is the
                   // signal a reviewer must see
@@ -762,7 +771,7 @@ export async function run(opts: RunOptions = {}) {
       // borrow its stars/trust) → finding; absence of evidence isn't proof.
       if (repo) {
         const dir = pk.repositoryDir ?? undefined
-        const dirTraversal = !!dir && dir.split('/').some(s => s === '..' || s === '.')
+        const dirTraversal = unsafeRepoDir(dir)
         if (dirTraversal) scan.findings.push('sec:repo-dir-traversal')
         const { pkgName, status: pjStatus } = dirTraversal
           ? { pkgName: null, status: 'error' as const }
@@ -1322,7 +1331,7 @@ export async function run(opts: RunOptions = {}) {
           const r = await scanTarball(await fetchTarball(url, { fetchFn: f }))
           return {
             scannedAt: now, rulesetVersion: RULESET_VERSION,
-            findings: r.findings.map(x => `${x.rule}:${x.file}`),
+            findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(c)])],
             redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
           }
         } catch { return c }
@@ -1388,13 +1397,29 @@ export async function run(opts: RunOptions = {}) {
         if (repoPkg.pkg?.name && sub.pkg !== repoPkg.pkg.name)
           redFlags.push(`sec:repo-pkg-changed:${clip(repoPkg.pkg.name)}`)
       }
+      // the pinned commit moved → the carried verification measured DIFFERENT
+      // bytes. Reset to unverified so plan re-queues the new sha (merge's
+      // samePinnedBytes gate can't help here — the stale status arrives
+      // inside this fresh entry, not via the prevVer restore). Evidence
+      // fields (verifiedAt/runUrl/integrity) stay as the audit trail of what
+      // WAS measured; merge's skipIfFlagged still downgrades if redFlags stand.
+      const moved = !!(tree.sha && e.source.version && tree.sha !== e.source.version)
       return {
         ...e,
         capabilities: {
           scannedAt: now, rulesetVersion: RULESET_VERSION,
-          findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+          // non-scan findings union back in (repo-mismatch/drift/delta signals
+          // nothing re-derives on this keep-path); tree-truncated is the one
+          // exception — it describes THIS probe's completeness, so it
+          // re-derives fresh below instead of carrying a stale marker
+          findings: [...new Set([
+            ...r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+            ...keepFindings(e.capabilities).filter(f => f !== 'sec:tree-truncated'),
+            ...(tree.truncated ? ['sec:tree-truncated'] : []),
+          ])],
           redFlags,
         },
+        ...(moved ? { verification: { ...e.verification, status: 'unverified' as const } } : {}),
         ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),
       }
     } catch { return e }
@@ -1414,7 +1439,7 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedNpm.has(e.name)) { entries.push(await rescanStaleNpm(e, pk)); return }
+      if (status === 'ok' && !rejectedNpm.has(lower)) { entries.push(await rescanStaleNpm(e, pk)); return }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
     // github-kind entries never pass through the candidate filters — but a

@@ -16,6 +16,22 @@ export function cacheKey(e: Pick<PluginEntry, 'name' | 'latestVersion'>, opencod
   return `${e.name}@${e.latestVersion ?? '?'}+${opencodeVersion}`
 }
 
+/** Byte-anchor agreement for the per-version restore in mergeEntries:
+ *  github-kind pins `source.version` (the scanned commit) while npm pins the
+ *  displayed tarball's SRI. cacheKey (name@version+host) cannot see a moved
+ *  commit — github latestVersion is always null — so without this check a
+ *  repo that advanced inherits the OLD commit's capabilities union and its
+ *  'verified' badge forever: verify plan never re-queues a verified slot,
+ *  so the moved bytes would never be measured at all. A missing anchor on
+ *  either side can't disprove sameness → keep the legacy restore. */
+const samePinnedBytes = (cur: PluginEntry, prev: PluginEntry): boolean => {
+  if (cur.source?.kind === 'github' || prev.source?.kind === 'github')
+    return (cur.source?.version ?? null) === (prev.source?.version ?? null)
+  const a = cur.integrity ?? null
+  const b = prev.integrity ?? null
+  return a === null || b === null || a === b
+}
+
 const ruleOf = (finding: string) => finding.split(':')[0] ?? finding
 
 /** Delta-scan strong rules: newly-appearing install-time code execution (SEC-3.5). */
@@ -244,7 +260,10 @@ export function mergeEntries(
     // e.latestVersion is the PINNED display version, so this restores the
     // displayed version's own scan/verify data (e.g. fresher verification
     // written by a verify-merge on the remote side of a rebase race).
-    if (prevVer) {
+    // samePinnedBytes guards the restore: a github-kind entry whose pinned
+    // commit moved keeps the same cacheKey, and inheriting the old commit's
+    // 'verified'/caps would certify bytes nobody scanned or ran.
+    if (prevVer && samePinnedBytes(out, prevVer)) {
       if (sameRuleset) out.capabilities = {
         // remote caps are authoritative for the slot — but findings/redFlags
         // the fresh entry computed THIS run (evidence-regression markers,

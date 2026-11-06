@@ -111,6 +111,18 @@ export async function fetchRepoTree(
   return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false, sha: b.sha ?? null }
 }
 
+/** repository.directory is attacker-controlled and lands RAW in a
+ *  raw.githubusercontent.com path — WHATWG URL parsing resolves '.', '..'
+ *  AND percent-encoded dot segments, treats '\' as '/', and strips
+ *  tab/LF/CR, so a '/'-only '..' segment check misses every smuggle class
+ *  ('a\..\b', '..%2f', '..\t/'). Allowlist instead: unicode letters/numbers
+ *  plus the URL-safe path charset, '/' separators only, no dot-segments. */
+export const unsafeRepoDir = (dir: string | null | undefined): boolean => {
+  const d = (dir ?? '').trim().replace(/^\/+|\/+$/g, '')
+  if (!d) return false
+  return /[^\p{L}\p{N}._~/-]/u.test(d) || d.split('/').some(s => s === '.' || s === '..')
+}
+
 /** Cross-check npm↔repo correspondence: the repo's own package.json should name
  *  the npm package. Uses the raw CDN (does not consume api.github.com quota).
  *  `dir` handles monorepos (repository.directory). */
@@ -119,11 +131,8 @@ export async function fetchRepoPackageName(
   opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<{ pkgName: string | null; status: RepoMetaStatus }> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  // repository.directory is attacker-controlled — '..' segments would let a
-  // packument steer the package.json probe into a different repo (URL path
-  // normalization escapes /owner/repo/HEAD/), defeating the mismatch check
+  if (unsafeRepoDir(opts.dir)) return { pkgName: null, status: 'error' }
   const clean = (opts.dir ?? '').replace(/^\/+|\/+$/g, '')
-  if (clean && clean.split('/').some(s => s === '..' || s === '.')) return { pkgName: null, status: 'error' }
   const dir = clean ? `${clean}/` : ''
   try {
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
@@ -143,8 +152,8 @@ export async function fetchRepoPackage(
   opts: { dir?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<{ pkg: { name?: string; main?: string; exports?: unknown; engines?: unknown; peerDependencies?: unknown } | null; status: RepoMetaStatus }> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
+  if (unsafeRepoDir(opts.dir)) return { pkg: null, status: 'error' }
   const clean = (opts.dir ?? '').replace(/^\/+|\/+$/g, '')
-  if (clean && clean.split('/').some(s => s === '..' || s === '.')) return { pkg: null, status: 'error' }
   const dir = clean ? `${clean}/` : ''
   try {
     const res = await f(`https://raw.githubusercontent.com/${fullName}/HEAD/${dir}package.json`)
