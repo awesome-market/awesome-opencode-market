@@ -162,7 +162,11 @@ const scanLine = (scanned: boolean, scanError: string | null, findings: number, 
       : 'Scan: not run'
 
 export function renderReview(r: Review): string {
-  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- reviewedVersion: ${r.version ?? 'null'} -->\n<!-- verdict: ${verdict(r)} -->`
+  // `target` marker: which package THIS report reviewed. submit.yml's
+  // edited-skip copies prior markers only when the last review's target still
+  // matches the current parse — without it an A→B→A title/body ping-pong can
+  // donate B's reviewedVersion/sha to A.
+  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- reviewedVersion: ${r.version ?? 'null'} -->\n<!-- target: ${r.name} -->\n<!-- verdict: ${verdict(r)} -->`
   if (r.status === 'error' || r.status === 'rate-limited')
     return `**${r.name}** — 审查失败：npm registry 暂时不可用（${r.status}）。这不是投稿内容的问题——请稍后在本 issue 回复任意评论即可重新审查。${markers}`
   if (!r.exists) return `**${r.name}** — package not found on npm.${markers}`
@@ -182,7 +186,7 @@ export function renderReview(r: Review): string {
 }
 
 export function renderRepoReview(r: RepoReview): string {
-  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.resolvedSha ?? 'null'} -->\n<!-- repoPkg: ${r.pkgName ?? 'null'} -->\n<!-- verdict: ${repoVerdict(r)} -->`
+  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.resolvedSha ?? 'null'} -->\n<!-- repoPkg: ${r.pkgName ?? 'null'} -->\n<!-- target: ${r.repo} -->\n<!-- verdict: ${repoVerdict(r)} -->`
   const apiDown = r.status === 'error' || r.status === 'rate-limited' || r.treeStatus === 'error' || r.treeStatus === 'rate-limited'
   if (apiDown)
     return `**${r.repo}** — 审查失败：GitHub API 暂时不可用（${r.status === 'ok' ? r.treeStatus : r.status}）。这不是投稿内容的问题——请稍后在本 issue 回复任意评论即可重新审查。${markers}`

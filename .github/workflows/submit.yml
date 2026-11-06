@@ -46,6 +46,20 @@ jobs:
     # comments/labels happen in the separate `report` job holding issues:write.
     permissions: {}
     steps:
+      # the review runs an ATTACKER-CONTROLLED tarball — zero permissions is
+      # the token boundary, this is the egress one: the job's real fetch set
+      # (npm registry + downloads api, github api/raw/codeload, git fetch) is
+      # allowlisted so a tar-parser exploit can't beacon or exfiltrate.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.npmjs.org:443
+            api.github.com:443
+            codeload.github.com:443
+            raw.githubusercontent.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -93,12 +107,15 @@ jobs:
           # the check — the catalog-side gate still enforces it.
           if [ "$KIND" != none ]; then
             git fetch origin catalog --quiet 2>/dev/null || true
-            BLOCKED=$(git show FETCH_HEAD:blocklist.json 2>/dev/null | BKEY="$PKG" node -e '
+            BLOCKED=$(git show FETCH_HEAD:blocklist.json 2>/dev/null | BKEY="$PKG" BREPO="$PREPO" node -e '
               try {
                 const b = JSON.parse(require("fs").readFileSync(0, "utf8"))
-                const k = (process.env.BKEY || "").toLowerCase()
+                // check BOTH identity keys — a name+repo submission whose repo
+                // is blocked must not sail the advisory check on a clean name
+                const keys = [process.env.BKEY, process.env.BREPO]
+                  .filter(Boolean).map(x => x.toLowerCase())
                 const hit = (b.names || []).concat(b.slugs || [])
-                  .some(x => String(x).toLowerCase() === k)
+                  .some(x => keys.includes(String(x).toLowerCase()))
                 process.stdout.write(hit ? "1" : "")
               } catch { /* unparseable blocklist → catalog gate still enforces */ }
             ' || true)
@@ -128,17 +145,23 @@ jobs:
             PSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
             PPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
             PCRE=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            if [ "$PV" = "clean" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
+            # cross-target guard: the LAST 'target:' marker must name the
+            # CURRENT parse — after an A→B→A edit ping-pong the most recent
+            # clean review can belong to B while the seed row still anchors A;
+            # copying B's markers onto A would pin a version/sha A never had.
+            # No marker (pre-marker comments) → can't prove same-target → scan.
+            PTGT=$(grep -oE 'target: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            if [ "$PV" = "clean" ] && [ "${PTGT,,}" = "${PKG,,}" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
               const s = JSON.parse(process.env.SEEDROW)
               const n = (process.env.PNAME || "").toLowerCase(), r = (process.env.PREPO || "").toLowerCase()
               process.exit((s.name ?? null) === (n || null) && (s.repo ?? null) === (r || null) ? 0 : 1)
             '; then SKIPSCAN=1; fi
           fi
           if [ -n "${BLOCKED:-}" ]; then
-            printf '**%s** — ⛔ 该包/仓库在收录黑名单（blocklist）中，目录不会收录。如认为误封请联系 maintainer。\n\n<!-- verdict: invalid -->\n' "$PKG" > /tmp/review.md
+            printf '**%s** — ⛔ 该包/仓库在收录黑名单（blocklist）中，目录不会收录。如认为误封请联系 maintainer。\n\n<!-- target: %s -->\n<!-- verdict: invalid -->\n' "$PKG" "$PKG" > /tmp/review.md
           elif [ -n "$SKIPSCAN" ]; then
-            printf '**%s** — 投稿目标未变化（与在队种子一致），沿用上次初审结论：clean——本次编辑仅更新描述/分类等元数据，未重复扫描。\n\n<!-- createdAt: %s -->\n<!-- reviewedVersion: %s -->\n<!-- repoSha: %s -->\n<!-- repoPkg: %s -->\n<!-- verdict: clean -->\n' \
-              "$PKG" "${PCRE:-null}" "${PVER:-null}" "${PSHA:-null}" "${PPKG:-null}" > /tmp/review.md
+            printf '**%s** — 投稿目标未变化（与在队种子一致），沿用上次初审结论：clean——本次编辑仅更新描述/分类等元数据，未重复扫描。\n\n<!-- createdAt: %s -->\n<!-- reviewedVersion: %s -->\n<!-- repoSha: %s -->\n<!-- repoPkg: %s -->\n<!-- target: %s -->\n<!-- verdict: clean -->\n' \
+              "$PKG" "${PCRE:-null}" "${PVER:-null}" "${PSHA:-null}" "${PPKG:-null}" "$PKG" > /tmp/review.md
             # pin stays what the ORIGINAL scan reviewed — not re-derived
             [ "$PVER" = "null" ] && PVER=""; [ "$PSHA" = "null" ] && PSHA=""; [ "$PPKG" = "null" ] && PPKG=""
             SEED_VERSION="${PVER:-$PSHA}"
@@ -214,6 +237,8 @@ jobs:
   # privileged half of the review: holds issues:write but only reads the
   # artifact the zero-permission `review` job produced — it never parses the
   # attacker tarball itself (N-6 / privilege separation).
+  # Deliberately NO harden-runner: actions/download-artifact talks to dynamic
+  # artifact-runtime hosts that can't be enumerated into an allowlist.
   report:
     needs: review
     runs-on: ubuntu-latest
@@ -286,6 +311,13 @@ jobs:
     concurrency: submit-ingest-${{ github.event.issue.number }}
     permissions: { contents: write, issues: write }
     steps:
+      # gh api/issue calls + git fetch/push to the catalog branch only
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - name: abuse gate — cap open submissions per account, then append
         env:
@@ -633,6 +665,16 @@ jobs:
             fi
           fi
           [ -n "$NOSEED" ] && echo "noseed=1" >> "$GITHUB_OUTPUT"
+          # pass-without-anchor refusal (F-3 twin): `shaOk` treats a missing
+          # `sha` as "nothing to verify against" — a sha-less human pass
+          # releases whatever bytes the slot anchors NEXT (same-version re-tag
+          # / unpublished-republish, or a repo whose HEAD moves after the tap).
+          # A pass MUST pin bytes: npm needs the reviewed version's
+          # dist.integrity, repo needs a commit sha (seed / review marker /
+          # index anchor). Brakes (concern) stay anchor-free on purpose.
+          if [ "$VERDICT" = "pass" ] && [ -z "$SHA" ]; then
+            echo "nosha=1" >> "$GITHUB_OUTPUT"
+          fi
           # slot context for the ack — same checks concern.yml does: does the
           # entry exist yet (ghost-verdict note), what is the targeted
           # version's CURRENT verification state (a pass must not promise
@@ -693,7 +735,7 @@ jobs:
           echo "entry=$ENTRY" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
-        if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.noseed != '1'
+        if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.noseed != '1' && steps.v.outputs.nosha != '1'
         id: app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -718,6 +760,8 @@ jobs:
           ./bin/catalog-append.sh
           echo "apply=$(cat /tmp/apply-status 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
       - name: heal — fold an already-recorded verdict into index.json
+        # not nosha-gated: a recorded line should still fold — the refusal is
+        # only about WRITING a sha-less pass, not about applying existing ones
         if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.noseed != '1' && (steps.v.outputs.dup == '1' || steps.app.outputs.apply == 'degraded')
         id: heal
         env:
@@ -781,6 +825,7 @@ jobs:
           VERMISMATCH: ${{ steps.v.outputs.vermismatch }}
           DUP: ${{ steps.v.outputs.dup }}
           NOSEED: ${{ steps.v.outputs.noseed }}
+          NOSHA: ${{ steps.v.outputs.nosha }}
           APPLY: ${{ steps.heal.outputs.apply || steps.app.outputs.apply }}
           SEEDRET: ${{ steps.conseed.outputs.ret }}
           PREV: ${{ steps.v.outputs.prev }}
@@ -851,6 +896,12 @@ jobs:
               }
               msg = `⛔ 未记录裁决：找不到已审版本可钉定——**人工 pass 不能放行从未扫描过的包**。${why[process.env.LASTREVIEW] ?? '请等初审完成（或先按初审报告修复）后再 `/approve`；如需直接裁决请走 [concern] 表单显式指定版本。'}`
             }
+            // F-3 twin: a pass with NO byte anchor (npm integrity / repo
+            // commit all failed to resolve) would release whatever bytes land
+            // next — refused like noseed, with a retry path spelled out
+            if (process.env.NOSHA === '1' && process.env.V === 'pass') {
+              msg = `⛔ 未记录裁决：无法钉定字节锚（${process.env.TARGET} 的 npm dist.integrity / repo commit sha 均解析失败）——**人工 pass 必须锚定已审字节，不锚定的 pass 会放行之后落槽的任意字节**。registry/API 暂时故障是常见原因，请稍后重新触发同一命令；持续失败请走 [concern] 表单显式指定版本。`
+            }
             // identical verdict already on file — append skipped so the
             // original `at` (and its maturity window) stands (HV-2)
             if (process.env.DUP === '1')
@@ -909,6 +960,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # gh api calls only — the narrowest allowlist
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: close stale submission issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -969,6 +1025,14 @@ jobs:
     concurrency: submit-withdraw-${{ github.event.issue.number }}
     permissions: { contents: write, issues: write }
     steps:
+      # npm ci + git fetch/push (catalog) + gh api — nothing else
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -986,7 +1050,14 @@ jobs:
           # the gate is a broad first-letter prefix — withdraw is destructive,
           # so validate the real command shape here before touching seeds
           LOW=${COMMENT_BODY,,}
-          [[ "$LOW" =~ ^[[:space:]]*/withdraw([[:space:]]|$) ]] || { echo "not a withdraw command — skip"; exit 0; }
+          if [[ ! "$LOW" =~ ^[[:space:]]*/withdraw([[:space:]]|$) ]]; then
+            # '/w*' prefix fired the job but the command isn't /withdraw —
+            # command-shaped bodies get the usage hint instead of silence
+            # (same feedback contract the verdict job keeps for /a /c typos)
+            [[ "$LOW" =~ ^[[:space:]]*/[a-z]+ ]] \
+              && gh issue comment "$ISSUE" --body "用法：`/withdraw`——撤回本投稿单的收录种子并关闭 issue。" || true
+            echo "not a withdraw command — skip"; exit 0
+          fi
           # ENTRY drives pending-entry retraction: a queued (never published)
           # entry that exists only because of submissions is tombstoned too —
           # otherwise a withdrawn submission keeps consuming scan/verify/AI
@@ -1012,6 +1083,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # gh api calls only — the narrowest allowlist
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: report pipeline failure on the issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
