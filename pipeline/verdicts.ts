@@ -292,8 +292,14 @@ export function applyMatureVerdicts(
 
   const plugins = index.plugins.map(entry => {
     let e = entry
-    // 1. held-version slot — pendingUpdate releases only via its own keyed verdict
-    if (e.pendingUpdate) {
+    // 1. held-version slot — pendingUpdate releases only via its own keyed
+    //    verdict. Never on a pending entry: its latestVersion IS the
+    //    candidate, so a leftover hold is the B3 inverted state — promoting
+    //    it here would approve the stale hold AND silently drop the pending
+    //    candidate before the R-9 cleanup below ever sees it. The guard makes
+    //    the source invariant airtight (valid inputs never carry pu on
+    //    pending, so this changes nothing for them).
+    if (e.pendingUpdate && e.approval !== 'pending') {
       const pu = e.pendingUpdate
       const v = verdictFor(e.name, pu.version)
       if (v?.verdict === 'concern') {

@@ -237,3 +237,37 @@ describe('R-D: digest surfaces the package brake and declared pause', () => {
     expect(md2).not.toContain('diagnose.paused')
   })
 })
+
+// ————— R-E: pending+pu inverted state — the stale hold is dropped, never promoted —————
+describe('R-E: a leftover hold on a pending entry cannot launder into an approval', () => {
+  it('pending + pendingUpdate + mature pass on the held version → pu dropped, candidate kept, still pending', () => {
+    // B3 inverted state (brake residue / hand-edited index): the entry's
+    // latestVersion IS the pending candidate — a stale hold sitting next to
+    // it must be normalized away, not promoted. Before the approval guard the
+    // pu release path fired first and overwrote latestVersion with the stale
+    // hold's version, silently discarding the candidate under review.
+    const e = mkEntry('p', {
+      approval: 'pending',
+      approvalReason: 'awaiting-review',
+      latestVersion: '2.0.0',
+      pendingUpdate: mkPu('1.1.0'),
+    })
+    const v = mkVerdict('p', '1.1.0', 'pass', T1)
+    const [out] = applyMatureVerdicts(mkIndex([e]), [v], digestStateOf('2026-02-01T00:00:00Z', [v])).index.plugins
+    expect(out!.approval).toBe('pending')
+    expect(out!.latestVersion).toBe('2.0.0')
+    expect(out!.pendingUpdate).toBeUndefined()
+  })
+  it('the same hold on an APPROVED entry still releases normally (guard is pending-only)', () => {
+    const e = mkEntry('p', {
+      approval: 'approved',
+      latestVersion: '1.0.0',
+      pendingUpdate: mkPu('1.1.0'),
+    })
+    const v = mkVerdict('p', '1.1.0', 'pass', T1)
+    const [out] = applyMatureVerdicts(mkIndex([e]), [v], digestStateOf('2026-02-01T00:00:00Z', [v])).index.plugins
+    expect(out!.approval).toBe('approved')
+    expect(out!.latestVersion).toBe('1.1.0')
+    expect(out!.pendingUpdate).toBeUndefined()
+  })
+})
