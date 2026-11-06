@@ -21,7 +21,7 @@
  *  Usage: tsx pipeline/verdicts-compact.ts <ai-verdicts.jsonl> [--days N] [--dry] */
 import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { AiVerdict } from '../src/schema.ts'
-import { vkey, atCmp } from './verdicts.ts'
+import { vkey, atCmp, rankable } from './verdicts.ts'
 
 interface Row { raw: string; v: AiVerdict | null }
 
@@ -48,6 +48,13 @@ export function compactLines(lines: string[], opts: { days?: number; now?: numbe
   const topAt = new Map<string, string>()
   for (const r of rows) {
     if (!r.v) continue
+    // same future-stamp exemption as latestVerdicts itself: an unrankable
+    // (far-future) line must NOT count as the key's "top" — otherwise every
+    // REAL rankable line reads as superseded-below-it and compaction deletes
+    // the exact line latestVerdicts would pick, silently un-verdicting the
+    // key (a live concern/brake vanishing from the effective map). The
+    // future line itself is never dropped (its `at` can never age out).
+    if (!rankable(r.v.at, now)) continue
     const k = vkey(r.v.name, r.v.version)
     const cur = topAt.get(k)
     if (cur === undefined || atCmp(r.v.at, cur) >= 0) topAt.set(k, r.v.at)

@@ -23,11 +23,15 @@ mkdir -p "$LOGD" "$(dirname "$CATDG")"
 
 log() { printf '%s [digest] %s\n' "$(date '+%F %T')" "$*"; }
 
-# single-instance guard — 同 ai-diagnose:mkdir 原子锁 + 超时回收
+# single-instance guard — 同 ai-diagnose:mkdir 原子锁 + 超时回收。
+# 回收必须原子:两次同时回收时,rmdir+mkdir 会让第二个回收者删掉第一个
+# 刚建的新锁(双双放行)。mv 是原子操作——先改名者拿走旧锁,败者 mv 撞
+# ENOENT 落入 skip 分支;新 mkdir 也复核——缝隙里挤进来的合法竞争者仍赢。
 LOCK=$HOME/.local/share/opencode-market/digest.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
-  if [ "$AGE" -gt 7200 ] && rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+  if [ "$AGE" -gt 7200 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+    rmdir "$LOCK.stale.$$" 2>/dev/null   # best-effort sweep of the moved dir
     log "reclaimed stale lock (${AGE}s old)"
   else
     log "another run in progress — skipping"; exit 0
