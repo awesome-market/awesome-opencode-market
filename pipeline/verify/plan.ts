@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { CatalogIndex, type AiVerdict, type PluginEntry } from '../../src/schema.ts'
 import { candidateHeldAt } from '../ai/diagnose.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
-import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict } from '../verdicts.ts'
+import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, tombEpochs } from '../verdicts.ts'
 import type { VerifyTarget } from './verify.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
@@ -63,6 +63,7 @@ import { retryable } from './retryable.ts'
 export function verifyQueued(
   e: PluginEntry, _now = new Date(),
   latest?: Map<string, AiVerdict>, latestHuman?: Map<string, AiVerdict>,
+  tomb?: Map<string, string>,
 ): boolean {
   const t = verifyTargetOf(e)
   // an npm slot needs a version to pin; a github-kind slot needs a repo spec.
@@ -81,7 +82,7 @@ export function verifyQueued(
   // a standing concern (slot-keyed or package brake) already judged these
   // bytes — re-verifying re-measures a condemned verdict. The verdict moving
   // re-enters the slot naturally; only --retest bypasses.
-  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version)?.verdict === 'concern') return false
+  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb)?.verdict === 'concern') return false
   const ver = t.verification
   // 'skipped' only exists because red flags vetoed a run — flags gone means
   // the skip reason no longer describes the slot, so it re-queues for an
@@ -121,6 +122,9 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
   const subs: VerifyTarget[] = []
   const staleHost: VerifyTarget[] = []
   const rest: VerifyTarget[] = []
+  // epoch map for the queue's verdict-condemned check — a pre-tombstone pass
+  // must not dissolve a live package brake here either (brakeFor/slotVerdict)
+  const tomb = tombEpochs(index.removed)
   // FIFO by candidate hold age (same clock diagnose consumes) — index order
   // is name-asc, so without this a deep backlog starves alphabetically-late
   // packages forever while early ones hog every run's cap
@@ -135,7 +139,7 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
     // host-version drift, cleared-flag skips, and retryable failures all fold
     // into the one queue predicate — verdict-condemned slots drop out inside
     // it unless a manual --retest asks for them back
-    if (!retest && !verifyQueued(p, now, latest, latestHuman)) continue
+    if (!retest && !verifyQueued(p, now, latest, latestHuman, tomb)) continue
     const parts = verifyPartsOf(p)
     // no plugin artifact AND no skill payload — nothing exists to honestly
     // verify (mcp/command/agent entries have no structure check yet)

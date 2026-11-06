@@ -508,7 +508,7 @@ export function unreviewedTargets(
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
     // actionable backlog. Same predicate the release gate uses.
-    if (brakeFor(human, e.name, ver)) return false
+    if (brakeFor(human, e.name, ver, tomb)) return false
     // §10 ordering: an 'unverified' target defers to the verify run for 48h —
     // reviewing without install evidence wastes tokens and the release gate
     // requires verified anyway. Past 48h: degraded review proceeds.
@@ -610,6 +610,7 @@ export async function main(
   const allVerdicts = loadVerdicts(verdictsPath)
   const seen = latestVerdicts(allVerdicts)
   const human = latestHumanVerdicts(allVerdicts)
+  const tomb = tombEpochs(idx.removed)
   const modelId = env.AI_MODEL ?? DEFAULT_MODEL
   const verOf = (e: CatalogIndex['plugins'][number]) => candidateVer(e) ?? null
 
@@ -649,7 +650,7 @@ export async function main(
     // package-braked slots can't apply any AI verdict — drift or not; skip
     // the sweep's packument fetch too (unreviewedTargets skips them as
     // well). --force is the explicit human override and bypasses both.
-    if (!force && brakeFor(human, e.name, ver)) return
+    if (!force && brakeFor(human, e.name, ver, tomb)) return
     const rec = seen.get(vkey(e.name, ver))
     if (!rec?.sha) return
     const cur = await shaFor(e.name, ver)

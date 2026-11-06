@@ -9,7 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs } from './verdicts.ts'
 import { retryable } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
@@ -141,6 +141,10 @@ export async function run(opts: RunOptions = {}) {
     const cur = removedByName.get(key)
     if (!cur || r.disappearedAt > cur.disappearedAt) removedByName.set(key, r)
   }
+  // epoch map for the shared verdict predicates (slotVerdict) — keeps the
+  // worker's hold-pin checks on the same tombstone rules as the release gate
+  // (named tombAt — `tomb` is already the worker's per-name RemovedEntry)
+  const tombAt = tombEpochs(old?.removed)
   const blocklist = loadBlocklist(opts.blocklistPath)
   const isBlocked = (name: string, slug?: string) =>
     !!blocklist && (blocklist.names.includes(name) || (!!slug && blocklist.slugs.includes(slug)))
@@ -598,11 +602,13 @@ export async function run(opts: RunOptions = {}) {
         // applyMatureVerdicts uses: raw latestByKey ranks by `at` alone, so an
         // ai pass stamped after a human concern (drift re-review, --force,
         // clock skew) would read "not terminal" and pin the hold forever
-        // while the release gate still treats the slot as braked (R-4).
-        const terminal = slotVerdict(latestByKey, latestHumanByKey, cand.name, heldPin.version)?.verdict === 'concern'
+        // while the release gate still treats the slot as braked (R-4). The
+        // tomb map keeps the pin check on the same epoch rules as the gate —
+        // a pre-tombstone pass must not dissolve a live brake here either.
+        const terminal = slotVerdict(latestByKey, latestHumanByKey, cand.name, heldPin.version, tombAt)?.verdict === 'concern'
           || (heldPin.verification.status === 'failed' && !retryable(heldPin.verification))
         const humanOnLatest = pk.latest !== null
-          && slotVerdict(latestByKey, latestHumanByKey, cand.name, pk.latest)?.source === 'human'
+          && slotVerdict(latestByKey, latestHumanByKey, cand.name, pk.latest, tombAt)?.source === 'human'
         if (!terminal && !humanOnLatest) {
           // the pin path used to skip every repo/metadata probe — a held
           // entry's description/category/license froze for as long as the

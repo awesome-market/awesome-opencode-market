@@ -190,12 +190,20 @@ export const epochGoverning = (
  *  report the brake instead of an impossible release phase. */
 export function brakeFor(
   human: Map<string, AiVerdict>, name: string, version: string | null,
+  tomb?: Map<string, string>,
 ): AiVerdict | undefined {
   if (version === null) return undefined
   const brake = packageBrake(human, name)
   if (!brake) return undefined
   const slotHuman = human.get(vkey(name, version))
-  if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0) return undefined
+  // the lifting pass must itself be able to govern: a pass predating the
+  // name's tombstone judged a DEAD incarnation — letting it dissolve the
+  // brake would drop the brake on a recycled name, exactly the name a
+  // concern is meant to keep inherited distrust on (epochGoverning is the
+  // shared per-line gate; omitting `tomb` keeps the pre-fix behavior for
+  // callers that have no removed-list context)
+  if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0
+      && (!tomb || epochGoverning(slotHuman, name, tomb))) return undefined
   return brake
 }
 
@@ -227,9 +235,10 @@ export const humanPassCovers = (
 export function slotVerdict(
   latest: Map<string, AiVerdict>, human: Map<string, AiVerdict>,
   name: string, version: string | null,
+  tomb?: Map<string, string>,
 ): AiVerdict | undefined {
   const v = effectiveVerdict(latest.get(vkey(name, version)), human)
-  return brakeFor(human, name, version) ?? v
+  return brakeFor(human, name, version, tomb) ?? v
 }
 
 /** Release gate (AI-DIAGNOSIS §10): the target version's own verification must
@@ -318,7 +327,7 @@ export function applyMatureVerdicts(
   // (run.ts pin checks, digest phases, docket) via slotVerdict so "which
   // verdict governs this key" cannot drift into per-callsite semantics
   const verdictFor = (name: string, version: string | null): AiVerdict | undefined =>
-    epochGoverning(slotVerdict(latest, latestHuman, name, version), name, latestTomb)
+    epochGoverning(slotVerdict(latest, latestHuman, name, version, latestTomb), name, latestTomb)
 
   const plugins = index.plugins.map(entry => {
     let e = entry
@@ -403,7 +412,7 @@ export function applyMatureVerdicts(
     // a package-level human pass (name@null) just dissolved a brake — with
     // no slot verdict to drive the reset the stale concern reason would
     // linger on a pending entry; clear it to the neutral awaiting state
-    const pkgPass = !v && latestHuman.get(vkey(e.name, null))?.verdict === 'pass'
+    const pkgPass = !v && epochGoverning(latestHuman.get(vkey(e.name, null)), e.name, latestTomb)?.verdict === 'pass'
     if (v) {
       if (e.approval === 'pending' || e.approval === 'legacy') {
         if (v.verdict === 'concern') {
@@ -502,7 +511,7 @@ export function explainEntry(
     // not a package-level override — don't mislabel it as a brake
     if (!brake || version === null)
       return { v: effectiveVerdict(latest.get(vkey(e.name, version)), latestHuman), packageBrake: false }
-    const v = slotVerdict(latest, latestHuman, e.name, version)
+    const v = slotVerdict(latest, latestHuman, e.name, version, tombs)
     return v === brake ? { v, packageBrake: true } : { v, packageBrake: false }
   }
   const slotOf = (
@@ -563,7 +572,10 @@ export function explainEntry(
       why: `${pre}pass 成熟 + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
   }
   const out: SlotExplain[] = []
-  if (e.pendingUpdate) {
+  // pending + pendingUpdate is the B3 inverted state applyMatureVerdicts
+  // refuses to adjudicate (pu dropped via the R-9 cleanup) — reporting a
+  // chain for a slot the gate discards would mislead ops
+  if (e.pendingUpdate && e.approval !== 'pending') {
     out.push(slotOf('pendingUpdate', e.pendingUpdate.version,
       e.pendingUpdate.capabilities.redFlags.length, e.pendingUpdate.capabilities.scannedAt === null,
       e.pendingUpdate.verification.status, e.pendingUpdate.integrity))

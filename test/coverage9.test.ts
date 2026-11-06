@@ -153,8 +153,10 @@ describe('verdicts explainEntry outcomes', () => {
     const xb = explainEntry(base as never, [vp, pkgConcern], dg([akey(vp), akey(pkgConcern)]))[0]!
     expect(xb.verdict).toBe('concern')   // package brake substitutes the verdict
     expect(xb.why).toContain('包级刹车')
-    // pendingUpdate slot explained separately
-    const withPu = { ...base, pendingUpdate: { version: '2.0.0', capabilities: base.capabilities, verification: base.verification, integrity: null } }
+    // pendingUpdate slot explained separately — on an APPROVED entry:
+    // pending+pendingUpdate is the B3 inverted state the gate refuses to
+    // adjudicate, so explainEntry skips it there too (audit #7)
+    const withPu = { ...live, pendingUpdate: { version: '2.0.0', capabilities: base.capabilities, verification: base.verification, integrity: null } }
     const slots = explainEntry(withPu as never, [verdict({ name: 'p', version: '2.0.0', verdict: 'pass', at: '2026-01-06T00:00:00Z' })], null)
     expect(slots.some(s => s.slot === 'pendingUpdate')).toBe(true)
   })

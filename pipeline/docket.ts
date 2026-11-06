@@ -167,7 +167,7 @@ export function docketTargets(
    *  brake itself is the standing decision. (version=null keys are
    *  github-kind SLOTS, not package brakes — brakeFor skips them.) */
   const pkgBrake = (name: string, ver: string): AiVerdict | undefined =>
-    brakeFor(human, name, ver)
+    brakeFor(human, name, ver, tomb)
   for (const e of index.plugins) {
     // slot = what the issue is about: the pendingUpdate when held, else the
     // entry itself. heldAt/publishedAt follow the candidate, not the entry.
@@ -757,7 +757,7 @@ export async function main(
     // docketTargets: a stale pre-tombstone pass is not a decision about
     // this incarnation — same honest "left the queue" reason
     const decided = !!(epochGoverning(latestV.get(vkey(t.name, t.ver || null)), t.name, tomb)
-      || brakeFor(humanV, t.name, t.ver || null))
+      || brakeFor(humanV, t.name, t.ver || null, tomb))
     if (decided) {
       // the one shape where '已放行' is the precise reason: a stale issue
       // whose version RELEASED (approved, flags gone). When the displayed

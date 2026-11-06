@@ -258,7 +258,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // verify backlog (V-2): shares planTargets' queue predicate — the real
   // number, retryable failures and cleared-flag re-entries included, minus
   // slots a verdict already condemned (they're judged, not awaiting a run).
-  const queue = index.plugins.filter(e => verifyQueued(e, now, latest, latestHuman))
+  const queue = index.plugins.filter(e => verifyQueued(e, now, latest, latestHuman, tomb))
   // drain estimate at the 2×daily scheduled cadence (VERIFY_CAP targets each)
   // — turns the raw count into "how long until this clears" for ops
   const drainDays = queue.length ? Math.ceil(queue.length / (Number(process.env.VERIFY_CAP) || 48) / 2) : 0
@@ -350,7 +350,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     // epoch gate matches the release gate (epochGoverning): a pass predating
     // this name's last tombstone judged a different object — rendering it as
     // '已公告·待放行闸' would promise a release that structurally can't happen
-    const governing = epochGoverning(slotVerdict(latest, latestHuman, e.name, ver), e.name, tomb)
+    const governing = epochGoverning(slotVerdict(latest, latestHuman, e.name, ver, tomb), e.name, tomb)
     if (ver !== null && governing && governing === packageBrake(latestHuman, e.name))
       return '包级刹车·需人工解除'
     // ver === null (repo-only/github-kind): the null key IS a real slot key
@@ -416,7 +416,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // though it lives on a different key — same predicate as the release gate.
   const brakeMark = (v: AiVerdict) => {
     if (v.verdict !== 'pass') return ''
-    if (brakeFor(latestHuman, v.name, v.version)) return ' ⛔已被包级 concern 刹车'
+    if (brakeFor(latestHuman, v.name, v.version, tomb)) return ' ⛔已被包级 concern 刹车'
     return eff(latest.get(vkey(v.name, v.version)))?.verdict === 'concern'
       ? ' ⛔已被更新的 concern 刹车' : ''
   }
