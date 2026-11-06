@@ -983,3 +983,245 @@ describe('docket main', () => {
     expect(readFileSync(summary, 'utf8')).toContain('预演')
   })
 })
+
+describe('docket audit — round 3 regressions', () => {
+  it('package-level human verdict (name@*) postdates flaggedAt → flag retired; predating it does not', () => {
+    const flagged = (at: string) => e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:name-reused'], flaggedAt: at } })
+    // slot key is pkg\0 1.0.0 — the pkg@* verdict lives on the null key;
+    // before the package-key check it could never retire the flag
+    expect(docketTargets(idx([flagged('2020-01-01T00:00:00Z')]),
+      [v({ source: 'human', version: null, verdict: 'concern' })])).toEqual([])
+    // pre-signal package verdict judges the bytes, not the flag → stays
+    expect(docketTargets(idx([flagged('2027-01-01T00:00:00Z')]),
+      [v({ source: 'human', version: null })])).toHaveLength(1)
+    // slot verdict still works exactly as before
+    expect(docketTargets(idx([flagged('2020-01-01T00:00:00Z')]),
+      [v({ source: 'human' })])).toEqual([])
+  })
+  it('flag target carries the pre-signal human verdict as CONTEXT, not a decision', () => {
+    const flagged = e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'], flaggedAt: '2027-01-01T00:00:00Z' } })
+    const hv = v({ source: 'human' })
+    const t = docketTargets(idx([flagged]), [hv])[0]!
+    expect(t.verdict).toBe('flag')
+    expect(t.humanVerdict).toBeTruthy()
+    expect(t.flaggedAt).toBe('2027-01-01T00:00:00Z')
+    const body = issueBody(t)
+    expect(body).toContain('此前人工裁决')
+    expect(body).toContain('早于信号')
+    expect(body).not.toContain('最新人工判词')   // generic line would read as decided
+  })
+  it('close reason is honest when the target left the queue with NO verdict (version moved / clock reset)', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkr-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    // candidate is 2.0.0 with a FRESH scan clock → young → no wanted target.
+    // The open issue is for 1.0.0 — its key has never been judged, so the
+    // close comment must not point at a verdict that doesn't exist
+    writeFileSync(idxPath, JSON.stringify(idx([e({ latestVersion: '2.0.0',
+      capabilities: { scannedAt: '2999-01-01T00:00:00Z', findings: [], redFlags: [] } })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list'))
+        return JSON.stringify([{ number: 9, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }] }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const comment = calls.find(c => c.includes('comment'))?.join(' ') ?? ''
+    expect(comment).toContain('离开队列')
+    expect(comment).not.toContain('verdict 已决议')
+    expect(calls.some(c => c.includes('close'))).toBe(true)
+  })
+  it('a verdict actually on the key still closes with the decided reason', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkr2-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    // human verdict on 1.0.0 → target resolved → the stale open issue closes
+    // with the REAL '已决议' pointer
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v({ source: 'human' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list'))
+        return JSON.stringify([{ number: 9, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }] }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const comment = calls.find(c => c.includes('comment'))?.join(' ') ?? ''
+    expect(comment).toContain('verdict 已决议')
+  })
+  it('open issue with body:null (REST empty body) → bodyDrift, no TypeError', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dknb-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list'))
+        return JSON.stringify([{ number: 5, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'ai:pass' }], body: null }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      // body:null used to hit (ex.body).trim() → TypeError → op failure every tick
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edit = calls.find(c => c.includes('edit') && c.includes('5'))
+    expect(edit?.join(' ')).toContain('--body')
+  })
+  it('paused unreviewed aggregate IS an ask — gets the DOCKET_ASSIGNEE push', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkpa-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(join(dir, 'diagnose.paused'), '')
+    // one aged no-verdict candidate → paused folds it into the aggregate
+    writeFileSync(idxPath, JSON.stringify(idx([e({ firstSeenAt: '2020-01-01T00:00:00Z' })])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return '[]'
+      if (args.includes('create')) return 'https://github.com/o/r/issues/42\n'
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    const savedA = process.env.DOCKET_ASSIGNEE
+    process.env.GH_REPO = 'o/r'
+    process.env.DOCKET_ASSIGNEE = 'maint'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      if (savedA === undefined) delete process.env.DOCKET_ASSIGNEE
+      else process.env.DOCKET_ASSIGNEE = savedA
+    }
+    expect(calls.find(c => c.includes('create'))?.join(' ')).toContain('(unreviewed backlog)')
+    const assign = calls.find(c => c.join(' ').includes('--add-assignee'))
+    expect(assign?.join(' ')).toContain('maint')
+  })
+  it('retried close does not re-post the auto-close comment (idempotent under partial failure)', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkic-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([])))
+    writeFileSync(vPath, '')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list'))
+        return JSON.stringify([{ number: 7, title: '[review] gone@1.0.0', labels: [] }])
+      // last comment is already the close note — a previous tick posted it,
+      // then the close call itself failed; re-posting is noise
+      if (args.includes('view')) return '该版本的审核单已自动关闭：该版本/条目已不在 catalog 索引中。'
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    expect(calls.some(c => c.includes('comment'))).toBe(false)
+    expect(calls.some(c => c.includes('close'))).toBe(true)
+  })
+  it('no drift but a missing notification assignee still gets one best-effort write', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkma-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const flagged = e({ approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'], flaggedAt: '2020-01-01T00:00:00Z' } })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, '')
+    // identical labels AND body → zero drift; only the assignee gap remains
+    const target = docketTargets(idx([flagged]), [], null)[0]!
+    const wantBody = issueBody(target, { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{
+        number: 5, title: '[review] pkg@1.0.0',
+        labels: [{ name: 'review:pending' }], body: wantBody, assignees: [] }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    const savedA = process.env.DOCKET_ASSIGNEE
+    process.env.GH_REPO = 'o/r'
+    process.env.DOCKET_ASSIGNEE = 'maint'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally {
+      process.env.GH_REPO = saved
+      if (savedA === undefined) delete process.env.DOCKET_ASSIGNEE
+      else process.env.DOCKET_ASSIGNEE = savedA
+    }
+    const edit = calls.find(c => c.join(' ').includes('--add-assignee'))
+    expect(edit?.join(' ')).toContain('5')
+    expect(calls.some(c => c.includes('create'))).toBe(false)
+  })
+  it('a failing write op is collected, siblings still run, and the job goes red', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkof-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e(), e({ name: 'pkg2' })])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n' + JSON.stringify(v({ name: 'pkg2', verdict: 'concern' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return '[]'
+      if (args.includes('create') && args.join(' ').includes('pkg@1.0.0'))
+        throw new Error('gh exploded')
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await expect(main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn))
+        .rejects.toThrow('write op')
+    } finally { process.env.GH_REPO = saved }
+    // the pkg2 create was attempted despite its sibling exploding
+    expect(calls.some(c => c.includes('create') && c.join(' ').includes('pkg2@1.0.0'))).toBe(true)
+  })
+})

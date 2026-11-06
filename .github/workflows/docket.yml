@@ -39,6 +39,15 @@ jobs:
     concurrency: review-docket
     permissions: { issues: write, contents: read }
     steps:
+      # renders model/plugin-controlled text into issues; also npm ci + git
+      # fetch + gh issue writes — same egress posture as other write jobs
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -68,8 +77,13 @@ jobs:
         run: |
           # K-6: no catalog branch (fork/dev) or transient fetch → defer to the
           # next tick instead of an hourly red job failure
-          git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next tick"; exit 0; }
-          git show origin/catalog:index.json > /tmp/index.json
+          git fetch --depth=1 origin catalog -q || { echo "no catalog branch / fetch failed — retry next tick"; exit 0; }
+          # same absent-vs-unreadable split as the aux files below: an
+          # index-less catalog branch = nothing to sync → defer, not red
+          if git show origin/catalog:index.json > /tmp/index.json 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:index.json 2>/dev/null; then
+            echo "index.json exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else echo "no index.json on origin/catalog yet — nothing to sync"; exit 0; fi
           # verdicts/digest-state legitimately ABSENT pre-first-run → empty is
           # correct. But "exists yet unreadable" (transient git failure) must
           # defer, not downgrade to empty: an empty verdict file strips every
@@ -98,7 +112,9 @@ jobs:
   # linking maintainers to them
   alert:
     needs: [docket]
-    if: failure()
+    # a 10-min timeout kill reports 'cancelled', not 'failure' — and a
+    # cancelled sync is exactly the silent-stale case this job exists for
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { issues: write }

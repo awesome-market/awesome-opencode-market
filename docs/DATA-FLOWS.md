@@ -1251,7 +1251,7 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
 
 ```mermaid
 flowchart TB
-  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai<br/>∨ 可见条目带身份级 sec flag<br/>（人工裁决须晚于 flaggedAt 才销旗）<br/>∨ 在押超 48h 仍无裁决<br/>（>10 聚合 unreviewed backlog 总单）<br/>+ humanVerdict/maturity 上下文"]
+  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai<br/>∨ 可见条目带身份级 sec flag<br/>（人工裁决须晚于 flaggedAt 才销旗，<br/>槽位键与包级 name@* 键都算）<br/>∨ 在押超 48h 仍无裁决<br/>（>cap(8) 聚合 unreviewed backlog 总单）<br/>+ humanVerdict/maturity 上下文"]
   VJ[("ai-verdicts.jsonl")] --> DT
   DT --> W["wanted 集合<br/>[review] name@ver"]
   OPEN["gh issue list<br/>open ∧ 标题前缀 [review]"] --> DF{"diff"}
@@ -1276,11 +1276,15 @@ docket.ts：index+verdicts → docketTargets
   （AI 已判、待人过目：pass 等放行窗口，concern 等人工翻案；
     人工裁决=终局 → 不进 wanted → 已开的单下轮自动关）
   ∨ flag 目标：可见条目（approval≠pending）展示槽含身份级 sec:* redFlag
-    且展示版键上**无晚于该 flag 首次观察时刻（flaggedAt）的人工裁决**
-    → [review] name@latestVersion 开单，人工 concern 即刹车回 pending
+    且展示版键与**包级 name@* 键**上都**无晚于该 flag 首次观察时刻
+    （flaggedAt）的人工裁决** → [review] name@latestVersion 开单，
+    人工 concern 即刹车回 pending
     （repojack/换包类信号的唯一评审面；sec:integrity-drift 同属此面——
     run.ts anchorIntegrity 的产物）。早于 flaggedAt 的人工裁决判的是
-    字节不是后到的信号，不能销旗；flaggedAt 缺失（旧数据）按新旗处理——
+    字节不是后到的信号，不能销旗——正文把它渲染为「此前人工裁决」
+    上下文行（标注裁决早于信号首次观察）；包级 `name@*` 判词同样销旗
+    ——包级裁决是对整条目而非单槽位的处置，维护者答 `pkg@* concern`
+    不应留下永生审核单；flaggedAt 缺失（旧数据）按新旗处理——
     fail-visible
   ∨ none 目标（有版本）：在押版本键上无任何裁决且在押超 48h——
     diagnose 队列积压或停摆（launchd 暂停）时给同等的 standing issue，
@@ -1323,7 +1327,9 @@ docket.ts：index+verdicts → docketTargets
         裁决字节不符，任一存在时**不承诺「按班放行」**)+详情页链接+按目标
         类型定制的手机点选说明（flag=确认信号/刹车回 pending，none=无
         判词直通放行链））；flag/concern 单额外 --add-assignee（DOCKET_ASSIGNEE repo
-        变量，逗号分隔登录名）——"等人裁决"变成推送通知；pass/none 不
+        变量，逗号分隔登录名）——"等人裁决"变成推送通知；`paused` 态的
+        unreviewed 总单同样指派——声明停摆后每条积压都在等人；其余
+        pass/none 不
         打扰（异议窗口非常态打扰）；assignee 写失败只告警不影响同步
   已存在但漂移 → issue edit：**所有**陈旧 ai:* 标签摘除（不只收敛第一
         个——多标签漂移曾永不收敛）、wantAi 补齐、review:pending 补回、
@@ -1334,7 +1340,12 @@ docket.ts：index+verdicts → docketTargets
   多余 → 关单+注明原因（已决议/已放行/并入总单/标题重复只留最新单/条目
         已出索引），收敛到 review:decided 终态标签，并顺带摘除残留
         verdict:* 标签（jsonl 才是裁决真源——已关单上的「待写盘」信号是
-        过期信号）；
+        过期信号）。「verdict 已决议」理由前置校验：目标键上确无裁决
+        且无包级刹车时，改报「离开队列（版本位移/时钟重置）」——
+        bump 或重扫描刷新在押时钟可让无判词目标移出 wanted，指着
+        不存在的判词关单会让维护者白翻 jsonl；并入总单的行优先于
+        同名目标判定（行在积压单里才是精确原因）；关单评论幂等——
+        上次重试已贴过的不再重复贴（查最新评论前缀）；
         canonical = 同标题取 max(issue number)——issue 号单调递增，
         不依赖 gh list 返回序（默认 newest-first，旧实现取数组尾实为
         最旧单，与"留最新"语义相反）；
@@ -1352,9 +1363,14 @@ workflow_run 触发只跳过 conclusion==='cancelled'（失败也跑——held �
 cron 和 fork 自己跑的 catalog/verify 都不该在本 repo 开单）；
 concurrency: review-docket 串行化；timeout-minutes: 10
 （三触发源可重叠——并发双跑曾会双建单，K-1）。
-catalog 文件读取区分「不存在」与「读失败」：verdicts/digest-state 缺失
+catalog 文件读取区分「不存在」与「读失败」：index.json 同口径——分支在
+但 index 缺席=无单可同步→defer 而非逐轮红告警（`git cat-file -e` 二段
+判定，`--depth=1` 只取 tip）；verdicts/digest-state 缺失
 →空文件（首轮合法态），存在但 `git show` 失败→整轮 defer——瞬断降级成
-空文件会剥全部 ai:* 标签并把 announced pass 的相位回退一整个 tick
+空文件会剥全部 ai:* 标签并把 announced pass 的相位回退一整个 tick；
+docket job 配 harden-runner egress 白名单（npm/git/gh 三域）；
+alert 收 failure()||cancelled()——10min 超时杀 job 报 cancelled，
+而被取消的同步正是「静默陈旧」场景本身
 ```
 
 人 → 标签 → concern.yml → verdict → 关单 → docket 下轮清理。闭环。

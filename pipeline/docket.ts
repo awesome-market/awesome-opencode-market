@@ -72,6 +72,10 @@ export interface DocketTarget {
    *  that would ship (applyMatureVerdicts' shaOk gate refuses the release) */
   verdictSha?: string
   integrity?: string | null
+  /** flag targets only: when the current sec-flag set was FIRST observed —
+   *  the body pairs it with a pre-signal human verdict so the maintainer
+   *  sees "the bytes were judged, the signal arrived later" explicitly */
+  flaggedAt?: string
   /** AI audit trail for the reviewer — judging model + L0.5 classifier score */
   model?: string
   l05Score?: number
@@ -190,9 +194,18 @@ export function docketTargets(
     if (e.approval !== 'pending') {
       const flags = e.capabilities.redFlags.filter(f => f.startsWith('sec:'))
       const hv = human.get(vkey(e.name, e.latestVersion))
-      const decided = hv !== undefined && e.capabilities.flaggedAt !== undefined
-        && atCmp(hv.at, e.capabilities.flaggedAt) > 0
+      // a PACKAGE-level human verdict (name\0null — `pkg@*` concern/pass) also
+      // retires the flag: it is a ruling on the whole entry, and a maintainer
+      // answering with pkg@* must not leave an immortal review issue behind.
+      // For github-kind latestVersion is null so this is the same lookup as
+      // the slot key above — only npm entries gain a second key here.
+      const hvPkg = e.latestVersion === null ? hv : human.get(vkey(e.name, null))
+      const flag = e.capabilities.flaggedAt
+      const postdates = (v: AiVerdict | undefined) =>
+        v !== undefined && flag !== undefined && atCmp(v.at, flag) > 0
+      const decided = postdates(hv) || postdates(hvPkg)
       if (flags.length && !decided) {
+        const prior = hv ?? hvPkg
         out.push({
           name: e.name, version: e.latestVersion, verdict: 'flag',
           reason: flags.join(' '),
@@ -202,6 +215,10 @@ export function docketTargets(
           ...(e.capabilities.scannedAt === null ? { unscanned: true } : {}),
           ...(e.slug ? { slug: e.slug } : {}),
           ...(e.publishedAt ? { publishedAt: e.publishedAt } : {}),
+          // a pre-signal verdict is CONTEXT, not a decision — the body
+          // states the ordering so it can't read as "already reviewed"
+          ...(prior ? { humanVerdict: prior } : {}),
+          ...(flag ? { flaggedAt: flag } : {}),
         })
       }
     }
@@ -428,6 +445,14 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   } else if (t.verdict === 'flag') {
     L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${clean(t.reason ?? 'sec:*')}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
+    // a human verdict that PREDATES the flag is evidence about the bytes,
+    // not this signal — show it as context with the ordering made explicit
+    if (t.humanVerdict) {
+      L.push(`- 此前人工裁决：**${t.humanVerdict.verdict}**（${(t.humanVerdict.at ?? '').slice(0, 10)}${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}）——` +
+        (t.flaggedAt
+          ? `信号首次观察 ${t.flaggedAt.slice(0, 10)}，裁决早于信号——判的是字节，不是该信号`
+          : '判词早于信号记录时点，需就该信号再判一次'))
+    }
   } else {
     L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
     if (t.reasonEn) L.push(`  - ${clean(t.reasonEn)}`)
@@ -465,7 +490,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
           ? '已进最新日报公示——异议窗开放中，下期日报后按班放行'
           : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
   }
-  if (t.humanVerdict) {
+  // flag targets render their own pre-signal context line above — the
+  // generic "最新人工判词" phrasing would read as decided there
+  if (t.humanVerdict && t.verdict !== 'flag') {
     L.push(`- 最新人工判词：**${t.humanVerdict.verdict}**${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}` +
       (t.humanVerdict.verdict === 'concern' && t.verdict === 'pass'
         ? '（在押刹车——AI 新判 pass 不会自动放行，本单为复审）' : ''))
@@ -534,6 +561,11 @@ export async function main(
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const verdicts = loadVerdicts(verdictsPath)
   const digest = loadDigestState(digestPath)
+  // closeReason needs the raw maps too — claiming "verdict 已决议" without
+  // checking the key is how a version-bumped/clock-reset issue used to close
+  // with a pointer to a judgment that never existed
+  const latestV = latestVerdicts(verdicts)
+  const humanV = latestHumanVerdicts(verdicts)
   // diagnose.paused on the catalog branch = the local AI queue is stopped on
   // PURPOSE (declared by bin/ai-diagnose.sh pause) — every aged 'none' hold
   // then aggregates into the standing issue instead of spamming per-version
@@ -541,7 +573,11 @@ export async function main(
   const paused = existsSync(join(dirname(idxPath), 'diagnose.paused'))
   const targets = docketTargets(index, verdicts, digest, { paused })
   const wanted = new Map(targets.map(t => [issueTitle(t), t]))
-  const wantedByName = new Map(targets.map(t => [t.name, t]))
+  // first-write-wins: targets arrive severity-sorted, so the surviving per-name
+  // entry is the most urgent pending surface (a flag target must not shadow
+  // the held-version issue when naming "what's current" in close reasons)
+  const wantedByName = new Map<string, DocketTarget>()
+  for (const t of targets) if (!wantedByName.has(t.name)) wantedByName.set(t.name, t)
   const pagesBase = env.MARKET_PAGES_URL
     ?? `https://${repo.split('/')[0]}.github.io/${repo.split('/')[1]}`
 
@@ -552,7 +588,11 @@ export async function main(
   // feature off. Assignment is best-effort — a rejected assignee must never
   // fail the verdict sync itself.
   const assignees = (env.DOCKET_ASSIGNEE ?? '').split(',').map(s => s.trim()).filter(Boolean)
-  const urgent = (t: DocketTarget) => t.verdict === 'flag' || t.verdict === 'concern'
+  // the paused aggregate is the ONE 'none' that is an ask, not a window:
+  // the AI queue is declared stopped, so every row inside needs a human —
+  // exactly what the assignee push exists for
+  const urgent = (t: DocketTarget) =>
+    t.verdict === 'flag' || t.verdict === 'concern' || (paused && t.name === NONE_BACKLOG)
   const assignBestEffort = async (issue: string | number, only?: string[]) => {
     if (!assignees.length) return
     const want = only ?? assignees
@@ -631,7 +671,9 @@ export async function main(
     const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
     const stuck = [...curLabels].find(l => l === 'verdict:pass' || l === 'verdict:concern') ?? null
     const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused })
-    const bodyDrift = ex.body !== undefined && ex.body.trim() !== body.trim()
+    // REST returns body:null for empty bodies — !== undefined lets null
+    // through and .trim() throws, permanently failing the op every tick
+    const bodyDrift = (ex.body ?? '') !== undefined && (ex.body ?? '').trim() !== body.trim()
     const edit = ['issue', 'edit', '-R', repo, String(ex.number)]
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
@@ -677,16 +719,24 @@ export async function main(
     if (i.title === issueTitle({ name: REPO_BACKLOG, version: null })) return 'repo-only 积压已清空'
     if (i.title === issueTitle({ name: NONE_BACKLOG, version: null })) return '未评审积压已清空（回落逐条单规模或全部获判）'
     const t = titleTarget(i.title)
+    // the aggregate check precedes same-name: a row inside the standing
+    // issue is the precise reason, "target changed" only when it isn't one
+    if (t && aggregated.has(`${t.name}\0${t.ver}`)) return '并入未评审积压总单'
     const still = t && wantedByName.get(t.name)
     if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
-    if (t && aggregated.has(`${t.name}\0${t.ver}`)) return '并入未评审积压总单'
     const e = t ? byName.get(t.name) : undefined
-    if (!e) return '该版本/条目已不在 catalog 索引中'
+    if (!t || !e) return '该版本/条目已不在 catalog 索引中'
     // per-entry issue superseded by an aggregate — say so instead of the
     // generic verdicted reason (the entry is still pending!)
     if (e.approval === 'pending' && e.latestVersion === null) return '并入 repo-only 积压总单'
     if (!(e.approval === 'pending' || e.pendingUpdate)) return '该版本已放行'
-    return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
+    // "verdict 已决议" must be TRUE: a candidate-key move (npm bump, ruleset
+    // rescan refreshing the hold clock) can drop a target with zero verdicts
+    // on its key — closing with a pointer to a judgment that doesn't exist
+    // sends the maintainer hunting through the jsonl for nothing
+    if (latestV.has(vkey(t.name, t.ver || null)) || brakeFor(humanV, t.name, t.ver || null))
+      return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
+    return '评审目标已离开队列（版本位移或在押时钟重置），该版本尚无裁决——如需先行人工裁决请在本单评论'
   }
 
   for (const i of open) {
@@ -707,8 +757,15 @@ export async function main(
       if (!cur.has('review:decided')) largs.push('--add-label', 'review:decided')
       for (const l of cur) if (l.startsWith('verdict:')) largs.push('--remove-label', l)
       if (largs.length) await ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
-      await ghFn(['issue', 'comment', '-R', repo, String(i.number),
-        '--body', `该版本的审核单已自动关闭：${why}。`])
+      // idempotent under retry: a close that died mid-op last tick (labels
+      // and comment posted, close call failed) reruns the whole op — without
+      // peeking at the latest comment the same note re-posts every retry
+      const last = String(await ghFn(['issue', 'view', '-R', repo, String(i.number),
+        '--json', 'comments', '--jq', '.comments[-1].body // ""'])).trim()
+      if (!last.startsWith('该版本的审核单已自动关闭')) {
+        await ghFn(['issue', 'comment', '-R', repo, String(i.number),
+          '--body', `该版本的审核单已自动关闭：${why}。`])
+      }
       await ghFn(['issue', 'close', '-R', repo, String(i.number)])
       closed.push(i.title)
     } })
