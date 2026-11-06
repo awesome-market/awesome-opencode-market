@@ -84,11 +84,11 @@ jobs:
           # permission denial (H-6). A definitive answer (404 = not a
           # collaborator, or an explicit low permission) removes the label;
           # a still-failing check keeps it so the maintainer can re-tap.
-          PERM=""; TRANSIENT=1
+          PERM=""
           for t in 1 2; do
             OUT=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>&1) \
-              && { PERM="$OUT"; TRANSIENT=""; break; }
-            case "$OUT" in *"HTTP 404"*) PERM="none"; TRANSIENT=""; break ;; esac
+              && { PERM="$OUT"; break; }
+            case "$OUT" in *"HTTP 404"*) PERM="none"; break ;; esac
             [ "$t" = 1 ] && sleep 2
           done
           echo "actor=$ACTOR permission=${PERM:-unknown}"
@@ -166,7 +166,10 @@ jobs:
             gh issue comment "$ISSUE" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
             exit 0
           fi
-          git fetch origin catalog -q || { echo "catalog fetch failed — refusing to judge on a stale index"; exit 1; }
+          # tip only — the full history (~14MB/index-commit) buys nothing for
+          # a exists/version lookup; forced refspec survives a rewritten branch
+          git fetch -q --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' \
+            || { echo "catalog fetch failed — refusing to judge on a stale index"; exit 1; }
           git show origin/catalog:index.json > /tmp/index.json
           # canonical name resolution: index names are the source of truth —
           # a hand-typed `Owner/Repo` or `@Scope/Pkg` must verdict-key to the
@@ -257,7 +260,6 @@ jobs:
           # branches read the resolved INFO.isrepo, not the parser's guess
           ISREPO=$(node -pe 'JSON.parse(process.argv[1]).isrepo' "$INFO")
           PKGALL=$(node -pe 'JSON.parse(process.argv[1]).pkgAll' "$INFO")
-          APPROVAL=$(node -pe 'JSON.parse(process.argv[1]).approval' "$INFO")
           FLAGS=$(node -pe 'JSON.parse(process.argv[1]).flags' "$INFO")
           SRCVER=$(node -pe 'JSON.parse(process.argv[1]).srcver' "$INFO")
           # pkgAll: empty V is the INTENDED package scope, not an unresolved
@@ -328,7 +330,6 @@ jobs:
           echo "displayed=$DISPLAYED" >> "$GITHUB_OUTPUT"
           echo "vstatus=$VSTATUS" >> "$GITHUB_OUTPUT"
           echo "pkgall=$PKGALL" >> "$GITHUB_OUTPUT"
-          echo "approval=$APPROVAL" >> "$GITHUB_OUTPUT"
           echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"
           # K-4: a version that is neither the held candidate nor the displayed
           # release has no live slot — the verdict is archived but changes
@@ -413,7 +414,6 @@ jobs:
           # one number for the ack to reason about (HV-8)
           APPLY: ${{ steps.heal.outputs.apply || steps.app.outputs.apply }}
           DISPLAYED: ${{ steps.n.outputs.displayed }}
-          APPROVAL: ${{ steps.n.outputs.approval }}
           FLAGS: ${{ steps.n.outputs.flags }}
           PREV: ${{ steps.n.outputs.prev }}
           PREVISSUE: ${{ steps.n.outputs.previssue }}
@@ -550,7 +550,7 @@ jobs:
   retest:
     if: >-
       !github.event.issue.pull_request
-      && github.event_name == 'issue_comment' && github.event.action == 'created'
+      && github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
       && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
       && !contains(github.event.issue.labels.*.name, 'submission')
       && (startsWith(github.event.comment.body, '/retest') || startsWith(github.event.comment.body, '/Retest') || startsWith(github.event.comment.body, '/RETEST')
@@ -612,7 +612,11 @@ jobs:
               // case-insensitive like verify's targets narrowing — a case
               // typo is not "not in catalog"; emit the INDEX spelling so the
               // dispatched targets are canonical
+              // name match first, then source.repo — same dual-key as the
+              // verdict channel: '/retest owner/repo' on an npm twin resolves
+              // to the npm entry's canonical name, not "不在目录"
               const e = idx.plugins.find(p => p.name.toLowerCase() === n.toLowerCase())
+                ?? idx.plugins.find(p => (p.source?.repo ?? "").toLowerCase() === n.toLowerCase())
               const v = e?.pendingUpdate?.version ?? e?.latestVersion
               if (!e) { notes.push(`${n} 不在目录`); continue }
               // github-kind entries have latestVersion=null but ARE verifiable —
