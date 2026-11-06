@@ -74,6 +74,14 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
   // call made. A pre-existing dir keeps its previous version's files and
   // manifest on a failed upgrade instead of being destroyed.
   const createdDest = !existsSync(dest)
+  // paths the PREVIOUS install recorded — must be captured BEFORE extraction:
+  // read after, a tarball-shipped .market-skills.json would pass as ours and
+  // its paths[] would drive rmSync over arbitrary sibling dirs
+  const owned = new Set<string>()
+  try {
+    const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
+    for (const rel of prev.paths ?? []) owned.add(rel)
+  } catch { /* first install */ }
   mkdirSync(dest, { recursive: true })
   let committed = false
   try {
@@ -112,7 +120,11 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
       if (pendingLong) { f = pendingLong; pendingLong = null }
       else if (prefix) f = `${prefix}/${f}`
       const rel = safeTarRel(f)
-      if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
+      // unsafe name or macOS AppleDouble junk — and never extract market
+      // bookkeeping files: a shipped .market-skills.json would forge the
+      // ownership manifest that drives the sibling-dir sweep below
+      const leaf = rel?.split('/').pop() ?? ''
+      if (rel === null || leaf.startsWith('._') || leaf === '.market-skills.json' || leaf === '.market-lift') { off = next; continue }
       items.push({ type, rel, body, size })
       off = next
     }
@@ -137,11 +149,6 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
     const root = dirname(dest)
     // paths we created on a previous install may be overwritten in place;
     // a foreign dir at the same name forces the <id>- prefix instead
-    const owned = new Set<string>()
-    try {
-      const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
-      for (const rel of prev.paths ?? []) owned.add(rel)
-    } catch { /* first install */ }
     const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
       ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
     const paths: string[] = []

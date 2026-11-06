@@ -1261,8 +1261,9 @@ export default Plugin.define({
           let apiOk = false, cliOk = false
           try {
             if (m.client?.plugin?.list) {
-              apiOk = true
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
+              apiOk = true   // set only after the call lands — a throwing
+              // list() must still count as inventory-unreachable (degraded)
               lg(`installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}`)
               Object.assign(featByName, featuresMap(res.data ?? []))
               for (const p of res.data ?? []) {

@@ -265,8 +265,10 @@ export default Plugin.define({
       // Resolves when the spawn + config rewrite fully settled — updateAll's
       // serial lane awaits it so config writes can't race.
       const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<boolean> => {
-        const pin = pinSpec(e)
-        try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
+        let pin: string
+        // pinSpec itself throws on a crafted latestVersion — outside the try
+        // it escaped as an unhandled rejection instead of a status line
+        try { pin = pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
         // the render-time entry can lag the publication by up to TTL — a
         // version concern'd inside that window must NOT install (GUI host
         // does the same recheck before its spawn). Cheap when health.json

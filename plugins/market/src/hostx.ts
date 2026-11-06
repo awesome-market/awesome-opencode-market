@@ -34,8 +34,10 @@ export function assertSpecForName(name: string, spec: unknown): void {
   if (spec === undefined || spec === null || spec === '') return
   if (typeof spec !== 'string' || cleanSpec(spec) !== name)
     throw new Error('spec does not match package name')
-  const v = spec.slice(name.length + 1)
-  if (v && !VER_RE.test(v)) throw new Error(`invalid version in spec: ${v.slice(0, 80)}`)
+  // an '@' demands a non-empty safe version — 'name@' must not read as
+  // 'name' (npm resolves a trailing-empty spec to the unapproved latest)
+  if (spec[name.length] === '@' && !VER_RE.test(spec.slice(name.length + 1)))
+    throw new Error(`invalid version in spec: ${spec.slice(name.length + 1, name.length + 81)}`)
 }
 
 /** Uninstall targets are broader than install ids: catalog names (npm or
