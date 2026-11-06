@@ -109,7 +109,9 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     reason = `via label ${e.label} by ${e.actor} (issue #${e.issueNumber})`
   } else if (e.event === 'issue_comment') {
     // case-insensitive: phone keyboards autocapitalize `/Approve`/`/Concern`
-    const m = e.commentBody.match(/^\/(concern|approve)(?:\s+([\s\S]*))?$/i)
+    // leading whitespace is tolerated — a padded '  /concern x' is still a
+    // command, not prose (same leniency as submit.yml's verdict parse)
+    const m = e.commentBody.match(/^\s*\/(concern|approve)(?:\s+([\s\S]*))?$/i)
     if (!m) return { skip: 'noresolve' }
     verdict = m[1]!.toLowerCase() === 'approve' ? 'pass' : 'concern'
     const rest = (m[2] ?? '').trim()

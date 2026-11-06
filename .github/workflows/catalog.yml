@@ -236,6 +236,9 @@ jobs:
             touch /tmp/stale.list /tmp/dead.list
             while read -r N; do
               [ -n "$N" ] || continue
+              # closed issues get no status noise — the sweep may have already
+              # posted its own close comment on the same 30d horizon
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
               gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || true
               echo "stale-warned issue #$N"
             done < /tmp/stale.list
@@ -244,6 +247,7 @@ jobs:
             # submissions can't hang open forever (F-11); resubmit = new issue.
             while read -r N; do
               [ -n "$N" ] || continue
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
               gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || true
               gh issue close "$N" || true
               echo "dead-closed issue #$N"

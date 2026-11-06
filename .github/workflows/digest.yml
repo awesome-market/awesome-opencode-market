@@ -193,6 +193,15 @@ jobs:
             REASONS="本地 ai-diagnose 疑似停摆：最近一次 ai-diagnose 提交已 ${AGE_H}h 且仍有 ${PENDING} 个目标未审——投稿将一直 pending。检查本机 launchd: \`launchctl list | grep opencode-market\`、日志与 ai.env。"
             LEGS="${LEGS}1"
           fi
+          # LAST=0 with a live pipeline is NOT bootstrap — index has history so
+          # catalog ran, yet no 'ai-diagnose:' commit ever landed: the local
+          # worker was never wired up (or its commit prefix drifted). The >0
+          # guard above keeps a truly fresh repo silent; this leg closes the
+          # "never configured reads as bootstrap forever" blind spot.
+          if [ "$PAUSED" != 1 ] && [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" = 0 ] && [ "${LAST_IDX:-0}" -gt 0 ]; then
+            REASONS="${REASONS}ai-verdicts.jsonl 中从未出现 ai-diagnose: 提交，但已有 ${PENDING} 个目标待审——本地诊断 worker 疑似从未接线（或提交前缀漂移），投稿将一直 pending。检查本机 launchd 配置。"
+            LEGS="${LEGS}5"
+          fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
             REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
             LEGS="${LEGS}2"

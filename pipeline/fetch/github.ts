@@ -6,6 +6,10 @@ export interface RepoMeta {
   id: number | null              // numeric repo id — repojacking detection (id changes on recreation)
   stars: number
   archived: boolean
+  /** true when the repo is a fork — submissions should nominate the canonical
+   *  upstream; a fork inherits the parent's whole tree and would sail through
+   *  the evidence gate on code it didn't write */
+  fork: boolean
   pushedAt: string | null
   createdAt: string | null
   license: string | null
@@ -42,7 +46,7 @@ export async function fetchRepoMeta(
   if (!res.ok) return { meta: null, status: 'error' }
   let b: {
     id?: number
-    stargazers_count?: number; archived?: boolean; pushed_at?: string; created_at?: string
+    stargazers_count?: number; archived?: boolean; fork?: boolean; pushed_at?: string; created_at?: string
     license?: { spdx_id?: string }; topics?: string[]; default_branch?: string
     full_name?: string
   }
@@ -57,6 +61,7 @@ export async function fetchRepoMeta(
       stars: b.stargazers_count ?? 0,
       topics: b.topics ?? [],
       archived: b.archived ?? false,
+      fork: b.fork ?? false,
       pushedAt: b.pushed_at ?? null,
       createdAt: b.created_at ?? null,
       license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
