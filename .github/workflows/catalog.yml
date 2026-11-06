@@ -169,7 +169,14 @@ jobs:
             # (preserves remote's verification/removed state instead of clobbering it)
             git show origin/catalog:index.json > /tmp/remote-index.json 2>/dev/null || true
             if [ -s /tmp/remote-index.json ]; then
-              npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json
+              # a failed remerge leaves an EMPTY or partial merged file — an
+              # unconditional mv would clobber our good index with it, and the
+              # cp+commit below would then push an empty index to the catalog
+              # branch. Fail the run instead: remerge failures are bugs or
+              # resource faults, both worth an alert, never a silent publish.
+              npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json \
+                || { echo "remerge failed — refusing to publish a clobbered index" >&2; exit 1; }
+              [ -s /tmp/index.merged.json ] || { echo "remerge produced empty output" >&2; exit 1; }
               mv /tmp/index.merged.json /tmp/index.json
             fi
             # catch-up verdict apply on the merged index: a human brake / new
@@ -244,7 +251,11 @@ jobs:
             flagPushed=0
             for i in 1 2 3; do
               if git -C /tmp/cat diff --cached --quiet; then flagPushed=1; break; fi
-              git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || true
+              # a failed commit followed by a push of an unchanged HEAD exits 0
+              # ("Everything up-to-date") — `|| true` would report flagPushed=1,
+              # send comments+closes, and lose notified:true entirely. Retry
+              # the commit instead; a still-staged diff means it never landed.
+              git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || continue
               git -C /tmp/cat push origin HEAD:catalog && { flagPushed=1; break; }
               git fetch origin catalog 2>/dev/null || true
               git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
@@ -260,7 +271,11 @@ jobs:
             # issues[] is already deduped per issue inside markNotified — one
             # comment+close per submission no matter how many seed rows match
             sort -un /tmp/notify.list -o /tmp/notify.list
-            SITE="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+            # project sites live at <owner>.github.io/<repo> — but a repo named
+            # <owner>.github.io IS the root domain (org page); appending its
+            # name produces a 404 detail link.
+            SITE="https://${GITHUB_REPOSITORY_OWNER}.github.io"
+            [ "${GITHUB_REPOSITORY#*/}" = "${GITHUB_REPOSITORY_OWNER}.github.io" ] || SITE="$SITE/${GITHUB_REPOSITORY#*/}"
             while IFS=$'\t' read -r N SLUG; do
               [ -n "$N" ] || continue
               LINK=""; [ -n "$SLUG" ] && LINK="——详情：$SITE/p/$SLUG.html"
@@ -329,6 +344,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # only gh api calls — the narrowest allowlist (same as verify/digest alert)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

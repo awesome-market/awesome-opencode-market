@@ -149,10 +149,17 @@ export function mergeEntries(
   const oldByName = new Map<string, PluginEntry>()
   if (old) for (const e of old.plugins) {
     oldByKey.set(cacheKey(e, opencodeVersion), e)
-    if (!oldByName.has(e.name)) oldByName.set(e.name, e)
+    // name keys are canonical lowercase everywhere else in the pipeline — an
+    // exact-case lookup here would silently drop the whole identity layer
+    // (approval, firstSeenAt, slug, verification) if a stored name's casing
+    // ever drifted (legacy index data, a github rename changing canonical
+    // case). Matching lowercase loses nothing: name collisions that differ
+    // ONLY by case are already rejected at admission.
+    const k = e.name.toLowerCase()
+    if (!oldByName.has(k)) oldByName.set(k, e)
   }
   const merged = fresh.map(e => {
-    const prev = oldByName.get(e.name)
+    const prev = oldByName.get(e.name.toLowerCase())
     const prevVer = oldByKey.get(cacheKey(e, opencodeVersion))
     const sameRuleset = !rulesetVersion || prevVer?.capabilities.rulesetVersion === rulesetVersion
     const out: PluginEntry = { ...e }
@@ -349,11 +356,14 @@ export function buildIndex(
   const now = opts.now ?? new Date().toISOString()
   const merged = mergeEntries(fresh, old, opts.opencodeVersion, opts.rulesetVersion, now)
   const gate = corruptionGate(merged, old)
-  const aliveNames = new Set(merged.map(e => e.name))
+  // lowercase: a live entry must retire its tombstone even if stored casing
+  // drifted — otherwise a zombie tombstone survives next to the live entry and
+  // its disappearedAt epoch keeps gating the live entry's pass verdicts.
+  const aliveNames = new Set(merged.map(e => e.name.toLowerCase()))
   const cutoff = Date.parse(now) - REMOVED_RETENTION_MS
   const removed = [
     ...(old?.removed ?? []).filter(r =>
-      !aliveNames.has(r.name) && (Number.isNaN(Date.parse(r.disappearedAt)) || Date.parse(r.disappearedAt) > cutoff)),
+      !aliveNames.has(r.name.toLowerCase()) && (Number.isNaN(Date.parse(r.disappearedAt)) || Date.parse(r.disappearedAt) > cutoff)),
     ...(opts.removed ?? []),
   ]
   // categories registry (I-3): english ids are canonical — legacy zh labels

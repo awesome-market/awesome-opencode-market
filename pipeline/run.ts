@@ -376,18 +376,26 @@ export async function run(opts: RunOptions = {}) {
     // own package.json name drift between version bumps, so the reuse path
     // refreshes them too, same as the pin path (O-8's twin). Both probes hit
     // raw.githubusercontent (CDN, no API quota).
-    const repo = e.source.repo
     const pkResP = fetchPackument(e.name, { fetchFn: f })
+    // the packument's repository field is authoritative — resolve the repo
+    // anchor from the FRESH packument, falling back to the stored source.repo
+    // only when the field is absent or unusable. A repointed repository field
+    // would otherwise stay invisible on the reuse path: repoMeta/marketMeta/
+    // repoPkg would keep probing the stale repo forever and repoId could never
+    // drift onto a different repo, so sec:repo-recreated could never fire.
+    const repoP = pkResP.then(({ pk }) =>
+      normalizeRepoUrl(pk?.repository ?? null) ?? e.source.repo ?? null)
     const [pkRes, repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
       pkResP,
-      repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+      repoP.then(r => r ? fetchRepoMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
       fetchDownloads30d(e.name, { fetchFn: f }),
-      repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
-      pkResP.then(({ pk }) => repo && pk?.repositoryDir
+      repoP.then(r => r ? fetchMarketMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
+      repoP.then(repo => pkResP.then(({ pk }) => repo && pk?.repositoryDir
         ? fetchRepoPackageName(repo, { dir: pk.repositoryDir, fetchFn: f })
-        : repo ? fetchRepoPackageName(repo, { fetchFn: f }) : Promise.resolve(null)),
+        : repo ? fetchRepoPackageName(repo, { fetchFn: f }) : null)),
     ])
     const { pk } = pkRes
+    const repo = await repoP
     if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
     // a refresh where EVERY probe failed refreshed nothing — stamping `now`
     // into checkedAt anyway froze dead metrics for another week and lied to
@@ -460,8 +468,17 @@ export async function run(opts: RunOptions = {}) {
       integrity: disp.integrity,
       capabilities: caps,
       ...(held ? { pendingUpdate: { ...e.pendingUpdate!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
-      // refresh repoId so repojacking detection works on reused entries too
-      ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
+      // refresh repoId so repojacking detection works on reused entries too —
+      // and write the packument-resolved repo back so a repoint actually lands
+      // (repoId then describes the NEW repo's identity; if its id differs from
+      // the stored one, merge's trustFlags emit sec:repo-recreated). Keeping
+      // the old repoId when the new repo's meta hasn't answered yet preserves
+      // the "different identity observed" signal for the next run.
+      source: {
+        ...e.source,
+        ...(repo ? { repo } : {}),
+        ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}),
+      },
       // compat follows the DISPLAYED version — packument carries every
       // version's engines/peerDependencies, so refreshing is free
       compat: pk?.compatOf[e.latestVersion ?? ''] ?? e.compat,
