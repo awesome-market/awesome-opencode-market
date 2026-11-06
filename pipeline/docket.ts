@@ -34,7 +34,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning } from './verdicts.ts'
+import { vkey, akey, atCmp, candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 
@@ -127,8 +127,12 @@ export const NO_VERDICT_AGE_MS = 48 * 3600e3
  *  scan stamp IS the candidate's birth, and the 48h window below must measure
  *  the same clock diagnose's degraded-review window does. */
 function heldStamp(e: PluginEntry): string | undefined {
-  const caps = e.pendingUpdate?.capabilities ?? e.capabilities
-  for (const s of [e.pendingUpdate?.heldAt, caps.scannedAt, e.firstSeenAt])
+  // candidateSlot, not raw pendingUpdate: on a pending entry a leftover
+  // hold is the B3 inverted state — its heldAt/scannedAt describe dead
+  // bytes, not the candidate whose 48h clock this stamp feeds
+  const slot = candidateSlot(e)
+  const caps = slot?.capabilities ?? e.capabilities
+  for (const s of [slot?.heldAt, caps.scannedAt, e.firstSeenAt])
     if (s && Number.isFinite(Date.parse(s))) return s
   // every stamp unparseable → omit the line entirely: rendering a garbage
   // date is worse than no date (aging still fails visible via candidateHeldAt)
@@ -169,9 +173,11 @@ export function docketTargets(
   const pkgBrake = (name: string, ver: string): AiVerdict | undefined =>
     brakeFor(human, name, ver, tomb)
   for (const e of index.plugins) {
-    // slot = what the issue is about: the pendingUpdate when held, else the
-    // entry itself. heldAt/publishedAt follow the candidate, not the entry.
-    const slot = e.pendingUpdate ?? e
+    // slot = what the issue is about: the candidate slot when held (the
+    // pendingUpdate on a displayed entry), else the entry itself —
+    // candidateSlot keeps the B3 inverted state (pending + leftover hold)
+    // reading the ENTRY's own fields, matching the `ver` key below
+    const slot = candidateSlot(e) ?? e
     const held = heldStamp(e)
     const preview = [...slot.capabilities.redFlags.slice(0, 2), ...slot.capabilities.findings.slice(0, 2)]
     const meta: SlotMeta = {
