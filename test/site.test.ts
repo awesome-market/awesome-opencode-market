@@ -768,13 +768,15 @@ describe('site audit round — routing parity, honest empty states, ops polish',
   it('detailPage surfaces verify retries + pendingUpdate integrity', async () => {
     const { detailPage } = await import('../pipeline/site/build.ts')
     const h = detailPage(mk({
-      verification: { status: 'failed', retries: 3 },
+      verification: { status: 'failed', retries: 3, integrity: 'sha512-measured' },
       pendingUpdate: { version: '2', heldAt: 't', integrity: 'sha512-abc',
         capabilities: { scannedAt: null, findings: [], redFlags: [] },
         verification: { status: 'failed', retries: 2 } } }))
     expect(h).toContain('verify retries')
     expect(h).toContain('sha512-abc')
     expect(h).toContain('retry')
+    expect(h).toContain('verify integrity')
+    expect(h).toContain('sha512-measured')
   })
 
   it('skillsPage: usage snippet + detail backlink; slug stripped from published index', async () => {

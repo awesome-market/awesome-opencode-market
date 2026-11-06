@@ -311,6 +311,9 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[], landed?: Set<
       [bi('opencode ver', 'opencode 版本')]: e.verification.opencodeVersion ? esc(e.verification.opencodeVersion) : undefined,
       [bi('verify run', '验证记录')]: e.verification.runUrl ? linkOrText(e.verification.runUrl, bi('logs', '日志')) : undefined,
       [bi('verify retries', '验证重试')]: e.verification.status === 'failed' && e.verification.retries ? esc(String(e.verification.retries)) : undefined,
+      // the bytes the verify run actually measured (SRI/commit sha) — distinct
+      // from the slot's pinned integrity, which may point elsewhere after a re-tag
+      [bi('verify integrity', '实测完整性')]: e.verification.integrity ? `<code style="word-break:break-all">${esc(e.verification.integrity)}</code>` : undefined,
       [bi('deprecated', '已弃用')]: e.deprecated ? `<span class=bad data-en="deprecated" data-zh="已弃用">deprecated</span>` : undefined,
       [bi('deprecated note', '弃用说明')]: e.deprecatedMessage ? esc(e.deprecatedMessage) : undefined,
       [bi('replacement', '替代品')]: e.replacement ? `<code>${esc(e.replacement)}</code>` : undefined,
