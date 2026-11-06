@@ -43,7 +43,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: |
-          git fetch origin catalog
+          # --depth=1: only FETCH_HEAD tip files are read (index/verdicts) —
+          # a full-history fetch would download every catalog commit's index
+          # snapshot each deploy and grow without bound (docket.yml precedent)
+          git fetch --depth=1 origin catalog
           # FETCH_HEAD = the ref we just fetched — immune to opportunistic
           # remote-tracking updates (origin/catalog could lag a failed fetch)
           git show FETCH_HEAD:index.json > index.json
