@@ -147,15 +147,22 @@ jobs:
             # stay ASC so `tail -1` below still lands on the newest review's
             # REAL trailing marker — a package-controlled 'verdict:'/'createdAt:'
             # string inside findings can only shadow EARLIER matches.
+            # PRIOR_FULL: the anonymous path can stop short (rate limit, curl
+            # failure, page budget) — markers scraped from a TRUNCATED prefix
+            # can name an old clean review while a newer flagged one sits
+            # beyond the cut, silently un-flagging it. Only a complete comment
+            # history may power the skip; truncated → real scan, never skip.
+            PRIOR_FULL=1
             if ! gh api "repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
                 --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/prior.txt 2>/dev/null; then
               : > /tmp/prior.txt
-              for p in 1 2 3 4 5; do
+              PRIOR_FULL=""
+              for p in $(seq 1 20); do
                 page=$(curl -sf "https://api.github.com/repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100&page=$p&sort=created&direction=asc" 2>/dev/null) || break
                 n=$(printf '%s' "$page" | jq 'length' 2>/dev/null) || break
-                [ "${n:-0}" -eq 0 ] && break
+                [ "${n:-0}" -eq 0 ] && { PRIOR_FULL=1; break; }
                 printf '%s' "$page" | jq -r '.[] | select(.user.login == "github-actions[bot]") | .body' >> /tmp/prior.txt
-                [ "$n" -lt 100 ] && break
+                [ "$n" -lt 100 ] && { PRIOR_FULL=1; break; }
               done
             fi
             PV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/prior.txt | tail -1 | awk '{print $2}')
@@ -169,7 +176,7 @@ jobs:
             # copying B's markers onto A would pin a version/sha A never had.
             # No marker (pre-marker comments) → can't prove same-target → scan.
             PTGT=$(grep -oE 'target: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            if [ "$PV" = "clean" ] && [ "${PTGT,,}" = "${PKG,,}" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
+            if [ -n "$PRIOR_FULL" ] && [ "$PV" = "clean" ] && [ "${PTGT,,}" = "${PKG,,}" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
               const s = JSON.parse(process.env.SEEDROW)
               const n = (process.env.PNAME || "").toLowerCase(), r = (process.env.PREPO || "").toLowerCase()
               process.exit((s.name ?? null) === (n || null) && (s.repo ?? null) === (r || null) ? 0 : 1)
@@ -594,13 +601,19 @@ jobs:
           SEED=$(git show FETCH_HEAD:submissions.txt 2>/dev/null | node -e '
             const i=require("fs").readFileSync(0,"utf8")
             const n=process.env.SUB_NAME||"", r=process.env.SUB_REPO||""
-            let hit=null
+            const iss=Number(process.env.ISSUE_NUM||0)
+            // prefer THIS issue\'s seed row — a same-package seed from another
+            // issue is still a valid fallback anchor, but the verdict should
+            // pin the artifact THIS issue\'s review actually scanned
+            let hit=null, own=null
             for(const l of i.split("\n")){try{const s=JSON.parse(l)
               // case-insensitive both sides — seedLine stores canonical
               // lowercase names while SUB_NAME keeps the typed form case, and
               // legacy rows predate the write-side normalization
-              if(n&&s.name?.toLowerCase()===n.toLowerCase())hit=s;else if(!n&&r&&s.repo?.toLowerCase()===r.toLowerCase())hit=s}catch{}}
-            if(hit)console.log(JSON.stringify(hit))' || true)
+              const m=n&&s.name?.toLowerCase()===n.toLowerCase()||(!n&&r&&s.repo?.toLowerCase()===r.toLowerCase())
+              if(m){hit=s;if(s.issue===iss)own=s}}catch{}}
+            const pick=own??hit
+            if(pick)console.log(JSON.stringify(pick))' || true)
           git show FETCH_HEAD:index.json > /tmp/index.json 2>/dev/null || true
           # flagged-override recovery: a pass on a submission that was reviewed
           # but never queued (flagged review doesn't ingest, or the ingest run
@@ -712,6 +725,12 @@ jobs:
             # index's current source.version as the fallback anchor. shaOk
             # then refuses a release when HEAD moved past the review.
             [ -n "$SEED" ] && SHA=$(node -e 'const s=JSON.parse(process.argv[1]);console.log(s.version||"")' "$SEED" 2>/dev/null || true)
+            # a seed row found via s.repo may belong to a NAME+REPO submission —
+            # its `version` is the npm reviewedVersion, not a commit sha; a
+            # semver-shaped pin would mismatch source.version forever (shaOk
+            # → wait). Repo verdicts only trust sha-shaped anchors — a bad
+            # shape falls through to the review marker / index anchor
+            [[ "$SHA" =~ ^[0-9a-f]{7,40}$ ]] || SHA=""
             [ -z "$SHA" ] && SHA="$RVSHA"
             if [ -z "$SHA" ] && [ -s /tmp/index.json ] && [ -n "$ENTRY" ]; then
               SHA=$(node -e '

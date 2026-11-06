@@ -63,6 +63,9 @@ for i in 1 2 3 4; do
   # a stray NON-worktree dir at WT (killed run, pruned registration) breaks
   # `worktree add` on every retry — WT is dedicated scratch, safe to clear
   rm -rf "$WT"
+  # ...and a registration WITHOUT a dir wedges add the same way ('missing but
+  # registered worktree') — prune clears it so the retry loop can recover
+  git worktree prune
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
   if [ "${APPLY_ONLY:-}" != 1 ]; then
     touch "$WT/$FILE"
@@ -81,7 +84,7 @@ for i in 1 2 3 4; do
       ' "$WT/$FILE" "$ISSUE" "$LINE")
       [ "$R" = "replaced" ] || printf '%s\n' "$LINE" >> "$WT/$FILE"
     else
-      grep -qxF "$LINE" "$WT/$FILE" || printf '%s\n' "$LINE" >> "$WT/$FILE"
+      grep -qxF -- "$LINE" "$WT/$FILE" || printf '%s\n' "$LINE" >> "$WT/$FILE"
     fi
     git -C "$WT" add "$FILE"
   fi

@@ -41,7 +41,11 @@ export function applySeedOutcomes(
       s.rejected = code
       return JSON.stringify(s)
     }
-    if (landed.has(k) && 'rejected' in s) {
+    // landing via the repo twin counts too — notify-published and the status
+    // comment both fall back to source.repo / repo-named entries for a
+    // name+repo seed; a rejected stamp that outlives the landing is stale
+    const repoK = typeof s.repo === 'string' ? s.repo.toLowerCase() : null
+    if ((landed.has(k) || (repoK !== null && landed.has(repoK))) && 'rejected' in s) {
       delete s.rejected
       return JSON.stringify(s)
     }

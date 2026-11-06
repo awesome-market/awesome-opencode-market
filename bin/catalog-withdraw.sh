@@ -28,6 +28,9 @@ for i in 1 2 3; do
   # a stray NON-worktree dir at WT (killed run, pruned registration) breaks
   # `worktree add` on every retry — same guard catalog-append.sh carries
   rm -rf "$WT"
+  # ...and a registration WITHOUT a dir wedges add the same way ('missing but
+  # registered worktree') — prune clears it so the retry loop can recover
+  git worktree prune
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
   touch "$WT/submissions.txt"
   # ENTRY ground truth = the seed rows actually removed, not the caller's

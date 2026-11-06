@@ -54,7 +54,7 @@ export const REJECT_REASONS: Record<string, string> = {
 
 /** One-line bounded reason for the status comment — reviewer text rendered
  *  into an issue the SUBMITTER reads; keep it single-line and short. */
-const clip = (s: string, max = 200) => s.replace(/\s+/g, ' ').trim().slice(0, max)
+const clip = (s: string, max = 200) => [...s.replace(/\s+/g, ' ').trim()].slice(0, max).join('')
 
 /** Which verdict currently governs the submitted package — delegates to
  *  slotVerdict, the SAME brake+stickiness+epoch predicate applyMatureVerdicts
