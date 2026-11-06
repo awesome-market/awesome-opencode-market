@@ -1018,7 +1018,7 @@ flowchart TB
 
 ## 6. 日报流 — `digest.yml`（CI cron 21:15 UTC + dispatch；`bin/publish-digest.sh` 为手动兜底）
 
-**实现**：`pipeline/ai/digest.ts::renderDigest/nextDigestState`（六板块渲染+状态推进）· `verdicts.ts::loadVerdicts`（容错加载+坏行计数告警）· `digest.yml`（worktree fetch→reset→渲染→commit→push 重试壳，`concurrency: catalog-branch`）
+**实现**：`pipeline/ai/digest.ts::renderDigest/nextDigestState`（七板块渲染+状态推进）· `verdicts.ts::loadVerdicts`（容错加载+坏行计数告警）· `digest.yml`（worktree fetch→reset→渲染→commit→push 重试壳，`concurrency: catalog-branch`）
 
 pass 从写入到放行的时序——digest 是公示环节，**上过日报的那一行**才解锁成熟：
 
@@ -1741,7 +1741,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `verify/merge.ts` | `mergeResults` `VerifyResultFile` | 结果按 version 路由写槽+drift 对照+同字节复用（reuseVerified）+freshness 守卫+文件级容错 |
 | `site/build.ts` | `buildSite` `buildSkillCatalog` `listPage` `detailPage` `skillsPage` `removedPage` `healthGate` `installHint` `isVisible` `scanLabel` `verifyLabel` `approvalBadge` | Pages 站点+HTTP skill catalog（缓存+两段式提取+发布闸门） |
 | `ai/diagnose.ts` | `unreviewedTargets` `candidateHeldAt` `latestShaVerdicts` `reviewMaterial` `contentMaterial` `MATERIAL_BUDGET` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` `isHarnessFailure` `L05_CANARY_*` | L0.5+Ornith 双通道 AI 审（sha/48h/retryable 递延/红旗草稿/budget/force/state 尝试计数+死键修剪/drift 插队+人工键标记/mapPool 限流/熔断/canary 自检/contentRank 物料选取/--health 戳）；system prompt 另要求判断**上架描述质量**——占位符/文不对题/与代码矛盾的描述属 concern 级（代替表单 descEn 校验） |
-| `ai/digest.ts` | `renderDigest` `nextDigestState` `BOOTSTRAP_WINDOW_MS` | 日报六板块渲染（放行/held/concerns/验证积压/评审积压+最新 AI 裁决心跳/信任信号）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；BOOTSTRAP_WINDOW_MS=14 天首期窗；state 丢失且有历史→fail-closed 拒渲） |
+| `ai/digest.ts` | `renderDigest` `nextDigestState` `BOOTSTRAP_WINDOW_MS` | 日报七板块渲染（放行/held/concerns/验证积压/评审积压+最新 AI 裁决心跳/信任信号/近24h下架）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；BOOTSTRAP_WINDOW_MS=14 天首期窗；state 丢失且有历史→fail-closed 拒渲） |
 | `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程；前向分块 64 行防内存峰值） |
 
 ### plugins/market/src/
@@ -1783,21 +1783,33 @@ UI（gui.ts webview / tui.tsx 终端）：
 {
  "name": "opencode-hush",
  "slug": "federicobordon09-dev/opencode-hush",
- "type": "plugin", "features": ["tui","server"],
+ "aliases": [],
+ "type": "plugin", "features": ["tui","server"], "contains": ["plugin"],
  "discoveredVia": ["npm-keyword"],
  "source": {"kind":"npm","id":"opencode-hush","repo":"federicobordon09-dev/opencode-Hush","repoId":1426242744,"version":"0.3.0"},
- "latestVersion": "0.3.0",          ← 展示版：钉在批准版
- "integrity": "sha512-AAA…",        ← latestVersion 对应 dist.integrity（装包逐字节校验）
- "contains": ["plugin"],            ← 部件清单（双栖包=plugin+skill）
+ "description": {"en":"hide sensitive fields in opencode sessions"},
+ "category": ["工具"], "license": "MIT",
+ "deprecated": false, "deprecatedMessage": null, "replacement": null,
+ "createdAt": "2026-08-12T09:00:00Z", "modifiedAt": null,
+ "maintainers": ["federicobordon09"],
+ "latestVersion": "0.3.0",          ← 展示版：钉在最后展示版（legacy=迁移前版本）
+ "publishedAt": "2026-10-20T10:00:00Z",
+ "integrity": "sha512-AAA…",        ← latestVersion 对应 dist.integrity（装包逐字节校验；github-kind 为 null，锚在 source.version）
  "distTags": {"latest":"0.4.1"},    ← npm 已到 0.4.1
+ "firstSeenAt": "2026-09-01T00:00:00Z",
+ "metrics": {"stars": 42, "npmDownloads30d": 1330, "checkedAt": "2026-11-04T03:50:00Z"},
  "capabilities": {"scannedAt":"2026-11-03T14:29:15Z","rulesetVersion":"r4","findings":[],"redFlags":[]},
- "verification": {"status":"verified","level":"load","opencodeVersion":"2.2.5","verifiedAt":"2026-11-02T00:02:51Z"},
+ "verification": {"status":"verified","level":"load","opencodeVersion":"2.2.5","verifiedAt":"2026-11-02T00:02:51Z",
+   "integrity":"sha512-AAA…"},      ← 实测到的字节锚（drift 对照/同字节复用 key；re-tag 后与槽位钉锚不同）
+ "compat": {},
  "approval": "legacy",
  "pendingUpdate": {                  ← 0.4.1 被 hold：已扫描未验证未裁决
    "version": "0.4.1",
    "capabilities": {"scannedAt":"2026-11-04T03:53:23Z","rulesetVersion":"r4","findings":[],"redFlags":[]},
    "verification": {"status":"unverified"},
    "features": ["tui","server"],
+   "contains": ["plugin"],           ← 在押版部件（展示槽 contains 钉旧版，候选 payload 描述在这）
+   "integrity": "sha512-BBB…",       ← 在押版 tarball SRI——shaOk/放行提升读它，不是展示槽的
    "publishedAt": "2026-11-04T01:05:18Z",
    "reason": "awaiting-review",
    "heldAt": "2026-11-04T03:53:23Z" }
@@ -1810,7 +1822,10 @@ UI（gui.ts webview / tui.tsx 终端）：
 {"name":"opencode-keystone","version":"0.3.15","verdict":"concern","reason":"扫描发现可疑行为，拒绝","at":"2026-11-04T04:41:50Z","source":"human","sha":"sha512-6NRF…","by":"terry2010","issue":87}
 {"name":"@fimars/mem9-oc2","version":"0.2.1","verdict":"concern","reason":"再想想还是不放行，外部服务调用不透明","at":"2026-11-04T04:42:10Z","source":"human","sha":"sha512-aam7…","by":"terry2010","issue":88}
 {"name":"memory-monitor","version":"0.1.0","verdict":"pass","reason":"包只读系统指标","reasonEn":"read-only system metrics","at":"2026-11-04T04:00:00Z","source":"ai","sha":"sha512-x9k…","model":"ornith","l05":{"model":"galvanize-2","score":0.12}}
+{"name":"owner/repo","version":null,"verdict":"pass","reason":"repo 工具干净","at":"2026-11-04T05:10:00Z","source":"human","sha":"a1b2c3d…","by":"terry2010","issue":92}
 ```
+
+（第四行=github-kind 槽位形态：`version:null` + `sha`=reviewed commit sha——shaOk 与 npm `dist.integrity` 同构，拒放 HEAD 前移后的字节；`by`/`issue` 由写盘通道从 actor/issue 号盖戳）
 
 ### submissions.txt（每行一个种子；同 issue 重审替换旧行，一单一行）
 
@@ -1818,7 +1833,10 @@ UI（gui.ts webview / tui.tsx 终端）：
 {"name":"oc-market-quail-zephyr-72a0","repo":"terry2010/quail-zephyr","type":"plugin","category":["开发流程"],"desc":{"en":"…","zh":"…"},"version":"abc123tree","pkg":"oc-quail","issue":11,"author":"terry2010","at":"2026-11-04T03:00:00Z","notified":true}
 {"name":"opencode-keystone","repo":"Adamkadaban/opencode-keystone","type":"plugin","category":null,"desc":{"en":"keystone plugin"},"version":"2.3.0","issue":20,"author":"adam","at":"2026-11-04T05:00:00Z","notified":false,"staleWarned":false}
 {"name":"old-gone-pkg","issue":31,"at":"2026-09-01T00:00:00Z","notified":false,"dead":true}
+{"name":"spam-farm-pkg","repo":"bot/spam","type":"plugin","issue":44,"author":"bot","at":"2026-11-03T00:00:00Z","notified":false,"rejected":"no-plugin-evidence"}
 ```
+
+（生命周期字段：`notified`/`staleWarned`/`dead` 由 notify-published 推进；`rejected`=<code> 由 seed-outcome 写回——条目落地即清除；同 issue 重审由 catalog-append 整行替换旧行）
 
 ### verify shard-N.json（plan 输出，每片 ≤12 个目标，按 features 数+双栖加权）
 
@@ -1844,12 +1862,15 @@ labels: review:pending, ai:pass
 ## 审核单 opencode-poke@0.1.5
 
 - 当前 AI 判定：**pass** — <中文理由>
-  - <english reason>
 - 成熟相位：已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）
-- 验证状态：unverified
+  （另两相位：已进最新日报公示——异议窗开放中，下期日报后按班放行 /
+   已公告·待放行闸——无人操作时按班放行；闸被锁时相位后追加首个 blocker）
+- 最新人工判词：**pass** — <理由>          ← 仅有人工裁决落盘后存在
+- 验证状态：还没验（unverified）           ← VERI_ZH 中文签 + 英文原值
 - 静态扫描：redFlags 0 / findings 1
 - 在押自：2026-11-03；npm 发布于 2026-11-02
-- 数据：[index.json](github.com/<repo>/blob/catalog/index.json) / [ai-verdicts.jsonl](…)
+- 数据：[index.json](https://github.com/<repo>/blob/catalog/index.json) / [ai-verdicts.jsonl](…)
+- 预告面：[最新日报](…/tree/catalog/digest)（所有将放行版本在此公示）
 - 详情页：https://<owner>.github.io/<repo>/p/o/opencode-poke.html
 
 ### 📱 手机裁决（点选，零打字）
@@ -1869,7 +1890,11 @@ labels: review:pending, ai:pass
 | opencode-poke | 0.1.5 | human | 人工复核通过（重发） | [审核单](issues?q=…) |
 ## ② 审核队列积压（held — 331）
 - `@fimars/mem9-oc2` (未发布过) …
-## ③ concerns
+## ③ Concerns（2 ·已解除 1）
+## ④ 验证积压（queue — 12）
+## ⑤ 评审积压（pending review — 40）
+## ⑥ 已上架条目信任信号（identity-level sec flags — 1）
+## ⑦ 近 24h 下架（0）
 ```
 
 ### 站点产物（/tmp/site → Pages）
@@ -1883,7 +1908,9 @@ skills/index.json + skills/<id>/   HTTP skill 源（npm 钉版 tarball ∨
 skills.html       技能浏览页
 removed.html      墓碑页（最新 300）
 404.html          下架解释页（回链 removed/主目录）
-health.json       {ok, entries, skills:{candidates,landed,degraded}, generatedAt, sha256, bytes}
+health.json       {ok, entries(可见数), total(全量含 pending),
+                   skills:{candidates,landed,degraded,unpinned,membersDropped},
+                   generatedAt, builtAt, commit(catalog 提交 sha), sha256, bytes}
 privacy.html
 ```
 
