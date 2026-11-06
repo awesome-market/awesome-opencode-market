@@ -295,6 +295,11 @@ let bad = 0
 const ok = lines.filter(l => { try { AiVerdict.parse(JSON.parse(l)); return true } catch { bad++; return false } })
 if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileSync(p, ok.join("\n") + (ok.length ? "\n" : "")) }
 ' || log "payload schema gate failed to run — pushing unfiltered"
+# spool := the FILTERED pending payload — a malformed spool line would
+# otherwise re-enter PAY every run, be dropped every run, and never land
+# nor clear. Syncing also persists this run's verdicts BEFORE the push
+# loop, so a SIGKILL mid-push replays them instead of re-burning the LLM.
+cp "$PAY" "$SPOOL" 2>/dev/null || true
 
 [ -s "$PAY" ] || { log "no new verdicts"; exit 0; }
 

@@ -172,6 +172,20 @@ describe('ai-diagnose.sh — schema gate', () => {
       expect(landed.split('\n').filter(l => l.includes('pkg-schema'))).toHaveLength(1)
     })
   }, 120_000)
+
+  it('malformed spool lines are purged from the replay file — not carried forever', () => {
+    // spool holds ONLY a corrupt line: the gate drops it from PAY, and the
+    // spool sync must drop it from SPOOL too — otherwise it re-enters every
+    // run, gets dropped every run, and never lands nor clears
+    writeFileSync(join(stated, 'pending-verdicts.jsonl'), '{"name":"broken",\n')
+    withCanned({ CANNED_VERDICTS: '', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = runScript()
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('no new verdicts')
+      expect(readFileSync(join(stated, 'pending-verdicts.jsonl'), 'utf8')).toBe('')
+    })
+    rmSync(join(stated, 'pending-verdicts.jsonl'), { force: true })
+  }, 120_000)
 })
 
 describe('ai-diagnose.sh — spool replay dedup', () => {
