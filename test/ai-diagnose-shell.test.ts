@@ -157,6 +157,23 @@ describe('ai-diagnose.sh — verdict push + health publish', () => {
   }, 120_000)
 })
 
+describe('ai-diagnose.sh — already-landed replay', () => {
+  it('payload fully on the branch → remote-content check exits clean, no dup append', () => {
+    // the "already landed" decision reads origin/catalog's file — NOT the
+    // local staged diff (a concurrent reset --hard on this shared worktree
+    // could fake an empty diff and silently drop the payload + spool)
+    const verdictE = VERDICT_A.replace('pkg-a', 'pkg-e')
+    withCanned({ CANNED_VERDICTS: `${verdictE}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)                       // first run lands it
+      const r = runScript()                                  // identical payload again
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('already on origin/catalog')
+      const landed = catalogFile('ai-verdicts.jsonl')
+      expect(landed.split('\n').filter(l => l.includes('"pkg-e"'))).toHaveLength(1)
+    })
+  }, 240_000)
+})
+
 describe('ai-diagnose.sh — schema gate', () => {
   it('malformed payload lines are dropped; only schema-valid verdicts land', () => {
     const bad1 = '{"name":"broken",'

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -79,6 +79,18 @@ describe('scan/scanTarball', () => {
     expect(r.findings.some(f => f.rule === 'scan-capped')).toBe(true)
     expect(r.findings.filter(f => f.rule === 'scan-capped')).toHaveLength(1)
   }, 30000)
+
+  it('parses in memory — no tar entries land under cwd', async () => {
+    // regression: extract() is Unpack — it writes every entry to
+    // process.cwd() (the CI workspace in production). tar.t parses only.
+    const work = mkdtempSync(join(tmpdir(), 'scancwd-'))
+    const prev = process.cwd()
+    process.chdir(work)
+    try {
+      await scanTarball(tgz)   // 'pkg/'-prefixed fixture — old code wrote work/pkg/**
+      expect(readdirSync(work)).toEqual([])
+    } finally { process.chdir(prev) }
+  })
 
   it('r3 rules: private IPv4 ignored, public v6 flagged, times not flagged', () => {
     const ip = RULES.find(r => r.id === 'literal-ip')!

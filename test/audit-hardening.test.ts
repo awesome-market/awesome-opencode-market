@@ -4,7 +4,7 @@
  *  provenance (reusedFrom), human-verdicted re-tag marker, --health stamp,
  *  and digest §⑤ latest-AI-verdict heartbeat. */
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -305,6 +305,69 @@ describe('--health stamp', () => {
     expect(h.wrote).toBe(1)
     expect(h.l05).toBe('ok')
     expect(h.omlx).toBe('up')
+  })
+})
+
+describe('audit #4 re-do: tar parses in memory, case-correct keying', () => {
+  it('contentMaterial writes NOTHING under cwd — tar.x would extract the whole tree', async () => {
+    // regression: extract() is Unpack — it writes every tar entry to
+    // process.cwd() ($CODE in production). tar.t parses in memory only.
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { create } = await import('tar')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-nowrite-'))
+    mkdirSync(join(dir, 'package'), { recursive: true })
+    writeFileSync(join(dir, 'package/SKILL.md'), '# skill')
+    writeFileSync(join(dir, 'package/package.json'), '{"name":"p"}')
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, ['package'])
+    const fetchFn = (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch
+    const work = mkdtempSync(join(tmpdir(), 'ct-cwd-'))
+    const prev = process.cwd()
+    process.chdir(work)
+    try {
+      const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)
+      expect(m.map(x => x.id)).toContain('content:SKILL.md')
+      expect(readdirSync(work)).toEqual([])   // nothing extracted to disk
+    } finally { process.chdir(prev) }
+  })
+
+  it('drift sweep honors --name case-insensitively for github-kind entries', async () => {
+    // --name values are lowercased at parse; github entry names keep 'Owner/Repo'
+    // case. The sweep compared raw e.name → a targeted run silently skipped
+    // the drift check for exactly the entries it was asked about.
+    const gh = e({
+      name: 'Owner/Repo', latestVersion: null,
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', version: 'abc123' } as PluginEntry['source'],
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z' },
+    })
+    const { argv, op } = files([gh], [v({ name: 'Owner/Repo', version: '2.0.0', sha: 'sha-old' })])
+    argv.push('--name', 'owner/repo')   // lowercase input must still match
+    await diagnoseMain(argv, {
+      l05: () => l05Map(), ornith: okOrnith,
+      sha: async () => 'sha-new', ping,
+    })
+    expect(outLines(op).length).toBeGreaterThan(0)   // drift detected → re-reviewed
+  })
+
+  it('attempts streak survives for mixed-case github names (vkey lowercase)', async () => {
+    // state keys are vkey() = lowercase name; liveVer was keyed by raw e.name
+    // → every 'Owner/Repo' streak pruned on load → MAX_ATTEMPTS unreachable
+    const d = mkdtempSync(join(tmpdir(), 'ah-state-case-'))
+    const sp = join(d, 'attempts.json')
+    writeFileSync(sp, JSON.stringify({ 'owner/repo\x002.0.0': { n: 4, last: 'err' } }))
+    const gh = e({
+      name: 'Owner/Repo', latestVersion: null,
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', version: 'abc123' } as PluginEntry['source'],
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2025-01-01T00:00:00Z' },
+    })
+    const { argv, op } = files([gh], [], sp)
+    await diagnoseMain(argv, {
+      l05: () => l05Map(), ornith: async () => { throw new Error('garbage') },
+      sha: noSha, ping,
+    })
+    const got = outLines(op)[0]
+    expect(got?.verdict).toBe('concern')
+    expect(got?.reason).toContain('连续 5 次失败')   // streak 4+1 survived the reload
   })
 })
 

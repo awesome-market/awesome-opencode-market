@@ -1,6 +1,6 @@
 /** Tarball scan driver: unpack .tgz in memory, apply rules per file. */
 import { Readable } from 'node:stream'
-import { extract } from 'tar'
+import { t as tarList } from 'tar'
 import { RULES, isBinary, type Severity } from './rules.ts'
 
 export interface ScanFinding {
@@ -50,7 +50,11 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
     }
   }
   await new Promise<void>((resolve, reject) => {
-    const parser = extract({
+    // tar.t (list) parses IN MEMORY — tar.x/extract would write every entry
+    // to process.cwd() (the CI workspace / dev checkout): untrusted package
+    // trees on disk, and the 512MB unpacked guard only stops the PARSER —
+    // Unpack's disk writes would already have happened. Same onentry API.
+    const parser = tarList({
       onentry(entry) {
         if (entry.type !== 'File') { entry.resume(); return }
         // skip macOS AppleDouble metadata (._*) — tar artifact, not package content

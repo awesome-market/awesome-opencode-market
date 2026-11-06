@@ -310,14 +310,21 @@ cd "$CAT"
 for i in 1 2 3 4; do
   git fetch origin catalog -q || { log "fetch attempt $i failed"; sleep 3; continue; }
   git reset --hard origin/catalog -q || { log "reset attempt $i failed"; sleep 3; continue; }
+  # "already landed" must be decided from the REMOTE file, not the local
+  # staged diff: pause/resume shares this worktree WITHOUT the diagnose lock,
+  # and its `reset --hard` can wipe a staged append — an empty diff then
+  # masquerades as 'already pushed' and the whole payload (new verdicts +
+  # spool) is silently dropped while the spool is cleared. Compute the
+  # missing set once against origin/catalog, append exactly it, and let
+  # push success/failure — never local git state — clear the spool.
+  comm -13 <(git show origin/catalog:ai-verdicts.jsonl 2>/dev/null | sort -u) \
+           <(sort -u "$PAY") > "$VVIEW"
+  [ -s "$VVIEW" ] || { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
   touch ai-verdicts.jsonl
-  # append only lines not already on the branch — a push that succeeded but
+  # append only lines the remote still lacks — a push that succeeded but
   # reported failure must not produce duplicate verdict lines next attempt
-  comm -13 <(sort -u ai-verdicts.jsonl) <(sort -u "$PAY") >> ai-verdicts.jsonl
+  cat "$VVIEW" >> ai-verdicts.jsonl
   git add ai-verdicts.jsonl
-  # staged diff empty = the exact lines are already on origin/catalog
-  # (an earlier push succeeded but reported failure) — treat as landed
-  git diff --cached --quiet && { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
   git commit -qm "ai-diagnose: $(date '+%F %H:%M')" \
     || { log "commit attempt $i failed"; sleep 3; continue; }
   git push -q origin catalog && { : > "$SPOOL"; stamp_health pushed ok; exit 0; }

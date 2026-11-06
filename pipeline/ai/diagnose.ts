@@ -48,7 +48,7 @@ import { exit, env } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
-import { extract } from 'tar'
+import { t as tarList } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
@@ -209,9 +209,13 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
     // collected (bounded by member cap + per-file head/tail store), then
     // ranked — see contentRank. Per-file store: whole file ≤32KB, else
     // head 16KB + rolling tail 8KB so end-of-file payloads survive.
+    // tar.t (list) parses IN MEMORY — tar.x/extract would write every entry
+    // to process.cwd() ($CODE in production): untrusted package trees landing
+    // in the pinned checkout, plus an 8MB-compressed zip bomb inflating to
+    // unbounded disk writes. The onentry contract is identical.
     const tgz = await fetchTarball(tarballUrl, { maxBytes: 8 * 1024 * 1024, ...(fetchFn ? { fetchFn } : {}) })
     await new Promise<void>((resolve, reject) => {
-      const parser = extract({
+      const parser = tarList({
         onentry(entry) {
           if (entry.type !== 'File' || !isContentFile(entry.path)) {
             entry.resume(); return
@@ -631,7 +635,10 @@ export async function main(
   }
   if (!sweepFresh) {
     await mapPool(idx.plugins, 8, async e => {
-    if (names && !names.has(e.name)) return
+    // --name values are lowercased at parse time; entry names keep canonical
+    // case (github-kind 'Owner/Repo') — compare case-insensitively like
+    // unreviewedTargets does, or a targeted run silently skips the sweep
+    if (names && !names.has(e.name.toLowerCase())) return
     const ver = verOf(e)
     if (!ver) return
     // package-braked slots can't apply any AI verdict — drift or not; skip
@@ -662,7 +669,11 @@ export async function main(
   const attempts = new Map<string, { n: number; last: string }>()
   if (statePath) {
     try {
-      const liveVer = new Map(idx.plugins.map(e => [e.name, verOf(e)]))
+      // liveVer keys must match the attempts keys' casing — vkey() lowercases
+      // the name, and github-kind entries keep 'Owner/Repo' case. Raw e.name
+      // here made every mixed-case entry's streak prune on load, so a
+      // chronically failing github target could never reach MAX_ATTEMPTS.
+      const liveVer = new Map(idx.plugins.map(e => [e.name.toLowerCase(), verOf(e)]))
       for (const [k, x] of Object.entries(JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, { n: number; last: string }>)) {
         if (seen.has(k)) continue // drop keys that already got a verdict
         // drop keys whose entry vanished or bumped versions — the streak
