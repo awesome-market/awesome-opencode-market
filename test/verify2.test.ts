@@ -902,19 +902,29 @@ describe('remaining verify/plan/merge edge branches', () => {
     expect(broken.status).toBe('failed')
     expect(broken.logExcerpt).toContain('skill payload failed')
   })
-  it('git target without a pinned sha → HEAD spec + codeload HEAD', async () => {
+  it('git target without a pinned sha → refused, no HEAD install', async () => {
     const calls: string[][] = []
     const fake = (async (cmd: string, args: string[]) => {
       calls.push([cmd, ...args])
-      if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-x/SKILL.md\n', stderr: '' }
-      if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const r = await verifyPackage('o/r', { git: { repo: 'O/R' }, parts: ['skill'],
-      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake })
-    expect(r.status).toBe('verified')
-    expect(calls.some(a => a[0] === 'curl' && a.join(' ').includes('tar.gz/HEAD'))).toBe(true)
-    expect(r.integrity).toBeUndefined()   // no sha → nothing to anchor
+    // a sha-less git spec has no REVIEWED bytes to measure — the harness must
+    // refuse (throw → harness:true, dropped by merge) rather than install
+    // bare HEAD and let 'verified' endorse unscanned code
+    await expect(verifyPackage('o/r', { git: { repo: 'O/R' }, parts: ['skill'],
+      home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake }))
+      .rejects.toThrow(/no pinned commit sha/)
+    expect(calls.some(a => a[0] === 'curl' || a[0] === 'opencode')).toBe(false)
+  })
+  it('plan drops a sha-less github slot entirely (incl. --retest)', () => {
+    const e = entry({
+      latestVersion: null,
+      source: { kind: 'github', id: 'o/r', repo: 'O/R' } as PluginEntry['source'],
+      verification: verf('unverified'),
+    })
+    expect(verifyQueued(e)).toBe(false)
+    expect(planTargets(idx([e]))).toEqual([])
+    expect(planTargets(idx([e]), 48, true)).toEqual([])   // retest too
   })
   it('verifyTargetOf github fallback: missing source.repo → id; missing version → no sha', () => {
     const e = entry({

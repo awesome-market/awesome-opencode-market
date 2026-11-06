@@ -64,6 +64,11 @@ export function verifyQueued(
   // an npm slot needs a version to pin; a github-kind slot needs a repo spec.
   // Anything else has no installable address to point the runner at.
   if (!t.version && !t.git) return false
+  // a github slot without the pinned commit (source.version) has NO reviewed
+  // bytes to measure — the runner would install whatever HEAD serves and a
+  // 'verified' would endorse unscanned code (nothing anchors the drift check
+  // either). It stays unverified until the slot re-pins.
+  if (t.git && (!t.git.repo || !t.git.sha)) return false
   if (t.flagged) return false
   // entries with no verifiable payload are never queued — the predicate must
   // match planTargets' parts filter or the digest §④ backlog over-counts
@@ -122,7 +127,7 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
     // retest (manual `targets` dispatch) may re-run failed/verified versions;
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
     // Flagged stays excluded in every mode: red-flagged code never executes here.
-    if ((!t.version && !t.git) || t.flagged) continue
+    if ((!t.version && !t.git) || t.flagged || (t.git && (!t.git.repo || !t.git.sha))) continue
     // host-version drift, cleared-flag skips, and retryable failures all fold
     // into the one queue predicate — verdict-condemned slots drop out inside
     // it unless a manual --retest asks for them back

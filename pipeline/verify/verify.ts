@@ -379,6 +379,12 @@ export async function verifyPackage(
   const spec = opts.git
     ? (opts.git.sha ? `${opts.git.repo}#${opts.git.sha}` : opts.git.repo)
     : (opts.version ? `${name}@${opts.version}` : name)
+  // plan never emits a sha-less git target (no reviewed bytes to measure) —
+  // this trips only on a hand-crafted shard file. Throw, don't return a
+  // package verdict: the harness cannot answer an unasked question.
+  if (opts.git && !opts.git.sha)
+    throw new Error(`git target ${opts.git.repo} has no pinned commit sha — ` +
+      `installing bare HEAD would measure bytes the scan never reviewed`)
   // the bytes this run measures — the anchor merge drift-checks and
   // content-addressed reuse key on. npm: the registry's CURRENT SRI for the
   // pinned spec (moves when the tag does). git: the pinned commit itself.
@@ -519,15 +525,25 @@ export async function verifyPackage(
       // idle, if a host version reports one) is not a verdict, keep polling.
       // A deterministic load failure still exits in ~1s.
       let lastHttp = ''
+      let answered = false   // did the server answer ANY poll?
       for (const t1 = Date.now(); Date.now() - t1 < (opts.apiWaitMs ?? 20_000);) {
         const res = await run('curl', ['-s', ...auth, '-o', apiPath, '-w', '%{http_code}',
           `${api}/plugin`], { timeout: 15_000 }).catch(() => null)
+        if (res) answered = true
         if (res?.stdout) lastHttp = res.stdout.trim()
         const body = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
         const st = apiPluginState(body, apiNames)
         if (st !== null) apiState = st
         if (st === 'active' || st === 'failed') break
         await sleep(500)
+      }
+      if (apiState === null && !answered) {
+        // the listening line scraped yet not one poll connected — the socket
+        // behind it is dead (runner resources, upstream drift). Under 2.2.5's
+        // lazy load plugin code hadn't run when the line printed, so the
+        // package can't be the cause: infrastructure, not a package verdict.
+        throw new Error(`serve announced a listener but never answered /api/plugin — ` +
+          `the socket was dead before the plugin loaded (harness):\n${tail(serveOut)}`)
       }
       if (apiState === null && (lastHttp === '401' || lastHttp === '403')) {
         // the entry never listed AND the API kept refusing auth — the
@@ -561,7 +577,10 @@ export async function verifyPackage(
       : apiState !== null
         ? `plugin entry stuck in non-terminal state '${apiState}' after the load window`
         : 'plugin absent from /api/plugin after the load window'
-    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${serveOut}\n${log}\n/api/plugin: ${api}`) }
+    // serveOut still carries the `server password <pw>` line — the token is
+    // dead with the process but must not be published into index.json either.
+    const safeServeOut = serveOut.replace(/server password \S+/g, 'server password [redacted]')
+    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${safeServeOut}\n${log}\n/api/plugin: ${api}`) }
   }
 
   try {
