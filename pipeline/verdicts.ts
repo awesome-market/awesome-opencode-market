@@ -507,17 +507,18 @@ export function explainEntry(
       return { ...base, outcome: 'wait', why: `${pre}pass 早于本条目上次消失（${tomb.slice(0, 10)}）— 判的是上一个同名对象，不生效，需重裁` }
     // pass: run the release gates in order and report the first blocker.
     // Structural impossibilities (flags/no-scan — AI can never release this
-    // slot regardless of timing) outrank the temporal gates or the report
-    // would promise a release "soon" that no wait can produce.
-    if (!base.announced) return { ...base, outcome: 'wait', why: `${pre}pass 未成熟 — verdict 行未进 digest 公示` }
+    // slot regardless of timing; sha-mismatch — THIS line's bytes can never
+    // be these bytes again) outrank the temporal gates or the report would
+    // promise a release "soon" that no wait can produce.
     if (base.aiBlockedByFlags) return { ...base, outcome: 'wait', why: `${pre}ai pass 落在 redFlag 槽位 — 被忽略` }
     if (base.aiBlockedByNoScan) return { ...base, outcome: 'wait', why: `${pre}ai pass 落在未扫描槽位 — 没扫到 ≠ 安全，被忽略` }
+    if (v.sha && integrity && v.sha !== integrity)
+      return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位锚（integrity / github commit）不符 — 疑似同版本换包或仓库前移，等复审` }
+    if (!base.announced) return { ...base, outcome: 'wait', why: `${pre}pass 未成熟 — verdict 行未进 digest 公示` }
     // announced in the LATEST digest — the objection window is still open:
     // maturity needs the line to survive one more render (dayAnnounced
     // membership), same gate applyMatureVerdicts applies
     if (dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
-    if (v.sha && integrity && v.sha !== integrity)
-      return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位锚（integrity / github commit）不符 — 疑似同版本换包或仓库前移，等复审` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }
     return { ...base, outcome: 'release', why: `${pre}pass 成熟 + 可放行 → 生效` }
   }

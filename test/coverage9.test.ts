@@ -137,6 +137,17 @@ describe('verdicts explainEntry outcomes', () => {
     // unreleasable verification → wait
     const badVer = { ...base, verification: { status: 'failed', level: 'install' } }
     expect(explainEntry(badVer as never, [vp], dg([akey(vp)]))[0]!.outcome).toBe('wait')
+    // structural blockers outrank temporal gates: an UNANNOUNCED ai pass on a
+    // flagged slot must report the flag-block — '未成熟' would imply waiting
+    // for a digest could ever release it (it can't, AI never releases flags)
+    const ux = explainEntry(flagged as never, [vp], dg([]))[0]!
+    expect(ux.outcome).toBe('wait')
+    expect(ux.aiBlockedByFlags).toBe(true)
+    expect(ux.why).toContain('redFlag')
+    // sha-mismatch is structural for the same reason — this exact line can
+    // never release these bytes; unannounced doesn't soften it to '未成熟'
+    const usha = explainEntry(shaE as never, [vsha], dg([]))[0]!
+    expect(usha.why).toContain('不符')
     // package brake: human concern on name@null overrides slot verdict
     const pkgConcern = verdict({ name: 'p', version: null, verdict: 'concern', source: 'human', reason: 'pkg bad', at: '2026-01-04T00:00:00Z' })
     const xb = explainEntry(base as never, [vp, pkgConcern], dg([akey(vp), akey(pkgConcern)]))[0]!
