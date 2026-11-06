@@ -307,9 +307,12 @@ export function sortEntries(entries: MarketEntry[], key: string): MarketEntry[] 
   })
 }
 
-/** Redact secrets/home paths from process output for export (dsh-style). */
+/** Redact secrets/home paths from process output for export (dsh-style).
+ *  sanitize() first — child output is untrusted terminal text, and an
+ *  exported log must not carry live ANSI/control sequences into whatever
+ *  the user pastes it into. */
 export function redactLog(text: string): string {
-  return text
+  return sanitize(text)
     .replace(/([A-Za-z]:)?[\\/](Users|home)[\\/][^\\/\s:]+/g, '<home>')
     .replace(/(token|apikey|api[_-]?key|secret|password|passwd|authorization)[=:]\s*\S+/gi, '$1=<redacted>')
     .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-<redacted>')
@@ -883,7 +886,11 @@ export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ 
   if (!pk) {
     const res = await fetch(`${npmRegistry()}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`packument fetch failed: ${res.status}`)
-    pk = (await res.json()) as Packument
+    // bounded read — same 64MB cap the pipeline's fetchPackument uses; a
+    // hostile/glitched registry (npm_config_registry is user-controlled)
+    // must not balloon the host process on an unbounded res.json()
+    const buf = await readBodyBounded(res, 64 * 1024 * 1024, 'packument')
+    pk = JSON.parse(new TextDecoder().decode(buf)) as Packument
     pkMetaCache.set(name, { at: Date.now(), pk })
     if (pkMetaCache.size > PK_META_MAX) pkMetaCache.delete(pkMetaCache.keys().next().value!)
   }

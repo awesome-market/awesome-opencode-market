@@ -151,9 +151,10 @@ export default Plugin.define({
           d => readdirSync(d), p => existsSync(p)))
         setInstalled(map); setInstalledIds(ids)
         // plugin.list is THE plugin inventory — its failure means every
-        // installed badge is a lie (skills still scan from disk). Flag it.
-        if (!apiOk && !Object.keys(map).length) setInvDown(true)
-        else setInvDown(false)
+        // plugin-side installed badge is silently wrong, even when the disk
+        // scan still found skills. Warn on any api failure, not just a
+        // totally empty inventory (a partial read is still a lie).
+        setInvDown(!apiOk)
       }
       onMount(() => {
         setLangMode(store.lang ?? 'auto')
@@ -392,16 +393,23 @@ export default Plugin.define({
       const halvesFor = (e: MarketEntry) => halvesToSync(e, halfState(e, installed(), store.skillVers))
       const install = async (e: MarketEntry): Promise<boolean> => {
         if (jobs.has(e.name)) { setStatus(t('installRunning')); return false }
-        const plan = installPlan(e)
-        const sync = halvesFor(e)
-        log(`install start ${e.name} plugin=${sync.plugin} skill=${sync.skill}`)
-        if (!sync.plugin && !sync.skill) { setStatus(t('allLatest')); return true }
-        setStatus(tf('installingN', { name: e.name }))
-        // halves run concurrently — plugin add mutates opencode.json, skill
-        // install writes the skills root; independent surfaces (GUI parity)
-        const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve(true)
-        const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve(true)
-        return (await pJob) && (await sJob)
+        // claim the name NOW — the real cancellables (spawn kill / fetch
+        // abort) only register inside the halves after awaits, so a fast
+        // second 'i' or an updateAll lane reaching the same entry would
+        // otherwise double-start the install
+        const claim = jobTrack(e.name, noop)
+        try {
+          const plan = installPlan(e)
+          const sync = halvesFor(e)
+          log(`install start ${e.name} plugin=${sync.plugin} skill=${sync.skill}`)
+          if (!sync.plugin && !sync.skill) { setStatus(t('allLatest')); return true }
+          setStatus(tf('installingN', { name: e.name }))
+          // halves run concurrently — plugin add mutates opencode.json, skill
+          // install writes the skills root; independent surfaces (GUI parity)
+          const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve(true)
+          const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve(true)
+          return (await pJob) && (await sJob)
+        } finally { claim() }
       }
       const uninstall = (e: MarketEntry) =>
         openMenu(`${e.name} — ${t('confirmUninstall')}`, [
@@ -668,12 +676,17 @@ export default Plugin.define({
             const pluginLane = (async () => {
               for (const j of results) if (j.sync.plugin) {
                 bump()
+                // an install already in flight for this entry (manual 'i' or a
+                // prior lane) must not be double-started — count it honestly
+                // as not-updated rather than racing a second spawn
+                if (jobs.has(j.e.name)) { j.pOk = false; continue }
                 j.pOk = await installPluginHalf(j.e, true)
               }
             })()
             const skillLane = (async () => {
               for (const j of results) if (j.sync.skill) {
                 bump()
+                if (jobs.has(j.e.name)) { j.sOk = false; continue }
                 j.sOk = await installSkill(j.e, installPlan(j.e))
               }
             })()

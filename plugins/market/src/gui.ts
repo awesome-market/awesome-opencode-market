@@ -43,7 +43,7 @@ type Api = {
   index(p?: { url?: string }): Promise<MarketIndex>
   refreshIndex(p?: { url?: string }): Promise<MarketIndex>
   indexOutcome(): Promise<string>
-  installed(p?: { names?: string[] | undefined }): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined> }>
+  installed(p?: { names?: string[] | undefined }): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined>; degraded?: boolean }>
   install(p: { name: string; spec?: string }): Promise<string>
   update(p: { name: string; spec?: string }): Promise<string>
   cancelInstall(name: string): Promise<string>
@@ -170,7 +170,7 @@ export default Plugin.define({
     // nothing is installed
     const [invDown, setInvDown] = createSignal(false)
     const pullInventory = () => void safe.installed?.({ names: catalogNames() })
-      .then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}); setInvDown(false) },
+      .then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}); setInvDown(!!s?.degraded) },
         () => setInvDown(true))
     pullInventory()
     // external installs (CLI, other windows) never reach this renderer —
@@ -1210,6 +1210,15 @@ export default Plugin.define({
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
     // skill downloads own AbortControllers — cancelInstall reaches them too
     const skillJobs = new Map<string, AbortController>()
+    // names that passed the jobs.has guard but haven't spawned yet — the
+    // pin-recheck await sits in that gap, and without a claimed slot a
+    // second IPC inside it would double-start the install. AbortControllers
+    // (not just a Set) so cancelInstall can reach a claimed-but-childless
+    // op — the pending half checks its signal before spawning
+    const pendingInstall = new Map<string, AbortController>()
+    // same window for skill installs — the index re-pull + packument fetch
+    // sit between entry and skillJobs.set
+    const pendingSkill = new Map<string, AbortController>()
       const specByName: Record<string, string> = {}
       const idByName: Record<string, string> = {}
       const featByName: Record<string, Record<string, true> | undefined> = {}
@@ -1246,8 +1255,13 @@ export default Plugin.define({
           const map: Record<string, string> = {}
           // host API first — source.target is the npm package name, which is
           // what catalog entries match on (CLI list reports internal ids)
+          // inventory reachability: apiOk/cliOk mean the plugin inventory
+          // could actually be READ (empty is fine) — both failing means the
+          // installed badges we're about to report are silently incomplete
+          let apiOk = false, cliOk = false
           try {
             if (m.client?.plugin?.list) {
+              apiOk = true
               const res = await m.client.plugin.list() as { data?: { id?: string; source?: { type?: string; target?: string; version?: string; path?: string } }[] }
               lg(`installed(): host api ${(res.data ?? []).length} items ${JSON.stringify((res.data ?? []).map(p => [p.source?.type, p.source?.target, p.source?.version]))}`)
               Object.assign(featByName, featuresMap(res.data ?? []))
@@ -1277,6 +1291,7 @@ export default Plugin.define({
               // restrictedEnv for parity with install/update — the fallback
               // must not leak ambient secrets into a spawned process either
               execFile('opencode', ['plugin', 'list'], { timeout: 15_000, env: restrictedEnv() }, (e, o, er) => e ? rej(new Error(er || e.message)) : res(o)))
+            cliOk = true
             for (const ln of out.split('\n').slice(1)) {
               const [id, ver, src] = ln.trim().split(/\s{2,}/)
               if (id) {
@@ -1308,21 +1323,33 @@ export default Plugin.define({
             extras = buildExtras(specByName, idByName, map, idxNames)
             for (const x of extras) map[x.name] = x.version
           } catch { lg('installed(): catalog unreachable — extras degraded (no uncataloged split)') }
-          return { versions: map, extras, features: featByName }
+          // degraded = every plugin-inventory path failed — skills may still
+          // be reported from disk, but plugin-side "installed" badges are
+          // unverifiable and the renderer must say so (invDown)
+          return { versions: map, extras, features: featByName, degraded: !(apiOk || cliOk) }
         },
         install: async (p: { name: string; spec?: string }) => {
           const { spawn } = require('node:child_process') as typeof import('node:child_process')
           assertSpecForName(p.name, p.spec)
           // double-click / retry-during-flight guard — jobs.set would orphan
-          // the first child while its stdout handlers still emit progress
-          if (jobs.has(p.name)) throw new Error(t('installRunning'))
+          // the first child while its stdout handlers still emit progress.
+          // pendingInstall closes the pin-recheck await window between the
+          // guard and jobs.set (two rapid IPC calls could both see empty).
+          if (jobs.has(p.name) || pendingInstall.has(p.name)) throw new Error(t('installRunning'))
+          const pac = new AbortController()
+          pendingInstall.set(p.name, pac)
           const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
           // the renderer's entry can lag the publication by up to TTL — a
           // version concern'd inside that window must NOT install. Health-
           // cheap recheck: a moved manifest sha forces a real re-pull.
           try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
-          catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
+          catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           return withConfigLock(() => new Promise<string>((resolve, reject) => {
+            // claim released here — the spawned child becomes the
+            // cancellable (jobs). delete+abort-check inside the executor is
+            // atomic vs any interleaved cancelInstall
+            pendingInstall.delete(p.name)
+            if (pac.signal.aborted) { reject(new Error('cancelled')); return }
             const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
             jobs.set(p.name, child)
             const push = (line: string) => m.emit?.('progress', { name: p.name, line })
@@ -1339,18 +1366,24 @@ export default Plugin.define({
         },
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
-          if (jobs.has(p.name)) throw new Error(t('installRunning'))
+          // pendingInstall closes the same pre-spawn window as install —
+          // a sweep lane and a manual click must not double-start a spec
+          if (jobs.has(p.name) || pendingInstall.has(p.name)) throw new Error(t('installRunning'))
+          const pac = new AbortController()
+          pendingInstall.set(p.name, pac)
           lg(`update ${p.name}: called`)
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
           // same stale-window guard as install — pin must still equal the
           // catalog-approved spec before spawn/config writes happen
           try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, pin) }
-          catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
+          catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name: p.name, line: '', done: true, ok })
           return withConfigLock(async () => {
+            pendingInstall.delete(p.name)
+            if (pac.signal.aborted) { done(false); throw new Error('cancelled') }
             try {
               // pinned update: `plugin add` does NOT dedupe — a second spec for the
               // same package appends. Install the pinned spec first, then rewrite
@@ -1385,6 +1418,11 @@ export default Plugin.define({
           // a skill-half download owns an AbortController instead of a child —
           // 'cancel' must reach it too (was spawn-only: skill fetches ran on)
           skillJobs.get(name)?.abort(); skillJobs.delete(name)
+          // a claimed-but-childless op (pin recheck / index re-pull in
+          // flight) has nothing to kill yet — its abort signal makes it
+          // stop at the next step instead of spawning past the cancel
+          pendingInstall.get(name)?.abort(); pendingInstall.delete(name)
+          pendingSkill.get(name)?.abort(); pendingSkill.delete(name)
           return 'cancelled'
         },
         uninstall: async (name: string) => {
@@ -1417,8 +1455,18 @@ export default Plugin.define({
         // integrity:null to skip the digest.
         writeSkill: async (p: { name: string }) => {
           assertSkillId(p.name)
+          // duplicate-call guard — a manual install and an updateAll lane
+          // reaching the same entry would race installSkillTar on the same
+          // dest dir (manifest written by one, files by the other). Owns a
+          // separate claim domain from pendingInstall so a dual entry's two
+          // halves never lock each other out.
+          if (pendingSkill.has(p.name)) throw new Error(t('installRunning'))
+          const pac = new AbortController()
+          pendingSkill.set(p.name, pac)
+          try {
           const entry = (await fetchIndexCached(lastIndexUrl, true))?.plugins?.find(e => e.name === p.name)
           if (!entry) throw new Error(`not in catalog: ${p.name}`)
+          if (pac.signal.aborted) throw new Error('cancelled')
           const plan = installPlan(entry)
           let url: string
           let integrity: string | null = null
@@ -1448,7 +1496,10 @@ export default Plugin.define({
           // no subtle crypto) and proceeds — github repo tarballs carry none
           const ok = await integrityMatches(bytes, integrity)
           if (ok === false) throw new Error('integrity mismatch — downloaded bytes do not match the reviewed artifact')
+          // last cancel checkpoint before touching the disk
+          if (pac.signal.aborted) throw new Error('cancelled')
           return installSkillTar({ name: p.name, gzipped: bytes, root: await skillsRoot() })
+          } finally { pendingSkill.delete(p.name) }
         },
         // read when no input; enable:true appends the url, enable:false strips
         // it — other skills[] entries are preserved either way

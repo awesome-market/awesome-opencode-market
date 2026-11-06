@@ -906,3 +906,108 @@ describe('audit-round-3 fixes', () => {
     } finally { globalThis.fetch = realFetch }
   })
 })
+
+describe('audit10 client hardening', () => {
+  it('redactLog strips ANSI/control sequences before redacting secrets', async () => {
+    const { redactLog } = await import('../src/catalog.ts')
+    const t = redactLog('ok\x1b[31m red \x1b]8;;http://x\x07link\x1b]8;;\x07 token=abc123')
+    expect(t).not.toContain('\x1b')
+    expect(t).not.toContain('\x07')
+    expect(t).toContain('<redacted>')
+  })
+
+  it('fetchPkgVersionMeta rejects an oversized packument before buffering it', async () => {
+    const { fetchPkgVersionMeta } = await import('../src/catalog.ts')
+    const realFetch = globalThis.fetch
+    // a lying registry (npm_config_registry is user-controlled) advertising a
+    // >64MB body must be refused at the content-length gate, not buffered
+    globalThis.fetch = (async () =>
+      new Response('x', { status: 200, headers: { 'content-length': String(65 * 1024 * 1024) } })) as typeof fetch
+    try {
+      await expect(fetchPkgVersionMeta('pk-huge-a10', '1.0.0')).rejects.toThrow(/too large/)
+    } finally { globalThis.fetch = realFetch }
+  })
+
+  // gui main() uses CommonJS require() internally (the host loads dist/gui.cjs);
+  // shim it so the provider surface is exercisable under ESM vitest
+  const withMain = async (fn: (api: Record<string, (...a: never[]) => unknown>) => Promise<void>) => {
+    const { createRequire } = await import('node:module')
+    const g = globalThis as Record<string, unknown>
+    const prev = g.require
+    g.require = createRequire(import.meta.url)
+    try {
+      const { default: plugin } = await import('../src/gui.ts')
+      const main = plugin.main as (m: unknown) => void
+      let api: Record<string, (...a: never[]) => unknown> = {}
+      main({ provide: (_d: unknown, impl: never) => { api = impl as typeof api }, emit: () => {} })
+      await fn(api)
+    } finally {
+      if (prev === undefined) delete g.require
+      else g.require = prev
+    }
+  }
+  const envOf = () => (globalThis as { process: { env: Record<string, string | undefined> } }).process.env
+
+  it('installed(): degraded=true when every inventory path fails', async () => {
+    const env = envOf()
+    const prevPath = env.PATH
+    env.PATH = '/nonexistent-a10'          // host api absent + CLI fallback unfindable
+    try {
+      await withMain(async (api) => {
+        const installed = api.installed as (p?: { names?: string[] }) => Promise<{ degraded?: boolean }>
+        expect((await installed({ names: [] })).degraded).toBe(true)
+      })
+    } finally { env.PATH = prevPath }
+  })
+
+  it('install: a second call inside the pin-recheck window → installRunning; cancelInstall reaches pending claims', async () => {
+    const name = 'a10-race-pkg'
+    const IDX = { version: '1', generatedAt: 't', categories: {}, removed: [],
+      plugins: [{ name, slug: name, type: 'plugin', contains: ['plugin'], approval: 'approved', latestVersion: '1.0.0' }] }
+    const env = envOf()
+    const prevIdx = env.OPENCODE_MARKET_INDEX; env.OPENCODE_MARKET_INDEX = 'https://a10.example/index.json'
+    const prevPath = env.PATH; env.PATH = '/nonexistent-a10'   // if it ever spawns, it must fail
+    const realFetch = globalThis.fetch
+    let release!: (r: Response) => void
+    const gate = new Promise<Response>(r => { release = r })
+    globalThis.fetch = ((u: unknown) => String(u).endsWith('/health.json')
+      ? Promise.resolve(new Response('x', { status: 404 }))   // no manifest → straight to the index fetch
+      : gate) as typeof fetch
+    try {
+      await withMain(async (api) => {
+        const install = api.install as (p: { name: string; spec: string }) => Promise<string>
+        const cancel = api.cancelInstall as (n: string) => Promise<string>
+        const p1 = install({ name, spec: `${name}@1.0.0` })    // claims the name, hangs in pin recheck
+        await expect(install({ name, spec: `${name}@1.0.0` })).rejects.toThrow('install already running')
+        expect(await cancel(name)).toBe('cancelled')           // aborts the claimed-but-childless op
+        release(new Response(JSON.stringify(IDX)))
+        await expect(p1).rejects.toThrow('cancelled')          // stops before spawning
+      })
+    } finally { env.PATH = prevPath; env.OPENCODE_MARKET_INDEX = prevIdx; globalThis.fetch = realFetch }
+  })
+
+  it('writeSkill: a duplicate call for the same entry → installRunning; cancel aborts the pending claim', async () => {
+    const name = 'a10-skill-pkg'
+    const IDX = { version: '1', generatedAt: 't', categories: {}, removed: [],
+      plugins: [{ name, slug: name, type: 'skill', contains: ['skill'], approval: 'approved', latestVersion: '2.0.0' }] }
+    const env = envOf()
+    const prevIdx = env.OPENCODE_MARKET_INDEX; env.OPENCODE_MARKET_INDEX = 'https://a10.example/index.json'
+    const realFetch = globalThis.fetch
+    let release!: (r: Response) => void
+    const gate = new Promise<Response>(r => { release = r })
+    globalThis.fetch = ((u: unknown) => String(u).endsWith('/health.json')
+      ? Promise.resolve(new Response('x', { status: 404 }))
+      : gate) as typeof fetch
+    try {
+      await withMain(async (api) => {
+        const writeSkill = api.writeSkill as (p: { name: string }) => Promise<string>
+        const cancel = api.cancelInstall as (n: string) => Promise<string>
+        const w1 = writeSkill({ name })                        // claims the name, hangs on the index re-pull
+        await expect(writeSkill({ name })).rejects.toThrow('install already running')
+        expect(await cancel(name)).toBe('cancelled')
+        release(new Response(JSON.stringify(IDX)))
+        await expect(w1).rejects.toThrow('cancelled')          // aborts before any disk write
+      })
+    } finally { env.OPENCODE_MARKET_INDEX = prevIdx; globalThis.fetch = realFetch }
+  })
+})
