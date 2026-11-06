@@ -106,7 +106,9 @@ jobs:
           # public repo even under permissions:{}; a fetch failure just skips
           # the check — the catalog-side gate still enforces it.
           if [ "$KIND" != none ]; then
-            git fetch origin catalog --quiet 2>/dev/null || true
+            # --depth=1: only tip blobs are read (blocklist/submissions) — a
+            # full-history fetch downloads every ~14MB index commit ever
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' --quiet 2>/dev/null || true
             BLOCKED=$(git show FETCH_HEAD:blocklist.json 2>/dev/null | BKEY="$PKG" BREPO="$PREPO" node -e '
               try {
                 const b = JSON.parse(require("fs").readFileSync(0, "utf8"))
@@ -436,9 +438,10 @@ jobs:
               *) gh issue comment "$ISSUE" -R "$GH_REPO" --body "⛔ 仅仓库协作者（OWNER/MEMBER/COLLABORATOR）可使用裁决命令 /approve、/concern——投稿进度由机器审查与目录流水线推进。" || true
                  echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
             esac
-          elif [[ "$LOW" =~ ^[[:space:]]*/[ac][a-z]+ ]]; then
+          elif [[ "$LOW" =~ ^[[:space:]]*/[ac]([a-z]|[[:space:]]|$) ]]; then
             # looks like a verdict command but isn't one — '/concerned', '/apply',
-            # '/a ok' typos deserve the usage hint instead of a silent skip
+            # '/a ok', '/c 原因', bare '/a' — typos deserve the usage hint instead
+            # of a silent skip ([a-z]+ alone missed the single-letter forms)
             # (same feedback contract concern.yml's noresolve path keeps)
             gh issue comment "$ISSUE" -R "$GH_REPO" --body "用法：`/approve` 或 `/concern [原因]`——在本投稿单上裁决投稿目标；如需指定其他包或版本请走 [concern] 表单。" || true
             echo "allowed=0" >> "$GITHUB_OUTPUT"
@@ -569,7 +572,10 @@ jobs:
             gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
             echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          git fetch origin catalog --quiet 2>/dev/null || true
+          # --depth=1 + forced tracking-ref refspec: FETCH_HEAD feeds the seed
+          # lookup, origin/catalog feeds the verdicts cat-file — both must be
+          # the fresh tip, and the '+' survives a rewritten catalog branch
+          git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' --quiet 2>/dev/null || true
           export SUB_NAME="$NAME" SUB_REPO="$SUBREPO"
           SEED=$(git show FETCH_HEAD:submissions.txt 2>/dev/null | node -e '
             const i=require("fs").readFileSync(0,"utf8")
@@ -600,11 +606,21 @@ jobs:
             RVVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
             RVSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
             RVPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
+            RVTGT=$(grep -oE 'target: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
             [ "$RVVER" = "null" ] && RVVER=""; [ "$RVPKG" = "null" ] && RVPKG=""
+            # cross-target guard — the SAME A→B→A hole the edited-skip guard
+            # closes (57d4e2a): the last review's markers only pin THIS
+            # submission when its 'target:' matches the current parse. A body
+            # edit to package B while B's re-review is in-flight (or failed)
+            # must not donate A's version/sha to a B seed — the verdict would
+            # anchor bytes nobody scanned while claiming "初审版本". No marker
+            # (pre-marker comments) → unprovable → no late-ingest.
+            RVMATCH=""
+            [ -n "$RVTGT" ] && [ "${RVTGT,,}" = "${ENTRY,,}" ] && RVMATCH=1
             case "$RV" in
               clean|flagged)
-                if { [ "$KIND" = npm ] && [ -n "$RVVER" ]; } \
-                   || { [ "$KIND" = repo ] && [ -n "$RVSHA" ]; }; then
+                if [ -n "$RVMATCH" ] && { { [ "$KIND" = npm ] && [ -n "$RVVER" ]; } \
+                   || { [ "$KIND" = repo ] && [ -n "$RVSHA" ]; } ; }; then
                   LATE=$(SEED_VERSION="${RVVER:-$RVSHA}" SEED_PKG="$RVPKG" SEED_AUTHOR="$ISSUE_AUTHOR" \
                     npx tsx pipeline/submission.ts --seedline "$ISSUE_NUM")
                   echo "lateingest=1" >> "$GITHUB_OUTPUT"
@@ -613,8 +629,10 @@ jobs:
                 fi ;;
             esac
             # no override target either way — still tell the ack what the
-            # last machine verdict was so 'noseed' can say WHY refusing
-            [ -n "${RV:-}" ] && echo "lastreview=$RV" >> "$GITHUB_OUTPUT"
+            # last machine verdict was so 'noseed' can say WHY refusing —
+            # but only when that verdict was ABOUT this target; citing a
+            # different package's review would mislead the refusal reason
+            [ -n "${RV:-}" ] && [ -n "$RVMATCH" ] && echo "lastreview=$RV" >> "$GITHUB_OUTPUT"
           fi
           # argignored: only when the spec token names a DIFFERENT catalog
           # entry — a spec-shaped word that is no package ("and/or") is reason
@@ -996,10 +1014,16 @@ jobs:
           # may not refresh issue.updated_at, so a healthy queued submission
           # could otherwise be closed at 30d while the pipeline still works it.
           # Anonymous clone: this job holds only issues:write and public-repo
-          # git needs no token scope. Clone/parse failure → empty set → the
-          # arm behaves exactly as before (status quo, never wider).
+          # git needs no token scope. A TRANSIENT clone failure must NOT
+          # masquerade as an empty live-seed set — closing a still-queued
+          # submission is exactly the harm the exemption exists to prevent.
+          # The arm only runs when the set is truthful: clone succeeded, or
+          # git says the branch is genuinely absent (fresh repo, pre-data-
+          # plane). Any other failure skips the arm with a warning.
+          LIVE_OK=""
           : > /tmp/live-seeds.txt
-          if git clone --depth 1 --branch catalog "https://github.com/$GH_REPO" /tmp/cat-sweep >/dev/null 2>&1; then
+          if git clone --depth 1 --branch catalog "https://github.com/$GH_REPO" /tmp/cat-sweep 2>/tmp/csw.err; then
+            LIVE_OK=1
             node -e '
               const fs=require("fs")
               try {
@@ -1008,6 +1032,11 @@ jobs:
                 }
               } catch {}
             ' | sort -un > /tmp/live-seeds.txt
+          elif grep -qi 'not found' /tmp/csw.err; then
+            LIVE_OK=1
+            echo "catalog branch absent — live-seed set is legitimately empty"
+          else
+            echo "::warning::live-seed clone failed — approved-stalled arm skipped this run: $(head -1 /tmp/csw.err)"
           fi
           # --limit must exceed the label's plausible backlog or the oldest
           # issues starve forever once the queue grows past one page (F-11)
@@ -1026,13 +1055,16 @@ jobs:
           # seed row at all (nothing else watches them). Issues whose seed is
           # still LIVE are exempt — the catalog pipeline owns their lifecycle
           # and a PATCHed status comment may not have refreshed updatedAt.
-          gh issue list --label submission:approved --state open --limit 1000 --json number,updatedAt |
-            node -e "const fs=require('fs');const live=new Set(fs.readFileSync('/tmp/live-seeds.txt','utf8').split('\n').filter(Boolean));const i=fs.readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut&&!live.has(String(x.number))).forEach(x=>console.log(x.number))" |
-            while read -r N; do
-              gh issue comment "$N" --body "投稿已入队超过 30 天仍未完成收录，本单自动关闭——如需继续请重新投稿或联系 maintainer。" || true
-              gh issue close "$N" || true
-              echo "closed stalled approved issue #$N"
-            done
+          # Only runs on a TRUSTWORTHY live-seed set (LIVE_OK) — see above.
+          if [ -n "$LIVE_OK" ]; then
+            gh issue list --label submission:approved --state open --limit 1000 --json number,updatedAt |
+              node -e "const fs=require('fs');const live=new Set(fs.readFileSync('/tmp/live-seeds.txt','utf8').split('\n').filter(Boolean));const i=fs.readFileSync(0,'utf8');const cut=Date.now()-30*86400e3;JSON.parse(i).filter(x=>Date.parse(x.updatedAt)<cut&&!live.has(String(x.number))).forEach(x=>console.log(x.number))" |
+              while read -r N; do
+                gh issue comment "$N" --body "投稿已入队超过 30 天仍未完成收录，本单自动关闭——如需继续请重新投稿或联系 maintainer。" || true
+                gh issue close "$N" || true
+                echo "closed stalled approved issue #$N"
+              done
+          fi
           # base-label orphans: a review that crashed BEFORE a verdict label
           # lands leaves 'submission' alone — no verdict label, no seed row,
           # invisible to every other cleanup path. >30d = abandoned.
@@ -1049,9 +1081,13 @@ jobs:
   # package never enters the catalog. Already-published entries are NOT
   # touched — taking those down is a maintainer verdict, not self-service.
   withdraw:
+    # created+edited: a comment EDITED into /withdraw is a real command —
+    # the verdict job already re-resolves edited commands; withdraw's in-step
+    # command-shape regex revalidates anyway and a repeat withdraw is a no-op,
+    # so edits are safe (an author fixing '/withdaw' must not get silence)
     if: >-
       github.event_name == 'issue_comment'
-      && github.event.action == 'created'
+      && contains(fromJSON('["created","edited"]'), github.event.action)
       && github.event.issue.state == 'open'
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
@@ -1122,7 +1158,7 @@ jobs:
   withdraw-deny:
     if: >-
       github.event_name == 'issue_comment'
-      && github.event.action == 'created'
+      && contains(fromJSON('["created","edited"]'), github.event.action)
       && github.event.issue.state == 'open'
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))

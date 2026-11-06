@@ -54,7 +54,11 @@ APPLY_WANT=0
 [ "${APPLY_INDEX:-}" = 1 ] && APPLY_WANT=1
 mark() { [ -n "${STATUS_FILE:-}" ] && printf '%s\n' "$1" > "$STATUS_FILE"; return 0; }
 for i in 1 2 3 4; do
-  git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
+  # --depth=1: the worktree only needs the tip (every index.json commit is
+  # ~14MB and history was fetched in full on EVERY retry). The '+' forced
+  # tracking refspec also survives a rewritten catalog branch — a non-FF
+  # tracking update would otherwise fail the fetch and wedge the retry loop.
+  git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' || { echo "attempt $i: fetch failed"; sleep 3; continue; }
   git worktree remove "$WT" --force 2>/dev/null || true
   # a stray NON-worktree dir at WT (killed run, pruned registration) breaks
   # `worktree add` on every retry — WT is dedicated scratch, safe to clear

@@ -21,7 +21,9 @@ git config user.email "market-bot@users.noreply.github.com"
 git config user.name "market-bot"
 WT=${WT:-/tmp/catw}
 for i in 1 2 3; do
-  git fetch origin catalog || { echo "attempt $i: fetch failed"; sleep 3; continue; }
+  # --depth=1 + forced tracking refspec — same rationale as catalog-append.sh
+  # (tip-only reads, non-FF remote must not wedge the retry loop)
+  git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' || { echo "attempt $i: fetch failed"; sleep 3; continue; }
   git worktree remove "$WT" --force 2>/dev/null || true
   # a stray NON-worktree dir at WT (killed run, pruned registration) breaks
   # `worktree add` on every retry — same guard catalog-append.sh carries
