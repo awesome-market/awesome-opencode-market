@@ -487,7 +487,12 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       : vs === 'unverified' ? '但还没验——装测通过前放行闸不会放行（等 verify 班或人工 verdict:pass）'
       : shaMismatch ? '但裁决字节与现槽位不符（疑似 re-tag）——等 drift 复审或人工重判'
       : null
-    const phase = t.maturity === 'announced' ? '已公告·待放行闸' : '已裁决·待日报公告'
+    // three-way like the clear path: 'maturing' was announced in the LATEST
+    // digest (objection window open) — collapsing it into 待日报公告 would
+    // claim the verdict isn't public yet when it already is
+    const phase = t.maturity === 'announced' ? '已公告·待放行闸'
+      : t.maturity === 'maturing' ? '已进最新日报公示·异议窗开放'
+      : '已裁决·待日报公告'
     L.push(`- 成熟相位：${blocker
       ? `${phase}——${blocker}`
       : t.maturity === 'announced'
@@ -685,6 +690,10 @@ export async function main(
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
+    // a wanted issue must not keep the terminal decided label — a reopened
+    // or hand-labeled issue would otherwise carry pending+decided at once
+    // (the close path converges to decided; the update path mirrors it)
+    if (curLabels.has('review:decided')) edit.push('--remove-label', 'review:decided')
     if (bodyDrift) edit.push('--body', body)
     if (edit.length > 5) {
       console.log(`[docket] update #${ex.number} ${title}${staleAi.length || missingAi ? ` (ai → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}${stuck ? ` (stuck ${stuck})` : ''}`)

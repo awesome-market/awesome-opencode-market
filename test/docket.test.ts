@@ -286,6 +286,14 @@ describe('issueBody', () => {
     expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'verified', maturity: 'announced' }))
       .toContain('按班放行')
   })
+  it('maturing pass with a blocker names the OPEN objection window — not 待日报公告', () => {
+    // 'maturing' = already announced in the LATEST digest — collapsing it into
+    // the pending-announce phase would claim the verdict isn't public yet
+    const body = issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'unverified', maturity: 'maturing' })
+    expect(body).toContain('异议窗开放')
+    expect(body).toContain('但还没验')
+    expect(body).not.toContain('待日报公告')
+  })
   it('flag reason is markdown-escaped like every other external string', () => {
     const body = issueBody({ name: 'p', version: '1', verdict: 'flag', reason: 'sec:x [click](https://evil.example) <b>' })
     expect(body).toContain('\\[click\\]')
@@ -473,6 +481,40 @@ describe('docket main', () => {
     } finally { process.env.GH_REPO = saved }
     const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
     expect(edits).toContain('--add-label review:pending')
+    expect(edits).not.toContain('--body')
+  })
+
+  it('a wanted issue still carrying review:decided gets it stripped — pending+decided never coexist', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk3b-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const wantBody = issueBody(
+      { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
+        slug: 'o/pkg', findings: 0, redFlags: 0 },
+      { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{
+        number: 3, title: '[review] pkg@1.0.0',
+        labels: [{ name: 'review:pending' }, { name: 'ai:pass' }, { name: 'review:decided' }],
+        body: wantBody,
+      }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+    expect(edits).toContain('--remove-label review:decided')
     expect(edits).not.toContain('--body')
   })
 
