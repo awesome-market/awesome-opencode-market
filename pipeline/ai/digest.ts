@@ -87,9 +87,9 @@ function announcementCandidates(verdicts: AiVerdict[], index?: CatalogIndex): Ai
   const live = [...latestVerdicts(verdicts).values()]
   if (!index) return live
   const slots = heldSlotKeys(index)
-  const inIndex = new Set(index.plugins.map(e => e.name))
+  const inIndex = new Set(index.plugins.map(e => e.name.toLowerCase()))
   return live.filter(v =>
-    slots.has(vkey(v.name, v.version)) || !inIndex.has(v.name) || v.verdict === 'concern')
+    slots.has(vkey(v.name, v.version)) || !inIndex.has(v.name.toLowerCase()) || v.verdict === 'concern')
 }
 
 /** State transition for one render — kept separate from markdown so the
@@ -175,7 +175,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
   const latest = latestVerdicts(verdicts)
   const latestHuman = latestHumanVerdicts(verdicts)
   const eff = (v: AiVerdict | undefined) => effectiveVerdict(v, latestHuman)
-  const inIndex = new Set(index.plugins.map(e => e.name))
+  const inIndex = new Set(index.plugins.map(e => e.name.toLowerCase()))
 
   // §③ 已解除 rows — a concern LINE the reader actually saw (its akey sits
   // in prevAnnounced) whose key's effective verdict is now a NEWER pass.
@@ -210,7 +210,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
   const prevDayAnnounced = new Set(prev?.dayAnnounced ?? [])
   const landed = verdicts.filter(v => {
     if (v.verdict !== 'pass' || !prevDayAnnounced.has(akey(v))) return false
-    const e = index.plugins.find(p => p.name === v.name)
+    const e = index.plugins.find(p => p.name.toLowerCase() === v.name.toLowerCase())
     return e !== undefined && e.approval !== 'pending' && e.approval !== 'legacy'
       && e.latestVersion === v.version
   })
@@ -362,14 +362,14 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
     v.verdict === 'concern' && eff(latest.get(vkey(v.name, v.version)))?.verdict === 'pass'
       ? ' ✅已被更新的 pass 解除' : ''
   const nameCell = (v: AiVerdict) =>
-    `${escMd(v.name)}${inIndex.has(v.name) ? '' : ' ⚠️不在目录'}${brakeMark(v)}${resolveMark(v)}`
+    `${escMd(v.name)}${inIndex.has(v.name.toLowerCase()) ? '' : ' ⚠️不在目录'}${brakeMark(v)}${resolveMark(v)}`
   // version===null rows: a human verdict on a name that HAS versioned slots
   // is the package brake ("this package"); on repo-only/ghost names the null
   // key is just the slot itself — tell them apart or '—' reads ambiguous
-  const byName = new Map(index.plugins.map(e => [e.name, e]))
+  const byName = new Map(index.plugins.map(e => [e.name.toLowerCase(), e]))
   const versionCell = (v: AiVerdict) => {
     if (v.version !== null) return v.version
-    const e = byName.get(v.name)
+    const e = byName.get(v.name.toLowerCase())
     return e?.pendingUpdate || e?.latestVersion != null ? '—（包级）' : '—'
   }
   const rows = (vs: AiVerdict[]) => vs.map(v =>

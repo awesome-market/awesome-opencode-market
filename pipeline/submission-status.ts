@@ -81,7 +81,10 @@ export function submissionStatuses(
   lines: string[],
   verdicts: AiVerdict[] = [],
 ): StatusRow[] {
-  const byName = new Map(index.plugins.map(e => [e.name, e]))
+  // name keys are canonical lowercase — legacy seed rows can carry typed
+  // casing ('My-Pkg') while catalog entries always land lowercase; verdict
+  // keys likewise lowercase (run.ts/diagnose write lowercase names)
+  const byName = new Map(index.plugins.map(e => [e.name.toLowerCase(), e]))
   const latest = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
   // one row per issue — the newest seed line wins (same-issue replace keeps
@@ -106,7 +109,7 @@ export function submissionStatuses(
   }
   const rows: StatusRow[] = []
   for (const [issue, s] of perIssue) {
-    const e = s.name ? byName.get(s.name)
+    const e = s.name ? byName.get(s.name.toLowerCase())
       : s.repo ? index.plugins.find(p =>
           p.source.repo?.toLowerCase() === s.repo!.toLowerCase() ||
           p.name.toLowerCase() === s.repo!.toLowerCase())
@@ -119,7 +122,7 @@ export function submissionStatuses(
     // submission is stopped rather than read "评审中" while a decided brake
     // stands. For queued seeds the ghost keys (name@null brake / reviewed
     // version) are checked too — the brake applies the moment the entry lands.
-    const name = s.name ?? s.repo
+    const name = (s.name ?? s.repo)?.toLowerCase()
     const ver = e ? candidateOf(e) : (s.repo ? null : (s.version ?? null))
     const c = name ? concernOn(name, ver, latest, human) : null
     if (c?.source === 'human') {

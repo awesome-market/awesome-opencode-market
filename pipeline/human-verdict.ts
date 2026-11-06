@@ -193,7 +193,7 @@ export function isDupVerdict(lines: string[], name: string, version: string | nu
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string }
-      if (v.name !== name || (v.version ?? null) !== version) continue
+      if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       // normalize BOTH sides — a writer that stored a multi-line reason vs a
       // caller passing the raw comment text must still dedupe correctly
       return v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') === oneLine(reason)
@@ -219,7 +219,7 @@ export function overriddenHuman(lines: string[], name: string, version: string |
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; source?: string; at?: string }
-      if (v.source !== 'human' || v.name !== name || (v.version ?? null) !== version) continue
+      if (v.source !== 'human' || v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       if (typeof v.verdict === 'string' && v.verdict !== verdict && typeof v.at === 'string')
         return { verdict: v.verdict, at: v.at }
       return null
@@ -240,7 +240,7 @@ export function retargetedIssueTarget(lines: string[], issue: number, name: stri
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number }
-      if (v.source !== 'human' || v.issue !== issue || v.name === name) continue
+      if (v.source !== 'human' || v.issue !== issue || v.name?.toLowerCase() === name.toLowerCase()) continue
       return { name: v.name!, version: v.version ?? null }
     } catch { continue }
   }
@@ -263,7 +263,7 @@ export function amendAt(lines: string[], name: string, version: string | null, v
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string; at?: string }
-      if (v.name !== name || (v.version ?? null) !== version) continue
+      if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
       if (v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') !== oneLine(reason)
           && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v.at))
         return v.at

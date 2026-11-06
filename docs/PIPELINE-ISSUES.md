@@ -827,7 +827,6 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 小项 | ✅ | `submission:approved` 标签打给不可解析 issue → skipmsg=unparseable 回执评论；notify 评论附详情页 `p/<slug>.html` 链接（notify-published 输出 `issue\tslug`）；投稿表单 repo 字段改 optional（npm-only 包此前无法走表单）；flagged 页脚明示 maintainer /approve 放行路径；DATA-FLOWS §0/§1/§2/§5/§12 同步 |
 
 **验证**：typecheck 0 错；新增 seed-outcome/submission-status rejected/markNotified slug 测试随套件全绿；vitest.config 别名 fileURLToPath（非 ASCII checkout 路径修复）。
->>>>>>> origin/main
 
 ## 附二十：审核单流四审（docket.yml 全流程，flaggedAt / 相位诚实化 / 工作流硬化）
 
@@ -853,3 +852,25 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 **评估未改**：`gh issue list --json body` 两段式拉取（一次调用 vs N 次 view——wanted 大时后者更差，4000 上限告警已足）；bootstrap 6 label `--force` 每轮重写（K-7 已评）；轻量 bundle 替代 npm ci（收益小）；`verdict:blocked` 折进正文（K-11 stuck 警示已覆盖 open 单，关单走摘签路径）。
 
 **验证**：typecheck 0 错；全量 vitest 套件绿（docket 新例：聚合阈值边界/行级信号/相位阻断文案/并入关单/verdict:* 摘签/dry 标记；audit9 新例：flaggedAt 三态/merge 盖章四态）；DATA-FLOWS §0/§8/§12 同步。
+
+## 附二十一：收录发现流三审（N 系列，catalog.yml ↔ 裁决/投稿/发现面全量落地）
+
+对照 DATA-FLOWS §0/§1/§11/§12/§15 逐行复核后落地。核心主题：**github-kind 与 npm 同构的钉字节语义**（verdict.sha ↔ source.version）、**投稿身份全链小写**（写入侧归一 + 消费端防御）、**publish 取消静默**、**code-search 第三发现通道**。另清除附十九尾部残留的 git 冲突标记行。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| N-1 publish 被 `catalog-branch` 写锁排队取消 → 整轮静默丢失（alert 只钩 `failure()`；digest.yml 同病） | ✅ | catalog/digest alert 同改 `failure() \|\| cancelled()`（verify G-1 同型补齐） |
+| N-2 github-kind 裁决无字节锚定：`sec:repo-moved-since-review` 只在 findings 无评审面；`shaOk` 对 gh 恒真——人工 pass 审 commit A 放行 commit B | ✅ | 双重锚：**review 锚**——pending 条目 treeRes.sha ≠ seed.version → `sec:repo-moved-since-review` 升 **redFlag**（flaggedAt 盖章/docket flag 目标/skipIfFlagged 诚实降级，进 R-14 评审面）；**release 锚**——已放行条目 latestHuman pass 的 verdict.sha ≠ HEAD → `sec:repo-moved-since-release:<新sha12>` redFlag（sha 入旗名=每次前移新 flag 集合→重新提问）；`shaAnchor`：github-kind 比 `source.version`、npm 比 `integrity`，`applyMatureVerdicts`/`explainEntry` 同用——npm 侧钉字节语义平移至 repo 条目 |
+| N-2b repo 裁决不盖 reviewed commit：`submit`/`concern` 写盘 sha 恒空 | ✅ | submit.yml verdict job：seed.version → index source.version → repo 当前 ref 三级回退盖 sha；concern.yml 同样从 catalog entry source.version 盖戳 |
+| N-3 投稿名大小写：`PKG_RE` 放行大写 → 种子行原始 case → `byName.get`/`concernOn`/verdict 键三路漏配（已收录判未收录→dead-close；"已被拦截"相位漏） | ✅ | `seedLine` 写入侧小写归一（一处根除）；notify-published/submission-status 查找端 `.toLowerCase()` 防御；`vkey` 归一 name 侧（gh 显示大小写 `Owner/Repo` 与种子小写 `owner/repo` 不再裂键）；human-verdict dedupe/改判/跨目标比较、digest index 命中/落地查询、diagnose sha 键同步小写 |
+| N-4 findings 插值攻击者文本无界（repo package.json name/repository 自由文本成 MB 级 finding） | ✅ | `run.ts clip(v,120)` 收口全部 `sec:*:<value>`/`sec:*@<value>` 插值点（repo-mismatch/dir-traversal/declared-mismatch/repo-pkg-changed/entries-mismatch/pkg-evidence-dropped/moved-since-review/moved-since-release） |
+| N-5 `refreshMeta` 不刷 repo 侧：版本钉住期间 marketMeta desc/category/repo 根 package.json 名全冻结到下版 | ✅ | 五探针并行：packument/repoMeta/downloads/**marketMeta/repoPkg**；repo-mismatch/dir-traversal/declared-mismatch 身份级 finding 随包件重算；bump/pin 路径同口径（既有行为） |
+| N-6 publish `git worktree add /tmp/cat` 无预清（verify/digest 已修同型） | ✅ | `git worktree remove /tmp/cat --force` 前置 |
+| N-7 `coveredRepos` 对既有 gh 条目"豁免"是谎言：照删→gone-check 探活复活，metrics 永久冻结、每轮白烧一次 repoMeta | ✅ | `ghMissing` 过滤放行 `oldByName` 命中的既有条目与**投稿种子**（有 npm 孪生也走全流程——人工点名不饿），走 ghWorker 正常复用/刷新路径 |
+| N-8 publish job 无 harden-runner egress 白名单 | ✅ | allowed-endpoints：registry.npmjs.org / api.github.com / github.com |
+| N-9 alert 去重 `--search "catalog workflow failed"` 未 `in:title`——正文含同句的他类告警误吞 dedupe 位 | ✅ | `in:title` 限定 |
+| N-10 `code-search`/`topic-list` 枚举无生产者 | ✅ | `code-search` 落地为第三 gh 发现通道：`searchCode`（`/search/code`，≤2 页 100/页，串行——独立配额 ~10/min，无 token 401 即整条降级跳过）；queries：filename:opencode.json / opencode.jsonc / path:/\\.opencode\\// / filename:SKILL.md+opencode；候选缺 pushed_at/id → ghWorker 身份回填门按"缺字段"判定不限种子；`topic-list` 标注**预留枚举值**（schema+DATA-FLOWS 同注） |
+| N-11 explainEntry 对 gh 条目比 `e.integrity`（恒 null）——解释层漏锚 | ✅ | 签名加 `source:{kind,version?}`，与 applyMatureVerdicts 同一 `shaAnchor` 口径；why 文案改「槽位锚（integrity / github commit）」 |
+| 清理 | ✅ | PIPELINE-ISSUES 附十九尾部 `>>>>>>> origin/main` 残留冲突标记行删除；DATA-FLOWS §15 两行过时表述修正（github 云验证 ❌→✅、验证槽位无位→已按 commit 钉）、§0 字段表枚举注生产者、§1 全链同步（code-search 段、refreshMeta 五探针、coveredRepos 豁免真实化、alert cancelled()+in:title、双锚漂移旗） |
+
+**验证**：typecheck 0 错；新增 `test/catalog-audit-n.test.ts` 15 例（gh sha 锚放行/拒放、repo-moved-since-release 旗、vkey 大小写、markNotified/submissionStatuses 小写匹配、seedLine 小写、refreshMeta repo 刷新、coveredRepos 豁免走 ghWorker、clip 收口、searchCode/discoverGithub）；全量 vitest 1176 例绿。

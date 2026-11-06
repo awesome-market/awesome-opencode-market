@@ -9,7 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey } from './verdicts.ts'
 import { retryable } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
@@ -85,6 +85,13 @@ export function replacementOf(msg: string | null): string | null {
  *  oldSha null → backfill (nothing to compare — anchors didn't exist yet);
  *  newSha null → keep the old anchor (a missing registry value proves nothing). */
 export const DRIFT_FLAG = 'sec:integrity-drift'
+
+/** Bounded interpolation for attacker-adjacent values inside `sec:*` finding
+ *  strings — a packument's repository.url or a repo package.json `name` is
+ *  author-controlled and unbounded; without the cap a 1MB field becomes a
+ *  1MB finding carried in index.json, issue comments, and review surfaces. */
+export const clip = (s: string, n = 120): string => (s.length > n ? s.slice(0, n) : s)
+
 export function anchorIntegrity(
   capabilities: PluginEntry['capabilities'],
   oldSha: string | null | undefined,
@@ -154,6 +161,9 @@ export async function run(opts: RunOptions = {}) {
     /** reviewed artifact identity: npm version or repo commit sha — repo seeds
      *  use it for moved-since-review drift detection */
     version?: string; pkg?: string; issue?: number; author?: string
+    /** submission-declared repo (npm seeds) — refreshMeta re-derives
+     *  sec:repo-declared-mismatch from it on the reuse path */
+    repo?: string
   }
   const seedMeta = new Map<string, SeedMeta>()
   // repo-only submissions (name:null) keep declared metadata too — keyed by repo
@@ -189,6 +199,7 @@ export async function run(opts: RunOptions = {}) {
             : []
           const meta: SeedMeta = {
             ...(s.type ? { type: s.type } : {}),
+            ...(repo ? { repo } : {}),
             ...(cats.length ? { category: cats } : {}),
             ...(Object.keys(desc).length ? { desc } : {}),
             ...(s.version ? { version: s.version.slice(0, 80) } : {}),
@@ -340,10 +351,21 @@ export async function run(opts: RunOptions = {}) {
   const pool = <T>(items: T[], fn: (x: T) => Promise<void>) => mapPool(items, POOL, fn)
 
   const refreshMeta = async (e: PluginEntry): Promise<PluginEntry> => {
-    const [pkRes, repoMetaRes, downloads] = await Promise.all([
-      fetchPackument(e.name, { fetchFn: f }),
-      e.source.repo ? fetchRepoMeta(e.source.repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+    // the npm version is pinned — but the REPO keeps moving underneath it:
+    // .opencode-market.json (author-declared desc/category) and the repo's
+    // own package.json name drift between version bumps, so the reuse path
+    // refreshes them too, same as the pin path (O-8's twin). Both probes hit
+    // raw.githubusercontent (CDN, no API quota).
+    const repo = e.source.repo
+    const pkResP = fetchPackument(e.name, { fetchFn: f })
+    const [pkRes, repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
+      pkResP,
+      repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
       fetchDownloads30d(e.name, { fetchFn: f }),
+      repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
+      pkResP.then(({ pk }) => repo && pk?.repositoryDir
+        ? fetchRepoPackageName(repo, { dir: pk.repositoryDir, fetchFn: f })
+        : repo ? fetchRepoPackageName(repo, { fetchFn: f }) : Promise.resolve(null)),
     ])
     const { pk } = pkRes
     if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
@@ -358,6 +380,28 @@ export async function run(opts: RunOptions = {}) {
       ? anchorIntegrity(e.pendingUpdate.capabilities, e.pendingUpdate.integrity ?? null,
           pk.integrityOf[e.pendingUpdate.version] ?? null)
       : null
+    // identity findings re-derive with the fresh packument — a repo
+    // package.json rename or repository-url drift must not freeze until the
+    // next version bump. Only when the probes answered: a failed fetch keeps
+    // the prior findings (absence of evidence isn't a verdict either way)
+    let caps = disp.capabilities
+    if (pk && repo) {
+      caps = { ...caps, findings: caps.findings.filter(x =>
+        !x.startsWith('sec:repo-mismatch') && x !== 'sec:repo-dir-traversal' && !x.startsWith('sec:repo-declared-mismatch')) }
+      const dir = pk.repositoryDir ?? undefined
+      if (dir && dir.split('/').some(s => s === '..' || s === '.')) {
+        caps = addFinding(caps, 'sec:repo-dir-traversal')
+      } else if (repoPkg?.status === 'ok' && repoPkg.pkgName
+          && repoPkg.pkgName !== e.name && repoPkg.pkgName !== e.name.split('/').pop()) {
+        caps = addFinding(caps, `sec:repo-mismatch:${clip(repoPkg.pkgName)}`)
+      }
+      const declaredRepo = seedMeta.get(e.name)?.repo ?? null
+      if (declaredRepo && declaredRepo.toLowerCase() !== repo.toLowerCase())
+        caps = addFinding(caps, `sec:repo-declared-mismatch:${clip(declaredRepo)}`)
+    }
+    const sub = seedMeta.get(e.name)
+    const claimedCats = (marketMeta?.category ?? sub?.category ?? [])
+      .map(catId).filter(cc => CAT_NAMES[cc] !== undefined)
     return {
       ...e,
       ...(pk ? {
@@ -369,6 +413,16 @@ export async function run(opts: RunOptions = {}) {
         maintainers: pk.maintainers.length ? pk.maintainers : e.maintainers,
         distTags: Object.keys(pk.distTags).length ? pk.distTags : e.distTags,
       } : {}),
+      // author-declared fields precedence, same as build/pin paths:
+      // repo .opencode-market.json > issue submission > prior auto-derived
+      description: {
+        en: marketMeta?.description?.en ?? sub?.desc?.en ?? e.description.en,
+        ...(marketMeta?.description?.zh || sub?.desc?.zh
+          ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh }
+          : e.description.zh ? { zh: e.description.zh } : {}),
+      },
+      category: claimedCats.length ? claimedCats : e.category,
+      license: pk?.license ?? repoMetaRes?.meta?.license ?? e.license,
       metrics: {
         stars: repoMetaRes?.meta?.stars ?? e.metrics.stars,
         npmDownloads30d: downloads ?? e.metrics.npmDownloads30d,
@@ -377,7 +431,7 @@ export async function run(opts: RunOptions = {}) {
       // backfill SRI for entries that predate the integrity field — the field
       // pins the DISPLAYED version's tarball (R-1)
       integrity: disp.integrity,
-      capabilities: disp.capabilities,
+      capabilities: caps,
       ...(held ? { pendingUpdate: { ...e.pendingUpdate!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
       // refresh repoId so repojacking detection works on reused entries too
       ...(repoMetaRes?.meta?.id ? { source: { ...e.source, repoId: repoMetaRes.meta.id } } : {}),
@@ -570,10 +624,10 @@ export async function run(opts: RunOptions = {}) {
           let dispCaps = dispA.capabilities
           if (dirTraversal) dispCaps = addFinding(dispCaps, 'sec:repo-dir-traversal')
           else if (repoPkg.status === 'ok' && repoPkg.pkgName && repoPkg.pkgName !== cand.name && repoPkg.pkgName !== cand.name.split('/').pop()) {
-            dispCaps = addFinding(dispCaps, `sec:repo-mismatch:${repoPkg.pkgName}`)
+            dispCaps = addFinding(dispCaps, `sec:repo-mismatch:${clip(repoPkg.pkgName)}`)
           }
           if (declaredRepo && repo && declaredRepo.toLowerCase() !== repo.toLowerCase()) {
-            dispCaps = addFinding(dispCaps, `sec:repo-declared-mismatch:${declaredRepo}`)
+            dispCaps = addFinding(dispCaps, `sec:repo-declared-mismatch:${clip(declaredRepo)}`)
           }
           const puChanged = puCaps !== heldPin.capabilities || puIntegrity !== (heldPin.integrity ?? null)
           // long-held entries still refresh author-declared metadata — a
@@ -660,11 +714,11 @@ export async function run(opts: RunOptions = {}) {
           ? { pkgName: null, status: 'error' as const }
           : await fetchRepoPackageName(repo, { dir, fetchFn: f })
         if (pjStatus === 'ok' && pkgName && pkgName !== cand.name && pkgName !== cand.name.split('/').pop()) {
-          scan.findings.push(`sec:repo-mismatch:${pkgName}`)
+          scan.findings.push(`sec:repo-mismatch:${clip(pkgName)}`)
         }
       }
       if (declaredRepo && repo && declaredRepo.toLowerCase() !== repo.toLowerCase())
-        scan.findings.push(`sec:repo-declared-mismatch:${declaredRepo}`)
+        scan.findings.push(`sec:repo-declared-mismatch:${clip(declaredRepo)}`)
       // tombstone identity check: a same-name package re-entering after a
       // disappearance is compared against the tombstone record — a different
       // repoId on the same repo or a NEWER package createdAt means the
@@ -838,12 +892,18 @@ export async function run(opts: RunOptions = {}) {
   //     exhaustion.
   // npm↔gh dedup compares repo identity case-insensitively — GitHub's display
   // case ('Owner/Repo') vs the packument-normalized value must not slip a
-  // duplicate through. An EXISTING gh entry is exempt from the covered filter:
-  // it is the canonical record for its repo and keeps being processed for
-  // metrics/scan freshness (slug-dedup merges the two views at publish).
+  // duplicate through. The covered filter drops NEW gh candidates only —
+  // an EXISTING gh entry is the canonical record for its repo and keeps
+  // flowing through ghWorker for metrics/scan freshness (slug-dedup merges
+  // the two views at publish); before this exemption it was filtered here
+  // and re-added by gone-check every run — a wasted probe with frozen
+  // metrics. Submission seeds are exempt too: a human asked for the repo
+  // even when an npm twin exists.
   const coveredRepos = new Set(entries.map(e => e.source.repo?.toLowerCase()).filter(Boolean))
   const ghMissing = ghQueue.filter(c => {
-    if (coveredRepos.has(c.fullName.toLowerCase())) return false
+    if (coveredRepos.has(c.fullName.toLowerCase())
+        && !oldByName.has(c.fullName.toLowerCase())
+        && !isSeedRepo(c)) return false
     if (isBlockedAnyCase(c.fullName, c.fullName.toLowerCase())) {
       if (c.discoveredVia.includes('submission')) seedOutcomes.set(c.fullName.toLowerCase(), 'blocklisted')
       return false
@@ -872,8 +932,11 @@ export async function run(opts: RunOptions = {}) {
       // identity: repoId for repojacking, createdAt for name-reuse
       // tombstones, pushedAt for incremental reuse, canonical casing, and a
       // truthful archived flag (the fake 'false' previously let an archived
-      // submission slip past preAdmit)
-      if (isSeedRepo(cand) && cand.id == null) {
+      // submission slip past preAdmit). The gate keys on missing identity
+      // fields rather than isSeedRepo: code-search results can also arrive
+      // with partial repo objects (missing pushed_at or id), and any
+      // candidate without both can't reuse-check or repojack-check anyway.
+      if (cand.pushedAt == null || cand.id == null) {
         const metaRes = await fetchRepoMeta(cand.fullName, { token: opts.ghToken, fetchFn: f })
         if (metaRes.status === 'rate-limited') rateLimitedCalls++
         if (metaRes.meta) {
@@ -977,17 +1040,32 @@ export async function run(opts: RunOptions = {}) {
       if (treeRes.truncated) scan.findings.push('sec:tree-truncated')
       const hasSkill = hasSkillPath(treeRes.paths) || hasSkillPath(new Set(scanFiles))
       const sub = seedRepoMeta.get(lower)
-      // repo drift: the submission review scanned tree `sub.version`; if HEAD's
-      // tree hash moved, the bytes a reviewer saw are gone — flag it and drop
-      // carried-over approval so the new bytes re-enter review instead of
-      // inheriting a judgment made on different code (repo submissions have no
-      // version slot, so verdicts can't pin this — the entry must say so)
-      const drifted = !!(sub?.version && treeRes.sha && sub.version !== treeRes.sha)
-      if (drifted) scan.findings.push('sec:repo-moved-since-review')
+      // repo drift, review anchor: the submission review scanned tree
+      // `sub.version`; if HEAD's tree hash moved, the bytes a reviewer saw are
+      // gone. This is an identity-level signal → redFlag, not finding: while
+      // the entry is still pending it must fail-closed into the human-review
+      // surface (sec:* → flaggedAt → docket flag target → skipIfFlagged), the
+      // same surface sec:integrity-drift rides on npm. Once the entry is
+      // released the verdict-sha anchor (below) takes over — the seed row's
+      // stale review sha would otherwise flag forever.
+      const drifted = !!(sub?.version && treeRes.sha && sub.version !== treeRes.sha
+        && (ghPrev?.approval ?? 'pending') === 'pending')
+      if (drifted) scan.redFlags.push('sec:repo-moved-since-review')
+      // repo drift, release anchor: a standing human pass stamped sha X at
+      // verdict time (submit/concern now record it) but HEAD moved — the
+      // displayed install pin now points at bytes no decision covers.
+      // Embedding the new sha makes each move a NEW flag set, so flaggedAt
+      // re-stamps and every move re-asks the question on the flag surface
+      // (a bare flag name would stay "decided" by the last verdict).
+      const hvPass = latestHumanByKey.get(vkey(ghPrev?.name ?? canonicalName ?? cand.fullName, null))
+      if (hvPass?.verdict === 'pass' && hvPass.sha && treeRes.sha && hvPass.sha !== treeRes.sha
+          && (ghPrev?.approval === 'approved' || ghPrev?.approval === 'legacy')) {
+        scan.redFlags.push(`sec:repo-moved-since-release:${treeRes.sha.slice(0, 12)}`)
+      }
       // same signal one level down: the package.json `name` the review saw
-      // differs from what's at HEAD now
+      // differs from what's at HEAD now — reviewed artifact identity changed
       if (sub?.pkg && repoPkg.pkg?.name && sub.pkg !== repoPkg.pkg.name)
-        scan.findings.push(`sec:repo-pkg-changed:${repoPkg.pkg.name}`)
+        scan.redFlags.push(`sec:repo-pkg-changed:${clip(repoPkg.pkg.name)}`)
       // tombstone identity: a same-name repo reappearing with a different
       // repoId (or a newer createdAt) is a recreated repo under a recycled
       // fullName, not a resurrection
@@ -1065,10 +1143,12 @@ export async function run(opts: RunOptions = {}) {
         },
         // repo-root package.json carries engines/peerDependencies too
         compat: compatStrings(repoPkg.pkg?.engines, repoPkg.pkg?.peerDependencies),
-        // drift is surfaced as a finding, not an approval demotion: repo-kind
-        // verdicts key on name@'' (no version slot) so a standing human pass
-        // would re-approve the entry at publish anyway — the durable signal
-        // for "reviewed bytes changed" is the finding itself.
+        // drift is enforced, not just noted: the sec:repo-moved-* redFlags
+        // above ride the flag review surface (flaggedAt → docket/digest), and
+        // repo verdicts stamped with the reviewed sha get refused by shaOk
+        // when the pinned commit moved — same pin discipline npm gets from
+        // dist.integrity, keyed on name@'' (repo verdicts have no version
+        // slot).
         approval: ghPrev?.approval ?? 'pending',
         ...(ghPrev?.approvalReason ? { approvalReason: ghPrev.approvalReason } : {}),
       }

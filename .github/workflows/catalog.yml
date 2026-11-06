@@ -82,6 +82,17 @@ jobs:
     concurrency: catalog-branch   # writer lock shared with verify/digest/ingest — only the write phase holds it (C-3)
     permissions: { contents: write, issues: write, actions: write }   # contents+issues: catalog writer + submission notify (WF-3); actions: dispatches site.yml (V-8)
     steps:
+      # write-side job — same eBPF egress posture as verify/digest writers.
+      # Covers git fetch/push (github.com), gh api/issue/dispatch calls
+      # (api.github.com), and npm ci (registry.npmjs.org); artifact download
+      # uses GitHub-internal endpoints like every other hardened job.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -98,6 +109,9 @@ jobs:
           git config user.name "market-bot"
           # catalog branch is data-only (no pipeline sources) — use a worktree so
           # the main checkout keeps pipeline/*.ts runnable throughout the loop.
+          # stray worktree from a crashed prior run must not fail the add below
+          # (verify/digest hit this for real — V-T / D-Z)
+          git worktree remove /tmp/cat --force 2>/dev/null || true
           if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
             git fetch origin catalog
             git worktree add /tmp/cat origin/catalog
@@ -265,7 +279,11 @@ jobs:
 
   alert:
     needs: [generate, publish]
-    if: failure()
+    # cancelled() included: publish shares the catalog-branch writer lock — a
+    # queued publish can be evicted by a later writer (verify-merge/digest/
+    # ingest), which drops the whole run's compute AND index update silently.
+    # verify.yml hardened the same shape in G-1.
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
@@ -276,8 +294,10 @@ jobs:
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
           # dedupe (same S-6 pattern as site.yml): a failing streak comments on
-          # the one open alert issue instead of opening one per run
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          # the one open alert issue instead of opening one per run. in:title —
+          # an unrelated pipeline-alert issue whose BODY mentions "catalog
+          # workflow failed" must not swallow this alert's dedupe slot
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

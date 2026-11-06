@@ -102,7 +102,12 @@ export function parseSubmission(body: string): Submission {
  *  rate limit (open-submission cap per account). */
 export function seedLine(s: Submission, issue: number, extra: { version?: string | null; pkg?: string | null; author?: string | null } = {}): string {
   return JSON.stringify({
-    name: s.name,
+    // canonical lowercase — npm names are case-insensitive but every
+    // downstream lookup (run.ts seeds, notify-published, submission-status)
+    // keys on the lowercase identity; a typed 'My-Pkg' would land the entry
+    // while its issue consumers missed it (staleWarned → dead-close on a
+    // package that's actually published)
+    name: s.name?.toLowerCase() ?? null,
     repo: s.repo,
     type: s.type,
     category: s.category,

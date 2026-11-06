@@ -265,7 +265,7 @@ describe('run: JSONL seed declared metadata', () => {
     expect(e.type).toBe('skill')   // declared type honored for repo-only seeds
   })
 
-  it('repo seed: tree moved since review → drift finding, not silent re-scan', async () => {
+  it('repo seed: tree moved since review → redFlag + skipped, not silent re-scan', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'seed-'))
     const seed = join(dir, 'submissions.txt')
     // version = the commit sha the submission REVIEW scanned
@@ -280,7 +280,11 @@ describe('run: JSONL seed declared metadata', () => {
     }) as typeof fetch
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'o/drift')!
-    expect(e.capabilities.findings).toContain('sec:repo-moved-since-review')
+    // identity-level signal → redFlag (flag surface + skipIfFlagged), not a
+    // buried finding — the moved bytes fail-closed into human review
+    expect(e.capabilities.redFlags).toContain('sec:repo-moved-since-review')
+    expect(e.capabilities.findings).not.toContain('sec:repo-moved-since-review')
+    expect(e.verification.status).toBe('skipped')
   })
 
   it('dead seeds are skipped — no candidate injection, no scan budget', async () => {

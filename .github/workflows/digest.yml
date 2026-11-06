@@ -242,7 +242,10 @@ jobs:
 
   alert:
     needs: [digest, watchdog]
-    if: failure()
+    # cancelled() included: digest shares the catalog-branch writer lock — an
+    # eviction by a later writer loses the day's render + digest-state maturity
+    # anchor with no signal (same shape verify.yml hardened in G-1)
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { issues: write }

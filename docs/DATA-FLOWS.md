@@ -107,7 +107,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `type` | enum | `plugin|skill|agent|command|mcp|theme|bundle|rule`——schema 预留八值，但当前管线只产出 `plugin`/`skill` 两种（其余为死 schema 面）；分类器产出，默认 plugin |
 | `contains[]` | enum? | `plugin|skill|mcp|command|agent|hook`——部件清单**显式且权威**（含 `[]`=无可装载荷；仅字段缺失才按 type 回落推导——三处消费方 verifyPartsOf/installPlan/entryParts 同规则）；npm 'plugin' 需 main/exports 入口，SKILL.md-only 包只领 'skill'；repo 探测 SKILL.md→'skill'（github-kind 也跑 hasSkillPath）。**随版本分槽**：hold 存在时钉在展示版，候选版的 parts 存 `pendingUpdate.contains`（含显式 []） |
 | `features[]` | enum? | `server|tui|gui|rpc`——镜像官方 Host.resolve：`./server`或根入口(`./`.`main`/`index.*`)→server；`./tui`→tui；`./rpc`+有 server→rpc；`./gui-experimental`（无 exports 时根下 `gui-experimental.cjs/.js`）且目标 `.cjs/.js`→gui。**无保底 server**——GUI/TUI-only 包合法为空 |
-| `discoveredVia[]` | enum[] | `npm-keyword|github-topic|code-search|topic-list|submission` |
+| `discoveredVia[]` | enum[] | `npm-keyword|github-topic|code-search|topic-list|submission`——生产者：npm-keyword=registry 搜索、github-topic=topic 搜索、code-search=github 代码搜索（.opencode/opencode.json/SKILL.md 提及）、submission=投稿种子；`topic-list` 为**预留枚举值**（暂无生产者，保留兼容旧 index 解析） |
 | `source` | obj | `{kind:npm|github, id, repo?, repoId?, version?}`；repoId=GitHub 数字 id，repojacking 检测 |
 | `description` | obj | `{en, zh?}`——优先级：`.opencode-market.json` > 投稿声明 > 自动 |
 | `category[]` | string[] | 分类 id 列表 |
@@ -141,7 +141,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 
 **实现**：`pipeline/run.ts::run`（主流程）· `discover/{npm,github,filter}.ts`（候选+入场过滤）· `fetch/{npm,github}.ts`（packument/tarball/repo 元数据）· `scan/{scan,rules}.ts`（tarball 静态扫描，`RULESET_VERSION='r4'`）· `publish/{merge,slug}.ts`（合并/去重/腐化门）· `remerge.ts`（重试合并）· `verdicts.ts::applyMatureVerdicts`（前置放行）· `notify-published.ts`（投稿通知）
 
-`generate`（permissions:{} 零权限 + harden-runner egress 白名单（npm registry/api + github api/raw/codeload/objects/release-assets——它解析不可信 tarball 字节，出站只给必需域），跑不可信元数据；可选 `MARKET_PAT` 提额；**无并发锁**——只读 catalog 分支，不占写锁）→ `publish`（唯一 index writer：contents+issues+actions 写权限；`concurrency: catalog-branch` 只挂在写阶段——与 verify.yml、submit ingest、digest.yml 共享分支写锁，写者串行；末尾 dispatch site.yml，失败 10s 后重试一次——V-8 单 Pages 发布者）→ `alert`（失败查 `pipeline-alert` 既有 open issue，有则评论追加、无则新建——连败不轰炸）。blocklist.json 存在但损坏 → `generate` 拒跑（fail-closed：坏黑名单不等于没黑名单）；文件缺失才视为"未配置"；**名单条目加载即小写归一**——书写者用显示大小写也拦得住（查询侧 isBlockedAnyCase 同样小写化）。
+`generate`（permissions:{} 零权限 + harden-runner egress 白名单（npm registry/api + github api/raw/codeload/objects/release-assets——它解析不可信 tarball 字节，出站只给必需域），跑不可信元数据；可选 `MARKET_PAT` 提额；**无并发锁**——只读 catalog 分支，不占写锁）→ `publish`（唯一 index writer：contents+issues+actions 写权限；`concurrency: catalog-branch` 只挂在写阶段——与 verify.yml、submit ingest、digest.yml 共享分支写锁，写者串行；末尾 dispatch site.yml，失败 10s 后重试一次——V-8 单 Pages 发布者）→ `alert`（`failure() || cancelled()`——publish 共享 catalog-branch 写锁，排队写者会被后来者取消：整轮 generate 计算+index 更新+投稿通知静默丢弃，必须同失败一样告警；查 `pipeline-alert` 既有 open issue（`in:title` 限定——正文含同句的他类告警单不会误吞 dedupe 位），有则评论追加、无则新建——连败不轰炸）。publish 同走 harden-runner egress 白名单（github.com/api.github.com/registry.npmjs.org）与 worktree 预清（崩溃遗留不清下步即炸——verify/digest 同型已修）。blocklist.json 存在但损坏 → `generate` 拒跑（fail-closed：坏黑名单不等于没黑名单）；文件缺失才视为"未配置"；**名单条目加载即小写归一**——书写者用显示大小写也拦得住（查询侧 isBlockedAnyCase 同样小写化）。
 
 ```mermaid
 flowchart TB
@@ -170,6 +170,12 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
   （npm ×3、gh ×2，mapPool——页级 15s 超时的长尾不再跨循环叠加，对
   registry/API 仍温和）；分页中途非 ok 或吃满页 → console.warn
   截断遥测——静默截断会被误读成"没有更多候选"）
+  **github code-search 精准通道**（`discoveredVia:'code-search'`）：
+  filename:opencode.json / opencode.jsonc / path:/\.opencode\// /
+  filename:SKILL.md+opencode，各 ≤2 页 100/页、query 带 fork:false、
+  **串行**（代码搜索独立配额 ~10 req/min 且未认证直接 401——无 token
+  时整条通道跳过降级，不拖垮发现）；repo 字段可能不完整（缺
+  pushed_at/id），ghWorker 的身份回填门按"缺字段"判定不限种子）
   → + submissions.txt 种子注入（JSONL 声明式种子；纯名字；github:owner/repo；
       dead:true 行直接跳过——撤回/超期终态不再消耗扫描预算；
       **种子名字/repo 一律小写归一**——repo 身份键全链小写，投稿大小写
@@ -185,9 +191,18 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       seed 元数据先消毒：desc 每语种 ≤4000 字符、category ≤8 项 ×80 字符、
         version/pkg/issue/author 限长、非字符串值剔除（表单可改 → 按
         marketMeta 同款上限处理）；version=被审版本（npm ver / repo resolvedSha（commit sha））
-      repo 种子漂移检测：treeRes.sha ≠ seed.version →
-        finding `sec:repo-moved-since-review`（审查后仓库已变——github-kind
-        无版本槽，裁决无法钉此，finding 是持久信号）
+      repo 种子漂移检测（review 锚）：treeRes.sha ≠ seed.version 且条目
+        仍 pending → **redFlag** `sec:repo-moved-since-review`（审查后仓库
+        已变——身份级信号进 R-14 flag 评审面：flaggedAt 盖章、docket flag
+        目标、skipIfFlagged 诚实降级；已放行条目不再用它比——种子行的旧
+        sha 会永远误报）
+      repo 漂移检测（release 锚）：已放行条目最新 human pass 钉的
+        verdict.sha ≠ HEAD → **redFlag** `sec:repo-moved-since-release:<新sha12>`
+        ——sha 入旗名使每次前移都是新 flag 集合（flaggedAt 重盖→每次前移
+        重新提问，裸旗名会被上一次裁决永久"已决议"）；verdict sha 由
+        submit/concern 流程在裁决时盖（seed.version → index
+        source.version），shaOk 拒放钉着旧 commit 的 pass——与 npm 侧
+        dist.integrity 钉字节同构
   → 入场过滤：preAdmit(archived)——只作用 GitHub 侧（npm 候选无 archived/fork 信号）
       + looksLikeTemplateSpam（owner 级 ≥6 近同名；**npm/gh 两侧同跑**——
         gh 侧 owner 下连发近同名 repo 是同一指纹的另一面；名单上日志可审计）
@@ -225,8 +240,12 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
            都不匹配→null 不短路——旧实现的 `PU ?? 展示` 跨槽回退把
            "PU 扫描失败无 rulesetVersion"误判成同规则，失败扫描永久冻结）。
            短路前仍过 isBlocked(name,slug) 双键检查。metrics.checkedAt >7d 或
-           **缺 integrity** → refreshMeta 重拉 packument/stars/downloads 并回填
-           SRI（三探针并行）；否则零请求
+           **缺 integrity** → refreshMeta 重拉 packument/repoMeta/downloads/
+           **marketMeta/repoPkg**（五探针并行——版本钉住但 repo 在动：
+           作者声明的 desc/category、repo 根 package.json 名、
+           repo-mismatch/dir-traversal/declared-mismatch 身份级 finding
+           都随包件重算，不再冻结到下版；bump/pin 路径同口径）并回填
+           SRI；否则零请求
         ③ 旧有条目候选里没有 → gone-check 探活（见下）
       fetchPackument → hasPluginEvidence：specific（opencode keyword /
         readme-install 句）∧ artifact（main/exports 入口 / readme-install）——
@@ -276,10 +295,12 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       组装 entry：approval='pending', approvalReason='awaiting-review'；
       compat 填展示版 engines/peerDependencies 序列化值（见 §表 compat 行）
       hold 手术（见 §7）
-  → github-kind 补集（coveredRepos 去重，**全小写比较**——GitHub
-      fullName 带显示大小写，小写变体不得穿透去重；**既有 gh 条目豁免
-      覆盖过滤**：它是该 repo 的正规记录，照常处理保持 metrics/scan 新鲜
-      ——slug 去重在发布层把 npm/gh 两视图并成一条；blocklist 同走小写
+  → github-kind 补集（coveredRepos 去重只拦**新**候选，**全小写比较**——
+      GitHub fullName 带显示大小写，小写变体不得穿透去重；**既有 gh 条目
+      豁免覆盖过滤**：它是该 repo 的正规记录，照走 ghWorker 保 metrics/scan
+      新鲜——slug 去重在发布层把 npm/gh 两视图并成一条（曾误删既有条目、
+      每轮靠 gone-check 探活复活且 metrics 冻结）；**投稿种子同豁免**——
+      人工点名的 repo 即使有 npm 孪生也要走全流程；blocklist 同走小写
       比较 isBlockedAnyCase——名单里的小写 owner/repo 拦得住显示大小写）：
       证据门 hasRepoEvidence(tree 路径+topics)：OpenCode 专属信号
         （.opencode/、opencode.json[c]、opencode-plugin/opencode-skill topic）
@@ -1807,7 +1828,7 @@ opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方�
 | **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ⚠️ 部分 | github **skill** 已可装（客户端 installPlan → codeload `tar.gz/<commit sha>` 钉扫过的提交 → `installSkillTar`，无 sha 遗产退 HEAD）；github **plugin** 仍只展示（`installPlan` 明确拒绝，`installHint` 不印装不上的命令）——`opencode plugin add owner/repo` 本身可用但目录不提供该路径；本机 git-spec 已装插件进 extras 清单可见 |
 | git `owner/repo#commit` 钉版 | ✅ 数据已备 | github-kind 的 `source.version` 记的就是 **commit sha**——`git/trees/{ref}` 按 ref 查询时响应 `sha` 字段返回 ref 解析到的 commit sha（对 API 实测验证，与该 commit 的 `commit.tree.sha` 不同），commit 不可变所以钉得住；`modifiedAt` 记 pushedAt 作展示/兜底 |
 | github 条目静态扫描 | ✅ | **已实现**：codeload `tar.gz/HEAD` 过同一套 `scanTarball`（§1 github-kind 补集），扫描失败才 `scannedAt:null` |
-| github 条目云验证 | ❌ | `planTargets` 要求 version；`opencode plugin add owner/repo` 可验但槽位模型（verification/pendingUpdate 按 version 索引）没留位置 |
+| github 条目云验证 | ✅ | `VerifyTarget.git` → `plugin add owner/repo#<source.version commit>` 沙箱实测 + `checkSkillStructureGit` codeload 结构检查；verify egress 白名单含 codeload。repo 裁决键 `name\0`（无版本槽）——verdict.sha 钉 reviewed commit（submit/concern 盖戳），shaOk 与 npm 同构拒放"移动后字节" |
 | github repo 内容探测 | ✅ | **已实现**：github-kind 走 `fetchRepoTree` 证据门 + `hasSkillPath` → `contains` 检测（§1）；站点技能目录已按此对 github-kind 出 `codeload` 文件 |
 | `~/.config/opencode/plugins/` 全局目录 | ❌ | 官方本地插件路径，方向不同（丢文件非装包），市场不覆盖 |
 | `.opencode/plugins/` + 项目 `opencode.json` 项目级 | ❌ | 市场只写全局 `~/.config/opencode/opencode.json`；项目级完全不支持 |
@@ -1833,5 +1854,5 @@ opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方�
 
 1. ~~**客户端放开按钮**~~ **skill 侧已实现**（installPlan → codeload → installSkillTar）；plugin 侧刻意不开——`plugin add owner/repo` 无版本锚点可钉，装上什么无法审计
 2. ~~**catalog 记 commit sha**~~ **已确认现成**——`source.version` 存的就是 ref 解析出的 head commit sha（`git/trees/HEAD` 响应 `sha` 的实测行为），`owner/repo#sha` 钉版数据已备；plugin 侧不开是故意的（上条），非数据缺口
-3. ~~**扫描接 codeload**~~ **已实现**（tar.gz → `scanTarball` 复用）；验证槽位仍按 version 索引，github-kind 无位
+3. ~~**扫描接 codeload**~~ **已实现**（tar.gz → `scanTarball` 复用）；云验证同已实现——VerifyTarget.git 按 `source.version` commit 走 `plugin add owner/repo#sha` + skill 结构检查，裁决键 `name\0` + verdict.sha 钉 commit
 4. ~~**fetchRepoTree 对 github-kind 补跑**~~ **已实现**（`contains` 由 tree 证据填充）

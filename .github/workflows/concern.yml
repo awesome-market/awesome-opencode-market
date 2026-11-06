@@ -199,6 +199,9 @@ jobs:
               pkgAll: pkgAll ? "1" : "",
               approval: e?.approval ?? "",
               flags: slot?.capabilities?.redFlags?.length ?? 0,
+              // github-kind byte anchor — repo verdicts pin the entry's
+              // current commit (source.version): the bytes under review now
+              srcver: e?.source?.version ?? "",
             }))
           ' "$NAME" "$VER" "${ISREPO:-0}")
           V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
@@ -208,6 +211,7 @@ jobs:
           PKGALL=$(node -pe 'JSON.parse(process.argv[1]).pkgAll' "$INFO")
           APPROVAL=$(node -pe 'JSON.parse(process.argv[1]).approval' "$INFO")
           FLAGS=$(node -pe 'JSON.parse(process.argv[1]).flags' "$INFO")
+          SRCVER=$(node -pe 'JSON.parse(process.argv[1]).srcver' "$INFO")
           # pkgAll: empty V is the INTENDED package scope, not an unresolved
           # target — only a truly version-less npm verdict with no `*` blocks
           if [ "$ISREPO" != "1" ] && [ -z "$V" ] && [ "$PKGALL" != "1" ]; then
@@ -238,6 +242,11 @@ jobs:
               [ "$t" -lt 3 ] && sleep 2
             done
           fi
+          # repo verdicts have no registry integrity — pin the entry's current
+          # commit instead: the human is deciding on the bytes the index pins
+          # right now, and shaOk refuses the release if HEAD moves before it
+          # matures (same discipline as npm's dist.integrity anchor)
+          if [ "$ISREPO" = "1" ] && [ -z "$SHA" ] && [ -n "$SRCVER" ]; then SHA="$SRCVER"; fi
           node -e '
             const rec = {
               name: process.argv[1],

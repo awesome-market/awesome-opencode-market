@@ -449,7 +449,7 @@ export function latestShaVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict>
   const m = new Map<string, AiVerdict>()
   for (const v of verdicts) {
     if (!v.sha) continue
-    const k = `${v.name}\0${v.sha}`
+    const k = `${v.name.toLowerCase()}\0${v.sha}`
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)
   }
@@ -610,7 +610,7 @@ export async function main(
     // same tarball under another version → reuse the NEWEST judgment on
     // those bytes (a re-tag/re-publish of identical content carries zero new
     // signal — but a pass overturned since must not resurrect)
-    const t = sha ? bySha.get(`${e.name}\0${sha}`) : undefined
+    const t = sha ? bySha.get(`${e.name.toLowerCase()}\0${sha}`) : undefined
     const twin = t && t.version !== verOf(e) ? t : undefined
     // §5/§6: npm candidates get REAL package content in the material —
     // twins and terminal verify-failed short-circuits never reach the model
