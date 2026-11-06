@@ -1,5 +1,5 @@
 /** Thin static site generator — renders index.json to plain HTML. Astro can replace this later without changing data. */
-import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync, cpSync, existsSync, statSync, readFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync, renameSync, readdirSync, cpSync, existsSync, statSync, readFileSync, lstatSync } from 'node:fs'
 import { execFileSync, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
@@ -369,7 +369,20 @@ const slugSafe = (slug: string): boolean =>
 export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: string, verdictsPath?: string): Promise<void> {
   rmSync(outDir, { recursive: true, force: true })   // no stale files from a previous build
   mkdirSync(join(outDir, 'p'), { recursive: true })
-  const verdicts = verdictsPath ? loadVerdicts(verdictsPath) : undefined
+  // the verdicts file feeds the per-page audit trail. Same fail-closed rule
+  // the fetch step applies to the FILE (cat-file -e): exists-but-unreadable,
+  // or fetched-but-100%-malformed, renders a silently empty audit surface on
+  // every detail page — abort the build rather than publish it. Partial
+  // corruption stays tolerated: an append-only log tears occasionally, and
+  // loadVerdicts already warns the dropped-line count.
+  const verdicts = verdictsPath ? (() => {
+    const raw = readFileSync(verdictsPath, 'utf8')   // unreadable → throw, not "empty"
+    const sink = { bad: 0 }
+    const v = loadVerdicts(verdictsPath, sink)
+    if (raw.trim() && !v.length && sink.bad)
+      throw new Error(`[site] ${verdictsPath}: ${sink.bad} malformed line(s), 0 parseable — refusing to publish an empty verdict audit surface`)
+    return v
+  })() : undefined
   // group once — per-page filtering over the whole append-only log would be
   // O(entries × verdicts) for no reason; each page gets only its own lines.
   const verdictsByName = new Map<string, AiVerdict[]>()
@@ -555,8 +568,12 @@ const SAFE_MEMBER = /^[^\x00-\x1f\x7f"'`#$%?*:<>\|]+$/
 const ACTIVE_CONTENT = /\.(html?|xhtml|shtml|svg|js|mjs|cjs)$/i
 /** Subresource-Integrity check across the algos npm actually emits — the
  *  client's integrityMatches only understands sha512 and treats anything else
- *  as unverifiable; the site verifies whatever algo is announced and only
- *  skips on a REAL mismatch (null = unverifiable → proceed, same contract). */
+ *  as unverifiable; the site verifies whatever algo the index announced.
+ *  Returns null for an UNPARSEABLE tag — callers must treat null like a
+ *  mismatch (fail closed): an announced-but-unverifiable SRI is corrupt index
+ *  data, and publishing unverified bytes under it would fake the
+ *  served-bytes=reviewed-bytes invariant. (An entry announcing NO integrity
+ *  skips the check entirely — there is nothing to verify against.) */
 const sriOk = (buf: Buffer, sri: string): boolean | null => {
   const m = /^(sha256|sha384|sha512|sha1)-([A-Za-z0-9+/=]+)$/.exec(sri.trim())
   if (!m?.[1]) return null
@@ -689,7 +706,12 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     // codeload pins to it so served bytes equal what the evidence gate + scan
     // saw; pushedAt (modifiedAt) is only the fallback for pre-sha index data.
     const ver = isGh ? (s.source?.version ?? s.modifiedAt) : s.latestVersion
-    if (isGh && !ghRepo) continue                     // malformed repo id
+    // kind=github but no usable repo id is corrupt index data — warn like the
+    // sibling skips below instead of dropping the candidate silently
+    if (isGh && !ghRepo) {
+      console.warn(`[site] skill skipped — github entry without a usable repo id: ${JSON.stringify(s.source?.repo).slice(0, 120)}`)
+      continue
+    }
     if (!ver) continue                                // npm entry without a version — nothing to serve
     // pre-sha rows fetch codeload HEAD — a moving target, so the served tree
     // can drift from what the (older) scan saw. Dropping them would cut ~30%
@@ -731,6 +753,12 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     // A corrupt cache entry (truncated copy, not a dir) must fall through to a
     // refetch, not kill the whole catalog build.
     if (hit && existsSync(hit)) try {
+      // lstat before trusting the hit: cpSync DEREFERENCES a symlinked cache
+      // entry into real files — a tampered cache could materialize out-of-band
+      // content into the published tree. (Nested links materialize as regular
+      // files and are re-vetted by collectFiles; this covers the entry itself.
+      // Cache writes are same-trust-domain, but the guard is cheap.)
+      if (!lstatSync(hit).isDirectory() || lstatSync(hit).isSymbolicLink()) throw new Error('cache entry is not a real dir')
       rmSync(c.dest, { recursive: true, force: true })
       cpSync(hit, c.dest, { recursive: true })
       const { files: abs, total, droppedActive, dropped } = collectFiles(c.dest)

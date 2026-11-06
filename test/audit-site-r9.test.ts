@@ -7,7 +7,7 @@
  *  no card, no detail page, and no skill-catalog candidate; an approved+hold
  *  entry keeps serving its DISPLAYED version (hold semantics). */
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildSite, listPage, isVisible } from '../pipeline/site/build.ts'
@@ -45,6 +45,9 @@ describe('§9: pending+hold never reaches a user-facing surface', () => {
     const dir = mkdtempSync(join(tmpdir(), 'a33-'))
     const inv = mk({ name: 'inv', slug: 'o/inv', pendingUpdate: pu as never })
     const ok = mk({ name: 'ok', slug: 'o/ok', approval: 'approved' })
+    // a supplied verdicts path must exist — the workflow always creates the
+    // file; an empty file is the legitimate "no verdicts yet" state
+    writeFileSync(join(dir, 'no-verdicts.jsonl'), '')
     await buildSite(idx([inv, ok]), join(dir, 'site'), undefined, join(dir, 'no-verdicts.jsonl'))
     // full catalog still ships for audit — pending rows included
     const shipped = JSON.parse(readFileSync(join(dir, 'site', 'index.json'), 'utf8'))
