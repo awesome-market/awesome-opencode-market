@@ -23,8 +23,8 @@
  *  here — the notify comment IS the published signal. */
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { CatalogIndex, type AiVerdict, type PluginEntry } from '../src/schema.ts'
-import { latestVerdicts, latestHumanVerdicts, effectiveVerdict, vkey, atCmp, loadVerdicts } from './verdicts.ts'
+import { CatalogIndex, type AiVerdict } from '../src/schema.ts'
+import { latestVerdicts, latestHumanVerdicts, slotVerdict, candidateVer, tombEpochs, loadVerdicts } from './verdicts.ts'
 
 export interface StatusRow {
   issue: number
@@ -56,28 +56,19 @@ export const REJECT_REASONS: Record<string, string> = {
  *  into an issue the SUBMITTER reads; keep it single-line and short. */
 const clip = (s: string, max = 200) => s.replace(/\s+/g, ' ').trim().slice(0, max)
 
-/** Which verdict currently governs the submitted package — mirrors
- *  applyMatureVerdicts' verdictFor (package brake overrides a slot unless a
- *  NEWER human pass exists on that exact slot key). Returns the winning
- *  concern verdict, or null when nothing blocks the package. */
+/** Which verdict currently governs the submitted package — delegates to
+ *  slotVerdict, the SAME brake+stickiness+epoch predicate applyMatureVerdicts
+ *  uses, so this comment can't drift from what the release gate will actually
+ *  do (a pre-tombstone pass must not dissolve a standing brake here either).
+ *  Returns the winning concern verdict, or null when nothing blocks. */
 export function concernOn(
   name: string, version: string | null,
   latest: Map<string, AiVerdict>, human: Map<string, AiVerdict>,
+  tomb?: Map<string, string>,
 ): AiVerdict | null {
-  const brakeH = version === null ? undefined : human.get(vkey(name, null))
-  const brake = brakeH?.verdict === 'concern' ? brakeH : undefined
-  let v = effectiveVerdict(latest.get(vkey(name, version)), human)
-  if (brake) {
-    const slotHuman = human.get(vkey(name, version))
-    if (!(slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0)) v = brake
-  }
+  const v = slotVerdict(latest, human, name, version, tomb)
   return v?.verdict === 'concern' ? v : null
 }
-
-/** Candidate version a verdict would land on for this entry — same rule as
- *  docketTargets/unreviewedTargets (held slot, else pending display slot). */
-const candidateOf = (e: PluginEntry): string | null =>
-  e.pendingUpdate ? e.pendingUpdate.version : e.approval === 'pending' ? e.latestVersion : null
 
 export function submissionStatuses(
   index: CatalogIndex,
@@ -90,6 +81,7 @@ export function submissionStatuses(
   const byName = new Map(index.plugins.map(e => [e.name.toLowerCase(), e]))
   const latest = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
+  const tomb = tombEpochs(index.removed)
   // one row per issue — the newest seed line wins (same-issue replace keeps
   // this true going forward; last-match also covers legacy duplicate rows)
   const perIssue = new Map<number, { key: string; name?: string; repo?: string; rejected?: string; version?: string }>()
@@ -127,9 +119,13 @@ export function submissionStatuses(
     // submission is stopped rather than read "评审中" while a decided brake
     // stands. For queued seeds the ghost keys (name@null brake / reviewed
     // version) are checked too — the brake applies the moment the entry lands.
-    const name = (s.name ?? s.repo)?.toLowerCase()
-    const ver = e ? candidateOf(e) : (s.repo ? null : (s.version ?? null))
-    const c = name ? concernOn(name, ver, latest, human) : null
+    // verdicts key on the ENTRY's catalog identity — a github-kind entry
+    // reached through the source.repo fallback can carry a different name
+    // than the seed's npm/repo string, and a brake on the real key must not
+    // be missed. Queued seeds (no entry yet) fall back to the seed identity.
+    const name = (e?.name ?? s.name ?? s.repo)?.toLowerCase()
+    const ver = e ? (candidateVer(e) ?? null) : (s.repo ? null : (s.version ?? null))
+    const c = name ? concernOn(name, ver, latest, human, tomb) : null
     if (c?.source === 'human') {
       rows.push({
         issue, key: s.key, phase: 'blocked',
@@ -170,9 +166,13 @@ export function upsertStatusComment(repo: string, row: StatusRow, runId: string)
   const body = `${MARKER}\n**投稿进度**：${row.phaseLabel}\n\n${row.detail}\n\n_状态由目录流水线定期刷新（run ${runId}）_`
   try {
     // --paginate + jq filter finds OUR marker comment across all pages; the
-    // first id wins (there should only ever be one)
+    // first id wins (there should only ever be one). Bot-scoped like every
+    // other marker read in the pipeline: the marker string is public, and an
+    // unscoped match lets any commenter paste it into their own comment —
+    // ids[0] would then be THEIR comment, which the bot PATCHes every run
+    // while the real status comment is never created.
     const ids = gh(['api', '--paginate', `repos/${repo}/issues/${row.issue}/comments?per_page=100`,
-      '--jq', '.[] | select(.body | contains("<!-- submission-status -->")) | .id']).trim().split('\n').filter(Boolean)
+      '--jq', '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- submission-status -->"))) | .id']).trim().split('\n').filter(Boolean)
     if (ids.length) {
       gh(['api', '-X', 'PATCH', `repos/${repo}/issues/comments/${ids[0]}`, '-f', `body=${body}`])
     } else {
