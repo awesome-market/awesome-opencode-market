@@ -64,7 +64,10 @@ jobs:
           # no "-b catalog" fallback: origin/catalog was verified above, so a
           # failed add means a real worktree problem — "-b" would branch off
           # MAIN's HEAD (no index.json there) and burn 4 dumb retries
-          git worktree add /tmp/cat origin/catalog || { echo "worktree add failed though origin/catalog exists"; exit 1; }
+          # --detach: pin the remote-tracking ref exactly — no DWIM surprise
+          # (a 'catalog' local branch would still work, but detached matches
+          # what the retry loop resets and pushes from, catalog-append.sh too)
+          git worktree add /tmp/cat origin/catalog --detach || { echo "worktree add failed though origin/catalog exists"; exit 1; }
           ok=0
           for i in 1 2 3 4; do
             # EVERY phase retries — the loop exists so a raced push re-renders
@@ -140,7 +143,7 @@ jobs:
         run: |
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next run"; exit 0; }
           git worktree remove /tmp/cat --force 2>/dev/null || true
-          git worktree add /tmp/cat origin/catalog
+          git worktree add /tmp/cat origin/catalog --detach
           # freshness probe = last ai-diagnose LANDING, not last touch of the
           # file — human verdicts / verdicts-compact / submit-verdict jobs all
           # append the same file and would keep AGE_H green over a dead local
@@ -206,23 +209,25 @@ jobs:
           # worker was never wired up (or its commit prefix drifted). The >0
           # guard above keeps a truly fresh repo silent; this leg closes the
           # "never configured reads as bootstrap forever" blind spot.
+          # separator on every append — multiple legs firing the same run used
+          # to concatenate into one unreadable blob (maintainer sees a wall)
           if [ "$PAUSED" != 1 ] && [ "${PENDING:-0}" -gt 0 ] && [ "${LAST:-0}" = 0 ] && [ "${LAST_IDX:-0}" -gt 0 ]; then
-            REASONS="${REASONS}ai-verdicts.jsonl 中从未出现 ai-diagnose: 提交，但已有 ${PENDING} 个目标待审——本地诊断 worker 疑似从未接线（或提交前缀漂移），投稿将一直 pending。检查本机 launchd 配置。"
+            REASONS="${REASONS}${REASONS:+$'\n\n'}ai-verdicts.jsonl 中从未出现 ai-diagnose: 提交，但已有 ${PENDING} 个目标待审——本地诊断 worker 疑似从未接线（或提交前缀漂移），投稿将一直 pending。检查本机 launchd 配置。"
             LEGS="${LEGS}5"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
-            REASONS="${REASONS}catalog 分支 ${IDX_AGE_H}h 无 catalog: 发布提交——catalog.yml 疑似停摆（generate/publish 连续失败或未跑），digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
+            REASONS="${REASONS}${REASONS:+$'\n\n'}catalog 分支 ${IDX_AGE_H}h 无 catalog: 发布提交——catalog.yml 疑似停摆（generate/publish 连续失败或未跑），digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
             LEGS="${LEGS}2"
           fi
           if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
-            REASONS="${REASONS}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
+            REASONS="${REASONS}${REASONS:+$'\n\n'}digest-state.json ${DS_AGE_H}h 未更新——digest 成熟锚静默冻结，pass verdict 不放行。检查 Actions 里 digest workflow 最近 run。"
             LEGS="${LEGS}3"
           fi
           # 36h ≈ catalog 每天两次 dispatch 的 1.5 个周期——站点健康文件超龄
           # 说明 dispatch 连败或 site job 挂了;health.json 拉不到(404/网络)
           # 时 SITE_AGE_H=0 不误报(新站点/未启用 Pages 的仓库同样静默)。
           if [ "${SITE_AGE_H:-0}" -gt 36 ]; then
-            REASONS="${REASONS}线上 health.json ${SITE_AGE_H}h 未更新——site.yml 部署疑似停摆，catalog/verify 的新数据到不了公开站。检查 Actions 里 site workflow 最近 run；紧急可手动 dispatch（force/skip_skills 参数见 workflow）。"
+            REASONS="${REASONS}${REASONS:+$'\n\n'}线上 health.json ${SITE_AGE_H}h 未更新——site.yml 部署疑似停摆，catalog/verify 的新数据到不了公开站。检查 Actions 里 site workflow 最近 run；紧急可手动 dispatch（force/skip_skills 参数见 workflow）。"
             LEGS="${LEGS}4"
           fi
           # 第六腿:本机 worker 活着但通道降级——verdict commit 年龄看不见
@@ -242,7 +247,7 @@ jobs:
               [ "$H_L05" = "failed" -o "$H_L05" = "untrusted" ] && H_BAD="${H_BAD}L0.5=${H_L05} "
               [ "$H_OMLX" = "down" -o "$H_OMLX" = "died-mid-run" ] && H_BAD="${H_BAD}omlx=${H_OMLX} "
               if [ -n "$H_BAD" ]; then
-                REASONS="${REASONS}本机 ai-diagnose 降级运行（${H_BAD% }）——裁决仍在产出但注入筛查/LLM 评审通道受损。检查本机 L0.5 模型缓存（HF_HOME 外置卷）与 omlx 服务；详见 catalog 分支 diagnose-health.json。"
+                REASONS="${REASONS}${REASONS:+$'\n\n'}本机 ai-diagnose 降级运行（${H_BAD% }）——裁决仍在产出但注入筛查/LLM 评审通道受损。检查本机 L0.5 模型缓存（HF_HOME 外置卷）与 omlx 服务；详见 catalog 分支 diagnose-health.json。"
                 LEGS="${LEGS}6"
               fi
             fi
