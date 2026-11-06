@@ -377,6 +377,24 @@ export async function run(opts: RunOptions = {}) {
   const keepFindings = (caps: PluginEntry['capabilities']): string[] =>
     caps.findings.filter(f => f.startsWith('sec:') || f.startsWith('sec-delta:'))
 
+  /** The redFlag half of keepFindings — same evaporation hole, worse blast
+   *  radius: a rescan rebuilds redFlags from scan output alone, and the
+   *  identity-level flags there are the standing brakes. `sec:repo-recreated`
+   *  (repojack distrust) is re-derived by trustFlags ONLY while the two repoIds
+   *  still differ — once the merged entry carries the new id, consecutive
+   *  runs see repoId-equal and nothing re-fires the flag, so a ruleset rescan
+   *  would silently un-brake a hijacked identity and let a mature AI pass
+   *  release it. `sec-delta:*` strong-rule markers vanish the same way (the
+   *  raw rule flag survives — it IS scan output — but the "newly appeared"
+   *  signal is gone). name-reused/version-rollback/integrity-drift re-derive
+   *  every run (trustFlags/anchorIntegrity) so keeping them is a stable dup
+   *  at worst. Payload-carrying flags are EXCLUDED: repo-moved-since-* and
+   *  repo-pkg-changed embed the sha/name that was observed — rescanStaleGh
+   *  re-derives them with CURRENT values, and keeping the old payload would
+   *  double-flag every move. */
+  const keepFlags = (caps: PluginEntry['capabilities']): string[] =>
+    caps.redFlags.filter(f => /^sec:[a-z-]+$/.test(f) || f.startsWith('sec-delta:'))
+
   // bounded worker pool (was 10-at-a-time batches): a slow candidate stalled
   // a whole batch's barrier — the pool lets the next candidate start as soon
   // as any worker frees, same concurrency without the tail latency
@@ -666,8 +684,9 @@ export async function run(opts: RunOptions = {}) {
                   findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(heldPin.capabilities)])],
                   // a confirmed re-tag stays flagged even after the fresh
                   // scan — "bytes changed under a stable version" is the
-                  // signal a reviewer must see
-                  redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...(puDrift ? [DRIFT_FLAG] : [])])],
+                  // signal a reviewer must see; keepFlags unions back the
+                  // persistent identity/delta flags nothing re-derives
+                  redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...keepFlags(heldPin.capabilities), ...(puDrift ? [DRIFT_FLAG] : [])])],
                 }
                 puIntegrity = regSha ?? puIntegrity  // anchor the bytes just scanned
               } catch (e) {
@@ -1340,7 +1359,9 @@ export async function run(opts: RunOptions = {}) {
           return {
             scannedAt: now, rulesetVersion: RULESET_VERSION,
             findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(c)])],
-            redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
+            // union the persistent flags — sec:repo-recreated/sec-delta:* are
+            // re-derived by NO layer once repoId/findings converge (keepFlags)
+            redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...keepFlags(c)])],
           }
         } catch { return c }
       }
@@ -1425,7 +1446,11 @@ export async function run(opts: RunOptions = {}) {
             ...keepFindings(e.capabilities).filter(f => f !== 'sec:tree-truncated'),
             ...(tree.truncated ? ['sec:tree-truncated'] : []),
           ])],
-          redFlags,
+          // same for redFlags — sec:repo-recreated (repojack distrust) is
+          // re-derived by no layer after repoId converges; the moved-since-*/
+          // pkg-changed payload flags are re-derived fresh above, so the old
+          // values are deliberately NOT kept
+          redFlags: [...new Set([...redFlags, ...keepFlags(e.capabilities)])],
         },
         ...(moved ? { verification: { ...e.verification, status: 'unverified' as const } } : {}),
         ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),

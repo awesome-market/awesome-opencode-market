@@ -223,6 +223,11 @@ export function mergeEntries(
       // and promoted its parts; keeping our pinned display parts would route
       // installs for the released version by the old payload shape
       out.contains = prev.contains
+      // compat is version-scoped like contains/capabilities — the released
+      // version must show ITS engines/peer constraints, not our stale
+      // display's (every other version-scoped field is adopted above; this
+      // one stayed stale for up to a metrics-refresh window)
+      out.compat = prev.compat
       out.source = prev.source
       out.integrity = prev.integrity
       out.approval = prev.approval
