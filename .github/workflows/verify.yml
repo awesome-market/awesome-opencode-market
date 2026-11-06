@@ -73,12 +73,12 @@ jobs:
       # shard job; the lockfile hash in the key keeps the cache honest
       - id: nm
         uses: actions/cache@v4
-        with: { path: node_modules, key: ${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }} }
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
       - if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
       # verdicts feed the plan's condemned-slot filter — a concern-marked
       # version shouldn't burn a shard re-measuring a judged verdict
-      - run: git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || : > /tmp/ai-verdicts.jsonl
+      - run: git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || true
       - id: shards
         env: { VERIFY_CAP: "${{ inputs.cap }}" }
         run: |
@@ -125,7 +125,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - id: nm
         uses: actions/cache@v4
-        with: { path: node_modules, key: ${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }} }
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
       - if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
       # pinned in lockstep with OPENCODE_VERSION in pipeline/publish/merge.ts —
@@ -172,7 +172,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - id: nm
         uses: actions/cache@v4
-        with: { path: node_modules, key: ${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }} }
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
       - if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/download-artifact@v4
