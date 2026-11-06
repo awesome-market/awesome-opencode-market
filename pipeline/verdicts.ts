@@ -51,6 +51,13 @@ export function loadLastDigestAt(path?: string): string | null {
  *  entry always looked unreviewed → re-reviewed every tick) */
 export const vkey = (name: string, version: string | null | undefined) => `${name}\0${version ?? ''}`
 
+/** The version currently under review (K-12): a hold's own version, else the
+ *  pinned display version when the entry itself is the pending candidate.
+ *  Shared by diagnose (queue selection) and docket (review-target resolution)
+ *  so the two never drift apart again. */
+export const candidateVer = (e: Pick<PluginEntry, 'approval' | 'latestVersion' | 'pendingUpdate'>) =>
+  e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : undefined)
+
 /** `at` ordering must be chronological, not lexicographic — ISO strings with
  *  non-Z offsets ('+08:00') misorder under string compare. Numeric parse wins;
  *  string tiebreak keeps same-ms appends deterministic (later line wins). */

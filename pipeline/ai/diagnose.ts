@@ -50,7 +50,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { latestVerdicts, loadVerdicts, vkey, atCmp } from '../verdicts.ts'
+import { candidateVer, latestVerdicts, loadVerdicts, vkey, atCmp } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, type Packument } from '../fetch/npm.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -356,7 +356,7 @@ export function unreviewedTargets(
   const now = Date.parse(opts.now ?? new Date().toISOString())
   return index.plugins.filter(e => {
     if (names && !names.has(e.name)) return false
-    const ver = e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
+    const ver = candidateVer(e) ?? null
     if (!ver) return false
     if (opts.force) return true
     if (seen.get(vkey(e.name, ver)) !== undefined) return false
@@ -445,8 +445,7 @@ export async function main(
   const modelId = env.AI_MODEL ?? DEFAULT_MODEL
   const t0 = Date.now()
 
-  const verOf = (e: CatalogIndex['plugins'][number]) =>
-    e.pendingUpdate?.version ?? (e.approval === 'pending' ? e.latestVersion : null)
+  const verOf = (e: CatalogIndex['plugins'][number]) => candidateVer(e) ?? null
 
   // sha lookups are cached per name@ver — the drift sweep and the works build
   // share one registry call per target instead of paying it twice (D-2)

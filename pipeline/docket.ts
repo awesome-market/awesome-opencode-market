@@ -9,11 +9,17 @@
  *      gate the pass is sitting at (D-W)
  *    - 'flag': a LIVE (non-pending) entry whose displayed slot carries
  *      identity-level sec:* redFlags — AI never re-reviews a displayed
- *      version, so the standing issue is the only surface; any human verdict
- *      on the displayed key retires it (R-14)
+ *      version, so the standing issue is the only surface; a human verdict
+ *      on the displayed key retires it ONLY if it postdates the flag's
+ *      first-observed stamp (flaggedAt) — a verdict older than the signal
+ *      decided the bytes, not the repojack (R-14 follow-up)
  *    - 'none' repo-only pendings — AI never reviews version-less entries
+ *      (aggregate standing issue: per-entry issues at 500+ scale are
+ *      tracker spam)
  *    - 'none' versioned holds that out-aged the diagnose queue — review
- *      backlog or a stalled launchd; surfaced instead of staying invisible
+ *      backlog or a stalled launchd; surfaced per-issue while small, but
+ *      beyond NONE_AGGREGATE_MIN they fold into ONE (unreviewed backlog)
+ *      aggregate — a stalled queue must be visible, not a flood
  *
  *  Human verdicts are decisions already → excluded → issue auto-closes.
  *
@@ -26,7 +32,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
+import { vkey, akey, atCmp, candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 
@@ -68,15 +74,31 @@ export interface DocketTarget {
   /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
    *  without opening the detail page */
   scanPreview?: string[]
-  /** aggregate repo-only backlog — a per-entry standing issue per
-   *  version-less pending floods the tracker (400+ rows and growing); the
-   *  aggregate carries the queue in ONE issue whose body regenerates */
-  backlog?: { name: string; heldAt?: string; unscanned?: boolean }[]
+  /** aggregate backlog rows — a per-entry standing issue per pending floods
+   *  the tracker (400+ repo-only rows and growing); the aggregate carries the
+   *  queue in ONE issue whose body regenerates. `version` is set for the
+   *  versioned (unreviewed backlog) aggregate, absent for repo-only. */
+  backlog?: {
+    name: string
+    version?: string | null
+    heldAt?: string
+    unscanned?: boolean
+    redFlags?: number
+    findings?: number
+    verification?: string
+  }[]
 }
 
-/** Reserved name for the aggregate repo-only standing issue — parentheses
- *  can't collide with npm names or owner/repo ids. */
+/** Reserved names for aggregate standing issues — parentheses can't collide
+ *  with npm names or owner/repo ids, and titleTarget's /^\(.*\)$/ guard makes
+ *  them un-targetable so comments on the aggregate route per-line instead. */
 export const REPO_BACKLOG = '(repo-only backlog)'
+export const UNREVIEWED_BACKLOG = '(unreviewed backlog)'
+
+/** Aged verdict-less versioned holds beyond this count fold into ONE
+ *  (unreviewed backlog) aggregate instead of per-entry issues — a stalled
+ *  diagnose queue must surface as a signal, not hundreds of notifications. */
+export const NONE_AGGREGATE_MIN = 10
 
 export const issueTitle = (t: Pick<DocketTarget, 'name' | 'version'>) =>
   `[review] ${t.name}${t.version ? `@${t.version}` : ''}`
@@ -96,7 +118,9 @@ function heldStamp(e: PluginEntry): string | undefined {
   const caps = e.pendingUpdate?.capabilities ?? e.capabilities
   for (const s of [e.pendingUpdate?.heldAt, caps.scannedAt, e.firstSeenAt])
     if (s && Number.isFinite(Date.parse(s))) return s
-  return e.firstSeenAt || undefined
+  // every stamp unparseable → omit the line entirely: rendering a garbage
+  // date is worse than no date (aging still fails visible via candidateHeldAt)
+  return undefined
 }
 
 /** Pending targets that need a human surface: latest verdict came from AI,
@@ -114,6 +138,9 @@ export function docketTargets(
   const announced = new Set(digest?.announced ?? [])
   const out: DocketTarget[] = []
   const repoOnly: NonNullable<DocketTarget['backlog']> = []
+  type SlotMeta = Omit<DocketTarget, 'name' | 'version' | 'verdict'>
+  /** aged verdict-less holds — per-issue vs aggregate decided after the loop */
+  const noneAged: { e: PluginEntry; ver: string; meta: SlotMeta }[] = []
   /** Package-level human brake — applyMatureVerdicts' verdictFor overrides
    *  EVERY slot of the package with a human concern on name@null until a
    *  newer human pass lands on that slot key. Mirrored here so a braked
@@ -133,7 +160,7 @@ export function docketTargets(
     const slot = e.pendingUpdate ?? e
     const held = heldStamp(e)
     const preview = [...slot.capabilities.redFlags.slice(0, 2), ...slot.capabilities.findings.slice(0, 2)]
-    const meta = {
+    const meta: SlotMeta = {
       findings: slot.capabilities.findings.length,
       redFlags: slot.capabilities.redFlags.length,
       // 没扫到 ≠ 安全: a null scannedAt means the scanner never ran — the
@@ -149,24 +176,31 @@ export function docketTargets(
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
     // live entry. Held entries already have a review channel (the held
     // version); a displayed version never gets one — the AI doesn't re-review
-    // it and the held filter doesn't see it. Any human verdict on the
-    // displayed key retires the flag (it's a decision by definition).
+    // it and the held filter doesn't see it. A human verdict on the displayed
+    // key retires the flag ONLY when it postdates the flag's first-observed
+    // stamp (flaggedAt): a repojack/integrity-drift signal can arrive long
+    // after a human passed the bytes, and the older verdict can't count as a
+    // decision about a signal that didn't exist yet. Missing flaggedAt = the
+    // flag predates the field or was never stamped → treat as fresh (surface).
     if (e.approval !== 'pending') {
       const flags = e.capabilities.redFlags.filter(f => f.startsWith('sec:'))
-      if (flags.length && !human.has(vkey(e.name, e.latestVersion))) {
+      const hv = human.get(vkey(e.name, e.latestVersion))
+      const decided = hv !== undefined && e.capabilities.flaggedAt !== undefined
+        && atCmp(hv.at, e.capabilities.flaggedAt) > 0
+      if (flags.length && !decided) {
         out.push({
           name: e.name, version: e.latestVersion, verdict: 'flag',
           reason: flags.join(' '),
           verification: e.verification.status,
           findings: e.capabilities.findings.length,
           redFlags: e.capabilities.redFlags.length,
+          ...(e.capabilities.scannedAt === null ? { unscanned: true } : {}),
           ...(e.slug ? { slug: e.slug } : {}),
           ...(e.publishedAt ? { publishedAt: e.publishedAt } : {}),
         })
       }
     }
-    const ver = e.pendingUpdate ? e.pendingUpdate.version
-      : e.approval === 'pending' ? e.latestVersion : null
+    const ver = candidateVer(e) ?? null
     if (!ver) {
       // repo-only pending (latestVersion null): unreviewedTargets requires a
       // version, so AI never writes a verdict — without a surface the entry
@@ -175,7 +209,13 @@ export function docketTargets(
       // maintainer can't act on anyway — aggregate into ONE standing issue
       // whose body lists the queue; entries drop out as human verdicts land.
       if (e.approval === 'pending' && e.latestVersion === null && !latest.has(vkey(e.name, null))) {
-        repoOnly.push({ name: e.name, ...(held ? { heldAt: held } : {}), ...(meta.unscanned ? { unscanned: true } : {}) })
+        repoOnly.push({
+          name: e.name,
+          ...(held ? { heldAt: held } : {}),
+          ...(meta.unscanned ? { unscanned: true } : {}),
+          ...(meta.redFlags ? { redFlags: meta.redFlags } : {}),
+          ...(meta.findings ? { findings: meta.findings } : {}),
+        })
       }
       continue
     }
@@ -196,7 +236,7 @@ export function docketTargets(
       // never silently suppress one (fail-visible, matching diagnose).
       const heldMs = candidateHeldAt(e)
       if (!Number.isFinite(heldMs) || now - heldMs >= NO_VERDICT_AGE_MS) {
-        out.push({ name: e.name, version: ver, verdict: 'none', ...meta })
+        noneAged.push({ e, ver, meta })
       }
       continue
     }
@@ -218,6 +258,28 @@ export function docketTargets(
   // ones needing real action: pass (veto window) → none (waiting) →
   // concern (blocked, decide) → flag (live entry, identity signal). Ties:
   // oldest-held first, matching diagnose FIFO.
+  // Aged no-verdict holds: per-issue while small (a rare stall keeps the rich
+  // per-entry surface: scan preview, verify state, maturity context); past
+  // NONE_AGGREGATE_MIN they fold into ONE aggregate — a stalled/deep queue at
+  // migration scale is a signal to fix, not hundreds of notifications
+  // (same reasoning as the repo-only aggregate). Per-line verdicts still
+  // route: `/concern name@ver` resolves name+version explicitly.
+  if (noneAged.length > NONE_AGGREGATE_MIN) {
+    noneAged.sort((a, b) => Date.parse(a.meta.heldAt ?? '') - Date.parse(b.meta.heldAt ?? ''))
+    out.push({
+      name: UNREVIEWED_BACKLOG, version: null, verdict: 'none',
+      backlog: noneAged.map(n => ({
+        name: n.e.name, version: n.ver,
+        ...(n.meta.heldAt ? { heldAt: n.meta.heldAt } : {}),
+        ...(n.meta.unscanned ? { unscanned: true } : {}),
+        ...(n.meta.redFlags ? { redFlags: n.meta.redFlags } : {}),
+        ...(n.meta.findings ? { findings: n.meta.findings } : {}),
+        ...(n.meta.verification ? { verification: n.meta.verification } : {}),
+      })),
+    })
+  } else {
+    for (const n of noneAged) out.push({ name: n.e.name, version: n.ver, verdict: 'none', ...n.meta })
+  }
   if (repoOnly.length) {
     repoOnly.sort((a, b) => Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
     out.push({ name: REPO_BACKLOG, version: null, verdict: 'none', backlog: repoOnly })
@@ -284,18 +346,31 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     .replace(/([\\[\]])/g, '\\$1')
     .replace(/\s+/g, ' ').trim().slice(0, max)
   if (t.backlog) {
-    // aggregate repo-only standing issue — per-entry issues at this scale are
-    // tracker spam; the body regenerates every sync so the list stays live
-    L.push('- 本单是 **repo-only 在押积压总单**：下列条目没有可装 npm 包（latestVersion 为空），AI 不审——只能逐条人工裁决。', '')
+    // aggregate standing issue — per-entry issues at this scale are tracker
+    // spam; the body regenerates every sync so the list stays live. Rows carry
+    // the same scan counters a per-entry issue would (没扫到 ≠ 安全: an
+    // unscanned row and a clean row must not look alike to the decider).
+    const versioned = t.name === UNREVIEWED_BACKLOG
+    L.push(versioned
+      ? '- 本单是 **未审在押总单**：下列版本超 48h 无 AI 判词——诊断积压或停摆时的兜底裁决面。AI 判词落地后该条目自动移出本单（并开出独立审核单）。'
+      : '- 本单是 **repo-only 在押积压总单**：下列条目没有可装 npm 包（latestVersion 为空），AI 不审——只能逐条人工裁决。', '')
     L.push(`待裁决 ${t.backlog.length} 条（在押久者优先）：`)
     const SHOW = 40
     for (const r of t.backlog.slice(0, SHOW)) {
-      L.push(`- \`${r.name}\`${r.unscanned ? '（⚠️ 未跑过静态扫描）' : ''}${r.heldAt ? ` — 在押自 ${r.heldAt.slice(0, 10)}` : ''}`)
+      const marks = [
+        r.unscanned ? '⚠️ 未跑过静态扫描（不等于安全）' : null,
+        (r.redFlags ?? 0) > 0 ? `⚠️ 红旗 ${r.redFlags}` : null,
+        (r.findings ?? 0) > 0 ? `findings ${r.findings}` : null,
+        r.verification ? (VERI_ZH[r.verification] ?? r.verification) : null,
+      ].filter(Boolean).join(' / ')
+      L.push(`- \`${versioned ? `${r.name}@${r.version ?? '?'}` : r.name}\`${marks ? `（${marks}）` : ''}${r.heldAt ? ` — 在押自 ${r.heldAt.slice(0, 10)}` : ''}`)
     }
     if (t.backlog.length > SHOW) L.push(`- …另 ${t.backlog.length - SHOW} 条见 index.json`)
     L.push('',
       '### 裁决方式',
-      '逐条评论：`/approve 条目名` 放行，`/concern 条目名 理由` 拦截（写回 `ai-verdicts.jsonl`，该条目即移出本单）。',
+      versioned
+        ? '逐条评论：`/approve 条目名@版本` 放行，`/concern 条目名@版本 理由` 拦截（写回 `ai-verdicts.jsonl`，该条目即移出本单）。'
+        : '逐条评论：`/approve 条目名` 放行，`/concern 条目名 理由` 拦截（写回 `ai-verdicts.jsonl`，该条目即移出本单）。',
       '本单自身**不适用** verdict 标签——标签只作用于单版本审核单；本单在积压清空时自动关闭。')
     if (opts.repo) {
       L.push('', `- 数据：[index.json](https://github.com/${opts.repo}/blob/catalog/index.json) / [最新日报](https://github.com/${opts.repo}/tree/catalog/digest)`)
@@ -309,7 +384,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       ? '- 当前 AI 判定：**无**（repo-only 条目无可装 npm 包，AI 不审——只能人工裁决）'
       : '- 当前 AI 判定：**无**（评审积压或诊断已停摆——可人工先行裁决，或等 AI 判词；判词落地后本单自动更新）')
   } else if (t.verdict === 'flag') {
-    L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${t.reason ?? 'sec:*'}\``, '',
+    L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${clean(t.reason ?? 'sec:*')}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
   } else {
     L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
@@ -325,13 +400,23 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push('- AI concern 已拦截放行——无人翻案则该版本保持 held；人工 pass 可放行，人工 concern 锁死。')
     }
   }
+  const vs = t.verification ?? 'unverified'
   if (t.verdict === 'pass' && t.humanVerdict?.verdict !== 'concern' && t.maturity) {
-    // an announced AI pass on a flagged/never-scanned slot can NEVER release
-    // — the "按班放行" wording would promise a gate that is structurally
-    // locked (same honesty rule as digest's phase tag)
-    const aiBlocked = (t.redFlags ?? 0) > 0 || t.unscanned
-    L.push(`- 成熟相位：${aiBlocked
-      ? '已公示——但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
+    // an announced AI pass that can NEVER release must not promise "按班放行"
+    // — the gate refuses flagged/unscanned slots outright, failed/unverified
+    // slots until verify converges, and sha-mismatched judgments until drift
+    // re-review (same honesty rule as digest's phase tag). Report the FIRST
+    // blocker in gate order and always name the next action.
+    const shaMismatch = t.verdictSha !== undefined && t.integrity != null && t.verdictSha !== t.integrity
+    const blocker =
+      (t.redFlags ?? 0) > 0 || t.unscanned ? '但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
+      : vs === 'failed' ? '但装测未过——放行闸不会按此裁决生效：修复后评论 `/retest` 重验，或人工改判'
+      : vs === 'unverified' ? '但还没验——装测通过前放行闸不会放行（等 verify 班或人工 verdict:pass）'
+      : shaMismatch ? '但裁决字节与现槽位不符（疑似 re-tag）——等 drift 复审或人工重判'
+      : null
+    const phase = t.maturity === 'announced' ? '已公告·待放行闸' : '已裁决·待日报公告'
+    L.push(`- 成熟相位：${blocker
+      ? `${phase}——${blocker}`
       : t.maturity === 'announced'
         ? '已公告·待放行闸——无人操作时按班放行（本单为异议窗口）'
         : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
@@ -341,7 +426,6 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       (t.humanVerdict.verdict === 'concern' && t.verdict === 'pass'
         ? '（在押刹车——AI 新判 pass 不会自动放行，本单为复审）' : ''))
   }
-  const vs = t.verification ?? 'unverified'
   L.push(`- 验证状态：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}`)
   if (t.unscanned) {
     L.push('- 静态扫描：**未运行**（findings/redFlags 为空是缺数据，不是无发现）')
@@ -372,11 +456,21 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     L.push('',
       `> ⚠️ 本单已贴 \`${opts.stuckLabel}\` 但裁决未写盘（写盘 job 可能失败）——标签事件不会重发：请摘除标签重贴，或评论 \`/approve\` / \`/concern 理由\`。`)
   }
+  const phoneLabels =
+    t.verdict === 'flag' ? [
+      '- `verdict:pass` — 确认身份信号无风险（条目保持上架）',
+      '- `verdict:concern` — 人工刹车（条目立即回 pending 下架）',
+    ] : t.verdict === 'none' ? [
+      '- `verdict:pass` — 人工放行（无 AI 判词，直接进入公告/放行链）',
+      '- `verdict:concern` — 人工拦截（锁死该版本）',
+    ] : [
+      '- `verdict:pass` — 人工放行（覆盖 AI concern）',
+      '- `verdict:concern` — 人工拦截（锁死该版本）',
+    ]
   L.push('',
     '### 📱 手机裁决（点选，零打字）',
     '本 issue → **Labels** → 勾选其一：',
-    '- `verdict:pass` — 人工放行（覆盖 AI concern）',
-    '- `verdict:concern` — 人工拦截（锁死该版本）',
+    ...phoneLabels,
     '',
     '打标签后 verdict job 自动写回 `ai-verdicts.jsonl` 并关闭本单。也可评论 `/approve` 或 `/concern 理由`。')
   return L.join('\n')
@@ -520,18 +614,25 @@ export async function main(
   }
 
   const byName = new Map(index.plugins.map(e => [e.name, e]))
+  /** names currently carried as rows inside the (unreviewed backlog)
+   *  aggregate — their old per-entry issues are "merged", not "decided" */
+  const aggregated = new Set(
+    targets.filter(t => t.name === UNREVIEWED_BACKLOG)
+      .flatMap(t => (t.backlog ?? []).map(r => r.name)))
   /** why an open [review] issue is out of the wanted set — the close comment
    *  must say WHICH, since "tombstoned" and "released" read very differently */
   const closeReason = (i: OpenIssue): string => {
     if (i.title === issueTitle({ name: REPO_BACKLOG, version: null })) return 'repo-only 积压已清空'
+    if (i.title === issueTitle({ name: UNREVIEWED_BACKLOG, version: null })) return '未审积压已清空（回落到逐条单规模或全部获判）'
     const t = titleTarget(i.title)
     const still = t && wantedByName.get(t.name)
     if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
     const e = t ? byName.get(t.name) : undefined
     if (!e) return '该版本/条目已不在 catalog 索引中'
-    // per-entry repo-only issue superseded by the aggregate — say so instead
-    // of the generic verdicted reason (the entry is still pending!)
+    // per-entry issue superseded by an aggregate — say so instead of the
+    // generic verdicted reason (the entry is still pending!)
     if (e.approval === 'pending' && e.latestVersion === null) return '并入 repo-only 积压总单'
+    if (t && aggregated.has(e.name)) return '并入未审积压总单'
     if (!(e.approval === 'pending' || e.pendingUpdate)) return '该版本已放行'
     return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
   }
@@ -545,11 +646,14 @@ export async function main(
     ops.push({ kind: 'close', title: i.title, run: async () => {
       // converge to the same terminal label the concern.yml ack sets —
       // otherwise closed issues keep `review:pending` forever and label
-      // filters see a false queue
+      // filters see a false queue. verdict:* labels (incl. verdict:blocked)
+      // are also stale the moment the issue closes — the jsonl is the audit
+      // truth; a closed issue must not keep a "decision pending" signal.
       const cur = new Set((i.labels ?? []).map(l => l.name))
       const largs: string[] = []
       if (cur.has('review:pending')) largs.push('--remove-label', 'review:pending')
       if (!cur.has('review:decided')) largs.push('--add-label', 'review:decided')
+      for (const l of cur) if (l.startsWith('verdict:')) largs.push('--remove-label', l)
       if (largs.length) await ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
       await ghFn(['issue', 'comment', '-R', repo, String(i.number),
         '--body', `该版本的审核单已自动关闭：${why}。`])
@@ -583,6 +687,7 @@ export async function main(
   if (summary) {
     appendFileSync(summary, [
       '## review-docket', '',
+      ...(dry ? ['- **dry-run 预演**——下列动作均未实际执行', ''] : []),
       `- 待决目标 ${wanted.size} / 在办单 ${open.length}`,
       `- 新开 ${created.length} / 更新 ${updated.length} / 关闭 ${closed.length}`,
       ...(listCapped ? [`- ⚠️ open issue 列表触顶 ${LIST_LIMIT}——超出部分本轮未同步，下一轮续收敛`] : []),

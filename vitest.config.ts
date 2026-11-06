@@ -1,11 +1,15 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 export default defineConfig({
   resolve: {
     conditions: ['browser', 'solid', 'development'],
+    // fileURLToPath, not URL.pathname — a checkout path containing non-ASCII
+    // characters (e.g. a 副本 clone) percent-encodes under .pathname and the
+    // aliased file silently stops existing
     alias: {
-      '@opencode/plugin/gui': new URL('./test/helpers/host-stub.ts', import.meta.url).pathname,
-      'solid-js/web': new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url).pathname,
-      'solid-js': new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url).pathname,
+      '@opencode/plugin/gui': fileURLToPath(new URL('./test/helpers/host-stub.ts', import.meta.url)),
+      'solid-js/web': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url)),
+      'solid-js': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url)),
     },
   },
   test: {

@@ -747,3 +747,28 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 4000 列单上限告警只进 console.warn——跑完即淹，summary 里看不到 | ✅ | 告警同时写 `GITHUB_STEP_SUMMARY`；summary 增列触顶/失败计数 |
 
 **验证**：typecheck 0 错；40 文件 861 tests 全过（docket +N 新例：candidateHeldAt 时钟口径/NaN fail-visible/canonical max(number)/reason 转义/双 ai:* 收敛/assignee 三态/包级刹车/总单聚合与自动关/并发池/summary 告警）；DATA-FLOWS §8 与 PIPELINE-ISSUES 附十七同步落地；D-T 文档漂移修正（15min→10min 与 docket.yml 实际一致）。
+
+## 附十八：审核单流四审（docket.yml 全流程，flaggedAt / none 聚合 / 相位诚实化）
+
+迁移期（launchd 手动运行、积压未排空）专项复审后落地。核心风险是 tracker 洪水与「相位承诺 ≠ 放行闸真相」的不一致；同步修复 1 处 flag 销旗时序漏洞与若干 P4 项。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| versioned `none` 逐条成洪：每个「超 48h 无任何裁决」的在押版本各开一张 `[review] name@ver`——K-10 的兜底设计在积压排空期/手动期会把数百条排队条目变成数百张 issue（repo-only 当年正是同一理由改聚合） | ✅ | `NONE_AGGREGATE_MIN=10`：超龄无裁决条数 >10 → 聚合为一张 `[review] (unreviewed backlog)` standing 总单（`(…)` 哨兵 titleTarget 天然不可命中，逐条 `/approve\|/concern 名@版本` 评论照常路由）；≤10 保持逐条单富上下文。条目 AI 判词落地自动移出并升独立单；遗留逐条单关单注明「并入未审积压总单」 |
+| flag 销旗不看时序：`!human.has(展示键)` 让**早于信号存在**的人工裁决永久压制 flag——v1.0 人工 pass 半年后遇 repojack/integrity-drift 红旗，信号失去唯一评审面 | ✅ | `capabilities.flaggedAt` 新字段（merge 盖章：身份级 `sec:*` 集合不变→保留、集合变/无旧章→now、清空→清）；docket 只在「人工裁决 at > flaggedAt」时销旗，flaggedAt 缺失按新旗 fail-visible。pu→display 提升随 caps 携带；pu 槽也盖章（候选期落旗后 promoted 的时钟连续） |
+| 成熟相位文案对验证/sha 闸失明：`maturity=announced` + `failed`/`unverified` 槽位仍写「按班放行」——RELEASABLE 永不放它；sha 不符同理 | ✅ | 相位行按放行闸顺序报第一个真实阻断：旗标/未扫描 → `failed`（附「修复后 `/retest` 或人工改判」）→ `unverified`（等 verify 班）→ sha 不符（等 drift 复审）；任一存在不承诺按班放行；pending-announce 相位同样适用 |
+| repo-only 总单行盲裁：`{name, heldAt, unscanned}` 三字段——带红旗的 repo 和干净的长得一样 | ✅ | 行级加 `redFlags/findings` 计数，红旗行 ⚠️ 标记；`scannedAt:null` 显式「未跑过静态扫描（不等于安全）」；版本化总单同口径再加验证态中文四态 |
+| flag `reason` 未过 `clean()`：`sec:*` 当前全是固定词表但 findings 族已含作者可控自由文本，未来升为 redFlag 即注入最高信任面 | ✅ | 过 `clean()` |
+| 自动关单留陈旧 `verdict:*` 标签：`verdict:pass/concern/blocked` 在已关单上是过期「待写盘」信号 | ✅ | 关单 edit 一并摘除全部 `verdict:*`（jsonl 才是裁决真源） |
+| `workflow_run` 无 owner 白名单：白名单只挂 schedule，fork 跑 catalog/verify 会在 fork 开单 | ✅ | 白名单扩展为「非 dispatch 触发全覆盖」（schedule+workflow_run 同口径） |
+| `digest.yml` 不在 `workflow_run` 列表：pass 公告后 `pending-announce→announced` 要等下个小时 tick | ✅ | workflows 加 `digest`，相位即效化 |
+| verdicts/digest-state 读取瞬断降级：`\|\| touch` 把「文件在但读失败」混淆成「不存在」——瞬断剥全部 `ai:*` 标签+相位回退 | ✅ | `git cat-file -e` 判存在性：缺失→空文件（首轮合法态），存在但读失败→整轮 defer |
+| `flag`/`none` 单手机文案照抄 pass 单：「覆盖 AI concern」在这两类单上不成立 | ✅ | 按目标类型定制：flag=确认信号无风险/刹车回 pending 下架；none=无判词直通放行链 |
+| `heldStamp` 兜底返回不可解析 `firstSeenAt` → 正文渲染垃圾日期 | ✅ | 全部不可解析→不落该行（aging 侧 NaN fail-visible 语义不变，展示侧不渲染垃圾） |
+| `--dry` STEP_SUMMARY 把预演动作写成「新开/关闭」易误读 | ✅ | summary 头部标「dry-run 预演——下列动作均未实际执行」 |
+| diagnose/docket 候选版本公式两处手写漂移风险（K-12 同类） | ✅ | `verdicts.ts` 导出共享 `candidateVer`：diagnose `verOf`/`unreviewedTargets` 与 docket 全部换用 |
+| `vitest.config.ts` 别名用 `URL.pathname`：非 ASCII checkout 路径（副本目录）percent-encode 后文件不存在，`solid-js` 别名解析失败 5 个测试文件红 | ✅ | 改 `fileURLToPath`（ASCII 路径行为不变） |
+
+**评估未改**：`gh issue list --json body` 两段式拉取（一次调用 vs N 次 view——wanted 大时后者更差，4000 上限告警已足）；bootstrap 6 label `--force` 每轮重写（K-7 已评）；轻量 bundle 替代 npm ci（收益小）；`verdict:blocked` 折进正文（K-11 stuck 警示已覆盖 open 单，关单走摘签路径）。
+
+**验证**：typecheck 0 错；957 tests 全过（docket +11 新例、audit9 +6 新例：聚合阈值边界/行级信号/flaggedAt 三态/merge 盖章四态/相位阻断文案/flag 转义/手机文案/并入关单/verdict:* 摘签/dry 标记）；DATA-FLOWS §0/§8 同步。

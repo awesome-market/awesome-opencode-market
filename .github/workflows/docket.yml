@@ -8,7 +8,10 @@ on:
         type: boolean
         default: false
   workflow_run:
-    workflows: [catalog, verify]
+    # digest included: a pass verdict's announce flips its maturity phase —
+    # waiting for the hourly tick would leave the objection-window wording
+    # stale for up to an hour after every digest
+    workflows: [catalog, verify, digest]
     types: [completed]
   schedule:
     - cron: '40 * * * *'   # hourly catch-up (after verify/catalog land)
@@ -20,13 +23,15 @@ jobs:
   docket:
     # a partially-failed verify still left valid catalog data — syncing the
     # docket against it is safe; only a cancelled run means "nothing landed".
-    # Scope guard: a fork's hourly cron would churn labels/issues against a
-    # catalog branch it doesn't have. Whitelist = the known data planes
-    # (org prod + terry2010 current prod).
+    # Scope guard: a fork's hourly cron OR a fork's catalog/verify/digest
+    # workflow_run would churn labels/issues against a catalog branch it
+    # doesn't have — the whitelist covers every non-dispatch trigger the
+    # same way (org prod + terry2010 current prod).
     if: >-
       (github.event_name != 'workflow_run'
         || github.event.workflow_run.conclusion != 'cancelled')
-      && (github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner))
+      && (github.event_name == 'workflow_dispatch'
+        || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —
@@ -65,8 +70,19 @@ jobs:
           # next tick instead of an hourly red job failure
           git fetch origin catalog -q || { echo "no catalog branch / fetch failed — retry next tick"; exit 0; }
           git show origin/catalog:index.json > /tmp/index.json
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || touch /tmp/ai-verdicts.jsonl
-          git show origin/catalog:digest-state.json > /tmp/digest-state.json || touch /tmp/digest-state.json
+          # verdicts/digest-state legitimately ABSENT pre-first-run → empty is
+          # correct. But "exists yet unreadable" (transient git failure) must
+          # defer, not downgrade to empty: an empty verdict file strips every
+          # ai:* label and rewrites every body to 'none' for a tick, and an
+          # empty digest-state regresses every announced pass's maturity.
+          if git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            echo "ai-verdicts.jsonl exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else touch /tmp/ai-verdicts.jsonl; fi
+          if git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:digest-state.json 2>/dev/null; then
+            echo "digest-state.json exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else touch /tmp/digest-state.json; fi
           npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ github.event.inputs.dry == true && '--dry' || '' }} \
             --digest-state /tmp/digest-state.json
 

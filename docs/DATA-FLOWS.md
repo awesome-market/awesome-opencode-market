@@ -120,7 +120,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `publishedAt` | string? | 展示版的发布时间 |
 | `integrity` | string? | 展示版 `dist.integrity`（sha512-…）——装包逐字节校验公告值；github-kind 恒 null |
 | `metrics` | obj | `{stars, npmDownloads30d, checkedAt}` |
-| `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[]}`；`scannedAt:null`=没扫过（≠扫过没发现） |
+| `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[], flaggedAt?}`；`scannedAt:null`=没扫过（≠扫过没发现）；`flaggedAt`=当前身份级 flag 集合（`sec:*` redFlags）首次被观察到的时刻——merge 盖章：集合不变保留、集合变了/无旧章→now、清空→undefined；docket flag 目标靠它区分「裁决晚于信号=已决议」与「裁决早于信号=没决议过」 |
 | `verification` | obj | `{status, level?, opencodeVersion?, verifiedAt?, runUrl?, logExcerpt≤2048, retries?}`；status ∈ `verified|failed|unverified|skipped`，level ∈ `install|load|interactive|render|structure`；`retries` 只在 failed 上计数（V-3 自动重试预算） |
 | `compat` | obj | `{engines?, peer?}` |
 | `approval` | enum | `pending`=hold 默认 / `approved`=放行 / `legacy`=门禁前老条目（schema 默认 legacy 兼容旧 index） |
@@ -936,13 +936,13 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
 
 ---
 
-## 8. 审核单流 — `docket.yml`（hourly :40 + catalog/verify 非取消完成后 + 手动）
+## 8. 审核单流 — `docket.yml`（hourly :40 + catalog/verify/digest 非取消完成后 + 手动）
 
 **实现**：`pipeline/docket.ts::docketTargets/issueTitle/issueBody`（目标+开单/关单/漂移同步，`gh` CLI 操作 issue）· `verdicts.ts::latestVerdicts/latestHumanVerdicts` · job 级 `concurrency: review-docket`（K-1，触发源可重叠）
 
 ```mermaid
 flowchart TB
-  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai<br/>∨ 可见条目带身份级 sec flag<br/>∨ 在押超 48h 仍无裁决<br/>+ humanVerdict/maturity 上下文"]
+  IDX[("index.json")] --> DT["docketTargets<br/>held ∧ 最新裁决 source=ai<br/>∨ 可见条目带身份级 sec flag<br/>（人工裁决须晚于 flaggedAt 才销旗）<br/>∨ 在押超 48h 仍无裁决<br/>（>10 聚合 unreviewed backlog 总单）<br/>+ humanVerdict/maturity 上下文"]
   VJ[("ai-verdicts.jsonl")] --> DT
   DT --> W["wanted 集合<br/>[review] name@ver"]
   OPEN["gh issue list<br/>open ∧ 标题前缀 [review]"] --> DF{"diff"}
@@ -967,17 +967,26 @@ docket.ts：index+verdicts → docketTargets
   （AI 已判、待人过目：pass 等放行窗口，concern 等人工翻案；
     人工裁决=终局 → 不进 wanted → 已开的单下轮自动关）
   ∨ flag 目标：可见条目（approval≠pending）展示槽含身份级 sec:* redFlag
-    且展示版键上无人工裁决 → [review] name@latestVersion 开单，
-    人工 concern 即刹车回 pending（repojack/换包类信号的唯一评审面；
-    sec:integrity-drift 同属此面——run.ts anchorIntegrity 的产物）
+    且展示版键上**无晚于该 flag 首次观察时刻（flaggedAt）的人工裁决**
+    → [review] name@latestVersion 开单，人工 concern 即刹车回 pending
+    （repojack/换包类信号的唯一评审面；sec:integrity-drift 同属此面——
+    run.ts anchorIntegrity 的产物）。早于 flaggedAt 的人工裁决判的是
+    字节不是后到的信号，不能销旗；flaggedAt 缺失（旧数据）按新旗处理——
+    fail-visible
   ∨ none 目标（有版本）：在押版本键上无任何裁决且在押超 48h——
     diagnose 队列积压或停摆（launchd 暂停）时给同等的 standing issue，
-    年轻在押仍归 AI 队列，不提前骚扰人工。
+    年轻在押仍归 AI 队列，不提前骚扰人工。**超龄条数 > NONE_AGGREGATE_MIN
+    （10）→ 聚合进一张 `[review] (unreviewed backlog)` 总单**（同 repo-only
+    聚合理由：积压排空期逐条 issue 是 tracker 洪水；总行带验证态/红旗/
+    findings/未扫描标记，逐条 `/approve|/concern 名@版本` 裁决，条目的 AI
+    判词落地后自动移出并升独立单）；≤10 条保持逐条单（罕见停摆保住
+    富上下文面）。遗留逐条单关单注明「并入未审积压总单」。
     **在押时钟 = candidateHeldAt**（pendingUpdate.heldAt → 候选槽
     capabilities.scannedAt → firstSeenAt，与 diagnose 48h 降级窗/digest §②
     同源）：firstSeenAt 是条目级、跨版本 bump 保留，单用它会把"昨天刚
     bump 的 pending"误判成立即超龄。时间戳全部不可解析 → NaN → 按"超龄"
-    处理（fail-visible：坏时钟宁可多开一张人工单也不静默吞掉）
+    处理（fail-visible：坏时钟宁可多开一张人工单也不静默吞掉；展示侧
+    heldStamp 同步只渲染可解析戳，垃圾日期不落正文）
   ∨ none 目标（repo-only，latestVersion=null）：AI 永不审版本-less 条目——
     **聚合进一张 standing 总单 `[review] (repo-only backlog)`**（条目名
     保留字防撞）：逐条 issue 在 500+ 在押规模下是 tracker 洪水，总单正文
@@ -996,8 +1005,11 @@ docket.ts：index+verdicts → docketTargets
         扫描计数与前几条扫描摘录（scannedAt:null 目标槽显式标注
         "unscanned——静态扫描未跑，空 findings≠检净"）+裁决 sha vs 槽位
         integrity 不符警示（re-tag 时 shaOk 放行闸会拒）+在押/发布日期+
-        pass 成熟相位(announced/pending-announce)+详情页链接+手机点选
-        说明）；flag/concern 单额外 --add-assignee（DOCKET_ASSIGNEE repo
+        pass 成熟相位(announced/pending-announce——相位行按放行闸顺序报
+        第一个真实阻断：旗标/未扫描→装测未过(附 `/retest` 指引)→还没验→
+        裁决字节不符，任一存在时**不承诺「按班放行」**)+详情页链接+按目标
+        类型定制的手机点选说明（flag=确认信号/刹车回 pending，none=无
+        判词直通放行链））；flag/concern 单额外 --add-assignee（DOCKET_ASSIGNEE repo
         变量，逗号分隔登录名）——"等人裁决"变成推送通知；pass/none 不
         打扰（异议窗口非常态打扰）；assignee 写失败只告警不影响同步
   已存在但漂移 → issue edit：**所有**陈旧 ai:* 标签摘除（不只收敛第一
@@ -1006,8 +1018,10 @@ docket.ts：index+verdicts → docketTargets
         人工刹车上下文都传播——创建时刻的冻结文案不再误导，K-2/K-3/K-5）；
         卡住的 verdict:* 标签（贴了但写盘 job 失败未落 jsonl）折进正文警示；
         flag/concern 单 assignee 缺失时补指派（best-effort）
-  多余 → 关单+注明原因（已决议/已放行/标题重复只留最新单/条目已出索引），
-        收敛到 review:decided 终态标签；
+  多余 → 关单+注明原因（已决议/已放行/并入总单/标题重复只留最新单/条目
+        已出索引），收敛到 review:decided 终态标签，并顺带摘除残留
+        verdict:* 标签（jsonl 才是裁决真源——已关单上的「待写盘」信号是
+        过期信号）；
         canonical = 同标题取 max(issue number)——issue 号单调递增，
         不依赖 gh list 返回序（默认 newest-first，旧实现取数组尾实为
         最旧单，与"留最新"语义相反）；
@@ -1019,8 +1033,15 @@ docket.ts：index+verdicts → docketTargets
         STEP_SUMMARY 汇总新开/更新/关闭/触顶/失败
   → bootstrap 标签（verdict:pass/concern, review:pending/decided, ai:pass/concern）
 workflow_run 触发只跳过 conclusion==='cancelled'（失败也跑——held 积压不
-等人，V-K）；concurrency: review-docket 串行化；timeout-minutes: 10
-（三触发源可重叠——并发双跑曾会双建单，K-1）
+等人，V-K）；catalog/verify/**digest** 完成都触发（digest 后 pass 相位
+即翻转，不等下个小时 tick）；owner 白名单（awesome-market/terry2010）
+覆盖**全部非 dispatch 触发**（schedule 与 workflow_run 同口径——fork 的
+cron 和 fork 自己跑的 catalog/verify 都不该在本 repo 开单）；
+concurrency: review-docket 串行化；timeout-minutes: 10
+（三触发源可重叠——并发双跑曾会双建单，K-1）。
+catalog 文件读取区分「不存在」与「读失败」：verdicts/digest-state 缺失
+→空文件（首轮合法态），存在但 `git show` 失败→整轮 defer——瞬断降级成
+空文件会剥全部 ai:* 标签并把 announced pass 的相位回退一整个 tick
 ```
 
 人 → 标签 → concern.yml → verdict → 关单 → docket 下轮清理。闭环。
@@ -1278,7 +1299,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | cron 05:23 UTC | submit.yml sweep | — | 关 30d 僵尸投稿（invalid/needs-work/error，limit 1000） |
 | catalog publish 后 | catalog.yml notify+status | catalog-branch（共享） | 投稿评论/关单（含 dead 终态）、状态评论 edit-in-place |
 | issue [review]/[concern] opened/**edited**/labeled + 评论 | concern.yml | verdict-N（不 cancel） | ai-verdicts.jsonl + index.json（APPLY_INDEX 即时）、review 标签、关单 |
-| hourly :40 + catalog/verify 非取消完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
+| hourly :40 + catalog/verify/digest 非取消完成 + dispatch | docket.yml | review-docket（K-1 防双建） | [review] issues、标签 |
 | catalog/verify push 后 dispatch（+ 手动 force/skip_skills） | site.yml | site-deploy | Pages 站点（单发布者） |
 | cron 21:15 UTC + dispatch | digest.yml | catalog-branch（共享） | digest/*.md、digest-state.json |
 | launchd 每小时（**迁移期暂停**） | bin/ai-diagnose.sh | mkdir 原子锁（防叠实例；>2h 僵锁自动回收 D-11） | ai-verdicts.jsonl |

@@ -38,6 +38,10 @@ export const Capabilities = z.looseObject({
   rulesetVersion: z.string().optional(),
   findings: z.array(z.string()),
   redFlags: z.array(z.string()),
+  /** when the CURRENT identity-level flag set (sec:* redFlags) was first observed
+   *  on this slot — stamped by merge, cleared when the set empties. Docket uses
+   *  it to tell "a human verdict decided this flag" from "verdict predates it". */
+  flaggedAt: z.string().optional(),
 })
 
 export const Verification = z.looseObject({
