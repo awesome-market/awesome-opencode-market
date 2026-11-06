@@ -132,10 +132,10 @@ describe('unreviewedTargets — 48h verify-wait measures the CANDIDATE version a
   it('freshly-scanned pending candidate defers even on an ancient entry', () => {
     // firstSeenAt is entry-level and never bumps — the old clock would have
     // expired the verify-wait instantly for every re-scanned candidate.
-    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), new Map(), null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(0)
+    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), [], null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(0)
   })
   it('candidate scanned long ago → defer expired, degraded review proceeds', () => {
-    expect(unreviewedTargets(idx('2026-02-01T00:00:00Z'), new Map(), null, { now: '2026-02-10T00:00:00Z' })).toHaveLength(1)
+    expect(unreviewedTargets(idx('2026-02-01T00:00:00Z'), [], null, { now: '2026-02-10T00:00:00Z' })).toHaveLength(1)
   })
 })
 

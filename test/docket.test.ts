@@ -123,33 +123,33 @@ describe('docketTargets', () => {
     expect(body).toContain('o/flagged`（⚠️ 红旗 1 / findings 2')
     expect(body).toContain('o/blind`（⚠️ 未跑过静态扫描（不等于安全）')
   })
-  it('aged versioned holds past NONE_AGGREGATE_MIN fold into ONE (unreviewed backlog) aggregate', () => {
+  it('aged versioned holds past NONE_ISSUE_CAP fold into ONE (unreviewed backlog) aggregate', () => {
     const aged = (n: string) => e({ name: n, slug: `o/${n}`, firstSeenAt: '2020-01-01T00:00:00Z' })
-    const eleven = Array.from({ length: 11 }, (_, i) => aged(`p${i}`))
-    const t = docketTargets(idx(eleven), [], null, { now: '2026-01-05T00:00:00Z' })
+    const nine = Array.from({ length: 9 }, (_, i) => aged(`p${i}`))
+    const t = docketTargets(idx(nine), [], null, { now: '2026-01-05T00:00:00Z' })
     expect(t).toHaveLength(1)
     expect(t[0]).toMatchObject({ name: '(unreviewed backlog)', version: null, verdict: 'none' })
-    expect(t[0]!.backlog).toHaveLength(11)
+    expect(t[0]!.backlog).toHaveLength(9)
     expect(t[0]!.backlog![0]).toMatchObject({ name: 'p0', version: '1.0.0', verification: 'verified' })
     // at the threshold → per-entry issues keep the rich surface
-    const ten = docketTargets(idx(eleven.slice(0, 10)), [], null, { now: '2026-01-05T00:00:00Z' })
-    expect(ten).toHaveLength(10)
-    expect(ten.every(x => x.verdict === 'none' && x.name !== '(unreviewed backlog)')).toBe(true)
+    const eight = docketTargets(idx(nine.slice(0, 8)), [], null, { now: '2026-01-05T00:00:00Z' })
+    expect(eight).toHaveLength(8)
+    expect(eight.every(x => x.verdict === 'none' && x.name !== '(unreviewed backlog)')).toBe(true)
   })
   it('(unreviewed backlog) rows show verify state + flags; /approve routes name@ver per line', () => {
     const aged = (n: string, over: Partial<PluginEntry> = {}) =>
       e({ name: n, slug: `o/${n}`, firstSeenAt: '2020-01-01T00:00:00Z', ...over })
     const eleven = [
-      ...Array.from({ length: 10 }, (_, i) => aged(`p${i}`)),
+      ...Array.from({ length: 8 }, (_, i) => aged(`p${i}`)),
       aged('flagged', { capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] },
         verification: { status: 'skipped' } }),
     ]
     const t = docketTargets(idx(eleven), [], null, { now: '2026-01-05T00:00:00Z' })
     const body = issueBody(t[0]!)
-    expect(body).toContain('未审在押总单')
+    expect(body).toContain('未评审积压总单')
     expect(body).toContain('`flagged@1.0.0`（⚠️ 红旗 1 / 有高危信号没跑）')
     expect(body).toContain('`p0@1.0.0`（已实测可装可用）')
-    expect(body).toContain('/approve 条目名@版本')
+    expect(body).toContain('/approve 包名@版本')
   })
   it('repo-only pending WITH a human verdict → decided, no standing issue', () => {
     const t = docketTargets(idx([e({ latestVersion: null })]),
@@ -893,7 +893,7 @@ describe('docket main', () => {
     expect(calls.some(c => c.includes('create'))).toBe(true)
   })
 
-  it('versioned none past NONE_AGGREGATE_MIN → ONE (unreviewed backlog) issue; stale per-entry issues close as 并入', async () => {
+  it('versioned none past NONE_ISSUE_CAP → ONE (unreviewed backlog) issue; stale per-entry issues close as 并入', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
@@ -922,7 +922,7 @@ describe('docket main', () => {
     expect(creates).toHaveLength(1)
     expect(creates[0]!.join(' ')).toContain('[review] (unreviewed backlog)')
     expect(creates[0]!.join(' ')).toContain('`p0@1.0.0`')
-    expect(calls.some(c => c.includes('comment') && c.join(' ').includes('并入未审积压总单'))).toBe(true)
+    expect(calls.some(c => c.includes('comment') && c.join(' ').includes('并入未评审积压总单'))).toBe(true)
     expect(calls.some(c => c.includes('close') && c.includes('31'))).toBe(true)
   })
 
