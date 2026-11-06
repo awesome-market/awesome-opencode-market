@@ -186,8 +186,11 @@ export async function run(opts: RunOptions = {}) {
       let repo: string | null = null
       if (line.startsWith('{')) {
         try {
-          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown>; version?: string; pkg?: string; issue?: number; author?: string; dead?: boolean }
-          if (s.dead) continue   // withdrawn/expired submission — stop spending scan budget on it
+          const s = JSON.parse(line) as { name?: string | null; repo?: string | null; type?: string; category?: unknown; desc?: Record<string, unknown>; version?: string; pkg?: string; issue?: number; author?: string; dead?: boolean; notified?: boolean }
+          // dead = withdrawn/expired; notified = landed + submitter told — both
+          // terminal. A notified row re-injected every run kept paying the full
+          // repo probe + codeload + scan for a submission already resolved.
+          if (s.dead || s.notified) continue
           name = s.name?.toLowerCase() ?? null
           repo = s.repo?.toLowerCase() ?? null
           // seed metadata is attacker-adjacent (issue-form fields, editable) —
@@ -369,6 +372,13 @@ export async function run(opts: RunOptions = {}) {
     ])
     const { pk } = pkRes
     if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
+    // a refresh where EVERY probe failed refreshed nothing — stamping `now`
+    // into checkedAt anyway froze dead metrics for another week and lied to
+    // the catalog about when the entry was last seen healthy. Bail unchanged
+    // so the next run retries (a missing .opencode-market.json returns null
+    // too — treating that as failure errs on the cheap side: one extra probe)
+    if (pk === null && repoMetaRes?.meta == null && downloads === null
+        && marketMeta === null && repoPkg?.status !== 'ok') return e
     // SRI pins the DISPLAYED version's tarball (R-1) — but it must describe
     // the bytes REVIEWED: a same-version registry re-tag freezes the old
     // anchor + flags the slot rather than silently re-certifying new bytes.
@@ -996,10 +1006,13 @@ export async function run(opts: RunOptions = {}) {
         ghStats.treeTransient++
         return ghPrev ?? null
       }
-      if (!treeRes.paths) {
+      if (!treeRes.paths || treeRes.paths.size === 0) {
+        // 404/409 → paths null (gone); a 200 with zero entries is a real repo
+        // with no files — equally unusable, and now counted the same instead of
+        // leaking into evidenceRejected and mislabeling the audit line
         ghStats.treeEmpty++
         rejectedGh.add(lower)
-        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-not-found')
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, treeRes.paths?.size === 0 ? 'no-opencode-evidence' : 'repo-not-found')
         return null
       }   // gone/empty — gone-check decides
       // a truncated tree is INCOMPLETE data, not a verdict — the API cut the

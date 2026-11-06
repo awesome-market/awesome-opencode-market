@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
 import { detectFeatures } from '../src/features.ts'
 import { scanTarball } from './scan/scan.ts'
-import { fetchTarball, withTimeout } from './fetch/npm.ts'
+import { fetchTarball, withTimeout, readJsonCapped } from './fetch/npm.ts'
 
 interface VerDoc { main?: string; exports?: unknown; dist?: { tarball?: string } }
 interface PkDoc { versions?: Record<string, VerDoc> }
@@ -34,7 +34,7 @@ export async function main(file: string, opts: { dry?: boolean; fetchFn?: typeof
     if (docCache.has(name)) return docCache.get(name)!
     try {
       const res = await f(`https://registry.npmjs.org/${name.replace('/', '%2f')}`)
-      const doc = res.ok ? await res.json() as PkDoc : null
+      const doc = res.ok ? await readJsonCapped<PkDoc>(res, 64 * 1024 * 1024) : null
       docCache.set(name, doc)
       return doc
     } catch { docCache.set(name, null); return null }

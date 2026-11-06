@@ -1,5 +1,5 @@
 /** GitHub discovery: topic search + repo metadata. Unauthenticated works (60 req/h); GH_TOKEN raises limits. */
-import { withTimeout } from '../fetch/npm.ts'
+import { withTimeout, readJsonCapped } from '../fetch/npm.ts'
 import { mapPool } from '../pool.ts'
 
 export const GH_API = 'https://api.github.com'
@@ -44,14 +44,14 @@ export async function searchTopic(
     // a mid-pagination failure must be loud — the candidate tail silently
     // vanished otherwise (truncation telemetry)
     if (!res.ok) { console.warn(`[discover:github] '${topic}' page ${page} failed (${res.status}) — results truncated`); break }
-    const body = (await res.json()) as {
+    const body = await readJsonCapped<{
       items?: Array<{
         full_name: string; description: string | null; archived: boolean
         fork: boolean; pushed_at: string | null; stargazers_count: number; default_branch: string
         id?: number; created_at?: string | null
         license?: { spdx_id?: string } | null; topics?: string[]
       }>
-    }
+    }>(res, 8 * 1024 * 1024)
     const items = body.items ?? []
     for (const it of items) {
       out.push({
@@ -102,7 +102,7 @@ export async function searchCode(
     // mid-pagination failure must be loud — same truncation telemetry as
     // the topic path
     if (!res.ok) { console.warn(`[discover:github] code search '${query}' page ${page} failed (${res.status}) — results truncated`); break }
-    const body = (await res.json()) as {
+    const body = await readJsonCapped<{
       items?: Array<{
         repository?: {
           full_name?: string; description?: string | null; archived?: boolean
@@ -111,7 +111,7 @@ export async function searchCode(
           license?: { spdx_id?: string } | null; topics?: string[]
         } | null
       }>
-    }
+    }>(res, 8 * 1024 * 1024)
     const items = body.items ?? []
     for (const it of items) {
       const r = it.repository

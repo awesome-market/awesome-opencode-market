@@ -62,6 +62,39 @@ export interface PackumentResult { pk: Packument | null; status: PackumentStatus
 export const withTimeout = (f: typeof fetch, timeoutMs: number): typeof fetch =>
   (input, init) => f(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(timeoutMs) })
 
+/** Bounded JSON body read — `res.json()` buffers the whole response with no
+ *  size guard, and a pathological document (a packument with tens of
+ *  thousands of versions, a hostile .opencode-market.json) can OOM the whole
+ *  generate job before any catch clause sees an error. Same streamed-byte-cap
+ *  posture as fetchTarball: content-length can lie or be absent, so count
+ *  real bytes. Test doubles without a body stream fall back to text()/json(). */
+export async function readJsonCapped<T>(res: Response, maxBytes: number): Promise<T> {
+  const len = Number(res.headers?.get?.('content-length') ?? 0)
+  if (len > maxBytes) throw new Error(`response too large: ${len} bytes (cap ${maxBytes})`)
+  const reader = res.body?.getReader?.()
+  if (reader) {
+    const chunks: Buffer[] = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > maxBytes) {
+        await reader.cancel()
+        throw new Error(`response too large: >${maxBytes} bytes`)
+      }
+      chunks.push(Buffer.from(value))
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T
+  }
+  if (typeof res.text === 'function') {
+    const text = await res.text()
+    if (text.length > maxBytes) throw new Error(`response too large: ${text.length} bytes (cap ${maxBytes})`)
+    return JSON.parse(text) as T
+  }
+  return res.json() as Promise<T>
+}
+
 export async function fetchPackument(
   name: string,
   opts: { registry?: string; fetchFn?: typeof fetch; abbreviated?: boolean } = {},
@@ -98,7 +131,9 @@ export async function fetchPackument(
     readme?: string
   }
   try {
-    doc = (await res.json()) as typeof doc
+    // packuments grow with version count — the biggest real ones run tens of
+    // MB; unbounded res.json() lets a pathological package OOM the whole job
+    doc = await readJsonCapped<typeof doc>(res, 64 * 1024 * 1024)
   } catch {
     return { pk: null, status: 'error' }
   }
@@ -221,7 +256,7 @@ export async function fetchDownloads30d(
   try {
     const res = await f(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`)
     if (!res.ok) return null
-    const body = (await res.json()) as { downloads?: number }
+    const body = await readJsonCapped<{ downloads?: number }>(res, 1024 * 1024)
     return body.downloads ?? null
   } catch {
     return null

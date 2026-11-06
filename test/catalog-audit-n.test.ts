@@ -2,7 +2,7 @@
  *  (shaAnchor + repo-moved flags), case-insensitive identity across the whole
  *  verdict/issue surface, refreshMeta repo-drift refresh, coveredRepos
  *  exemption, bounded finding interpolation, code-search channel. */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +13,7 @@ import { markNotified } from '../pipeline/notify-published.ts'
 import { submissionStatuses } from '../pipeline/submission-status.ts'
 import { seedLine, parseSubmission } from '../pipeline/submission.ts'
 import { searchCode, discoverGithub } from '../pipeline/discover/github.ts'
+import { fetchPackument, readJsonCapped } from '../pipeline/fetch/npm.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -251,5 +252,119 @@ describe('O-3: code-search discovery channel', () => {
     const f2 = (async (input: RequestInfo | URL) => { calls2.push(String(input)); return mkRes({ items: [] }) }) as typeof fetch
     await discoverGithub(['opencode-plugin'], { fetchFn: f2, maxPages: 1 })
     expect(calls2.filter(u => u.includes('/search/code'))).toHaveLength(0)
+  })
+})
+
+describe('O-4: notified seed rows are terminal at ingestion', () => {
+  it('notified npm + repo seeds fire no probes; live rows still inject', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'notif-'))
+    const seed = join(dir, 'seed.txt')
+    writeFileSync(seed, [
+      JSON.stringify({ name: 'notified-pkg', issue: 1, notified: true }),
+      JSON.stringify({ repo: 'o/notified-repo', issue: 2, notified: true }),
+      JSON.stringify({ name: 'live-pkg', issue: 3 }),
+    ].join('\n'))
+    const urls: string[] = []
+    const tgz = mkTgz({ 'package.json': '{"name":"live-pkg","main":"i.js"}', 'i.js': 'x' })
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input); urls.push(url)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+      if (url.includes('registry.npmjs.org/live-pkg'))
+        return mkRes({ 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } }, time: {} })
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    // terminal rows never reached the network — a notified repo seed used to
+    // pay meta+tree+codeload+scan every single run until the 90d prune
+    expect(urls.some(u => u.includes('notified-pkg'))).toBe(false)
+    expect(urls.some(u => u.includes('notified-repo'))).toBe(false)
+    expect(urls.some(u => u.includes('live-pkg'))).toBe(true)
+    expect(idx.plugins.map(p => p.name)).toEqual(['live-pkg'])
+  })
+})
+
+describe('O-5: refreshMeta — a fully-failed refresh is not a refresh', () => {
+  it('all probes failed → entry returned unchanged, checkedAt NOT advanced', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rf-fail-'))
+    const prev = mkEntry('reuse-pkg', {
+      source: { kind: 'npm', id: 'reuse-pkg', repo: 'o/reuse' },
+      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },   // >7d stale → refresh path
+    })
+    const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [{ package: { name: 'reuse-pkg', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } }] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+      return mkRes({}, 500)   // every probe (packument/repoMeta/downloads/marketMeta/repoPkg) fails
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-03-05T00:00:00Z' })
+    const e = idx.plugins.find(p => p.name === 'reuse-pkg')!
+    // a failed refresh used to stamp checkedAt:now — dead metrics frozen
+    // another week and the catalog lying about when the entry was last seen
+    expect(e.metrics.checkedAt).toBe('2026-01-01T00:00:00Z')
+    expect(e.metrics.stars).toBe(1)
+  })
+  it('partial success still refreshes — one live probe is enough', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rf-part-'))
+    const prev = mkEntry('reuse-pkg', {
+      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+    })
+    const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [{ package: { name: 'reuse-pkg', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } }] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+      if (url.includes('api.npmjs.org/downloads')) return mkRes({ downloads: 42 })   // the only live probe
+      return mkRes({}, 500)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-03-05T00:00:00Z' })
+    const e = idx.plugins.find(p => p.name === 'reuse-pkg')!
+    expect(e.metrics.npmDownloads30d).toBe(42)
+    expect(e.metrics.checkedAt).toBe('2026-03-05T00:00:00Z')
+  })
+})
+
+describe('O-6: bounded JSON reads — readJsonCapped', () => {
+  it('streams the body and rejects past the cap (content-length can lie)', async () => {
+    const big = '{"x":"' + 'A'.repeat(100_000) + '"}'
+    await expect(readJsonCapped(new Response(big), 1024)).rejects.toThrow(/too large/)
+  })
+  it('content-length pre-check rejects before reading', async () => {
+    const res = new Response('{}', { headers: { 'content-length': String(10 * 1024 * 1024) } })
+    await expect(readJsonCapped(res, 1024)).rejects.toThrow(/too large/)
+  })
+  it('under-cap bodies parse normally', async () => {
+    await expect(readJsonCapped<{ a: number }>(new Response('{"a":1}'), 1024)).resolves.toEqual({ a: 1 })
+  })
+  it('an oversize packument degrades to status error — one giant package cannot OOM the run', async () => {
+    const f = (async () => new Response('{}', { headers: { 'content-length': String(70 * 1024 * 1024) } })) as typeof fetch
+    const r = await fetchPackument('huge-pkg', { fetchFn: f })
+    expect(r.status).toBe('error')
+    expect(r.pk).toBeNull()
+  })
+})
+
+describe('O-7: empty repo tree counts treeEmpty, not evidenceRejected', () => {
+  it('a 200 tree with zero entries is rejection-by-absence, honest accounting', async () => {
+    const logs: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(a.map(String).join(' ')) })
+    try {
+      const f = (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/-/v1/search')) return mkRes({ objects: [] })
+        if (url.includes('api.github.com/search'))
+          return mkRes({ items: [{ full_name: 'o/empty', description: '', archived: false, fork: false, pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin'], id: 1, created_at: 'c' }] })
+        if (url.includes('/git/trees/')) return mkRes({ tree: [] })   // exists, holds zero files
+        return mkRes({}, 404)
+      }) as typeof fetch
+      const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'te-')), 'i.json'), fetchFn: f, now: 't', forceGate: true })
+      expect(idx.plugins.find(p => p.name === 'o/empty')).toBeUndefined()
+      const line = logs.find(l => l.startsWith('github-kind:'))
+      expect(line).toContain('1 empty')
+      expect(line).toContain('0 evidence-rejected')
+    } finally { spy.mockRestore() }
   })
 })

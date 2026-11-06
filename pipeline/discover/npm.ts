@@ -1,5 +1,5 @@
 /** npm registry discovery: keyword search with pagination + rank filtering. */
-import { withTimeout } from '../fetch/npm.ts'
+import { withTimeout, readJsonCapped } from '../fetch/npm.ts'
 import { mapPool } from '../pool.ts'
 
 export const NPM_SEARCH_URL = 'https://registry.npmjs.org/-/v1/search'
@@ -45,7 +45,7 @@ export async function searchByKeyword(
     // a mid-pagination failure must be loud — the candidate tail silently
     // vanished otherwise (truncation telemetry)
     if (!res.ok) { console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`); break }
-    const body = (await res.json()) as { objects?: NpmSearchObject[]; total?: number }
+    const body = await readJsonCapped<{ objects?: NpmSearchObject[]; total?: number }>(res, 8 * 1024 * 1024)
     const objects = body.objects ?? []
     for (const o of objects) {
       const p = o.package

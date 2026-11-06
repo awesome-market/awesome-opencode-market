@@ -51,7 +51,7 @@ import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor } from '../verdicts.ts'
-import { fetchPackument, fetchTarball, type Packument } from '../fetch/npm.ts'
+import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -321,7 +321,9 @@ export async function ornithReview(e: CatalogIndex['plugins'][number], material:
     body: JSON.stringify(body), signal: AbortSignal.timeout(300_000),
   })
   if (!res.ok) throw new Error(`omlx ${res.status}`)
-  const data = await res.json() as { choices: { message: { content?: string } }[] }
+  // bounded like every other network read — a misbehaving endpoint must not
+  // OOM the diagnosis job (chat responses are small; 4MB is generous)
+  const data = await readJsonCapped<{ choices: { message: { content?: string } }[] }>(res, 4 * 1024 * 1024)
   const content = data.choices?.[0]?.message?.content ?? ''
   const parsed = extractVerdictJson(content) as {
     verdict?: string; reason_zh?: string; reason_en?: string; reason?: string
