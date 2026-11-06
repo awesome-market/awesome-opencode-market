@@ -164,6 +164,11 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
       }
     }
   } else if (e.event === 'issues' && (e.action === 'opened' || e.action === 'edited')) {
+    // the parser is the command contract — the workflow's job-if narrows
+    // issues events to [concern] titles today, but resolve must stay correct
+    // if that gate ever widens (a [review] opened event would otherwise be
+    // silently read as a form)
+    if (!e.issueTitle.startsWith('[concern]')) return { skip: 'noresolve' }
     const map = sections(e.issueBody)
     name = formField(map, 'npm 包名或 owner/repo', '包名')
     ver = formField(map, '版本（可留空）', '版本')

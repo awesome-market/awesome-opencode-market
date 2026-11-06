@@ -202,6 +202,15 @@ describe('form channel (issues opened/edited)', () => {
     expect(r.name).not.toContain('\n')
     expect(r.name).toBe('evil skip=noresolve')
   })
+  it('issues opened/edited on a NON-[concern] title → noresolve (parser is the contract)', () => {
+    // the workflow gate narrows this channel to [concern] titles today, but a
+    // [review] opened event reaching the resolver must not be read as a form —
+    // its body has no ### sections yet the parser is the single source of truth
+    const r = resolveVerdictEvent(ev({ event: 'issues', action: 'opened', issueTitle: '[review] pkg@1.0', issueBody: FORM_BODY, commentBody: '' }))
+    expect(r.skip).toBe('noresolve')
+    const r2 = resolveVerdictEvent(ev({ event: 'issues', action: 'edited', issueTitle: 'plain issue', issueBody: FORM_BODY, commentBody: '' }))
+    expect(r2.skip).toBe('noresolve')
+  })
 })
 
 describe('case-insensitive commands + isrepo output (HV-6/HV-7)', () => {
