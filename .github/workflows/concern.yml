@@ -1,7 +1,9 @@
 name: concern-verdict
 on:
   issues: { types: [opened, edited, labeled] }
-  issue_comment: { types: [created] }
+  # edited included: fixing a typo'd /concern comment must re-resolve — the
+  # semantic dedupe + amend chain makes replays idempotent (HV-10)
+  issue_comment: { types: [created, edited] }
 permissions: {}
 jobs:
   # Maintainer-only manual verdict channel — phone-friendly paths:
@@ -37,11 +39,12 @@ jobs:
         && startsWith(github.event.issue.title, '[review]')
         && (github.event.label.name == 'verdict:pass' || github.event.label.name == 'verdict:concern')
         && github.event.sender.login != 'github-actions[bot]')
-      || (github.event_name == 'issue_comment' && github.event.action == 'created'
+      || (github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && (startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')
           || startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A'))))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # NOT catalog-branch: every verdict event must land, so bursts queue
     # per-issue instead of cancelling each other; the retry loop in
     # bin/catalog-append.sh absorbs cross-issue write races.
@@ -80,7 +83,7 @@ jobs:
             admin|maintain|write) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
             none|read|triage)
               gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
-              gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅 maintainer 可用 verdict 标签。" || true
+              gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅仓库协作者（write 及以上）可用 verdict 标签。" || true
               echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
             *)
               gh issue comment "$ISSUE" -R "$REPO" --body "⚠️ 无法确认 @$ACTOR 的仓库权限（API 暂时不可用）——标签已保留，请稍后重试。" || true
@@ -104,7 +107,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
+          EVENT: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
+          # The gate over-matches on purpose (/a /c prefixes). Only comment
+          # when the body actually reads like a verdict command — `/close`,
+          # `/check`, `/ack` and friends must not earn usage help + a
+          # verdict:blocked label on an unrelated issue (HV-9). Kept looser
+          # than the parser: `/concerned`-style typos still get help.
+          if [ "$EVENT" = "issue_comment" ]; then
+            printf '%s' "$COMMENT_BODY" | grep -qiE '^/(concern|approve)' \
+              || { echo "not a verdict command — silent skip"; exit 0; }
+          fi
           gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
           gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
           gh issue comment "$ISSUE" --body "无法解析裁决目标——用法：① [review] 单上勾 \`verdict:pass\`/\`verdict:concern\` 标签，或裸评论 \`/approve\`、\`/concern 理由\`；② 任意 issue 评论 \`/concern <pkg>[@ver] [理由]\`；③ 开 [concern] 表单。" || true
@@ -116,9 +130,23 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # bootstrap: no catalog branch yet = the data plane isn't initialized.
+          # A generic failure() comment would misreport this as a lost verdict
+          if ! git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+            echo "exists=nobranch" >> "$GITHUB_OUTPUT"
+            gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
+            gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
+            gh issue comment "$ISSUE" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
+            exit 0
+          fi
           git fetch origin catalog -q || { echo "catalog fetch failed — refusing to judge on a stale index"; exit 1; }
           git show origin/catalog:index.json > /tmp/index.json
-          if ! node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$NAME"; then
+          # canonical name resolution: index names are the source of truth —
+          # a hand-typed `Owner/Repo` or `@Scope/Pkg` must verdict-key to the
+          # indexed spelling, not to the typed one (HV-14). Case-fold compare
+          # for lookup, then emit the entry's canonical name downstream.
+          CNAME=$(node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const n=process.argv[1].toLowerCase();const e=i.plugins.find(p=>p.name.toLowerCase()===n);process.stdout.write(e?e.name:"")' "$NAME")
+          if [ -z "$CNAME" ]; then
             echo "exists=0" >> "$GITHUB_OUTPUT"
             gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
             gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
@@ -126,11 +154,12 @@ jobs:
             exit 0
           fi
           echo "exists=1" >> "$GITHUB_OUTPUT"
+          echo "cname=$CNAME" >> "$GITHUB_OUTPUT"
       - name: resolve version (index-first) + tarball sha + slot status
         if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1'
         id: n
         env:
-          NAME: ${{ steps.v.outputs.name }}
+          NAME: ${{ steps.exists.outputs.cname }}
           VER: ${{ steps.v.outputs.ver }}
           VERDICT: ${{ steps.v.outputs.verdict }}
           REASON: ${{ steps.v.outputs.reason }}
@@ -160,6 +189,7 @@ jobs:
             // vstatus keyed to the RESOLVED slot (HV-4): a verdict on the
             // displayed version while a hold exists must not report the held
             // slot verification; a dead-slot version has no known status
+            const slot = v && e?.pendingUpdate?.version === v ? e.pendingUpdate : e
             const vstatus = v && e?.pendingUpdate?.version === v
               ? (e?.pendingUpdate?.verification?.status ?? "")
               : (v && e?.latestVersion === v ? (e?.verification?.status ?? "") : "")
@@ -167,6 +197,8 @@ jobs:
               v, heldver: e?.pendingUpdate?.version ?? "",
               displayed: e?.latestVersion ?? "", vstatus,
               pkgAll: pkgAll ? "1" : "",
+              approval: e?.approval ?? "",
+              flags: slot?.capabilities?.redFlags?.length ?? 0,
             }))
           ' "$NAME" "$VER" "${ISREPO:-0}")
           V=$(node -pe 'JSON.parse(process.argv[1]).v' "$INFO")
@@ -174,6 +206,8 @@ jobs:
           DISPLAYED=$(node -pe 'JSON.parse(process.argv[1]).displayed' "$INFO")
           VSTATUS=$(node -pe 'JSON.parse(process.argv[1]).vstatus' "$INFO")
           PKGALL=$(node -pe 'JSON.parse(process.argv[1]).pkgAll' "$INFO")
+          APPROVAL=$(node -pe 'JSON.parse(process.argv[1]).approval' "$INFO")
+          FLAGS=$(node -pe 'JSON.parse(process.argv[1]).flags' "$INFO")
           # pkgAll: empty V is the INTENDED package scope, not an unresolved
           # target — only a truly version-less npm verdict with no `*` blocks
           if [ "$ISREPO" != "1" ] && [ -z "$V" ] && [ "$PKGALL" != "1" ]; then
@@ -189,7 +223,7 @@ jobs:
           # announcement key — hence digest maturity — is preserved. Both
           # verdict lines stay in the append-only audit log.
           git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
-          DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$NAME" "$V" "$VERDICT" "$REASON")
+          DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$NAME" "$V" "$VERDICT" "$REASON" "$ISSUE")
           printf '%s\n' "$DEDUPE" >> "$GITHUB_OUTPUT"
           AMEND=$(printf '%s\n' "$DEDUPE" | sed -n 's/^amend=//p')
           DUP=$(printf '%s\n' "$DEDUPE" | sed -n 's/^dup=//p')
@@ -226,8 +260,11 @@ jobs:
           # can tell "whole package" apart from a bare unresolved name
           echo "target=$NAME${V:+@$V}${PKGALL:+@*}" >> "$GITHUB_OUTPUT"
           echo "heldver=$HELDVER" >> "$GITHUB_OUTPUT"
+          echo "displayed=$DISPLAYED" >> "$GITHUB_OUTPUT"
           echo "vstatus=$VSTATUS" >> "$GITHUB_OUTPUT"
           echo "pkgall=$PKGALL" >> "$GITHUB_OUTPUT"
+          echo "approval=$APPROVAL" >> "$GITHUB_OUTPUT"
+          echo "flags=$FLAGS" >> "$GITHUB_OUTPUT"
           # K-4: a version that is neither the held candidate nor the displayed
           # release has no live slot — the verdict is archived but changes
           # nothing; the ack must say so instead of implying it will act
@@ -249,8 +286,30 @@ jobs:
         run: |
           ./bin/catalog-append.sh
           echo "apply=$(cat /tmp/apply-status 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
+      - name: heal — fold an already-recorded verdict into index.json
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1' && (steps.n.outputs.dup == '1' || steps.app.outputs.apply == 'degraded')
+        id: heal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILE: ai-verdicts.jsonl
+          MSG: "release: fold recorded verdict ${{ steps.n.outputs.target }} (issue #${{ github.event.issue.number }})"
+          APPLY_ONLY: "1"
+          STATUS_FILE: /tmp/heal-status
+        run: |
+          # Two callers, one idempotent fold (HV-8):
+          #   dup=1      — the maintainer re-triggered to retry a degraded
+          #                apply; semantic dedupe skipped the append step, so
+          #                without this the retry could NEVER re-fold the index
+          #   degraded   — the verdict line just landed but release.ts failed;
+          #                one immediate retry before settling for the next
+          #                catalog tick
+          ./bin/catalog-append.sh
+          echo "apply=$(cat /tmp/heal-status 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
       - name: dispatch site rebuild — a brake only counts once the public index shows it
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1' && steps.n.outputs.dup != '1' && steps.v.outputs.verdict == 'concern' && steps.app.outputs.apply != 'degraded'
+        # effective apply = heal's verdict when it ran, else the append's —
+        # a healed fold (dup-retry or immediate retry) must still dispatch,
+        # and a still-degraded one must not pretend the site is current
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip == '' && steps.exists.outputs.exists == '1' && steps.n.outputs.unresolved != '1' && steps.v.outputs.verdict == 'concern' && (steps.heal.outputs.apply || steps.app.outputs.apply) != 'degraded'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -275,7 +334,14 @@ jobs:
           MISMATCH: ${{ steps.v.outputs.mismatch }}
           DUP: ${{ steps.n.outputs.dup }}
           REASON: ${{ steps.v.outputs.reason }}
-          APPLY: ${{ steps.app.outputs.apply }}
+          # effective apply = heal's verdict when it ran, else the append's —
+          # one number for the ack to reason about (HV-8)
+          APPLY: ${{ steps.heal.outputs.apply || steps.app.outputs.apply }}
+          DISPLAYED: ${{ steps.n.outputs.displayed }}
+          APPROVAL: ${{ steps.n.outputs.approval }}
+          FLAGS: ${{ steps.n.outputs.flags }}
+          PREV: ${{ steps.n.outputs.prev }}
+          PREVISSUE: ${{ steps.n.outputs.previssue }}
           EVENT: ${{ github.event_name }}
           TITLE: ${{ github.event.issue.title }}
         with:
@@ -303,6 +369,18 @@ jobs:
             // implying it's on its way (H-17)
             if (process.env.V === 'pass' && process.env.VSTATUS && !['verified', 'skipped'].includes(process.env.VSTATUS))
               msg += `\n\n当前验证：${process.env.VSTATUS}——该版本还需通过装测验证才会真正上架。`
+            // informed override: a human pass on a red-flagged slot is legal
+            // (it outranks the AI) but the ack echoes the flag count so the
+            // decision is made knowingly, on the record
+            if (process.env.V === 'pass' && Number(process.env.FLAGS) > 0)
+              msg += `\n\n⚠️ 该槽位有 ${process.env.FLAGS} 个高危标记——人工 pass 将压过 AI 侧顾虑放行（见详情页标记清单）。`
+            // redundant pass: the slot is already published with no hold —
+            // the line is archived but is never an announcement candidate,
+            // so it will not mature; don't imply a digest is coming
+            if (process.env.V === 'pass' && !pkgAll && !process.env.HELDVER && process.env.DISPLAYED
+              && process.env.TARGET.endsWith(`@${process.env.DISPLAYED}`)
+              && ['verified', 'skipped'].includes(process.env.VSTATUS) && process.env.DUP !== '1')
+              msg += `\n\n注意：该版本当前已是展示版本且无在押更新——本裁决仅作审计存档，不进入日报公示/不改变上架状态。`
             // verdict landed on a version that isn't the current hold — the
             // maintainer probably saw a stale review issue (H-stale). A
             // package-level verdict intentionally spans the held slot too.
@@ -317,6 +395,16 @@ jobs:
             // say so instead of implying a second line was written (HV-2)
             if (process.env.DUP === '1')
               msg += `\n\n相同裁决已在记录中——本次未重复追加（保留原裁决时间与成熟度窗口）。`
+            // this decision REVERSED a newer human verdict on the same key —
+            // legal (latest wins) but never silent: e.g. a stale form edit
+            // quietly re-braking a package a colleague just passed (HV-7)
+            if (process.env.PREV && process.env.DUP !== '1')
+              msg += `\n\n⚠️ 本次裁决覆盖了更新的同键人工裁决（${process.env.PREV}）——确认这是有意反转而非过期表单/评论的误 replay。`
+            // this issue previously recorded a verdict for a DIFFERENT target —
+            // an edited [concern] form retargets; the old target's verdict is
+            // still live on the ledger unless it was superseded there (HV-13)
+            if (process.env.PREVISSUE)
+              msg += `\n\n⚠️ 本单此前裁决过另一目标（${process.env.PREVISSUE}）——该裁决仍在记录中生效。若属改标且旧裁决应作废，请对 \`${process.env.PREVISSUE}\` 重新裁决覆盖。`
             // echo the reason back so the maintainer sees what was recorded —
             // skip the auto-generated label text which is noise (HV-11)
             if (process.env.REASON && !process.env.REASON.startsWith('via label'))
@@ -326,12 +414,19 @@ jobs:
             // lands as a correction, not a fresh window)
             if (!process.env.REASON && process.env.V === 'concern' && process.env.DUP !== '1')
               msg += `\n\n未填写理由——审计记录里没有原因说明。补充方式：在任意 issue 评论 \`/concern ${process.env.TARGET} 新理由\`（相同裁决会以勘误追加，不重置成熟度）。`
-            // verdict line landed but index.json was NOT folded — the brake
-            // is recorded yet the public site/client keep showing the old
-            // state until the next catalog run; don't pretend it's live
+            // verdict line landed but index.json was NOT folded — and the
+            // auto-heal retry (dup-aware APPLY_ONLY pass) also failed. The
+            // brake is recorded yet the public site/client keep showing the
+            // old state; don't pretend it's live, and the re-trigger path is
+            // REAL now (heal step re-folds without re-appending)
             if (process.env.APPLY === 'degraded')
-              msg += `\n\n⚠️ index 应用降级——裁决已存档，但 index.json 未能同步更新：公开站点/客户端在下次 catalog 班（约 16h）前仍显示旧状态。重新触发同一命令可重试应用（幂等）。`
-            await github.rest.issues.createComment({ ...ref, body: msg })
+              msg += `\n\n⚠️ index 应用降级——裁决已存档且自动重试仍未同步 index.json：公开站点/客户端在下次 catalog 班（约 16h）前仍显示旧状态。重新触发同一命令可再次重试应用（幂等，不会重复追加裁决行）。`
+            // comment-post failure must not read as a lost verdict — the line
+            // is already committed by now (HV-12). Swallow so the step (and
+            // the failure() notifier) doesn't misfire a "may not have landed"
+            try { await github.rest.issues.createComment({ ...ref, body: msg }) } catch (e) {
+              core.warning(`ack comment failed (verdict IS recorded): ${e}`)
+            }
             // `[review] (...)` sentinel titles (the repo-only aggregate) are
             // standing issues, not per-target review threads — a per-entry
             // comment verdict must NOT close them nor swap review labels;
@@ -377,7 +472,7 @@ jobs:
       && github.event_name == 'issue_comment' && github.event.action == 'created'
       && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
       && !contains(github.event.issue.labels.*.name, 'submission')
-      && (startsWith(github.event.comment.body, '/r') || startsWith(github.event.comment.body, '/R'))
+      && (startsWith(github.event.comment.body, '/retest') || startsWith(github.event.comment.body, '/Retest') || startsWith(github.event.comment.body, '/RETEST'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency: concern-retest-${{ github.event.issue.number }}
@@ -393,14 +488,17 @@ jobs:
         run: |
           set -e
           comment() { gh issue comment "$ISSUE" -R "$GH_REPO" --body "$1"; }
-          # arg text after the command; bare /retest → the [review] title's target
-          ARG=$(printf '%s' "$BODY" | sed -E 's#^[[:space:]]*/[Rr][Ee][Tt][Ee][Ss][Tt]##' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          # arg text after the command; bare /retest → the [review] title's
+          # target. Word boundary after the command: `/retestfoo` isn't a
+          # `/retest` invocation — treat it as bare (title target or usage)
+          ARG=$(printf '%s' "$BODY" | sed -E 's#^[[:space:]]*/[Rr][Ee][Tt][Ee][Ss][Tt]([[:space:]]|$)#\1#' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          case "$ARG" in /*) ARG="" ;; esac   # didn't parse as /retest → not an arg
           SPEC="$ARG"
           if [ -z "$SPEC" ]; then
             SPEC=$(printf '%s' "$TITLE" | sed -nE 's/^\[review\][[:space:]]+(.+)$/\1/p' | sed -e 's/[[:space:]]*$//')
           fi
           if [ -z "$SPEC" ]; then
-            comment "用法：在任意 issue 评论 \`/retest <pkg>[@ver]\`（逗号或空格分隔多个），或在 [review] 单里裸评 \`/retest\` 复验单上目标。仅 maintainer。"
+            comment "用法：在任意 issue 评论 \`/retest <pkg>[@ver]\`（逗号或空格分隔多个），或在 [review] 单里裸评 \`/retest\` 复验单上目标。仅仓库协作者。"
             exit 0
           fi
           # names only — verify re-measures whatever version the slot holds;

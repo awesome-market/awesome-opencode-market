@@ -2,7 +2,8 @@
  *  inline node -e. Covers the label / bare-comment / arg-comment / form
  *  channels plus the divergence + sanitization rules. */
 import { describe, it, expect } from 'vitest'
-import { resolveVerdictEvent, titleTarget, splitSpec, isDupVerdict, amendAt } from '../pipeline/human-verdict.ts'
+import { readFileSync } from 'node:fs'
+import { resolveVerdictEvent, titleTarget, splitSpec, isDupVerdict, amendAt, overriddenHuman, retargetedIssueTarget } from '../pipeline/human-verdict.ts'
 import type { VerdictEvent } from '../pipeline/human-verdict.ts'
 
 const ev = (over: Partial<VerdictEvent> = {}): VerdictEvent => ({
@@ -275,6 +276,86 @@ describe('amendAt — reason-only amendment keeps maturity (HV-2 counterpart)', 
     const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'old', source: 'human', at: AT })]
     expect(amendAt(lines, 'p', '2', 'pass', 'new')).toBeNull()
     expect(amendAt(lines, 'q', '1', 'pass', 'new')).toBeNull()
+  })
+})
+
+describe('overriddenHuman — reversal detection (HV-12)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  const AT = '2026-01-01T00:00:00.000Z'
+  it('latest human line for the key has a DIFFERENT verdict → returns it', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('same verdict → null (that is dup/amend territory, not a reversal)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+  })
+  it('no human line for the key → null; AI line on top → null (overriding the robot is routine)', () => {
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'pass', source: 'human', at: AT }),
+      L({ name: 'p', version: '1', verdict: 'concern', source: 'ai', at: '2026-01-02T00:00:00.000Z' }),
+    ]
+    // writing a NEW pass still reverses the older human pass? no — same
+    // verdict as the human line → null; a concern write overrides the human
+    // pass even with an AI concern stacked on top (the AI is shadowed, the
+    // human decision is what's being reversed)
+    expect(overriddenHuman(lines, 'p', '1', 'pass')).toBeNull()
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('different key → null; malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'p', version: '2', verdict: 'pass', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+    expect(overriddenHuman(lines, 'p', '2', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('missing at on the overridden line → null (never emit an unanchored warning)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human' })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+  })
+})
+
+describe('retargetedIssueTarget — form retarget residue (HV-13)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  it('latest human line traced to this issue names a DIFFERENT package → returns it', () => {
+    const lines = [L({ name: 'oldpkg', version: '1', verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(lines, 9, 'newpkg')).toEqual({ name: 'oldpkg', version: '1' })
+  })
+  it('same package → null; other issues → null; AI lines → null', () => {
+    const lines = [
+      L({ name: 'samepkg', version: '1', verdict: 'concern', source: 'human', issue: 9 }),
+      L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'ai', issue: 9 }),
+      L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'human', issue: 8 }),
+    ]
+    expect(retargetedIssueTarget(lines, 9, 'samepkg')).toBeNull()
+  })
+  it('an arg-spec verdict for another package from the same issue is surfaced (documented)', () => {
+    // /concern pkgA then /concern pkgB on one issue → the second write warns
+    // that pkgA's verdict still stands — informative either way
+    const lines = [L({ name: 'pkgA', version: null, verdict: 'concern', source: 'human', issue: 5 })]
+    expect(retargetedIssueTarget(lines, 5, 'pkgB')).toEqual({ name: 'pkgA', version: null })
+  })
+  it('malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'x', source: 'human', issue: 'not-a-number' })]
+    expect(retargetedIssueTarget(lines, 9, 'newpkg')).toBeNull()
+  })
+})
+
+describe('form-template contract — issue template ⇄ parser field keys', () => {
+  // the parser reads ### sections by LABEL text; a template rename that
+  // drifts from formField()'s lookup keys silently turns the form channel
+  // into noresolve — assert the two sides stay in sync
+  const tpl = readFileSync(new URL('../.github/ISSUE_TEMPLATE/concern.yml', import.meta.url), 'utf8')
+  const labels = [...tpl.matchAll(/label:\s*(.+)/g)].map(m => m[1]!.trim())
+  it('template labels cover every formField lookup key', () => {
+    for (const key of ['npm 包名或 owner/repo', '版本（可留空）', '操作 / Action', '理由 / Reason']) {
+      expect(labels, `missing template label: ${key}`).toContain(key)
+    }
+  })
+  it('template still produces a resolvable form issue', () => {
+    const r = resolveVerdictEvent(ev({
+      event: 'issues', action: 'opened', issueTitle: '[concern] x', commentBody: '',
+      issueBody: `### npm 包名或 owner/repo\n\nsomepkg\n\n### 版本（可留空）\n\n1.0.0\n\n### 操作 / Action\n\n拦截 (concern)\n\n### 理由 / Reason\n\nwhy`,
+    }))
+    expect(r).toMatchObject({ name: 'somepkg', ver: '1.0.0', verdict: 'concern', reason: 'why' })
   })
 })
 

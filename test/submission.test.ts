@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseSubmission, seedLine } from '../pipeline/submission.ts'
 import { markNotified } from '../pipeline/notify-published.ts'
-import { submissionStatuses } from '../pipeline/submission-status.ts'
+import { submissionStatuses, concernOn } from '../pipeline/submission-status.ts'
+import { latestVerdicts, latestHumanVerdicts } from '../pipeline/verdicts.ts'
+import { AiVerdict, CatalogIndex } from '../src/schema.ts'
 import { run } from '../pipeline/run.ts'
-import { CatalogIndex } from '../src/schema.ts'
 
 const FORM_BODY = `### npm package name / npm 包名
 
@@ -340,6 +341,78 @@ describe('submissionStatuses', () => {
     expect(rows.find(r => r.issue === 9)!.key).toBe('o/r')
     expect(rows.find(r => r.issue === 9)!.phase).toBe('review')
     expect(rows.find(r => r.issue === 10)!.phase).toBe('queued')
+  })
+
+  // verdict-aware phases (HV-submission-status): a human concern landing via
+  // ANY channel (submit verdict job / [concern] form / [review] label) must
+  // surface as "已被拦截" on the seed's issue — not "评审中" for weeks
+  const hv = (over: Partial<AiVerdict>): AiVerdict => AiVerdict.parse({
+    name: 'p', verdict: 'concern', at: '2026-01-01T00:00:00Z', source: 'human', ...over,
+  })
+  it('human concern on the pending slot → blocked; AI concern → review annotation', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const seeds = ['{"name":"pend-pkg","issue":2,"notified":false}']
+    const human = submissionStatuses(idx, seeds, [hv({ name: 'pend-pkg', version: '1.0.0', reason: 'steals data' })])
+    expect(human[0]!.phase).toBe('blocked')
+    expect(human[0]!.phaseLabel).toBe('已被拦截')
+    expect(human[0]!.detail).toContain('steals data')
+    const ai = submissionStatuses(idx, seeds, [hv({ name: 'pend-pkg', version: '1.0.0', source: 'ai' })])
+    expect(ai[0]!.phase).toBe('review')
+    expect(ai[0]!.detail).toContain('concern')
+  })
+  it('package-level brake (name@null human concern) covers a pending entry AND a queued seed', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const brake = [hv({ name: 'pend-pkg', version: null }), hv({ name: 'ghost-pkg', version: null })]
+    const rows = submissionStatuses(idx, [
+      '{"name":"pend-pkg","issue":2,"notified":false}',
+      '{"name":"ghost-pkg","issue":3,"notified":false,"version":"9.9.9"}',  // not in index yet — brake still applies on landing
+    ], brake)
+    expect(rows.find(r => r.issue === 2)!.phase).toBe('blocked')
+    expect(rows.find(r => r.issue === 3)!.phase).toBe('blocked')
+  })
+  it('a NEWER human pass on the slot lifts the package brake → back to review', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const rows = submissionStatuses(idx, ['{"name":"pend-pkg","issue":2,"notified":false}'], [
+      hv({ name: 'pend-pkg', version: null, at: '2026-01-01T00:00:00Z' }),
+      hv({ name: 'pend-pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-02T00:00:00Z' }),
+    ])
+    expect(rows[0]!.phase).toBe('review')
+  })
+  it('github-kind entry: a human concern on the null slot key → blocked (the slot IS null, not a package brake)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'o/r', source: { kind: 'github', id: 'o/r', repo: 'o/r' }, approval: 'pending', latestVersion: null }])
+    const rows = submissionStatuses(idx, ['{"repo":"o/r","issue":7,"notified":false}'],
+      [hv({ name: 'o/r', version: null, reason: 'dead repo' })])
+    expect(rows[0]!.phase).toBe('blocked')
+  })
+  it('no verdicts arg → legacy behavior (queued/review/published only)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const rows = submissionStatuses(idx, ['{"name":"pend-pkg","issue":2,"notified":false}'])
+    expect(rows[0]!.phase).toBe('review')
+  })
+})
+
+describe('concernOn — package-brake precedence (mirrors applyMatureVerdicts)', () => {
+  const hv2 = (over: Partial<AiVerdict>): AiVerdict => AiVerdict.parse({
+    name: 'p', verdict: 'concern', at: '2026-01-01T00:00:00Z', source: 'human', ...over,
+  })
+  const maps = (vs: AiVerdict[]) => ({ latest: latestVerdicts(vs), human: latestHumanVerdicts(vs) })
+  it('null-version github slot: its own concern is found without brake lookup', () => {
+    const { latest, human } = maps([hv2({ name: 'o/r', version: null })])
+    expect(concernOn('o/r', null, latest, human)?.verdict).toBe('concern')
+  })
+  it('an ai pass does NOT lift a package brake (R-4 stickiness in status too)', () => {
+    const { latest, human } = maps([
+      hv2({ name: 'p', version: null }),
+      hv2({ name: 'p', version: '1.0.0', verdict: 'pass', source: 'ai', at: '2026-01-02T00:00:00Z' }),
+    ])
+    expect(concernOn('p', '1.0.0', latest, human)?.source).toBe('human')
+    expect(concernOn('p', '1.0.0', latest, human)?.version).toBeNull()  // the brake verdict itself
+  })
+  it('no verdicts → null; ai concern on the slot → that verdict', () => {
+    const empty = maps([])
+    expect(concernOn('p', '1.0.0', empty.latest, empty.human)).toBeNull()
+    const { latest, human } = maps([hv2({ name: 'p', version: '1.0.0', source: 'ai' })])
+    expect(concernOn('p', '1.0.0', latest, human)?.source).toBe('ai')
   })
 })
 

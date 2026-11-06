@@ -216,9 +216,11 @@ jobs:
             done < /tmp/dead.list
             # progress visibility: refresh the pinned status comment on every
             # submission issue that still has a live seed — edit-in-place, one
-            # comment per issue, best-effort (never fails the publish).
+            # comment per issue, best-effort (never fails the publish). The
+            # verdicts arg lets a human/AI concern on the submitted package
+            # surface as "已被拦截" instead of a misleading "评审中".
             GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" GH_REPO="$GH_REPO" \
-              npx tsx pipeline/submission-status.ts /tmp/index.json /tmp/cat/submissions.txt || true
+              npx tsx pipeline/submission-status.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/cat/ai-verdicts.jsonl || true
             else
               echo "submissions flag push failed — skipping issue notify/close this run (self-heals next run)"
             fi

@@ -2,7 +2,10 @@ name: submission-review
 # scope: prod-only — formal submission processing + abandonment sweep
 on:
   issues: { types: [opened, edited, labeled] }
-  issue_comment: { types: [created] }   # re-review loop: author replies after fixing
+  # edited included for the VERDICT job (fixing a typo'd /concern re-resolves
+  # idempotently via dedupe/amend) — the review job stays created-only so an
+  # edited comment can't burn a tarball re-scan
+  issue_comment: { types: [created, edited] }   # re-review loop: author replies after fixing
   schedule: [ { cron: '23 5 * * *' } ]  # abandonment sweep
 permissions: {}
 jobs:
@@ -14,6 +17,7 @@ jobs:
       && (github.event_name == 'issues'
           && (github.event.action != 'labeled' || github.event.label.name == 'submission')
           || (github.event_name == 'issue_comment'
+              && github.event.action == 'created'   # edits go to the verdict job, not a re-scan
               && !endsWith(github.event.comment.user.login, '[bot]')
               && (contains(github.event.issue.labels.*.name || 'x', 'submission:needs-work')
                   || contains(github.event.issue.labels.*.name || 'x', 'submission:invalid')
@@ -227,12 +231,13 @@ jobs:
         (github.event_name == 'issues' && github.event.action == 'labeled'
           && github.event.label.name == 'submission:approved'
           && github.event.sender.login != 'github-actions[bot]')
-        || (github.event_name == 'issue_comment' && github.event.action == 'created'
+        || (github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
           && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
           && (startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A')
               || startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')))
       )
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # per-issue group, NOT catalog-branch: every verdict event must land —
     # a shared writer lock drops pending runs in a burst; the rebase-push
     # retry loop below absorbs cross-issue write races instead. Namespaced per
@@ -270,7 +275,7 @@ jobs:
             admin|maintain|write) echo "allowed=1" >> "$GITHUB_OUTPUT" ;;
             none|read|triage)
                gh issue edit "$ISSUE" -R "$REPO" --remove-label "$LABEL" || true
-               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅 maintainer 可用 verdict 标签。" || true
+               gh issue comment "$ISSUE" -R "$REPO" --body "⛔ @$ACTOR 无裁决权限（${PERM:-unknown}）——标签已移除。仅仓库协作者（write 及以上）可用 verdict 标签。" || true
                echo "allowed=0" >> "$GITHUB_OUTPUT" ;;
             *)
                gh issue comment "$ISSUE" -R "$REPO" --body "⚠️ 无法确认 @$ACTOR 的仓库权限（API 暂时不可用）——标签已保留，请稍后重试。" || true
@@ -397,7 +402,7 @@ jobs:
           # identical re-runs are no-ops; a reason-only change reuses the
           # prior line's `at` so digest maturity isn't restarted by an edit
           git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
-          DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$ENTRY" "$VER" "$VERDICT" "$REASON")
+          DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$ENTRY" "$VER" "$VERDICT" "$REASON" "$ISSUE_NUM")
           printf '%s\n' "$DEDUPE" >> "$GITHUB_OUTPUT"
           AMEND=$(printf '%s\n' "$DEDUPE" | sed -n 's/^amend=//p')
           DUP=$(printf '%s\n' "$DEDUPE" | sed -n 's/^dup=//p')
@@ -433,8 +438,24 @@ jobs:
         run: |
           ./bin/catalog-append.sh
           echo "apply=$(cat /tmp/apply-status 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
+      - name: heal — fold an already-recorded verdict into index.json
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.noseed != '1' && (steps.v.outputs.dup == '1' || steps.app.outputs.apply == 'degraded')
+        id: heal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILE: ai-verdicts.jsonl
+          MSG: "release: fold recorded verdict ${{ steps.v.outputs.target }} (issue #${{ github.event.issue.number }})"
+          APPLY_ONLY: "1"
+          STATUS_FILE: /tmp/heal-status
+        run: |
+          # Same self-heal as concern.yml: a dup re-trigger is the documented
+          # "retry the degraded apply" path — semantic dedupe skips the append
+          # step, so without this the retry could never re-fold the index.
+          ./bin/catalog-append.sh
+          echo "apply=$(cat /tmp/heal-status 2>/dev/null || echo unknown)" >> "$GITHUB_OUTPUT"
       - name: dispatch site rebuild — a brake only counts once the public index shows it
-        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.noseed != '1' && steps.v.outputs.verdict == 'concern' && steps.app.outputs.apply != 'degraded'
+        # effective apply = heal's verdict when it ran, else the append's
+        if: steps.gate.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.noseed != '1' && steps.v.outputs.verdict == 'concern' && (steps.heal.outputs.apply || steps.app.outputs.apply) != 'degraded'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -453,7 +474,9 @@ jobs:
           VERMISMATCH: ${{ steps.v.outputs.vermismatch }}
           DUP: ${{ steps.v.outputs.dup }}
           NOSEED: ${{ steps.v.outputs.noseed }}
-          APPLY: ${{ steps.app.outputs.apply }}
+          APPLY: ${{ steps.heal.outputs.apply || steps.app.outputs.apply }}
+          PREV: ${{ steps.v.outputs.prev }}
+          PREVISSUE: ${{ steps.v.outputs.previssue }}
         with:
           script: |
             let msg = process.env.V === 'concern'
@@ -479,13 +502,27 @@ jobs:
             // original `at` (and its maturity window) stands (HV-2)
             if (process.env.DUP === '1')
               msg += `\n\n相同裁决已在记录中——本次未重复追加（保留原裁决时间与成熟度窗口）。`
-            // verdict line landed but index.json was NOT folded — recorded
-            // yet publicly stale until the next catalog run; don't pretend
+            // this decision REVERSED a newer human verdict on the same key —
+            // legal but never silent (HV-7)
+            if (process.env.PREV && process.env.DUP !== '1')
+              msg += `\n\n⚠️ 本次裁决覆盖了更新的同键人工裁决（${process.env.PREV}）——确认这是有意反转而非过期操作的误 replay。`
+            // a prior verdict from THIS issue landed on a different target
+            // (re-review renamed the package) — the old line still stands
+            if (process.env.PREVISSUE)
+              msg += `\n\n⚠️ 本单此前裁决过另一目标（${process.env.PREVISSUE}）——该裁决仍在记录中生效。若属改名且旧裁决应作废，请对 \`${process.env.PREVISSUE}\` 重新裁决覆盖。`
+            // verdict line landed but index.json was NOT folded — and the
+            // auto-heal retry also failed; recorded yet publicly stale until
+            // the next catalog run; don't pretend
             if (process.env.APPLY === 'degraded')
-              msg += `\n\n⚠️ index 应用降级——裁决已存档，但 index.json 未能同步更新：公开站点/客户端在下次 catalog 班（约 16h）前仍显示旧状态。重新触发同一命令可重试应用（幂等）。`
-            await github.rest.issues.createComment({
+              msg += `\n\n⚠️ index 应用降级——裁决已存档且自动重试仍未同步 index.json：公开站点/客户端在下次 catalog 班（约 16h）前仍显示旧状态。重新触发同一命令可再次重试应用（幂等，不会重复追加裁决行）。`
+            // comment-post failure must not read as a lost verdict — the
+            // line is already committed by now; swallow so failure() doesn't
+            // misfire "may not have landed" (HV-12)
+            try { await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, body: msg })
+              issue_number: context.issue.number, body: msg }) } catch (e) {
+              core.warning(`ack comment failed (verdict IS recorded): ${e}`)
+            }
             // a human concern is terminal for this submission round — leaving
             // the issue open reads as "still under review" (F-11). The author
             // can fix and resubmit (or reopen) once the concern is addressed.
