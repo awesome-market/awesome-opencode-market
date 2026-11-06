@@ -1691,20 +1691,20 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 | 文件 | 关键导出 | 角色 |
 |---|---|---|
-| `run.ts` | `run` `loadOldIndex` `replacementOf` | 收录主流水线：种子→过滤→cap→worker→merge→index（§1） |
+| `run.ts` | `run` `loadOldIndex` `replacementOf` `anchorIntegrity` `DRIFT_FLAG` | 收录主流水线：种子→过滤→cap→worker→merge→index（§1）+integrity 锚定/漂移红旗 |
 | `discover/npm.ts` | `discoverNpm` `searchByKeyword` `KEYWORDS` | npm keyword 搜索候选 |
-| `discover/github.ts` | `discoverGithub` `searchTopic` `normalizeRepoUrl` `TOPICS` | GitHub topic 搜索候选 |
+| `discover/github.ts` | `discoverGithub` `searchTopic` `searchCode` `normalizeRepoUrl` `TOPICS` `CODE_QUERIES` | GitHub 候选双通道：topic 搜索 + code search（`/search/code` 按 opencode 特征串；无 token 自动降级） |
 | `discover/filter.ts` | `preAdmit` `looksLikeTemplateSpam` `hasPluginEvidence` `hasRepoEvidence` `hasSkillPath` | 入场过滤（archived/模板农场/插件证据/repo 证据门/skill 路径） |
 | `discover/seed.ts` | `buildSeedList` `extractRepos` `filterByStars` `repoToNpm` | awesome-list 冷启动种子（一次性工具） |
 | `pool.ts` | `mapPool` | 有界并发辅助（发现循环 ×3/×2、worker 池 ×10） |
-| `fetch/npm.ts` | `fetchPackument`（含 abbreviated install-v1）`fetchTarball`（手动重定向逐跳 https 校验 ≤5 跳）`fetchDownloads30d` `compatStrings` | npm 拉取（status: ok/not-found/error） |
+| `fetch/npm.ts` | `fetchPackument`（含 abbreviated install-v1）`fetchTarball`（手动重定向逐跳 https 校验 ≤5 跳）`fetchDownloads30d` `compatStrings` `readJsonCapped` `withTimeout` | npm 拉取（status: ok/not-found/error）+限界 JSON 原语（readJsonCapped 跨模块共用——外部数据一律带上限读） |
 | `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `fetchMarketMeta` | repo 元数据/文件树探测（rate-limited 状态透传） |
 | `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags（MAX_UNPACKED=512MB 解压上限防 zip bomb；MAX_FINDINGS=500 截断+scan-capped 标记；已知良性二进制扩展名降 medium） |
 | `scan/rules.ts` | `RULES` `RULESET_VERSION='r4'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding；obfuscation/credential-read 限代码扩展名） |
 | `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
 | `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并（其后 release.ts 追赶应用裁决，R-10） |
-| `verdicts.ts` | `loadVerdicts` `latestVerdicts` `latestHumanVerdicts` `effectiveVerdict` `packageBrake` `brakeFor` `slotVerdict` `vkey` `akey` `loadDigestState` `digestStateOf` `applyMatureVerdicts` `explainEntry` | 裁决读盘+NUL 键+放行判定（announced 成熟+human stickiness+包级闸+sha 校验）+判定链解释器 |
+| `verdicts.ts` | `loadVerdicts` `latestVerdicts` `latestHumanVerdicts` `effectiveVerdict` `packageBrake` `brakeFor` `slotVerdict` `vkey` `akey` `atCmp` `candidateVer` `tombEpochs` `loadDigestState` `loadLastDigestAt` `digestStateOf` `applyMatureVerdicts` `explainEntry` | 裁决读盘+NUL 键+放行判定（announced 成熟+human stickiness+包级闸+sha 校验+同名片段闸）+判定链解释器 |
 | `verdicts-compact.ts` | `compactLines` | ai-verdicts.jsonl 压实——丢超窗被取代的 AI 行（畸形/human/最新/窗内全保留），digest.yml 班内跑 |
 | `human-verdict.ts` | `resolveVerdictEvent` `titleTarget` `splitSpec` `isDupVerdict` `amendAt` `overriddenHuman` `retargetedIssueTarget` | 人工裁决三通道解析+歧义规则+mismatch+dedupe/amend/反转与改标审计信号（§5） |
 | `release.ts` | — | applyMatureVerdicts CLI 壳——裁决写盘同 commit 落 index（R-2 即时通道）；`--explain` 槽位判定链；catalog publish remerge 后追赶应用（R-10） |
@@ -1713,27 +1713,28 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `review.ts` | `reviewPackage` `reviewRepo` `verdict` `repoVerdict` `renderReview` `renderRepoReview` | 投稿机械审（status/scanned/evidenceOk 透传；verdict 四态 clean/flagged/invalid/error；报告含 LAST verdict 标记） |
 | `notify-published.ts` | `markNotified` | 投稿落地通知标记（approval≠pending 才算；issues 去重；14d staleWarned / 30d dead 终态） |
 | `submission-status.ts` | `submissionStatuses` `concernOn` `upsertStatusComment` | 投稿进度状态评论（排队中/评审中/**已被拦截**/已上架；verdict 感知——人工 concern 任意通道落地即显拦截态；marker 评论 edit-in-place） |
-| `docket.ts` | `docketTargets` `issueTitle` `issueBody` | [review] 审核单同步+漂移收敛（gh CLI）；flag 目标=可见条目身份级 sec 红旗的刹车通道 |
+| `docket.ts` | `docketTargets` `issueTitle` `issueBody` `REPO_BACKLOG` `NONE_BACKLOG` `NO_VERDICT_AGE_MS` | [review] 审核单同步+漂移收敛（gh CLI）；flag 目标=可见条目身份级 sec 红旗的刹车通道；REPO_BACKLOG/NONE_BACKLOG=repo-only/无单条聚合哨兵单名，NO_VERDICT_AGE_MS=无裁决老条目的自动开单阈值 |
+| `seed-outcome.ts` | `applySeedOutcomes` `SeedOutcomeIndex` | run.ts per-seed 拒绝码写回 submissions.txt `rejected` 字段（条目落地即清除；catalog run 班内调） |
 | `backfill.ts` | `backfill` | 老条目身份字段一次性修补（createdAt/maintainers/repoId） |
 | `verify/plan.ts` | `verifyTargetOf` `verifyPartsOf` `planTargets` `shard` `targetWeight` `hostStaleVerify` `verifyQueued` `retryable`(re-export) | 验证目标（候选槽语义+git spec+retest+裁决闸）+≤12 目标/片按阶段加权分片（tui/gui/双栖计价；片内双通道） |
 | `verify/retryable.ts` | `retryable` `MAX_FAILED_ATTEMPTS` | V-3 有界重试谓词——纯次数预算 retries<3（独立模块——diagnose 与 plan 共享同一语义不成环） |
-| `verify/verify.ts` | `verifyPackage` `verifyShard` `checkSkillStructure` `checkSkillStructureGit` `checkSkillTgz` `xdgEnv` `writeDummyProvider` `loadedSignal` `apiPluginState` `apiLoaded` `apiFailed` `coerceTarget` `measuredIntegrity` `sweepSandboxProcs` | L1 install + L1.5 lazy-load 验证（API 终态判定+canary 诊断+401/403 harness；git spec/结构检查/tar 成员封顶/integrity 测量/双 lane/无 listening→harness throw/双次沙箱清扫） |
+| `verify/verify.ts` | `verifyPackage` `verifyShard` `checkSkillStructure` `checkSkillStructureGit` `checkSkillTgz` `xdgEnv` `writeDummyProvider` `dummyProviderConfig` `loadedSignal` `apiPluginState` `apiLoaded` `apiFailed` `coerceTarget` `ocVersion` | L1 install + L1.5 lazy-load 验证（API 终态判定+canary 诊断+401/403 harness；git spec/结构检查/tar 成员封顶/integrity 测量（内部 measuredIntegrity）/双 lane/无 listening→harness throw/双次沙箱清扫（内部 sweepSandboxProcs）/宿主版本戳 ocVersion） |
 | `verify/tui.ts` | `checkTui` `judgeTuiPane` | L2 tmux 冒烟 |
 | `verify/gui.ts` | `checkGuiBundle` `findGuiBundle` | L3a jsdom+vm 真渲染 |
 | `verify/merge.ts` | `mergeResults` `VerifyResultFile` | 结果按 version 路由写槽+drift 对照+同字节复用（reuseVerified）+freshness 守卫+文件级容错 |
 | `site/build.ts` | `buildSite` `buildSkillCatalog` `listPage` `detailPage` `skillsPage` `removedPage` `healthGate` `installHint` `isVisible` `scanLabel` `verifyLabel` `approvalBadge` | Pages 站点+HTTP skill catalog（缓存+两段式提取+发布闸门） |
-| `ai/diagnose.ts` | `unreviewedTargets` `candidateHeldAt` `latestShaVerdicts` `reviewMaterial` `contentMaterial` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` `L05_CANARY_*` | L0.5+Ornith 双通道 AI 审（sha/48h/retryable 递延/红旗草稿/budget/force/state 尝试计数+死键修剪/drift 插队+人工键标记/mapPool 限流/熔断/canary 自检/contentRank 物料选取/--health 戳）；system prompt 另要求判断**上架描述质量**——占位符/文不对题/与代码矛盾的描述属 concern 级（代替表单 descEn 校验） |
-| `ai/digest.ts` | `renderDigest` `nextDigestState` | 日报六板块渲染（放行/held/concerns/验证积压/评审积压+最新 AI 裁决心跳/信任信号）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；state 丢失且有历史→fail-closed 拒渲） |
+| `ai/diagnose.ts` | `unreviewedTargets` `candidateHeldAt` `latestShaVerdicts` `reviewMaterial` `contentMaterial` `MATERIAL_BUDGET` `materialPrompt` `l05Score` `ornithReview` `omlxAlive` `makeIntegrityOf` `verdictRecord` `isHarnessFailure` `L05_CANARY_*` | L0.5+Ornith 双通道 AI 审（sha/48h/retryable 递延/红旗草稿/budget/force/state 尝试计数+死键修剪/drift 插队+人工键标记/mapPool 限流/熔断/canary 自检/contentRank 物料选取/--health 戳）；system prompt 另要求判断**上架描述质量**——占位符/文不对题/与代码矛盾的描述属 concern 级（代替表单 descEn 校验） |
+| `ai/digest.ts` | `renderDigest` `nextDigestState` `BOOTSTRAP_WINDOW_MS` | 日报六板块渲染（放行/held/concerns/验证积压/评审积压+最新 AI 裁决心跳/信任信号）+announced 锚点推进（按公告候选=每键最新行∩在押槽位/幽灵键/concern 截断；BOOTSTRAP_WINDOW_MS=14 天首期窗；state 丢失且有历史→fail-closed 拒渲） |
 | `ai/l05_score.py` | — | Galvanize-2 打分器（独立 python 进程；前向分块 64 行防内存峰值） |
 
 ### plugins/market/src/
 
 | 文件 | 关键导出 | 角色 |
 |---|---|---|
-| `catalog.ts` | `fetchIndex` `fetchIndexCached`/`fetchOutcome` `resolveIndexUrl`/`healthUrl`/`skillsUrl` `sha256Hex` `sanitizeIndex` `isVisible` `sortEntries` `search` `pinSpec` `approvedTarballUrl` `fetchPkgVersionMeta` `integrityMatches` `installPlan`/`canInstall` `verMarker`/`hasUpdate` `versionCmp`/`isDowngrade` `siteDetailUrl` `removedReasonLabel` `setCatDict`/`catLabel` `fmtN` `inDays` `scanSkillKeys` `skillInstalledVer` `t`/`tf`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` `MAX_INDEX_BYTES` | 数据面+纯函数层（webview/tui 共用） |
+| `catalog.ts` | `fetchIndex` `fetchIndexCached`/`fetchOutcome` `resolveIndexUrl`/`healthUrl`/`skillsUrl` `sha256Hex` `sanitizeIndex` `isVisible` `sortEntries` `search` `pinSpec` `approvedTarballUrl` `fetchPkgVersionMeta` `integrityMatches` `installPlan`/`canInstall` `verMarker`/`hasUpdate` `versionCmp`/`isDowngrade` `gitPinRef` `halfState`/`halvesToSync` `siteDetailUrl` `removedReasonLabel` `setCatDict`/`catLabel` `fmtN` `inDays` `indexAge` `scanSkillKeys` `skillInstalledVer` `t`/`tf`/i18n `loadState`/`saveState` `appendLog`/`readLog`/`redactLog`/`keyLines` `EMPTY_STATE` `MAX_INDEX_BYTES` `readBodyBounded`/`sha256HexBytes` `assertApprovedPin` `enginesSatisfied` | 数据面+纯函数层（webview/tui 共用；bounded 读+pin 断言+引擎兼容门） |
 | `spec.ts` | `cleanSpec` `dedupeToSpec` `removeSpec` `featuresMap` `buildExtras` | opencode.json plugins[] spec 代数 |
 | `skill-install.ts` | `installSkillTar` `uninstallSkillDir` `globalSkillsRoot` `safeTarRel` `MAX_SKILL_TGZ`/`MAX_SKILL_TAR` | tarball→skills 目录（两段式剥 wrapper/提升/清单/撞名/外来目录拒装） |
-| `hostx.ts` | `assertPkgName` `assertEntryId` `assertSpecForName` `skillId`/`assertSkillId` `readJson`/`strArrayField`/`writeJsonAtomic` `marketLogPath`/`appendBounded` `restrictedEnv` `configPath` `skillsRoot` `writeSkillPermission` | 宿主侧校验+安全原语（npm 名∨owner/repo；原子写+限界日志；env 感知路径） |
+| `hostx.ts` | `assertPkgName` `assertEntryId` `assertSpecForName` `assertUninstallRef` `skillId`/`assertSkillId` `readJson`/`strArrayField`/`writeJsonAtomic` `withConfigLock` `marketLogPath`/`appendBounded` `restrictedEnv` `configPath` `skillsRoot` `writeSkillPermission` `probeActivation` | 宿主侧校验+安全原语（npm 名∨owner/repo；原子写+配置锁+限界日志；env 感知路径；激活探针） |
 | `gui.ts` | default `Plugin.define` | webview UI + 全部 host IPC api |
 | `tui.tsx` | default `Plugin.define` | 终端 UI + 进程内宿主调用 |
 | `server.ts` | — | 插件入口装配（ctx.options.indexUrl 通道） |
