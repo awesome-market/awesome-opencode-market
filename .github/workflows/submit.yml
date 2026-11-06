@@ -567,15 +567,29 @@ jobs:
           VER=""; SHA=""; NOSEED=""
           # bootstrap: no catalog branch = data plane not initialized — say so
           # instead of dying later in catalog-append as a generic "may not
-          # have landed" write failure (concern.yml parity)
-          if ! git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+          # have landed" write failure (concern.yml parity). The exit code
+          # distinguishes causes: 2 = the ref is genuinely absent (fresh
+          # repo); anything else = connectivity — a network blip must not
+          # masquerade as "branch not initialized" (wrong guidance either way)
+          git ls-remote --exit-code origin catalog >/dev/null 2>&1; LSRC=$?
+          if [ "$LSRC" = 2 ]; then
             gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
+            echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$LSRC" != 0 ]; then
+            gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ 暂时无法访问仓库（git ls-remote 失败，网络/GitHub 瞬断）——裁决未写入。稍后重新触发同一命令即可重试。" || true
             echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # --depth=1 + forced tracking-ref refspec: FETCH_HEAD feeds the seed
           # lookup, origin/catalog feeds the verdicts cat-file — both must be
-          # the fresh tip, and the '+' survives a rewritten catalog branch
-          git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' --quiet 2>/dev/null || true
+          # the fresh tip, and the '+' survives a rewritten catalog branch.
+          # The fetch MUST be fatal: `|| true` leaves FETCH_HEAD / origin/catalog
+          # stale-or-absent — the SEED lookup misses live seeds (a pass can
+          # late-ingest over a newer pin with an OLDER review-marker version)
+          # and dedupe reads an EMPTY verdicts file → duplicate/conflicting
+          # lines land. Refuse on staleness, never guess (fail-closed).
+          git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' --quiet 2>/dev/null \
+            || { gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ catalog 分支拉取失败——为避免在过期数据上写裁决，本次未写入。稍后重新触发同一命令即可重试（幂等）。" || true; echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; }
           export SUB_NAME="$NAME" SUB_REPO="$SUBREPO"
           SEED=$(git show FETCH_HEAD:submissions.txt 2>/dev/null | node -e '
             const i=require("fs").readFileSync(0,"utf8")
@@ -639,7 +653,16 @@ jobs:
           # prose, not a cross-target attempt
           if [ -n "$SPEC_TOK" ] && [ -s /tmp/index.json ]; then
             TOKNAME=$(node -e 'const s=process.argv[1];const at=s.lastIndexOf("@");console.log(at>0?s.slice(0,at):s)' "$SPEC_TOK")
-            if [ "${TOKNAME,,}" != "${ENTRY,,}" ] && node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const k=process.argv[1].toLowerCase();process.exit(i.plugins.some(p=>p.name.toLowerCase()===k)?0:1)' "$TOKNAME"; then
+            # name OR repo identity — an 'owner/repo' token can name a real
+            # catalog entry through source.repo (npm twins share the slug).
+            # Only warn when it resolves to a DIFFERENT entry: an arg that
+            # points at this very submission via its own repo path is not a
+            # cross-target attempt.
+            if [ "${TOKNAME,,}" != "${ENTRY,,}" ] && ENTRY="$ENTRY" node -e '
+              const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"))
+              const k=process.argv[1].toLowerCase()
+              const e=i.plugins.find(p=>p.name.toLowerCase()===k||(p.source?.repo??"").toLowerCase()===k)
+              process.exit(e && e.name.toLowerCase()!==(process.env.ENTRY||"").toLowerCase() ? 0 : 1)' "$TOKNAME"; then
               echo "argignored=$SPEC_TOK" >> "$GITHUB_OUTPUT"
             fi
           fi
