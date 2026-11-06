@@ -200,8 +200,11 @@ export async function run(opts: RunOptions = {}) {
           // endpoints; a name+repo seed drops just the bad hint (the npm package
           // still resolves its own packument repo), a repo-only seed is dead.
           const repoNorm = typeof s.repo === 'string' ? normalizeRepoUrl(s.repo) : null
-          if (s.repo != null && !repoNorm && !name) {
-            seedOutcomes.set(String(s.repo).toLowerCase(), 'invalid-repo')
+          if (s.repo != null && !repoNorm) {
+            if (!name) seedOutcomes.set(String(s.repo).toLowerCase(), 'invalid-repo')
+            // name+repo seed: the bad hint drops but the name still ingests —
+            // say so, a silently-lost repo hint is invisible drift otherwise
+            else console.warn(`seed '${name}': repo hint rejected (${String(s.repo).slice(0, 80)}) — name seed still ingested`)
           }
           repo = repoNorm?.toLowerCase() ?? null
           // seed metadata is attacker-adjacent (issue-form fields, editable) —
@@ -1209,7 +1212,7 @@ export async function run(opts: RunOptions = {}) {
     }
   })
   console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +
-    `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.archived} seed-archived, ` +
+    `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.archived} archived-or-fork, ` +
     `${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ${ghStats.truncated} truncated-tree, ` +
     `${ghStats.scanFailed} scan-failed of which ${ghStats.scanOversize} oversize)`)
   if (rateLimitedCalls > 0) {

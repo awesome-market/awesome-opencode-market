@@ -270,7 +270,7 @@ export default Plugin.define({
         // version concern'd inside that window must NOT install (GUI host
         // does the same recheck before its spawn). Cheap when health.json
         // hasn't moved; a real re-pull when it has.
-        try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL), e.name, pin) }
+        try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL, true), e.name, pin) }
         catch { setStatus(t('catalogMoved')); return false }
         const cw = compatWarnOf(e)
         if (cw) setStatus(cw)
@@ -340,7 +340,7 @@ export default Plugin.define({
           // anyway is exactly the bypass assertApprovedPin exists to close
           // (GUI writeSkill refuses the same case). A fetch failure surfaces
           // as its real error instead of silently installing anyway.
-          const freshIdx = await fetchIndexCached(INDEX_URL)
+          const freshIdx = await fetchIndexCached(INDEX_URL, true)
           const fresh = freshIdx?.plugins?.find(x => x.name === e.name)
           if (!fresh) throw new Error(t('catalogMoved'))
           const planNow = installPlan(fresh)

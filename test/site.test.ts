@@ -128,6 +128,31 @@ describe('site honest labels', () => {
     expect(specs).toEqual(['@3', 'sk-empty@1.0.0'])   // sk-nover never reached tarballOf
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
+  it('buildSkillCatalog skips ids that would escape the skills dir', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { execSync } = await import('node:child_process')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      // name '' → id falls back to slug; '../../escape' would rmSync/renameSync outside skills/
+      mk({ name: '', slug: '../../escape', contains: ['skill'], latestVersion: '1' }),
+      // '..' basename — dest would resolve to the skills dir's parent
+      mk({ name: '..', slug: 'dotdot', contains: ['skill'], latestVersion: '1' }),
+      mk({ name: 'sk-ok', contains: ['skill'], latestVersion: '1' }),
+    ], removed: [] }
+    const specs: string[] = []
+    await buildSkillCatalog(idx, out, (n) => { specs.push(n); return `file://${join(src, 's.tgz')}` })
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills).toHaveLength(1)
+    expect(cat.skills[0].name).toBe('sk-ok')
+    // rejected at plan stage — no tarball fetch was even attempted for them
+    expect(specs).toEqual(['sk-ok@1'])
+    expect(existsSync(join(out, 'escape'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
 
 describe('buildSkillCatalog github-kind entries', () => {
   const mkGhTgz = () => {

@@ -1320,7 +1320,7 @@ export default Plugin.define({
           // the renderer's entry can lag the publication by up to TTL — a
           // version concern'd inside that window must NOT install. Health-
           // cheap recheck: a moved manifest sha forces a real re-pull.
-          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl), p.name, spec) }
+          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
           catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           return withConfigLock(() => new Promise<string>((resolve, reject) => {
             const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
@@ -1345,7 +1345,7 @@ export default Plugin.define({
           const clean = cleanSpec(pin)
           // same stale-window guard as install — pin must still equal the
           // catalog-approved spec before spawn/config writes happen
-          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl), p.name, pin) }
+          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, pin) }
           catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
@@ -1417,7 +1417,7 @@ export default Plugin.define({
         // integrity:null to skip the digest.
         writeSkill: async (p: { name: string }) => {
           assertSkillId(p.name)
-          const entry = (await fetchIndexCached(lastIndexUrl))?.plugins?.find(e => e.name === p.name)
+          const entry = (await fetchIndexCached(lastIndexUrl, true))?.plugins?.find(e => e.name === p.name)
           if (!entry) throw new Error(`not in catalog: ${p.name}`)
           const plan = installPlan(entry)
           let url: string

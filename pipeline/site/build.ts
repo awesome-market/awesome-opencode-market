@@ -547,7 +547,11 @@ function npmTarballResolver(): (spec: string) => Promise<string | null> {
     if (!p) {
       p = (async () => {
         try {
-          const u = `${registry}${name.startsWith('@') ? name.replace('/', '%2F') : name}`
+          // encodeURIComponent parity with the client's fetchPkgVersionMeta —
+          // a crafted catalog name containing '/', '?', '..' must not steer
+          // the packument request onto a different registry path (the SRI
+          // gate only covers entries that announce integrity)
+          const u = `${registry}${encodeURIComponent(name)}`
           const r = await fetch(u, { signal: AbortSignal.timeout(20_000), headers: { accept: 'application/json' } })
           return r.ok ? await r.json() : null
         } catch { return null }
@@ -666,6 +670,11 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     const base = baseOf(s.name)
     let id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     while (usedIds.has(id)) id += '-x'                // S-12 deterministic suffix
+    // id becomes a filesystem path under skills/ AND a published catalog
+    // name — name/slug are unconstrained z.string() in the schema, so apply
+    // the same segment guard detail pages get (slugSafe): '..' or a backslash
+    // would let rmSync/renameSync escape the skills dir entirely
+    if (!slugSafe(id)) { console.warn(`[site] skill skipped — unsafe catalog id: ${JSON.stringify(id).slice(0, 120)}`); continue }
     usedIds.add(id)
     // npm cache pins BY BYTES: dist.integrity identifies the exact tarball the
     // catalog approved — a re-tagged same-version release gets a new key and a

@@ -678,9 +678,9 @@ export async function main(
     const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
     const stuck = [...curLabels].find(l => l === 'verdict:pass' || l === 'verdict:concern') ?? null
     const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused })
-    // REST returns body:null for empty bodies — !== undefined lets null
-    // through and .trim() throws, permanently failing the op every tick
-    const bodyDrift = (ex.body ?? '') !== undefined && (ex.body ?? '').trim() !== body.trim()
+    // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
+    // an empty existing body correctly reads as drift against a non-empty one
+    const bodyDrift = (ex.body ?? '').trim() !== body.trim()
     const edit = ['issue', 'edit', '-R', repo, String(ex.number)]
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
