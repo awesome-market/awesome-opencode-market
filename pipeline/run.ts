@@ -1025,6 +1025,12 @@ export async function run(opts: RunOptions = {}) {
       // scan. modifiedAt stores last-seen pushedAt for github-kind entries.
       if (ghPrev && cand.pushedAt && ghPrev.modifiedAt === cand.pushedAt
           && ghPrev.capabilities.rulesetVersion === RULESET_VERSION
+          // a github-kind carry-over with no source.version has no byte
+          // anchor — verify can't pin what was never recorded, and reuse
+          // would preserve the gap forever (pre-anchor legacy rows). Fall
+          // through to the full path once: the rebuilt entry anchors
+          // source.version = the scanned commit and the slot heals.
+          && (ghPrev.source?.kind !== 'github' || !!ghPrev.source.version)
           && !isBlockedAnyCase(cand.fullName, ghPrev.slug)) {
         ghStats.reused++
         reusedNames.add(lower)

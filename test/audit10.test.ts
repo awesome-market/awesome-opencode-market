@@ -340,7 +340,7 @@ describe('run — github identity is case-insensitive', () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-ghcase-'))
     const prev = mkEntry('Owner/Repo', {
       slug: 'owner/repo', discoveredVia: ['github-topic'],
-      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 5 },
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 5, version: 'commitA' },
       latestVersion: null, modifiedAt: '2026-01-10T00:00:00Z',
       verification: { status: 'skipped', level: 'install' },
     })

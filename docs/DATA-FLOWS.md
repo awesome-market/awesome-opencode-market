@@ -564,7 +564,12 @@ plan job（contents:read + harden-runner egress 白名单——不跑不可信�
         不排队——没有可诚实验证的载荷
         github-kind 条目按 `source.repo`/`source.version`（resolvedSha）
         出 git spec 目标——plugin add owner/repo#sha 与 codeload 结构
-        检查两路都可实测；无可装部件或旗标在身的仍 skipped
+        检查两路都可实测；无可装部件或旗标在身的仍 skipped。
+        缺 source.version 的条目（收录早于锚点字段的存量行）不出目标——
+        裸 `plugin add owner/repo` 测的是验证时刻的 HEAD，既不是扫描钉住
+        的字节、结果也没有 integrity 供 merge drift 对照；宁可留在
+        unverified 等 run.ts 复用闸回填锚点（见 §1），也不把未审字节
+        认证成 verified
         → shard 加权贪心 12/组（片内双通道并行，每通道 ~6 目标——
           墙钟与旧 8 目标串行相当，吞吐 ×2）；顺序切片会把 submission
           优先层和 feature 重的目标全挤进头部片；现按实际多跑的阶段
@@ -655,7 +660,9 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
           沙箱模式下移到 `npx tsx gui.ts` nobody 子进程——vm 逃逸只拿 nobody；
           git spec 安装落 `git-<slug>-<sha256(spec):12>` 缓存目录，包目录
           按 node_modules 里带 gui export 的包定位——repo 名 ≠ 包名时
-          不瞎报"装不上"）
+          不瞎报"装不上"；入口文件 >8MB 直接判 failed/render——上游没有
+          单文件上限，巨型 bundle 能把 vm.Script 编译（compile 无超时窗）
+          或内存拖死整条 shard，带着邻目标陪葬）
         双栖补验：parts 同时含 plugin+skill → 插件链过后再跑一遍
           checkSkillStructure——技能半边载荷坏（SKILL.md 缺/frontmatter 残）
           → failed，level 记插件链最深通过级，excerpt 注明"plugin half passed"

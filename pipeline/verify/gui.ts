@@ -11,7 +11,7 @@
  *  Whitelisted requires: @opencode/plugin/gui (stub), effect, solid-js* (real,
  *  renderer-side modules the host provides). Anything else → load failure. */
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
@@ -41,6 +41,12 @@ const HOST_GLOBALS = [
 
 const EVAL_TIMEOUT = 5_000
 const STAGE_TIMEOUT = 8_000
+/** Untrusted bundle size bound: nothing upstream caps an individual gui
+ *  entrypoint — a multi-MB file can hang `new vm.Script` compilation (the
+ *  eval timeout only covers runInContext, not compile) or OOM the shard.
+ *  Real gui bundles are far smaller; refuse honestly instead of dying
+ *  mid-shard and taking the lane's remaining targets with it. */
+const GUI_BUNDLE_MAX = 8 * 1024 * 1024
 
 /** Reject if `p` doesn't settle within `ms` — bounds async hangs inside
  *  untrusted setup()/render() (sync loops are already bound by the vm timeout). */
@@ -273,6 +279,10 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
   if (!rel) return { error: `gui export ${guiKey} has no file target` }
   const file = join(pkgDir, rel)
   if (!existsSync(file)) return { error: `gui entrypoint missing: ${rel}` }
+  const bytes = statSync(file).size
+  if (bytes > GUI_BUNDLE_MAX) {
+    return { error: `gui entrypoint too large to evaluate (${bytes} bytes > ${GUI_BUNDLE_MAX}-byte cap)` }
+  }
   return { path: file, src: readFileSync(file, 'utf8') }
 }
 

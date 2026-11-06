@@ -252,7 +252,7 @@ describe('github-kind hardening', () => {
     let codeloadHits = 0
     const f = ghBase(
       url => url.includes('/git/trees/')
-        ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }] }))
+        ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }], sha: 'commitA' }))
         : null,
       () => { codeloadHits++; return new Response('', { status: 200, headers: { 'content-length': '70000000' } }) },
     )

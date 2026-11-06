@@ -186,6 +186,57 @@ describe('N-5/N-7: refreshMeta repo refresh + coveredRepos exemption', () => {
     expect(gh.metrics.stars).toBe(99)           // ghWorker reuse path refreshed metrics, not frozen
     expect(gh.metrics.checkedAt).toBe('2026-03-05T00:00:00Z')
   })
+  it('github carry-over WITHOUT source.version skips reuse — full path backfills the byte anchor', async () => {
+    // pre-anchor legacy rows (admitted before source.version existed) matched
+    // every reuse condition yet kept the gap forever: verify can't pin what
+    // was never recorded. The reuse gate must fall through once so the
+    // rebuilt entry anchors source.version = the scanned commit.
+    const dir = mkdtempSync(join(tmpdir(), 'n-anchor-'))
+    const prev = ghEntry('o/legacy', 'unused', {
+      approval: 'approved', modifiedAt: 'samepush',
+      source: { kind: 'github', id: 'o/legacy', repo: 'o/legacy' },   // no version
+    })
+    const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
+    const tgz = mkTgz({ 'package.json': '{"name":"x"}', '.opencode/plugin/i.js': 'x' })
+    const treeHit: string[] = []
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [{ full_name: 'o/legacy', description: '', archived: false, fork: false, pushed_at: 'samepush', stargazers_count: 5, default_branch: 'main', topics: ['opencode-plugin'], id: 8, created_at: '2020-01-01' }] })
+      if (url.includes('/git/trees/')) { treeHit.push(url); return mkRes({ tree: [{ path: '.opencode/plugin/i.js' }, { path: 'package.json' }], sha: 'commitB' }) }
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(tgz))
+      if (url.includes('raw.githubusercontent.com')) return mkRes({}, 404)
+      if (url.includes('api.github.com/repos/')) return mkRes({ id: 8, full_name: 'o/legacy', pushed_at: 'samepush', created_at: '2020-01-01', archived: false })
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-03-05T00:00:00Z' })
+    const e = idx.plugins.find(p => p.name === 'o/legacy')!
+    expect(treeHit.length).toBeGreaterThan(0)        // reuse was bypassed — tree fetched
+    expect(e.source.version).toBe('commitB')         // anchor = the scanned commit
+    expect(e.approval).toBe('approved')              // review state survives the rebuild
+  })
+  it('github carry-over WITH source.version still takes the cheap reuse path', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'n-reuse-'))
+    const prev = ghEntry('o/anchored', 'commitA', { approval: 'approved', modifiedAt: 'samepush' })
+    const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
+    const treeHit: string[] = []
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [{ full_name: 'o/anchored', description: '', archived: false, fork: false, pushed_at: 'samepush', stargazers_count: 5, default_branch: 'main', topics: ['opencode-plugin'], id: 9, created_at: '2020-01-01' }] })
+      if (url.includes('/git/trees/')) { treeHit.push(url); return mkRes({ tree: [], sha: 'commitA' }) }
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(mkTgz({ 'package.json': '{}' })))
+      if (url.includes('raw.githubusercontent.com')) return mkRes({}, 404)
+      if (url.includes('api.github.com/repos/')) return mkRes({ id: 9, full_name: 'o/anchored', pushed_at: 'samepush' })
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-03-05T00:00:00Z' })
+    const e = idx.plugins.find(p => p.name === 'o/anchored')!
+    expect(treeHit).toHaveLength(0)                  // reuse held — no tree fetch
+    expect(e.source.version).toBe('commitA')
+  })
 })
 
 describe('N-4: bounded interpolation of attacker-controlled finding values', () => {

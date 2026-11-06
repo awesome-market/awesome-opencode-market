@@ -926,15 +926,29 @@ describe('remaining verify/plan/merge edge branches', () => {
     expect(planTargets(idx([e]))).toEqual([])
     expect(planTargets(idx([e]), 48, true)).toEqual([])   // retest too
   })
-  it('verifyTargetOf github fallback: missing source.repo → id; missing version → no sha', () => {
+  it('verifyTargetOf github fallback: missing source.repo → id; missing version → NO target', () => {
+    // an unanchored github entry (no source.version) must not emit a git
+    // spec at all — `plugin add owner/repo` would measure whatever HEAD is
+    // at verify time, bytes the scan never pinned, and the result carries
+    // no integrity for merge's drift check. The slot stays honestly
+    // unverified until run.ts's reuse gate backfills the anchor.
     const e = entry({
       latestVersion: null,
       source: { kind: 'github', id: 'o/r' } as PluginEntry['source'],
       verification: verf('unverified'),
     })
     const t = verifyTargetOf(e)
-    expect(t.git).toEqual({ repo: 'o/r' })
+    expect(t.git).toBeUndefined()
     expect(t.version).toBeNull()
+    expect(verifyQueued(e)).toBe(false)
+    expect(planTargets(idx([e]))).toEqual([])
+    // repo-only fallback still applies when the anchor IS present
+    const anchored = entry({
+      latestVersion: null,
+      source: { kind: 'github', id: 'o/r', version: 'abc123' } as PluginEntry['source'],
+      verification: verf('unverified'),
+    })
+    expect(verifyTargetOf(anchored).git).toEqual({ repo: 'o/r', sha: 'abc123' })
   })
   it('hostStaleVerify: github-kind slot invalidated by a host bump re-queues', () => {
     const e = entry({

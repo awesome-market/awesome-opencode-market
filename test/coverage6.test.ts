@@ -2,7 +2,7 @@
  *  checkTui, verifyPackage feature routes, fetch/github+npm uncovered arms,
  *  run.ts reuse/hold/gone-check branches. */
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -509,6 +509,16 @@ describe('verify/gui remaining branches', () => {
     const h3 = tmp('fg3-')
     mkdirSync(join(h3, 'cache', 'opencode', 'npm', 'other@1', '1'), { recursive: true })
     expect(findGuiBundle(h3, 'pkg')).toMatchObject({ error: expect.stringContaining('not found') })
+  })
+  it('findGuiBundle: oversize gui entrypoint refused before read (shard OOM guard)', () => {
+    const h = tmp('fg-big-')
+    const dir = join(h, 'cache', 'opencode', 'npm', 'pkg@9', '1', 'node_modules', 'pkg')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui': './g.js' } }))
+    const g = join(dir, 'g.js')
+    writeFileSync(g, 'x')
+    truncateSync(g, 8 * 1024 * 1024 + 1)   // sparse — statSync sees the cap breach
+    expect(findGuiBundle(h, 'pkg')).toMatchObject({ error: expect.stringContaining('too large') })
   })
 })
 

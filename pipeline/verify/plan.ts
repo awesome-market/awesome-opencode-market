@@ -21,10 +21,14 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: 
     version,
     // github-kind target: `plugin add owner/repo#<sha>` pins the REVIEWED
     // commit (source.version = the tree sha the pipeline scanned) — verifying
-    // HEAD would measure bytes the scan never saw. source.repo is the
-    // canonical-cased fullName; id is the entry-name fallback.
-    ...(e.source.kind === 'github'
-      ? { git: { repo: e.source.repo ?? e.source.id, ...(e.source.version ? { sha: e.source.version } : {}) } }
+    // HEAD would measure bytes the scan never saw, and the result carries no
+    // integrity anchor for merge's drift check to hold it to. source.repo is
+    // the canonical-cased fullName; id is the entry-name fallback. A github
+    // entry WITHOUT source.version (pre-anchor legacy rows — run.ts's reuse
+    // gate backfills them) has no pinned bytes to measure: emit no target at
+    // all rather than certify an unanchored HEAD install as 'verified'.
+    ...(e.source.kind === 'github' && e.source.version
+      ? { git: { repo: e.source.repo ?? e.source.id, sha: e.source.version } }
       : {}),
     unverified: verification.status === 'unverified',
     flagged: caps.redFlags.length > 0,
