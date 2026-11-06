@@ -330,7 +330,7 @@ describe('reviewMaterial', () => {
       pendingUpdate: { version: '2.0', capabilities: { scannedAt: 't', findings: ['uses http'], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' },
     }))
     expect(m.some(x => x.id === 'manifest')).toBe(true)
-    expect(m.some(x => x.id === 'finding:uses http')).toBe(true)
+    expect(m.some(x => x.id.startsWith('finding:0:uses http'))).toBe(true) // id = index + 80-char prefix, not full text
     expect(m.some(x => x.id === 'pending')).toBe(true)
   })
   it('verdictRecord pins pendingUpdate.version', () => {

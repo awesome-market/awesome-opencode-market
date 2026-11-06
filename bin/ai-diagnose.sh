@@ -12,8 +12,11 @@
 # - $CAT 是独立的 catalog 分支 checkout,与 REPO/CODE/其他 writer 互不共享。
 # - 远端 URL 优先取 MARKET_GIT_URL —— launchd 的 TCC 可能读不到外置卷上的
 #   REPO,而克隆目标都在系统卷,整个任务可完全不依赖开发 checkout。
-# - 每轮写 $HEALTHF(机器可读健康戳),digest §⑤ 用来看"本机诊断活着没有"——
-#   ai-verdicts.jsonl 有多个写入者,文件新鲜度证明不了 diagnose 在跑。
+# - 每轮写 $HEALTHF(机器可读健康戳 {at,wrote,l05,omlx,pushed}),状态翻转或
+#   每 24h 经 publish_health 落到 catalog 分支 diagnose-health.json——CI 的
+#   watchdog 第五腿与 digest §⑤ 消费它,区分"活着且健康"与"活着但 L0.5/LLM
+#   降级"(ai-verdicts.jsonl 有多个写入者,文件新鲜度证明不了 diagnose 在跑,
+#   verdict commit 年龄也看不见"活着但通道受损")。
 set -uo pipefail
 
 REPO=${MARKET_REPO:-/Volumes/2t/code/opencode-market}
@@ -41,6 +44,65 @@ try { h = JSON.parse(readFileSync(process.env.HF!, "utf8")) } catch {}
 h[process.env.K!] = process.env.V!
 writeFileSync(process.env.HF!, JSON.stringify(h) + "\n")
 ' 2>/dev/null) || true
+}
+
+# publish the health stamp to the catalog branch — the local $HEALTHF is
+# invisible to CI, so without this the watchdog/digest can never tell
+# "worker alive + L0.5/LLM degraded" apart from "worker alive + healthy"
+# (verdict commits prove a run happened; only this stamp carries l05/omlx).
+# Publishes on signal change (l05/omlx/pushed/wrote-nonzero) or as a 24h
+# heartbeat so the stamp's freshness check keeps working. Advisory: any
+# failure retries on the next transition — a dead push path is already
+# covered by the verdict-spool leg. Uses `git -C` everywhere so the caller's
+# cwd ($CODE for the schema gate) is never disturbed.
+HEALTH_PUB=$STATED/diagnose-health.published.json
+publish_health() {
+  [ -f "$HEALTHF" ] || return 0
+  # freshness guard: only stamps from a run in the last 2h may publish —
+  # a dead worker's stale file must not keep masquerading as live state
+  python3 - "$HEALTHF" >/dev/null 2>&1 <<'PY' || return 0
+import json,sys,datetime
+h=json.load(open(sys.argv[1]))
+at=datetime.datetime.fromisoformat(str(h.get('at','')).replace('Z','+00:00'))
+sys.exit(0 if (datetime.datetime.now(datetime.timezone.utc)-at).total_seconds()<7200 else 1)
+PY
+  DECIDE=$(python3 - "$HEALTHF" "$HEALTH_PUB" 2>/dev/null <<'PY' || echo 0
+import json,sys,datetime
+try:
+    h=json.load(open(sys.argv[1]))
+    sig={'l05':h.get('l05'),'omlx':h.get('omlx'),'pushed':h.get('pushed'),'wrote':int(h.get('wrote',0))>0}
+    try:
+        p=json.load(open(sys.argv[2]))
+        same=all(p.get(k)==v for k,v in sig.items())
+        age=(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(str(p.get('publishedAt','')).replace('Z','+00:00'))).total_seconds()
+        print(0 if (same and age<86400) else 1)
+    except Exception:
+        print(1)
+except Exception:
+    print(0)
+PY
+)
+  [ "$DECIDE" = 1 ] || return 0
+  local ok=0
+  for i in 1 2 3; do
+    git -C "$CAT" fetch origin catalog -q && git -C "$CAT" reset --hard origin/catalog -q || { sleep 3; continue; }
+    # write the stamp AFTER reset — the file is tracked once published, so
+    # reset --hard restores the OLD version and would wipe a pre-loop write
+    # (first publish escaped this only because the file was still untracked)
+    python3 - "$HEALTHF" "$CAT/diagnose-health.json" >/dev/null 2>&1 <<'PY' || { sleep 3; continue; }
+import json,sys,datetime
+h=json.load(open(sys.argv[1]))
+h['publishedAt']=datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z')
+json.dump(h,open(sys.argv[2],'w'))
+PY
+    git -C "$CAT" add diagnose-health.json
+    # identical stamp already on the branch → nothing to do but record it
+    git -C "$CAT" diff --cached --quiet && { ok=1; break; }
+    git -C "$CAT" commit -qm "diagnose: health $(date -u +%FT%TZ)" \
+      && git -C "$CAT" push -q origin catalog && { ok=1; break; }
+    sleep 3
+  done
+  [ "$ok" = 1 ] && cp "$CAT/diagnose-health.json" "$HEALTH_PUB" 2>/dev/null || true
 }
 
 # pause|resume —— 先处理开关再进正常流程:翻转"声明暂停"只需要 git,不该
@@ -114,8 +176,14 @@ ENVF=$HOME/.config/opencode-market/ai.env
 bash -n "$ENVF" 2>/dev/null || { log "$ENVF has shell syntax errors — refusing to source it"; exit 1; }
 set -a; . "$ENVF"; set +a
 # HF_HOME only when the dir actually exists — pointing at a missing/external
-# path makes the L0.5 model load fail silently inside the python subprocess
-[ -d /Volumes/2t/huggingface_tmp ] && export HF_HOME=/Volumes/2t/huggingface_tmp
+# path makes the L0.5 model load fail silently inside the python subprocess.
+# Say so loudly: an unmounted cache volume silently downgrades every run to
+# LLM-only review and the health stamp is the only place that shows it.
+if [ -d /Volumes/2t/huggingface_tmp ]; then
+  export HF_HOME=/Volumes/2t/huggingface_tmp
+else
+  log "HF cache /Volumes/2t/huggingface_tmp missing (volume unmounted?) — L0.5 injection screen will fail this run"
+fi
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # clone/push 只用远端 URL —— 本地路径 clone 的 origin 指向本地 repo,
@@ -203,6 +271,11 @@ npx tsx pipeline/ai/diagnose.ts \
   ${DIAGNOSE_NAME:+--name "$DIAGNOSE_NAME"} $FARG \
   || exit $?
 
+# health stamp → catalog branch (transition/24h gated, advisory). CI's
+# watchdog leg 5 and digest §⑤ read it there — the local file alone is
+# invisible to them, and verdict commits can't express "alive but degraded"
+publish_health
+
 # push payload = this run's verdicts ∪ unreplayed spool — an empty TMPV no
 # longer short-circuits when the spool still has lines waiting to land
 sort -u "$TMPV" "$SPOOL" > "$PAY" 2>/dev/null || cp "$TMPV" "$PAY"
@@ -210,7 +283,9 @@ sort -u "$TMPV" "$SPOOL" > "$PAY" 2>/dev/null || cp "$TMPV" "$PAY"
 # schema-gate the payload before it reaches the append-only audit file — a
 # hand-edited or disk-corrupted spool line would otherwise land verbatim on
 # the branch (downstream parsers skip it, but the file stays dirty forever).
-# Validation failure ≠ push failure: proceed unfiltered rather than drop.
+# Malformed LINES are dropped inside the gate; a nonzero exit means the gate
+# itself crashed (tsx/schema import) — either way we proceed unfiltered
+# rather than drop the whole payload: validation failure ≠ push failure.
 PAY="$PAY" npx tsx -e '
 import { AiVerdict } from "./src/schema.ts"
 import { readFileSync, writeFileSync } from "node:fs"
@@ -219,7 +294,7 @@ const lines = readFileSync(p, "utf8").split("\n").filter(Boolean)
 let bad = 0
 const ok = lines.filter(l => { try { AiVerdict.parse(JSON.parse(l)); return true } catch { bad++; return false } })
 if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileSync(p, ok.join("\n") + (ok.length ? "\n" : "")) }
-' || log "payload schema check failed — pushing unfiltered"
+' || log "payload schema gate failed to run — pushing unfiltered"
 
 [ -s "$PAY" ] || { log "no new verdicts"; exit 0; }
 

@@ -808,17 +808,31 @@ ai-diagnose.sh 壳：env 检查（bash -n 预检）→ mkdir 原子锁（防 lau
       + verify（装测状态+日志摘录）+ prev-findings（展示版 delta 对照）
       + **content:\***（§5/§6 真包内容——contentMaterial 拉该版本 tarball，
         取 package.json + 全部 .md/.txt（SKILL.md/AGENTS.md/指令文档正是
-        prompt-injection 主攻面）；≤8 文件 × ≤12KB，二进制跳过，fetch 失败
-        降级为纯元数据评审——内容缺失绝不阻塞；块同时进 L0.5 打分。
-        **选取按 contentRank 优先级而非归档顺序**——tarball 全量解析后
-        按 指令文件>manifest>readme>其他 md、浅层优先 选 8 个；
+        prompt-injection 主攻面）；**按字节预算而非文件数上限**——
+        ≤384 成员 × 单文件 ≤32KB 整存、超出存 首16KB+尾8KB、候选总量
+        ≤384KB 按 contentRank 序填充、溢出文件给 ≤2KB 首尾 stub（≤128 个）、
+        再溢出由 content-coverage 块**显式披露**未覆盖数——任何文件不再
+        静默消失（审计 A-1：旧"前 8 名额"可被 8 个同 rank 良性诱饵文件名
+        排序挤掉恶意 SKILL.md；审计 A-2：旧 12KB 头截断让尾部注入对
+        LLM/L0.5 双双隐形）。二进制跳过，fetch 失败降级为纯元数据评审
+        ——内容缺失绝不阻塞；**每个入选文件都进 L0.5 打分**（rank 只决定
+        预算填充顺序与 prompt 顺序，不再决定谁被排除）。
+        **选取按 contentRank 优先级排序**——tarball 全量解析后
+        按 指令文件>manifest>readme>其他 md、浅层优先；
         旧的流式取前 8 会被排序投毒绕过（前 8 个无害 md 顶掉第 9 位的
         恶意指令文件永远不进 LLM 视野））
     materialPrompt 总预算 32KB（D-15：500 findings × ≤4KB 曾能顶出 ~2MB
-      prompt——上下文溢出被误记"工具故障"；溢出块折成 [material truncated]）
+      prompt——上下文溢出被误记"工具故障"；溢出块折成 [material truncated]）。
+      content 块给 LLM 的是 首2KB+尾2KB 采样（中段省略标记）——与 L0.5
+      的分窗覆盖互补：LLM 看到两端语义，L0.5 看到全 token 流
     L0.5（Galvanize-2）**每轮一次** python 调用批量打分（spawn 带 5min
       timeout——模型加载卡死不能挂住 runner+锁，D-13；python 侧前向
       分块 64 行防内存峰值）
+      **分窗打分**：tokenizer 关内建截断（no_truncation）后整流编码，
+      按 512 token 窗、stride 448 重叠切分（每文件最多 30 头窗+10 尾窗、
+      全局 ≤6000 窗预算），逐窗打分后**按物料项 max-pool**——深层/中段
+      注入不再躲在前 512 token 之后（审计实测：深埋 payload 旧实现 0.159
+      → 分窗 0.946）；预算耗尽未打分的项保持"无分"而非"良性"
       （复合 id `name\0block` 拆回；meta/verify 纯机器串块不打分——
         off-distribution 路径串实测出 0.694 FP）
       **canary 自检**：批次混入两个已知标签块（良性样例+经典注入样例，
@@ -854,7 +868,12 @@ ai-diagnose.sh 壳：env 检查（bash -n 预检）→ mkdir 原子锁（防 lau
     不再回带——状态文件不再缓慢泄漏）
   --health 戳：{at,wrote,l05,omlx}——l05:ok/failed/untrusted/skipped、
     omlx:up/down/died-mid-run/unused；壳在推送后并入 pushed 字段；
-    让"本机诊断还活着吗"有个文件新鲜度之外的诚实信号
+    壳侧 publish_health 在状态翻转或 24h 心跳时把戳提交到 catalog 分支
+    diagnose-health.json（≤2h 新鲜戳才发布；git -C 操作不扰 cwd）——
+    **真实消费者**：watchdog 第五腿（digest.yml，fresh 戳 + l05/omlx
+    降级 → pipeline-alert）与 digest §⑤（同谓词加注"降级运行中"）。
+    verdict commit 年龄只能证明"跑过"，看不见"活着但通道受损"——
+    l05 挂了照样出判词、omlx 挂了走机械兜底，这正是该戳存在的理由
   verdicts → mktemp 文件 → AiVerdict schema 校验丢畸形行（spool 被手改/
     盘坏的行不原样落 append-only 审计文件——校验失败不等于推送失败，
     不过滤照推）→ 推送循环 ×4：

@@ -35,6 +35,11 @@ export interface DigestInput {
   /** catalog-branch diagnose.paused — the local AI queue is stopped on
    *  PURPOSE; surfaces say "declared pause", not "looks dead" */
   paused?: boolean
+  /** catalog-branch diagnose-health.json — the local worker's self-reported
+   *  l05/omlx state. Only meaningful while `at` is fresh (<48h): a stale
+   *  stamp means the worker is dead, which §⑤'s verdict-heartbeat already
+   *  covers. Degraded-but-alive is the gap this closes. */
+  health?: { at?: string | undefined; l05?: string | undefined; omlx?: string | undefined } | null
   /** malformed jsonl lines dropped at load (loadVerdicts sink) — surfaced in
    *  the header so a truncated/merge-artifact line is visible to the reader,
    *  not only in a CI warn log nobody watches */
@@ -136,7 +141,7 @@ function repoUrl(): string {
   }
 }
 
-export function renderDigest({ index, verdicts, prev, now, paused = false, badLines = 0 }: DigestInput): string {
+export function renderDigest({ index, verdicts, prev, now, paused = false, health = null, badLines = 0 }: DigestInput): string {
   const day = now.toISOString().slice(0, 10)
   const nowIso = now.toISOString()
 
@@ -276,6 +281,23 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
     .map(v => Date.parse(v.at))
     .filter(Number.isFinite)
     .reduce((a, b) => Math.max(a, b), 0)
+
+  // worker self-report (catalog diagnose-health.json, published by
+  // bin/ai-diagnose.sh on state transitions): verdict commits prove a run
+  // happened but can't express "alive with a degraded channel" — l05 dead
+  // still emits verdicts, omlx down still writes mechanical fallbacks.
+  // Only a FRESH stamp (<48h) counts: stale = dead worker, already covered
+  // by the verdict-heartbeat marker above.
+  const healthAt = health?.at ? Date.parse(health.at) : NaN
+  const healthFresh = Number.isFinite(healthAt) && now.getTime() - healthAt < 48 * 3_600_000
+  const degraded: string[] = []
+  if (healthFresh && !paused) {
+    if (health?.l05 === 'failed' || health?.l05 === 'untrusted') degraded.push(`L0.5=${health.l05}`)
+    if (health?.omlx === 'down' || health?.omlx === 'died-mid-run') degraded.push(`omlx=${health.omlx}`)
+  }
+  const healthNote = degraded.length
+    ? ` / ⚠️ 本机诊断降级运行中（${degraded.join('、')}）——裁决仍在产出但通道受损，检查本机 L0.5 模型缓存与 omlx 服务`
+    : ''
 
   // §⑥ live-entry trust alarms — identity-level sec:* redFlags on a VISIBLE
   // entry (repojack / name-reuse / version-rollback). §②'s held filter
@@ -433,7 +455,7 @@ ${concerns.length || resolved.length ? table([...concerns, ...resolved]) : '_无
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
-- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${paused ? ' ⏸️ 本地诊断已声明暂停（catalog 分支 `diagnose.paused`，恢复：`bin/ai-diagnose.sh resume`）' : pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}
+- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${paused ? ' ⏸️ 本地诊断已声明暂停（catalog 分支 `diagnose.paused`，恢复：`bin/ai-diagnose.sh resume`）' : pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}${healthNote}
 
 ## ⑥ 已上架条目信任信号（identity-level sec flags — ${liveAlarms.length}）
 
@@ -470,6 +492,13 @@ export async function main(args: string[] = process.argv): Promise<void> {
   // diagnose.paused = the local AI queue is declared stopped — say so in §⑤
   // instead of letting the backlog read like an undiagnosed stall
   const paused = existsSync(join(outDir, 'diagnose.paused'))
+  // worker self-report — absent on catalogs published before the health
+  // leg existed; a corrupt file must not kill the digest (it's advisory)
+  let health: DigestInput['health'] = null
+  try {
+    const h = JSON.parse(readFileSync(join(outDir, 'diagnose-health.json'), 'utf8')) as Record<string, unknown>
+    health = { at: typeof h.at === 'string' ? h.at : undefined, l05: typeof h.l05 === 'string' ? h.l05 : undefined, omlx: typeof h.omlx === 'string' ? h.omlx : undefined }
+  } catch { /* no stamp yet — fine */ }
 
   // state LOSS ≠ bootstrap: prev=null with digests already published means
   // digest-state.json vanished or went corrupt. Rendering on would announce
@@ -485,7 +514,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
       throw new Error(`digest-state.json missing/corrupt but digest/*.md exists — refusing to re-announce everything. Restore digest-state.json (or rebuild it from ai-verdicts.jsonl) and rerun.`)
   }
 
-  const md = renderDigest({ index, verdicts, prev, now, paused, badLines: sink.bad })
+  const md = renderDigest({ index, verdicts, prev, now, paused, health, badLines: sink.bad })
   const day = now.toISOString().slice(0, 10)
   const digestPath = join(outDir, 'digest', `${day}.md`)
   const next = nextDigestState(verdicts, prev, now, index)
