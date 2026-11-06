@@ -105,7 +105,11 @@ export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains
   // an explicit contains field — including [] — is authoritative: []
   // means "no installable payload" and must NOT fall back to type-inferred
   // parts (skill-only npm packages would re-enter the plugin verify chain)
-  const c = e.pendingUpdate?.contains ?? e.contains
+  // Mirror verifyTargetOf's slot rule: on a PENDING entry the candidate is
+  // the entry itself — a leftover pendingUpdate is the B3 inverted state
+  // (dropped by the R-9 cleanup) whose parts describe bytes not under review.
+  const slot = e.approval === 'pending' ? null : e.pendingUpdate ?? null
+  const c = slot?.contains ?? e.contains
   return c !== undefined ? c : [e.type === 'skill' ? 'skill' : 'plugin']
 }
 
@@ -193,7 +197,10 @@ export const targetWeight = (t: VerifyTarget): number =>
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, outDir, verdictsPath] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
-  const cap = Number(process.env.VERIFY_CAP) || 48
+  // a negative/zero cap would slice(0,-N) — verify nearly the whole queue
+  // instead of none; only a positive integer is an operator cap
+  const capNum = Number(process.env.VERIFY_CAP)
+  const cap = Number.isFinite(capNum) && capNum > 0 ? Math.floor(capNum) : 48
   // optional verdict feed — a condemned slot isn't worth a shard measuring it.
   // Absent (local runs) the queue just doesn't apply the verdict filter.
   const verdicts = verdictsPath ? loadVerdicts(verdictsPath) : []

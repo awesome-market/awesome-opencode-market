@@ -278,9 +278,12 @@ describe('planTargets retest mode + residual small branches', () => {
     const targets = planTargets(mkIdx([noparts, skillOnly]), 48, true)   // retest=true
     expect(targets.every(t => t.name !== 'np')).toBe(true)
     expect(targets.some(t => t.name === 'sk')).toBe(true)
-    // verifyPartsOf: pendingUpdate.contains wins over entry.contains
+    // verifyPartsOf: on an APPROVED entry pendingUpdate.contains wins over
+    // entry.contains — the hold IS the candidate under review there. (On a
+    // PENDING entry the slot rule makes the entry itself the candidate, so
+    // a leftover hold's parts must NOT win — audit-verify-r3.test.ts.)
     const held = mkEntry('h', {
-      contains: ['plugin'] as never, approval: 'pending',
+      contains: ['plugin'] as never, approval: 'approved',
       pendingUpdate: { version: '2.0.0', heldAt: 't', reason: 'r', contains: ['skill'] as never,
         capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never,
     })
