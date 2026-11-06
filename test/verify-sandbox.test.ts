@@ -406,7 +406,7 @@ describe('shard-level hoists and boundaries', () => {
 
   it('VerifyResultFile drops malformed artifact rows at the merge boundary', async () => {
     const { VerifyResultFile } = await import('../pipeline/verify/merge.ts')
-    const ok = { name: 'p', status: 'verified', level: 'load', opencodeVersion: 'x', verifiedAt: 't' }
+    const ok = { name: 'p', status: 'verified', level: 'load', opencodeVersion: 'x', verifiedAt: '2026-01-02T00:00:00Z' }
     expect(VerifyResultFile.safeParse(ok).success).toBe(true)
     // the poison case: a status string that would hard-fail CatalogIndex.parse
     // downstream if it ever reached verification.status

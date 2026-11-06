@@ -10,6 +10,7 @@
  *    contribution factory → { render(): HTMLElement }
  *  Whitelisted requires: @opencode/plugin/gui (stub), effect, solid-js* (real,
  *  renderer-side modules the host provides). Anything else → load failure. */
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import vm from 'node:vm'
@@ -195,24 +196,66 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
   }
 }
 
+/** opencode's npm-cache key for a git spec — mirrors the host's install
+ *  layout (util/npm.ts `key()`): `git-<basename>-<sha256(spec).hex[0:12]>`.
+ *  Compute it so `plugin add owner/repo#sha` installs are found — the
+ *  name@version dirs only ever cover registry specs. */
+function gitSpecDir(spec: string): string {
+  let target = spec.split('#')[0] ?? spec
+  try { target = decodeURIComponent(target) } catch { /* keep raw */ }
+  const slug = target.replace(/\.git$/i, '').split(/[/:\\]/).at(-1)
+    ?.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'repository'
+  return `git-${slug}-${createHash('sha256').update(spec).digest('hex').slice(0, 12)}`
+}
+
+/** Under an installed tree's node_modules, find packages carrying a gui
+ *  export — a git install nests under the package's OWN package.json name,
+ *  which needn't equal the repo name the entry is catalogued under. */
+function scanForGuiPackage(nm: string): string[] {
+  if (!existsSync(nm)) return []
+  const roots: string[] = []
+  for (const top of readdirSync(nm)) {
+    if (top.startsWith('.')) continue
+    if (top.startsWith('@')) for (const s of readdirSync(join(nm, top))) roots.push(join(top, s))
+    else roots.push(top)
+  }
+  return roots.filter(r => {
+    try {
+      const pj = JSON.parse(readFileSync(join(nm, r, 'package.json'), 'utf8')) as { exports?: Record<string, unknown> }
+      return Object.keys(pj.exports ?? {}).some(k => /gui/.test(k))
+    } catch { return false }
+  }).map(r => join(nm, r))
+}
+
 /** Locate the installed package dir under XDG_CACHE_HOME/opencode/npm and read
- *  its gui entrypoint (package.json exports key matching /gui/). */
-export function findGuiBundle(home: string, name: string): { path: string; src: string } | { error: string } {
+ *  its gui entrypoint (package.json exports key matching /gui/). `spec` is
+ *  the install spec actually given to `plugin add` — for git targets the
+ *  cache dir keys on it, not on the entry name. */
+export function findGuiBundle(home: string, name: string, spec?: string): { path: string; src: string } | { error: string } {
   const npmRoot = join(home, 'cache', 'opencode', 'npm')
   if (!existsSync(npmRoot)) return { error: `no plugin cache at ${npmRoot}` }
   // spec dirs are named by the bare package segment — a scoped '@s/p@ver'
   // spec dir can't exist ('/' isn't a valid path segment), it's 'p@ver'
   const norm = name.split('/').pop() ?? name
+  const gitDir = spec ? gitSpecDir(spec) : null
   let pkgDir: string | null = null
-  for (const spec of readdirSync(npmRoot)) {
-    if (!spec.startsWith(`${name}@`) && !spec.startsWith(`${norm}@`)) continue
-    for (const ts of readdirSync(join(npmRoot, spec))) {
-      const cand = join(npmRoot, spec, ts, 'node_modules', name)
-      if (existsSync(join(cand, 'package.json'))) pkgDir = cand
-      // scoped npm dir: node_modules/@scope/name
-      const scoped = join(npmRoot, spec, ts, 'node_modules', ...name.split('/'))
-      if (!pkgDir && existsSync(join(scoped, 'package.json'))) pkgDir = scoped
+  for (const dir of readdirSync(npmRoot)) {
+    // name-prefix dirs pin the package name — a 'p@x' dir that turns out to
+    // hold package 'p' must NOT vouch for '@s/p'. The any-package scan only
+    // applies inside the git spec dir, where the installed package name
+    // legitimately differs from the entry name.
+    const isGit = gitDir !== null && dir === gitDir
+    if (!dir.startsWith(`${name}@`) && !dir.startsWith(`${norm}@`) && !isGit) continue
+    for (const ts of readdirSync(join(npmRoot, dir))) {
+      const nm = join(npmRoot, dir, ts, 'node_modules')
+      const cand = join(nm, name)
+      if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }
+      if (isGit) {
+        pkgDir = scanForGuiPackage(nm)[0] ?? null
+        if (pkgDir) break
+      }
     }
+    if (pkgDir) break
   }
   if (!pkgDir) return { error: `installed package dir not found under ${npmRoot}` }
   let exportsMap: Record<string, unknown> = {}

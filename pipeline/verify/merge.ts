@@ -15,16 +15,21 @@ import type { VerifyResult } from './verify.ts'
  *  in index.json and hard-fail every downstream CatalogIndex.parse (site
  *  build, the next plan run). Validate at the boundary and drop the bad rows. */
 export const VerifyResultFile = z.object({
-  name: z.string(),
-  version: z.string().optional(),
+  name: z.string().max(300),
+  version: z.string().max(120).optional(),
   /** SRI (npm) or commit sha (github) of the bytes actually exercised — the
    *  drift anchor compared against the slot's pinned integrity below. */
-  integrity: z.string().optional(),
+  integrity: z.string().max(200).optional(),
   status: z.enum(['verified', 'failed']),
   level: z.enum(['install', 'load', 'interactive', 'render', 'structure']),
-  opencodeVersion: z.string(),
-  verifiedAt: z.string(),
-  logExcerpt: z.string().optional(),
+  opencodeVersion: z.string().max(60),
+  // NaN would make every freshness-guard compare below false — a tampered
+  // row with a garbage timestamp could clobber fresh evidence. Drop it here.
+  verifiedAt: z.string().max(60).refine(s => Number.isFinite(Date.parse(s)), 'unparseable'),
+  // index schema clamps at 2048 — an over-long excerpt would survive to the
+  // final CatalogIndex.parse and hard-fail the WHOLE merge (every valid row
+  // in the batch dies with it). Bound here so the poisoned row drops alone.
+  logExcerpt: z.string().max(2048).optional(),
   // shard threw around the package check — infrastructure signal, dropped below
   harness: z.boolean().optional(),
 })
@@ -38,7 +43,17 @@ function slotAnchor(p: PluginEntry, slot: 'pu' | 'display'): string | null | und
   return p.integrity ?? (p.source.kind === 'github' ? p.source.version : null)
 }
 
+/** Untrusted excerpt bound for index.json: strip ANSI/OSC escapes + C0/C1
+ *  controls (mirrors plugins/market/src/catalog.ts's sanitize — the client
+ *  cleans at render, but the data plane shouldn't carry dirty bytes at all:
+ *  an artifact could embed fake terminal sequences into the audit trail). */
+const stripControls = (s: string): string =>
+  s.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')          // OSC … BEL/ST
+    .replace(/\x1b[@-Z\\-_]|\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')   // ESC + CSI
+    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '')            // remaining C0/C1
+
 function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['verification']): PluginEntry['verification'] {
+  const excerpt = r.logExcerpt ? stripControls(r.logExcerpt).slice(0, 2048) : ''
   return {
     status: r.status,
     level: r.level,
@@ -46,7 +61,7 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
     verifiedAt: r.verifiedAt,
     ...(r.integrity ? { integrity: r.integrity } : {}),
     ...(runUrl ? { runUrl } : {}),
-    ...(r.logExcerpt ? { logExcerpt: r.logExcerpt } : {}),
+    ...(excerpt ? { logExcerpt: excerpt } : {}),
     // consecutive-failure counter — plan lets a recent failure back into the
     // queue while retries < 3 (V-3). Cleared whenever the status isn't failed.
     // Legacy failed records predate the field: `?? 1` used to count the first
@@ -71,11 +86,20 @@ const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): Plugin
 
 export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUrl?: string): CatalogIndex {
   const byName = new Map<string, VerifyResult[]>()
+  const seen = new Set<string>()
   for (const r of results) {
     // harness:true rows are infrastructure failures the shard flagged — the
     // package was never measured. Dropping (not writing 'failed') keeps the
     // slot honest: unverified stays queued, a prior verdict stays standing.
     if (r.harness) continue
+    // The prev-run sweep can surface the SAME measurement twice (a cancelled
+    // merge's artifact landing in the next run's results). Identity =
+    // name + measured version + verifiedAt: identical rows carry identical
+    // evidence, so a replay applies zero extra effect — in particular a
+    // duplicate 'failed' must not burn a second retry of the budget.
+    const key = `${r.name}\0${r.version ?? ''}\0${r.verifiedAt}`
+    if (seen.has(key)) continue
+    seen.add(key)
     byName.set(r.name, [...(byName.get(r.name) ?? []), r])
   }
   const drifted: string[] = []
@@ -100,9 +124,12 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
       }
       // freshness guard: leftover-artifact replay (a cancelled merge's
       // results swept into the next run) must not clobber evidence recorded
-      // AFTER the measurement — slot verifiedAt newer than the result wins
+      // AT or AFTER the measurement. >= is deliberate — a replayed row
+      // carries the very verifiedAt it already wrote; letting it apply
+      // again would burn one retry of the failure budget for zero new
+      // evidence (and re-count once per swept replay).
       const fresher = (prev: PluginEntry['verification'] | undefined): boolean =>
-        !!(prev?.verifiedAt && r.verifiedAt && Date.parse(prev.verifiedAt) > Date.parse(r.verifiedAt))
+        !!(prev?.verifiedAt && r.verifiedAt && Date.parse(prev.verifiedAt) >= Date.parse(r.verifiedAt))
       if (r.version && p.pendingUpdate?.version === r.version) {
         const pu = out.pendingUpdate!
         if (!fresher(pu.verification))

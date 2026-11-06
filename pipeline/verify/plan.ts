@@ -34,7 +34,11 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: 
     // never exercised on the current runtime and re-enters the queue.
     // 'unknown' (the shard's own version probe failed) is NOT stale —
     // unknown ≠ different; treating it as stale re-queued the slot forever.
+    // level 'structure' is excluded: that check inspects tarball bytes only —
+    // it never ran the host, so host version drift can't invalidate it (it
+    // would otherwise jump the staleHost priority tier for free minutes).
     hostStale: verification.status === 'verified'
+      && verification.level !== 'structure'
       && verification.opencodeVersion !== 'unknown'
       && verification.opencodeVersion !== OPENCODE_VERSION,
     verification,
@@ -162,6 +166,13 @@ export function shard<T>(items: T[], size: number, weight: (t: T) => number = ()
   return out.filter(b => b.t.length).map(b => b.t)
 }
 
+/** Shard weighting — charge the EXTRA STAGES a target routes to: tui (~10s
+ *  settle) and gui (~90s jsdom eval) each cost real minutes; server/rpc ride
+ *  free on the plugin check; dual plugin+skill pays for BOTH payloads. */
+export const targetWeight = (t: VerifyTarget): number =>
+  1 + (t.features?.filter(f => f === 'tui' || f === 'gui').length ?? 0)
+    + (t.parts?.includes('plugin') && t.parts?.includes('skill') ? 1 : 0)
+
 /* v8 ignore next 20 */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [indexPath, outDir, verdictsPath] = process.argv.slice(2)
@@ -174,11 +185,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const latestHuman = verdicts.length ? latestHumanVerdicts(verdicts) : undefined
   const targets = planTargets(index, cap, process.argv.includes('--retest'), new Date(), latest, latestHuman)
   // 12/shard with 2 intra-shard lanes ≈ the old 8×serial wall-clock (~30min
-  // worst case): each lane still only carries ~6 targets. Feature-routed
-  // targets cost extra stages — charge them so shards balance by minutes,
-  // not headcount. Dual plugin+skill pays for BOTH checks.
-  const shards = shard(targets, 12, t =>
-    1 + (t.features?.length ?? 0) + (t.parts?.includes('plugin') && t.parts?.includes('skill') ? 1 : 0))
+  // worst case): each lane still only carries ~6 targets. Feature-staged
+  // targets cost real minutes — targetWeight keeps shards balanced on time.
+  const shards = shard(targets, 12, targetWeight)
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))
   // matrix list goes to a file, not stdout-position — a future log line can't

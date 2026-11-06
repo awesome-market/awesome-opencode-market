@@ -539,7 +539,10 @@ jobs:
               const e = idx.plugins.find(p => p.name === n)
               const v = e?.pendingUpdate?.version ?? e?.latestVersion
               if (!e) { notes.push(`${n} 不在目录`); continue }
-              if (!v) { notes.push(`${n} 无可验证版本`); continue }
+              // github-kind entries have latestVersion=null but ARE verifiable —
+              // the planner installs `owner/repo#sha` from source.repo/version
+              const ghInstallable = !v && e.source?.kind === "github" && !!(e.source.repo || e.source.id)
+              if (!v && !ghInstallable) { notes.push(`${n} 无可验证版本`); continue }
               const caps = e.pendingUpdate?.capabilities ?? e.capabilities
               if ((caps?.redFlags ?? []).length) notes.push(`${n} 带高危标记——计划会跳过`)
               ok.push(n)
