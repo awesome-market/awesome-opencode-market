@@ -561,13 +561,17 @@ export async function main(
     sha?: (name: string, version: string | null) => string | undefined | Promise<string | undefined>
     tarball?: (name: string, version: string) => string | null | Promise<string | null>
     ping?: () => Promise<boolean>
+    /** fetch override for content tarball downloads + packument reads —
+     *  injected deps imply an offline fixture; without this a content test
+     *  would still hit the real registry through contentMaterial */
+    fetchFn?: typeof fetch
   } = {},
 ): Promise<void> {
   const l05 = deps.l05 ?? l05Score
   const ornith = deps.ornith ?? ornithReview
   // one packument cache feeds BOTH the sha lookups and the per-version tarball
   // urls (content material) — a second cache would double the registry fetches
-  const pkOf = makePackumentOf()
+  const pkOf = makePackumentOf(deps.fetchFn)
   // injected deps imply an offline fixture — injecting only one side must
   // not silently hit the real registry through the other
   const shaOf = deps.sha ?? (deps.tarball ? async () => undefined : async (name: string, ver: string | null) =>
@@ -601,11 +605,6 @@ export async function main(
   const seen = latestVerdicts(allVerdicts)
   const human = latestHumanVerdicts(allVerdicts)
   const modelId = env.AI_MODEL ?? DEFAULT_MODEL
-  // shared "this run" clock — the LLM budget starts BELOW (the sweep/material
-  // build/L0.5 batch are prep, not LLM time); retryable() shares it for
-  // consistent failed-slot semantics across the whole run
-  const runNow = new Date()
-
   const verOf = (e: CatalogIndex['plugins'][number]) => candidateVer(e) ?? null
 
   // sha lookups are cached per name@ver — the drift sweep and the works build
@@ -653,7 +652,11 @@ export async function main(
       driftedSet.add(e)
     }
     })
-    if (sweepPath) { try { writeFileSync(sweepPath, new Date().toISOString()) } catch { /* advisory stamp */ } }
+    // stamp only FULL sweeps — a --name/--force run sweeps a subset, and
+    // stamping it would make the next full run skip the real sweep for up
+    // to SWEEP_MIN_MS (drift detection silently deferred). Same predicate
+    // that reads the stamp.
+    if (sweepPath && !names && !force) { try { writeFileSync(sweepPath, new Date().toISOString()) } catch { /* advisory stamp */ } }
   }
   const drifted = idx.plugins.filter(e => driftedSet.has(e)) // index order, deterministic
   const targets = unreviewedTargets(idx, allVerdicts, names, { force: force && names !== null })
@@ -720,7 +723,7 @@ export async function main(
     // twins and terminal verify-failed short-circuits never reach the model
     // so their fetch is wasted; github-kind entries have no npm tarball
     const content = (!twin && e.source.kind === 'npm' && ver !== '?' && !terminalFailed(vf))
-      ? await contentMaterial(e.name, ver, await tarballOf(e.name, ver)).catch(() => [] as Material[])
+      ? await contentMaterial(e.name, ver, await tarballOf(e.name, ver), deps.fetchFn).catch(() => [] as Material[])
       : []
     const rec = driftedSet.has(e) ? seen.get(vkey(e.name, ver)) : undefined
     return { e, ver, material: [...reviewMaterial(e), ...content], sha, vf,
@@ -733,7 +736,10 @@ export async function main(
   // excerpts) — off-distribution noise where the chat-trained classifier only
   // produces false positives. finding/flag blocks DO get scored: a hostile
   // filename can carry injection prose into the reviewer's context.
-  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan'])
+  // 'pending' ('candidate vX.Y') and 'content-coverage' (our own generated
+  // coverage note) are machine prose like meta/verify/scan — scoring them
+  // can only FP into a mechanical concern on text the package never wrote
+  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage'])
   const reviewWorks = works.filter(w => !w.twin && !terminalFailed(w.vf))
   const l05Top = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'

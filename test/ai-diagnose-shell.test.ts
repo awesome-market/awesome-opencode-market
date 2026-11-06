@@ -84,6 +84,7 @@ beforeAll(() => {
   writeFileSync(join(nm, '.bin', 'tsx'), `#!/bin/bash
 # test shim — stub the diagnose run, delegate everything else to real tsx
 if [ "\${1:-}" = "pipeline/ai/diagnose.ts" ]; then
+  [ -n "\${CANNED_ARGV:-}" ] && printf '%s\n' "$@" > "$CANNED_ARGV"
   OUT=""; HEALTH=""
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -257,4 +258,53 @@ describe('ai-diagnose.sh — push failure spools for replay', () => {
       expect(readFileSync(join(stated, 'pending-verdicts.jsonl'), 'utf8')).toBe('')
     })
   }, 240_000)
+})
+
+describe('audit #4 re-do — append normalization, arg passthrough, shallow sync', () => {
+  it('remote file without trailing newline does NOT fuse the first appended verdict', () => {
+    // seed ai-verdicts.jsonl missing its final '\n' — cat >> would glue the
+    // first new line onto the last remote line, losing BOTH inside one
+    // malformed blob. The append path now normalizes the last byte first.
+    const seed3 = join(root, 'seed3')
+    execFileSync('git', ['clone', '-q', '-b', 'catalog', remote, seed3])
+    const orphan = JSON.stringify({ name: 'pkg-nonl', version: '1.0.0', verdict: 'pass', at: '2025-01-01T00:00:00Z', source: 'ai' })
+    writeFileSync(join(seed3, 'ai-verdicts.jsonl'), `${orphan}\n${VERDICT_A.replace('pkg-a', 'pkg-tail')}`)  // no trailing \n
+    git(seed3, 'add', 'ai-verdicts.jsonl')
+    git(seed3, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'no trailing newline')
+    git(seed3, 'push', '-q', 'origin', 'catalog')
+    rmSync(seed3, { recursive: true, force: true })
+    const verdictN = VERDICT_B.replace('pkg-b', 'pkg-appended')
+    withCanned({ CANNED_VERDICTS: `${verdictN}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      const lines = catalogFile('ai-verdicts.jsonl').split('\n').filter(Boolean)
+      // every line must parse as a verdict — no fused blob
+      expect(() => lines.forEach(l => JSON.parse(l))).not.toThrow()
+      expect(lines.filter(l => l.includes('"pkg-tail"'))).toHaveLength(1)
+      expect(lines.filter(l => l.includes('"pkg-appended"'))).toHaveLength(1)
+    })
+  }, 120_000)
+
+  it('DIAGNOSE_NAME reaches diagnose as ONE --name arg even with spaces/commas', () => {
+    // ${DIAGNOSE_NAME:+--name "$v"} word-split 'a, b' into "--name a," + a
+    // stray "b" positional — only 'a' was reviewed, 'b' silently dropped.
+    // The arg array keeps the whole value as a single argument.
+    const argvFile = join(stated, 'argv.dump')
+    withCanned({ CANNED_VERDICTS: '', CANNED_ARGV: argvFile, DIAGNOSE_NAME: 'pkg-x, pkg-y', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      const argvLines = readFileSync(argvFile, 'utf8').split('\n')
+      const i = argvLines.indexOf('--name')
+      expect(i).toBeGreaterThan(-1)
+      expect(argvLines[i + 1]).toBe('pkg-x, pkg-y')   // single arg, not split
+    })
+  }, 120_000)
+
+  it('catalog + code checkouts stay shallow after a run (bounded history)', () => {
+    // persistent $CAT grew ~14MB per catalog commit forever — the fetches
+    // now bound history at --depth=1 and an existing full clone converts
+    withCanned({ CANNED_VERDICTS: '', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      expect(git(cat, 'rev-parse', '--is-shallow-repository')).toBe('true')
+      expect(git(code, 'rev-parse', '--is-shallow-repository')).toBe('true')
+    })
+  }, 120_000)
 })

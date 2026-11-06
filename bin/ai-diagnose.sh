@@ -85,7 +85,8 @@ PY
   [ "$DECIDE" = 1 ] || return 0
   local ok=0
   for i in 1 2 3; do
-    git -C "$CAT" fetch origin catalog -q && git -C "$CAT" reset --hard origin/catalog -q || { sleep 3; continue; }
+    git -C "$CAT" fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
+      && git -C "$CAT" reset --hard origin/catalog -q || { sleep 3; continue; }
     # write the stamp AFTER reset — the file is tracked once published, so
     # reset --hard restores the OLD version and would wipe a pre-loop write
     # (first publish escaped this only because the file was still untracked)
@@ -117,13 +118,14 @@ case "${1:-}" in
     URL=${MARKET_GIT_URL:-$(git -C "$REPO" remote get-url origin 2>/dev/null || true)}
     [ -n "$URL" ] || { log "no remote URL — set MARKET_GIT_URL"; exit 1; }
     git -C "$CAT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-      || git clone --single-branch --branch catalog "$URL" "$CAT" \
+      || git clone --depth=1 --single-branch --branch catalog "$URL" "$CAT" \
       || { log "catalog clone failed ($URL) — check auth/network"; exit 1; }
     git -C "$CAT" config user.name "market-bot"
     git -C "$CAT" config user.email "market-bot@users.noreply.github.com"
     FLAG=diagnose.paused
     for i in 1 2 3 4; do
-      (cd "$CAT" && git fetch origin catalog -q && git reset --hard origin/catalog -q) \
+      (cd "$CAT" && git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
+        && git reset --hard origin/catalog -q) \
         || { log "sync attempt $i failed"; sleep 3; continue; }
       if [ "$1" = pause ]; then
         [ -f "$CAT/$FLAG" ] && { log "already paused"; exit 0; }
@@ -199,12 +201,15 @@ fi
 # dirty dev worktree. Separate dir from $REPO and $CAT. Deps re-install only
 # when package-lock.json moved (.deps-stamp lives outside git's reach).
 if ! git -C "$CODE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git clone --single-branch --branch main "$URL" "$CODE" \
+  git clone --depth=1 --single-branch --branch main "$URL" "$CODE" \
     || { log "code checkout clone failed ($URL) — check auth/network"; exit 1; }
 fi
 git -C "$CODE" remote get-url origin >/dev/null 2>&1 || git -C "$CODE" remote add origin "$URL"
 [ "$(git -C "$CODE" remote get-url origin)" = "$URL" ] || git -C "$CODE" remote set-url origin "$URL"
-git -C "$CODE" fetch -q origin main || { log "code fetch failed (offline?) — silent, retry next tick"; exit 0; }
+# 浅抓取即可——两个 checkout 只读 tip,持久克隆全历史会无限膨胀(catalog
+# 每次提交 ~14MB)。forced refspec 也让压缩/重写过的远端历史不会把同步卡死。
+git -C "$CODE" fetch -q --depth=1 origin +refs/heads/main:refs/remotes/origin/main \
+  || { log "code fetch failed (offline?) — silent, retry next tick"; exit 0; }
 git -C "$CODE" reset -q --hard origin/main || { log "code checkout reset failed"; exit 1; }
 LOCKHASH=$(shasum -a 256 "$CODE/package-lock.json" | cut -d' ' -f1)
 if [ "$(cat "$CODE/.deps-stamp" 2>/dev/null)" != "$LOCKHASH" ]; then
@@ -224,7 +229,7 @@ if ! git -C "$CAT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       || { log "cannot reach remote $URL (auth/network) — silent, retry next tick"; exit 0; }
     log "catalog branch not found on remote — nothing to review"; exit 0
   fi
-  git clone --single-branch --branch catalog "$URL" "$CAT" \
+  git clone --depth=1 --single-branch --branch catalog "$URL" "$CAT" \
     || { log "catalog clone failed ($URL) — check auth/network/disk"; exit 1; }
 fi
 git -C "$CAT" remote get-url origin >/dev/null 2>&1 || git -C "$CAT" remote add origin "$URL"
@@ -237,7 +242,8 @@ git -C "$CAT" config user.name "market-bot"
 git -C "$CAT" config user.email "market-bot@users.noreply.github.com"
 cd "$CAT"
 # 拿不到远端状态就不审:离线跑完 push 必败,verdict 只会被下一轮 reset 丢弃
-git fetch origin catalog || { log "fetch failed (offline?) — silent, retry next tick"; exit 0; }
+git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
+  || { log "fetch failed (offline?) — silent, retry next tick"; exit 0; }
 # reset 失败必须退出——没有 -e,失败会拿陈旧 index 审一遍,产出错配 verdict
 git reset --hard origin/catalog -q || { log "reset failed — refusing to review stale state"; exit 1; }
 # 声明暂停在数据面生效——本机也认它(防止"pause 了但忘了 launchd 还在跑"
@@ -261,14 +267,18 @@ sort -u "$CAT/ai-verdicts.jsonl" "$SPOOL" > "$VVIEW" 2>/dev/null \
   || cp "$CAT/ai-verdicts.jsonl" "$VVIEW"   # no spool yet → view = branch file
 
 # DIAGNOSE_FORCE: only truthy values pass --force ("0"/"false" must not count)
-FARG=
-case ${DIAGNOSE_FORCE:-} in ''|0|false|no) ;; *) FARG=--force ;; esac
+# build the args in an array — ${DIAGNOSE_NAME:+--name "$v"} word-splits a
+# value containing whitespace into a stray positional ('a, b' → only 'a'
+# reviewed, 'b' silently dropped)
+ARGS=()
+if [ -n "${DIAGNOSE_NAME:-}" ]; then ARGS+=(--name "$DIAGNOSE_NAME"); fi
+case ${DIAGNOSE_FORCE:-} in ''|0|false|no) ;; *) ARGS+=(--force) ;; esac
 
 npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" --out "$TMPV" \
   --limit "$DIAGNOSE_LIMIT" --budget "$DIAGNOSE_BUDGET" --state "$STATEF" \
   --sweep-state "$SWEEPF" --health "$HEALTHF" \
-  ${DIAGNOSE_NAME:+--name "$DIAGNOSE_NAME"} $FARG \
+  "${ARGS[@]}" \
   || exit $?
 
 # health stamp → catalog branch (transition/24h gated, advisory). CI's
@@ -308,7 +318,8 @@ cp "$PAY" "$SPOOL" 2>/dev/null \
 # means re-append onto the newest origin/catalog next attempt.
 cd "$CAT"
 for i in 1 2 3 4; do
-  git fetch origin catalog -q || { log "fetch attempt $i failed"; sleep 3; continue; }
+  git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
+    || { log "fetch attempt $i failed"; sleep 3; continue; }
   git reset --hard origin/catalog -q || { log "reset attempt $i failed"; sleep 3; continue; }
   # "already landed" must be decided from the REMOTE file, not the local
   # staged diff: pause/resume shares this worktree WITHOUT the diagnose lock,
@@ -321,6 +332,10 @@ for i in 1 2 3 4; do
            <(sort -u "$PAY") > "$VVIEW"
   [ -s "$VVIEW" ] || { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
   touch ai-verdicts.jsonl
+  # a remote file whose last byte isn't '\n' would fuse its last line with the
+  # first appended line — two verdicts lost inside one malformed blob that the
+  # append-only gate never re-checks. Normalize before appending.
+  [ -s ai-verdicts.jsonl ] && [ -n "$(tail -c1 ai-verdicts.jsonl)" ] && printf '\n' >> ai-verdicts.jsonl
   # append only lines the remote still lacks — a push that succeeded but
   # reported failure must not produce duplicate verdict lines next attempt
   cat "$VVIEW" >> ai-verdicts.jsonl
