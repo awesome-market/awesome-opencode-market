@@ -192,6 +192,20 @@ describe('buildSkillCatalog github-kind entries', () => {
     expect(cat.skills[0].version).toBe('abc123def')   // sha is the version marker now
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
+
+  it('pre-sha github rows count as unpinned — HEAD fallback disclosed in stats', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const { src, tgz } = mkGhTgz()
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      ghEntry({ name: 'g-old' }),   // no source.version → codeload HEAD
+      ghEntry({ name: 'g-new', source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill', version: 'abc123def' } }),
+    ], removed: [] }
+    const r = await buildSkillCatalog(idx, out, () => null, undefined, () => `file://${tgz}`)
+    expect(r.unpinned).toBe(1)
+    expect(r.landed).toBe(2)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
 })
 
 describe('buildSkillCatalog failure paths', () => {
@@ -380,6 +394,9 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     const h = JSON.parse(readFileSync(join(out, 'health.json'), 'utf8'))
     expect(h.entries).toBe(3)
     expect(h.skills).toMatchObject({ candidates: 2, landed: 0, degraded: true })
+    // disclosure counters ride along even when zero — ops can tell "no
+    // unpinned rows" apart from "field missing on an old snapshot"
+    expect(h.skills).toMatchObject({ unpinned: 0, membersDropped: 0 })
     // sha256 covers the exact serialized index.json bytes — manifest-first fetch
     // pins on this; a drifted/truncated index must never match
     const indexBytes = readFileSync(join(out, 'index.json'))
@@ -619,6 +636,24 @@ describe('site audit hardening — gate totals, active content, i18n, url safety
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 
+  it('tar members beyond MAX_SKILL_MEMBERS are dropped AND counted in stats', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    for (let i = 0; i < 105; i++) writeFileSync(join(src, 'package', `f${i}.md`), `# ${i}`)
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-big', contains: ['skill'], latestVersion: '1' })], removed: [] }
+    const r = await buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
+    expect(r.membersDropped).toBe(6)              // 106 members − 100 cap
+    expect(r.landed).toBe(1)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills[0].files.length).toBeLessThanOrEqual(100)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
   it('npm skill version binds to the approved bytes — integrity tag appended', async () => {
     const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
     const src = mkdtempSync(join(tmpdir(), 'tgz-'))
@@ -638,7 +673,7 @@ describe('site audit hardening — gate totals, active content, i18n, url safety
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 
-  it('SRI check honors the announced algo — sha1 verifies, unparseable proceeds', async () => {
+  it('SRI check honors the announced algo — sha1 verifies, unparseable skips (fail-closed)', async () => {
     const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
     const src = mkdtempSync(join(tmpdir(), 'tgz-'))
     mkdirSync(join(src, 'package'), { recursive: true })
@@ -654,8 +689,9 @@ describe('site audit hardening — gate totals, active content, i18n, url safety
     expect((await buildSkillCatalog(idx(`sha1-${createHash('sha1').update(buf).digest('base64')}`), out, () => url)).landed).toBe(1)
     // wrong sha1 → real mismatch → skipped
     expect((await buildSkillCatalog(idx('sha1-deadbeef'), out, () => url)).landed).toBe(0)
-    // unparseable integrity → unverifiable → proceeds (same contract as client)
-    expect((await buildSkillCatalog(idx('not-a-sri'), out, () => url)).landed).toBe(1)
+    // unparseable integrity → announced but unverifiable → skipped: the
+    // publish surface fails closed rather than serve unpinned bytes
+    expect((await buildSkillCatalog(idx('not-a-sri'), out, () => url)).landed).toBe(0)
     rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 
@@ -758,6 +794,31 @@ describe('site audit round — routing parity, honest empty states, ops polish',
     expect(h).not.toContain('not mine')          // other entries' verdicts filtered out
   })
 
+  it('detailPage verdict lookup is case-insensitive — vkey() parity', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    // github entries keep 'Owner/Repo' casing; verdict lines arrive lowercased —
+    // an exact-match filter would hide the record the pipeline is acting on
+    const h = detailPage(mk({ name: 'Owner/Repo', slug: 'o/r' }), [
+      { name: 'owner/repo', version: null, verdict: 'concern' as const, at: '2026-01-02T00:00:00Z',
+        source: 'human' as const, reason: 'lowercase verdict', by: 'terry' }])
+    expect(h).toContain('lowercase verdict')
+    expect(h).toContain('评审记录')
+  })
+
+  it('buildSite verdict grouping is case-insensitive — mixed-case log still lands on the page', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const vdir = mkdtempSync(join(tmpdir(), 'v-'))
+    const vf = join(vdir, 'ai-verdicts.jsonl')
+    writeFileSync(vf, JSON.stringify({ name: 'owner/repo', verdict: 'concern', at: '2026-01-02T00:00:00Z',
+      source: 'human', reason: 'case-mismatch verdict', by: 'terry' }) + '\n')
+    const gh = mk({ name: 'Owner/Repo', slug: 'o/r', latestVersion: null,
+      source: { kind: 'github', id: 'o/r', repo: 'o/r' } })
+    await buildSite({ version: '1', generatedAt: 't', categories: {}, plugins: [gh], removed: [] }, out, undefined, vf)
+    const html = readFileSync(join(out, 'p', 'o', 'r.html'), 'utf8')
+    expect(html).toContain('case-mismatch verdict')
+    rmSync(out, { recursive: true, force: true }); rmSync(vdir, { recursive: true, force: true })
+  })
+
   it('detailPage labels npmDownloads30d honestly — 30d, not 周下载', async () => {
     const { detailPage } = await import('../pipeline/site/build.ts')
     const h = detailPage(mk())
@@ -789,6 +850,10 @@ describe('site audit round — routing parity, honest empty states, ops polish',
     const bare = skillsPage([{ name: 'sk', version: '1', files: ['SKILL.md'] }])
     expect(bare).not.toContain('"skills":')        // no URL → no bogus snippet
     expect(bare).not.toContain('details')
+    // stats caveats surface only when nonzero — honest disclosure, not noise
+    const cav = skillsPage([{ name: 'sk', version: '1', files: ['SKILL.md'] }], null, { unpinned: 3, membersDropped: 7 })
+    expect(cav).toContain('lack a commit-sha pin')
+    expect(cav).toContain('7')
     // end-to-end: the published index.json keeps the {name,version,files} contract
     const src = mkdtempSync(join(tmpdir(), 'tgz-'))
     mkdirSync(join(src, 'package'), { recursive: true })

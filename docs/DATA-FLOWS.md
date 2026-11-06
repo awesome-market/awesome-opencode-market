@@ -69,7 +69,7 @@ flowchart TB
 | 文件 | 写入方 | 消费方 | 语义 |
 |---|---|---|---|
 | `index.json` | catalog.yml publish / verify.yml merge | 站点构建、客户端、diagnose、docket、verify plan、applyMatureVerdicts | 完整目录（含 pending——数据面全量，展示面各自过滤） |
-| `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml；digest.yml 班内 `verdicts-compact.ts` 压实 | run.ts、diagnose（判重）、docket、digest、site 详情页（裁决记录区块） | **append-only** 裁决流水；同 name@version 最新 `at` 胜出；详情页折叠透出最近 10 条 + 全量链接。压实只丢「被同键更新行取代且超保留窗（默认 180d）的 AI 行」——畸形行、human 行、每键最新行、窗口内行全保留，最新行集合不变 → 全消费端语义不变 |
+| `ai-verdicts.jsonl` | diagnose、submit.yml verdict、concern.yml；digest.yml 班内 `verdicts-compact.ts` 压实 | run.ts、diagnose（判重）、docket、digest、site 详情页（裁决记录区块，按 vkey 同规则大小写不敏感） | **append-only** 裁决流水；同 name@version 最新 `at` 胜出；详情页折叠透出最近 10 条 + 全量链接。压实只丢「被同键更新行取代且超保留窗（默认 180d）的 AI 行」——畸形行、human 行、每键最新行、窗口内行全保留，最新行集合不变 → 全消费端语义不变 |
 | `submissions.txt` | submit.yml ingest、catalog.yml publish（notified/dead 回写+终态剪枝）、catalog-withdraw.sh | run.ts `--seed`、notify-published、submission-status | JSONL：一行一个 `{name,repo,type,category,desc:{en,...},version?,pkg?,issue,author?,at,notified,staleWarned?,dead?,rejected?}`；`version`=被审版本（npm ver/repo resolvedSha（commit sha）），`at`=投稿时刻，`author`=issue 作者；`dead:true`=终态（30 天未落地），run.ts 跳过不再注入但**仍可在迟到上架时补发落地通知**（关单≠聋）；`rejected`=本轮目录收录门给出的拒绝原因代码（seed-outcome 回写，条目落地即清除），status 评论渲染成人类可读原因；终态行（notified/dead）超 90 天宽限期被 publish 剪除；兼容旧格式：纯包名行、`github:owner/repo` 行 |
 | `digest-state.json` | digest.yml / publish-digest.sh | run.ts | `{lastDigestAt, announced, day, dayAnnounced}` — pass 成熟 = `announced` 集合成员 **且不在当次渲染的 `dayAnnounced`**（本期新公示的行要再活过一期日报才放行——真异议窗 ≳24h，不是"上过即熟"）；`announced` 按「每键最新裁决行 ∩ 公告候选（held 槽位/不在 index 的幽灵键/concern）」截断——已放行/永不需成熟的 pass 键也裁掉，不无限膨胀；**缺失/损坏**：消费端 announced=∅ 全冻结，生产端若已有日报历史则拒绝重渲（fail-closed，不全量公告） |
 | `digest/YYYY-MM-DD.md` | digest.yml（publish-digest.sh 兜底） | 人（手机/网页） | 日报：新放行表 + held 积压 + concerns + 审核单链接。入口：[review] 审核单正文"预告面"链接、站点列表页 `digest` 链接、README——异议窗口必须找得到日报才有意义 |
@@ -1392,7 +1392,10 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       按 installPlan 同规则出：npm 插件 pin 批准版 / skill 指
                       skills catalog（未落地技能降级为"客户端仍可装"注记）
                       / github 插件 "no client install path"——不印装不上
-                      的命令；裁决记录理由双语——AI 行 reasonEn/reason 按
+                      的命令；裁决记录按 vkey() 同规则大小写不敏感匹配
+                      （github 条目 'Owner/Repo' 与裁决行 'owner/repo'
+                      不分裂——精确匹配会让公开审计面漏掉管线正在执行
+                      的裁决）；理由双语——AI 行 reasonEn/reason 按
                       界面语言切换）
       skills/index.json + skills/<id>/  HTTP skill catalog：
                       候选 = entryParts 含 'skill'（contains 权威、
@@ -1406,7 +1409,9 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       逐 spec 的 npm view 进程 spawn）；
                       github 条目 = codeload <repo>/tar.gz/<commit sha>——钉到
                       扫描过的 source.version（版本标记=字节标记；
-                      无 sha 的遗产条目退回 HEAD+modifiedAt）；
+                      无 sha 的遗产条目退回 HEAD+modifiedAt——移动目标，
+                      计入 stats.unpinned 在 health.json/skills.html 披露，
+                      不静默）；
                       两者都 latestVersion/modifiedAt/sha 为空 → 跳过；
                       <id>@<pin> 缓存（actions/cache 滚动键，pin=SRI 优先
                       ——re-tag 同版本换字节必换键）——未变技能零网络，
@@ -1414,13 +1419,19 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       更）回写 hit 自愈——同一坏项不再每次构建重删重 warn；
                       id 碰撞 → -x 确定性后缀；
                       拉取走 SKILL_POOL 限界 worker 池（S-14——冷缓存下
-                      串行拉取会超时，pool 化才跑得完）；
+                      串行拉取会超时，pool 化才跑得完；全冷 ~700 技能
+                      最坏可逼近 site job 的 30min 上限，稳态靠
+                      actions/cache 摊薄，mass version bump 日才需关注）；
                       curl 加固：--proto-redir '=https'（重定向不降级 http）、
                       --max-filesize 48MB（下载期截断）、--retry 2；
-                      SRI 按公告算法校验（sha1/256/384/512 都认；解析不了
-                      的 integrity 视为不可验证→放行，与客户端同契约）；
+                      SRI 按公告算法校验（sha1/256/384/512 都认；公告了
+                      却解析不了的 integrity=索引数据损坏→跳过——发布面
+                      fail-closed，不放行不可验证字节；客户端安装路径
+                      的"不可验证→放行"契约不变，那是用户本机的取舍）；
                       解包走两段式：tzf 列表 → 按名提取全部 payload 成员
-                      （symlink 成员不创建=无穿越原语；node_modules 段滤除；
+                      （成员数封顶 100——tar 顺序攻击者可控，截断数计入
+                      stats.membersDropped 披露；symlink 成员不创建=无穿越
+                      原语；node_modules 段滤除；
                       .html/.htm/.xhtml/.shtml/.svg/.js/.mjs/.cjs 活性网页
                       类型双闸滤除——市场自有 github.io 域不托管可执行内容，
                       客户端 npm tarball 安装路径不受影响）；
@@ -1439,12 +1450,16 @@ index.json（catalog 分支现取，不吃旧 artifact——B-5；CLI 前置 zod
                       服务它），解释"可能已下架"，回链 removed/主目录
       privacy.html    通过 page() 渲染——页脚有入口（up 前缀随页面深度）
       health.json     {ok, entries(可见数·仅信息), total(全量含 pending),
-                      skills:{candidates,landed,degraded},
+                      skills:{candidates,landed,degraded,unpinned,membersDropped},
                       generatedAt, builtAt, commit, sha256, bytes}
                       ——sha256 覆盖 index.json 序列化字节，客户端先拉它再决定
                       要不要下全量 index（moved hash → 下载+逐字节验证）；
                       degraded=有候选但落地不足一半（registry 抖动≠真空目录）；
-                      builtAt/commit 供 digest watchdog 判站点部署新鲜度
+                      unpinned/membersDropped=技能目录的诚实披露计数
+                      （HEAD 回退行数 / 成员截断数）；
+                      builtAt 供 digest watchdog 判站点部署新鲜度；
+                      commit=产出 index.json 的 catalog 分支提交
+                      （site.yml 取 FETCH_HEAD——不是 github.sha 代码版本）
   → deploy gate：healthGate(live prev, cur)——按 total（含 pending）比
      绝对地板(SITE_FLOOR repo variable，默认 200)与 <上次发布 50%；
      只卡数据面真实缩水——批量刹车把可见数拉低是合法状态必须放行，
