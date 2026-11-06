@@ -192,8 +192,18 @@ export async function run(opts: RunOptions = {}) {
           // terminal. A notified row re-injected every run kept paying the full
           // repo probe + codeload + scan for a submission already resolved.
           if (s.dead || s.notified) continue
-          name = s.name?.toLowerCase() ?? null
-          repo = s.repo?.toLowerCase() ?? null
+          name = typeof s.name === 'string' ? s.name.toLowerCase() : null
+          // repo feeds RAW into api.github.com/raw.githubusercontent.com/codeload
+          // URL paths AND the entry slug — it must be canonical owner/repo, the
+          // same gate the npm-side repository field passes through. A malformed
+          // value ('../repos/o/r') would path-normalize onto a DIFFERENT repo's
+          // endpoints; a name+repo seed drops just the bad hint (the npm package
+          // still resolves its own packument repo), a repo-only seed is dead.
+          const repoNorm = typeof s.repo === 'string' ? normalizeRepoUrl(s.repo) : null
+          if (s.repo != null && !repoNorm && !name) {
+            seedOutcomes.set(String(s.repo).toLowerCase(), 'invalid-repo')
+          }
+          repo = repoNorm?.toLowerCase() ?? null
           // seed metadata is attacker-adjacent (issue-form fields, editable) —
           // cap counts/lengths like fetchMarketMeta does (F-4)
           const desc: Record<string, string> = {}
@@ -215,7 +225,10 @@ export async function run(opts: RunOptions = {}) {
           else if (repo) seedRepoMeta.set(repo, meta)
         } catch { continue }
       } else if (line.startsWith('github:')) {
-        repo = line.slice(7).toLowerCase()
+        // legacy seed form — same canonicalization gate as JSONL repo fields
+        const r = normalizeRepoUrl(line.slice(7))
+        if (r) repo = r.toLowerCase()
+        else console.warn(`seed: ignoring malformed github: line '${line.slice(0, 80)}'`)
       } else {
         name = line.toLowerCase()
       }
@@ -662,16 +675,16 @@ export async function run(opts: RunOptions = {}) {
             },
             category: heldCats.length ? heldCats : heldPrev.category,
             license: pk.license ?? repoMetaRes?.meta?.license ?? heldPrev.license,
-            distTags: pk.distTags,
-            modifiedAt: pk.modifiedAt,
-            maintainers: pk.maintainers,
+            distTags: Object.keys(pk.distTags).length ? pk.distTags : heldPrev.distTags,
+            modifiedAt: pk.modifiedAt ?? heldPrev.modifiedAt,
+            maintainers: pk.maintainers.length ? pk.maintainers : heldPrev.maintainers,
             deprecated: pk.deprecated,
             deprecatedMessage: pk.deprecatedMessage,
-            replacement: replacementOf(pk.deprecatedMessage),
+            replacement: pk.deprecated ? replacementOf(pk.deprecatedMessage) : heldPrev.replacement,
             source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
             integrity: dispA.integrity,
             compat: pk.compatOf[heldPrev.latestVersion ?? ''] ?? heldPrev.compat,
-            metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads, checkedAt: now },
+            metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads ?? heldPrev.metrics.npmDownloads30d, checkedAt: now },
           })
           reusedNames.add(cand.name)
           console.log(`  [${entries.length}] ${cand.name} (hold pinned at v${heldPin.version}; upstream ${pk.latest})`)
@@ -1185,7 +1198,16 @@ export async function run(opts: RunOptions = {}) {
       }
       return entry
   }
-  await pool(ghMissing, async c => { const e = await ghWorker(c); if (e) entries.push(e) })
+  await pool(ghMissing, async c => {
+    try {
+      const e = await ghWorker(c)
+      if (e) entries.push(e)
+    } catch (err) {
+      // same per-candidate isolation as the npm worker — one malformed repo
+      // must not fail the whole generate after the npm side already produced
+      console.warn(`github candidate ${c.fullName} failed:`, (err as Error).message)
+    }
+  })
   console.log(`github-kind: ${ghStats.admitted} admitted (${ghStats.reused} reused, ${ghStats.covered} npm-covered, ` +
     `${ghStats.blocked} blocked, ${ghStats.evidenceRejected} evidence-rejected, ${ghStats.archived} seed-archived, ` +
     `${ghStats.treeTransient} transient-kept, ${ghStats.treeEmpty} empty, ${ghStats.truncated} truncated-tree, ` +

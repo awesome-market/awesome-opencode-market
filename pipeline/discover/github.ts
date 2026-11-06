@@ -174,6 +174,21 @@ export async function discoverGithub(
   return map
 }
 
+/** Canonical repo identity is exactly `owner/repo` — two non-empty segments
+ *  from the GitHub charset, neither a dot-segment. The value is interpolated
+ *  RAW into api.github.com / raw.githubusercontent.com / codeload URLs, where
+ *  WHATWG path normalization resolves `..`/`.` segments: '../x' or
+ *  'github.com/../repos/o/r' would silently retarget the fetch at a DIFFERENT
+ *  repo's endpoints (and mint a traversal-shaped slug). Reject at the boundary
+ *  instead of trusting downstream consumers to re-validate. */
+const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+const cleanRepo = (r: string): string | null => {
+  if (!REPO_RE.test(r)) return null
+  const [o, repo] = r.split('/')
+  if (!o || !repo || o === '.' || o === '..' || repo === '.' || repo === '..') return null
+  return r
+}
+
 /** Canonical repo URL extraction from an npm repository field (handles git+, git@, ssh, monorepo dir). */
 export function normalizeRepoUrl(raw: string | null | undefined): string | null {
   if (!raw) return null
@@ -185,8 +200,8 @@ export function normalizeRepoUrl(raw: string | null | undefined): string | null 
   // as canonical a GitHub pointer as a full URL; gitlab:/bitbucket: still miss
   s = s.replace(/^github:/i, 'https://github.com/')
   const m = s.match(/github\.com\/([^/]+\/[^/#?]+)/)
-  if (m) return m[1]!.replace(/\.git$/, '').replace(/\/$/, '')
+  if (m) return cleanRepo(m[1]!.replace(/\.git$/, '').replace(/\/$/, ''))
   // bare owner/repo — submission seeds and terse repository fields
   const bare = s.match(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/)
-  return bare ? bare[1]!.replace(/\.git$/, '') : null
+  return bare ? cleanRepo(bare[1]!.replace(/\.git$/, '')) : null
 }

@@ -47,6 +47,7 @@ export const REJECT_REASONS: Record<string, string> = {
   'archived': '仓库已归档——目录只收录仍在维护的仓库。',
   'repo-not-found': 'GitHub 仓库不存在或不可访问（404）。确认仓库地址后回复本 issue 重新审查。',
   'no-opencode-evidence': '仓库缺少 opencode 专属信号（`.opencode/` 目录、`opencode.json` 或 `opencode-*` topic）。补齐后回复本 issue 重新审查。',
+  'invalid-repo': '仓库地址格式不正确——需要 `owner/repo` 形式（如 `alice/my-plugin`）。修正后回复本 issue 重新审查。',
 }
 
 /** One-line bounded reason for the status comment — reviewer text rendered
