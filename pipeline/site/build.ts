@@ -7,6 +7,7 @@ import { join, dirname, relative } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import type { PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, atCmp } from '../verdicts.ts'
+import { readJsonCapped } from '../fetch/npm.ts'
 
 type Caps = PluginEntry['capabilities']
 type Ver = PluginEntry['verification']
@@ -553,7 +554,10 @@ function npmTarballResolver(): (spec: string) => Promise<string | null> {
           // gate only covers entries that announce integrity)
           const u = `${registry}${encodeURIComponent(name)}`
           const r = await fetch(u, { signal: AbortSignal.timeout(20_000), headers: { accept: 'application/json' } })
-          return r.ok ? await r.json() : null
+          // bounded read — same 64MB cap fetchPackument uses. An unbounded
+          // r.json() lets a hostile/glitched registry OOM the deploy job;
+          // oversize → throw → caught → skill skipped, never half-parsed.
+          return r.ok ? await readJsonCapped<Record<string, any>>(r, 64 * 1024 * 1024) : null
         } catch { return null }
       })()
       cache.set(name, p)

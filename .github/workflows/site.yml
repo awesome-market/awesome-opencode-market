@@ -29,6 +29,12 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    # Deliberately NO harden-runner egress block on this job: upload/download
+    # of the Pages artifact talks to dynamic action-runtime endpoints that
+    # cannot be allowlisted (same posture as submit.yml's report job). The
+    # untrusted-fetch half is still bounded — packument reads are byte-capped,
+    # tarball curls are https-pinned + size-capped + SRI-checked, and the
+    # tarball URL comes from the live packument, not catalog data.
     steps:
       # B-5: site always builds from the catalog branch's current index —
       # never from a possibly-stale artifact produced hours earlier.
@@ -146,10 +152,18 @@ jobs:
 
   alert:
     needs: site
-    if: failure()
+    # cancelled counts too: the documented worst case is a cold skill cache
+    # mass-bump hitting the 30min job cap — a cancelled deploy leaves the live
+    # site silently stale, which is exactly what this job exists to report
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # gh api only — same egress posture as every other alert job
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open (or append to) failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -159,7 +173,9 @@ jobs:
           # alert instead of spawning an issue per run (same rule as the
           # digest watchdog).
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "site workflow failed" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          # in:title — an unrelated open issue merely mentioning the phrase in
+          # its body must not become the append target (digest.yml precedent)
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "site workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else
