@@ -229,7 +229,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || echo "site dispatch failed twice — the next catalog/verify run will refresh"; }
+          # Retry once, then escalate: a silent double-fail leaves published
+          # changes off the public site for ~12h+ — the digest watchdog's 36h
+          # leg is the backstop, not the detector. Deduped like the alert job.
+          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || {
+            echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+            BODY="site.yml dispatch failed twice — published catalog changes may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          }; }
 
   alert:
     needs: [generate, publish]

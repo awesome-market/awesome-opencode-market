@@ -60,13 +60,29 @@ jobs:
           path: .skill-cache
           key: skill-cache-${{ github.run_id }}
           restore-keys: skill-cache-
+      # absolute Pages origin + base path — an org/user page repo (named
+      # <owner>.github.io) serves from the origin itself, a project repo from
+      # /<name>; derived here so forks and org pages both stay correct.
+      # SITE_URL feeds the skills-catalog usage snippet and the deploy gate's
+      # live-health probe; SITE_BASE feeds 404.html's absolute links.
+      - name: derive SITE_URL / SITE_BASE
+        run: |
+          NAME="${{ github.event.repository.name }}"
+          OWNER="${{ github.repository_owner }}"
+          if [ "$NAME" = "$OWNER.github.io" ]; then
+            echo "SITE_URL=https://$OWNER.github.io" >> "$GITHUB_ENV"
+            echo "SITE_BASE=/" >> "$GITHUB_ENV"
+          else
+            echo "SITE_URL=https://$OWNER.github.io/$NAME" >> "$GITHUB_ENV"
+            echo "SITE_BASE=/$NAME/" >> "$GITHUB_ENV"
+          fi
       - run: npx tsx pipeline/site/build.ts index.json /tmp/site ai-verdicts.jsonl
         env:
           SKILL_CACHE: .skill-cache
           SKIP_SKILLS: ${{ inputs.skip_skills }}
           SITE_COMMIT: ${{ github.sha }}
-          # absolute base path for 404.html links — served at arbitrary depth
-          SITE_BASE: /${{ github.event.repository.name }}/
+          # SITE_BASE/SITE_URL come from the derive step above (GITHUB_ENV) —
+          # an org-page repo must not inherit a /repo/ base it doesn't serve
       # S-3: deploy gate — an empty/broken catalog published is worse than a
       # stale one. Compare against the LIVE site's health.json; if that fetch
       # fails the absolute floor still applies (never gate on network flakiness).
@@ -76,7 +92,10 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           if [ "$FORCE" = "true" ]; then echo "deploy gate: skipped (force dispatch)"; exit 0; fi
-          curl -fsSL --max-time 15 "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/health.json" -o /tmp/prev-health.json \
+          # SITE_URL (derived above) already encodes the org-page-vs-project
+          # distinction — a hardcoded owner.github.io/<repo> would 404 a
+          # user/org page and silently degrade every deploy to floor-only
+          curl -fsSL --max-time 15 "$SITE_URL/health.json" -o /tmp/prev-health.json \
             || echo '{"entries":null}' > /tmp/prev-health.json
           npx tsx -e "
             import {readFileSync, appendFileSync} from 'node:fs';
@@ -84,7 +103,9 @@ jobs:
             let prev;
             try { prev = JSON.parse(readFileSync('/tmp/prev-health.json','utf8')) }
             catch { prev = { entries: null } }   // corrupt live health → degrade to floor-only, like a fetch failure
-            const floor = Number(process.env.SITE_FLOOR) || 200;
+            // explicit parse — '0' is a valid floor (small curated catalog);
+            // only unset/non-numeric falls back to 200
+            const floor = process.env.SITE_FLOOR && Number.isFinite(Number(process.env.SITE_FLOOR)) ? Number(process.env.SITE_FLOOR) : 200;
             const msg = healthGate(prev, JSON.parse(readFileSync('/tmp/site/health.json','utf8')), floor);
             if (msg) {
               console.error('deploy gate: '+msg);

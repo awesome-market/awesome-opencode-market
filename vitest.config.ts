@@ -1,11 +1,16 @@
 import { defineConfig } from 'vitest/config'
+import { fileURLToPath } from 'node:url'
+// fileURLToPath, not .pathname — the latter stays percent-encoded, so a repo
+// path containing spaces or non-ASCII (e.g. a 副本 working copy) resolves to
+// a file that doesn't exist and every solid-js import dies at load time.
+const here = (p: string) => fileURLToPath(new URL(p, import.meta.url))
 export default defineConfig({
   resolve: {
     conditions: ['browser', 'solid', 'development'],
     alias: {
-      '@opencode/plugin/gui': new URL('./test/helpers/host-stub.ts', import.meta.url).pathname,
-      'solid-js/web': new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url).pathname,
-      'solid-js': new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url).pathname,
+      '@opencode/plugin/gui': here('./test/helpers/host-stub.ts'),
+      'solid-js/web': here('./plugins/market/node_modules/solid-js/web/dist/web.js'),
+      'solid-js': here('./plugins/market/node_modules/solid-js/dist/solid.js'),
     },
   },
   test: {

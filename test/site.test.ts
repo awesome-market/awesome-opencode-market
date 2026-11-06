@@ -694,3 +694,172 @@ describe('site audit hardening — gate totals, active content, i18n, url safety
     rmSync(out, { recursive: true, force: true })
   })
 })
+
+describe('site audit round — routing parity, honest empty states, ops polish', () => {
+  it('buildSkillCatalog routes through entryParts: legacy type:skill (no contains) lands; contains:[] does not', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# legacy')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'legacy-skill', type: 'skill', latestVersion: '1' }),   // no contains — type fallback must still route it
+      mk({ name: 'no-parts', contains: [] }),                            // explicit [] = no installable payload
+      mk({ name: 'dual', contains: ['plugin', 'skill'], latestVersion: '1' }),
+    ], removed: [] }
+    const r = await buildSkillCatalog(idx, out, () => `file://${join(src, 's.tgz')}`)
+    expect(r.candidates).toBe(2)              // legacy + dual — no-parts never a candidate
+    expect(r.landed).toBe(2)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills.map((s: { name: string }) => s.name).sort()).toEqual(['dual', 'legacy-skill'])
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('default ghTarballOf rejects a non-hex source pin — never fetches un-reviewed bytes', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'gh-s', contains: ['skill'], latestVersion: null,
+        source: { kind: 'github', id: 'o/s', repo: 'o/s', version: 'not-a-hex!!' },
+        modifiedAt: '2026-03-01T00:00:00Z' })], removed: [] }
+    // no ghTarballOf injected → the default pin validator runs; a bad ref
+    // returns null before any URL is built (lands 0 without touching network)
+    const r = await buildSkillCatalog(idx, out, () => null)
+    expect(r.candidates).toBe(1)
+    expect(r.landed).toBe(0)
+    rmSync(out, { recursive: true, force: true })
+  })
+
+  it('detailPage: empty findings under scannedAt:null says "not scanned", not "none"', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const unscanned = detailPage(mk())
+    expect(unscanned).toContain('not scanned — nothing was analyzed')
+    expect(unscanned).toContain('这里为空≠检净')
+    const scanned = detailPage(mk({ capabilities: { scannedAt: 't', findings: [], redFlags: [] } }))
+    expect(scanned).not.toContain('not scanned — nothing was analyzed')
+    expect(scanned).toContain('>none</span>')
+  })
+
+  it('detailPage: AI verdict reasons render bilingually — reasonEn on en, reason on zh', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const verdicts = [
+      { name: 'p', version: '1', verdict: 'concern' as const, at: '2026-01-02T00:00:00Z', source: 'ai' as const,
+        reason: '中文理由', reasonEn: 'english reason' },
+      { name: 'p', version: '1', verdict: 'pass' as const, at: '2026-01-01T00:00:00Z', source: 'human' as const,
+        reason: 'human note', by: 'terry', issue: 7 },
+      { name: 'other', version: '1', verdict: 'pass' as const, at: '2026-01-03T00:00:00Z', source: 'ai' as const, reason: 'not mine' },
+    ]
+    const h = detailPage(mk(), verdicts)
+    expect(h).toContain('data-en="english reason"')
+    expect(h).toContain('data-zh="中文理由"')
+    expect(h).toContain('human note')            // single-language reason serves both
+    expect(h).toContain('#7')                    // issue backlink
+    expect(h).not.toContain('not mine')          // other entries' verdicts filtered out
+  })
+
+  it('detailPage labels npmDownloads30d honestly — 30d, not 周下载', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const h = detailPage(mk())
+    expect(h).toContain('npm 30天下载')
+    expect(h).not.toContain('周下载')
+  })
+
+  it('detailPage surfaces verify retries + pendingUpdate integrity', async () => {
+    const { detailPage } = await import('../pipeline/site/build.ts')
+    const h = detailPage(mk({
+      verification: { status: 'failed', retries: 3 },
+      pendingUpdate: { version: '2', heldAt: 't', integrity: 'sha512-abc',
+        capabilities: { scannedAt: null, findings: [], redFlags: [] },
+        verification: { status: 'failed', retries: 2 } } }))
+    expect(h).toContain('verify retries')
+    expect(h).toContain('sha512-abc')
+    expect(h).toContain('retry')
+  })
+
+  it('skillsPage: usage snippet + detail backlink; slug stripped from published index', async () => {
+    const { skillsPage, buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const html = skillsPage(
+      [{ name: 'sk', version: '1', files: ['SKILL.md'], slug: 'o/sk' }],
+      'https://o.github.io/repo')
+    expect(html).toContain('"skills": ["https://o.github.io/repo"]')
+    expect(html).toContain('href="p/o/sk.html"')   // backlink via detailHref
+    const bare = skillsPage([{ name: 'sk', version: '1', files: ['SKILL.md'] }])
+    expect(bare).not.toContain('"skills":')        // no URL → no bogus snippet
+    expect(bare).not.toContain('details')
+    // end-to-end: the published index.json keeps the {name,version,files} contract
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'package'), { recursive: true })
+    writeFileSync(join(src, 'package', 'SKILL.md'), '# x')
+    execSync(`cd "${src}" && tar czf s.tgz package`)
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const r = await buildSkillCatalog(
+      { version: '1', generatedAt: 't', categories: {}, plugins: [
+        mk({ name: 'sk-s', slug: 'owner/sk-s', contains: ['skill'], latestVersion: '1' })], removed: [] },
+      out, () => `file://${join(src, 's.tgz')}`)
+    expect(r.entries[0]!.slug).toBe('owner/sk-s')          // in-memory page metadata
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills[0].slug).toBeUndefined()             // published contract unchanged
+    expect(Object.keys(cat.skills[0]).sort()).toEqual(['files', 'name', 'version'])
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
+  })
+
+  it('poisoned cache entry self-heals: cleaned files are synced back over the hit', async () => {
+    const { buildSkillCatalog } = await import('../pipeline/site/build.ts')
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const cache = mkdtempSync(join(tmpdir(), 'cache-'))
+    // seed a cache entry as if a rule change made a stored file unpublishable
+    const key = join(cache, 'sk-x%401')
+    mkdirSync(key, { recursive: true })
+    writeFileSync(join(key, 'SKILL.md'), '# ok')
+    writeFileSync(join(key, 'evil.html'), '<script>x</script>')
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'sk-x', contains: ['skill'], latestVersion: '1' })], removed: [] }
+    const r = await buildSkillCatalog(idx, out, () => null, cache)
+    expect(r.landed).toBe(1)
+    const cat = JSON.parse(readFileSync(join(out, 'skills', 'index.json'), 'utf8'))
+    expect(cat.skills[0].files).toEqual(['SKILL.md'])
+    // the SOURCE cache entry was rewritten too — next build won't re-drop it
+    expect(existsSync(join(key, 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(key, 'evil.html'))).toBe(false)
+    rmSync(out, { recursive: true, force: true }); rmSync(cache, { recursive: true, force: true })
+  })
+
+  it('installHint degrades when the skill never landed — no link to an empty slot', async () => {
+    const { installHint } = await import('../pipeline/site/build.ts')
+    const e = mk({ slug: 'o/s', contains: ['skill'] })
+    expect(installHint(e, '../', new Set(['o/s']))).toContain('skills catalog')
+    const missed = installHint(e, '../', new Set())
+    expect(missed).toContain('not yet in this site')
+    expect(missed).not.toContain('skills.html')
+    // no landed set passed (tests/older callers) → original link, backwards compatible
+    expect(installHint(e, '../')).toContain('skills catalog')
+  })
+
+  it('listPage: verified first, red-flagged sinks below unflagged, name breaks ties', async () => {
+    const { listPage } = await import('../pipeline/site/build.ts')
+    const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'zz-flagged', verification: { status: 'verified' },
+        capabilities: { scannedAt: 't', findings: ['f'], redFlags: ['r'] } }),
+      mk({ name: 'bb-unverified' }),
+      mk({ name: 'cc-failed', verification: { status: 'failed' } }),
+      mk({ name: 'aa-verified', verification: { status: 'verified' } }),
+    ], removed: [] })
+    const pos = (n: string) => html.indexOf(`<b>${n}</b>`)
+    expect(pos('aa-verified')).toBeGreaterThan(-1)
+    expect(pos('aa-verified')).toBeLessThan(pos('bb-unverified'))
+    expect(pos('bb-unverified')).toBeLessThan(pos('cc-failed'))
+    expect(pos('cc-failed')).toBeLessThan(pos('zz-flagged'))   // flags sink below everything
+  })
+
+  it('listPage: parts filter select + nested-slug detail hrefs', async () => {
+    const { listPage } = await import('../pipeline/site/build.ts')
+    const html = listPage({ version: '1', generatedAt: 't', categories: {}, plugins: [
+      mk({ name: 'a', contains: ['plugin'], slug: 'o/a' }),
+      mk({ name: 'b', contains: ['skill'], slug: 'owner/b' }),
+    ], removed: [] })
+    expect(html).toContain('id=part')
+    expect(html).toContain('data-parts="[&quot;skill&quot;]"')
+    expect(html).toContain('href="p/owner/b.html"')   // canonical nested path, not owner%2Fb
+  })
+})
