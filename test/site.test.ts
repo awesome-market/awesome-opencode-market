@@ -785,9 +785,12 @@ describe('site audit round — routing parity, honest empty states, ops polish',
         source: { kind: 'github', id: 'o/s', repo: 'o/s', version: 'not-a-hex!!' },
         modifiedAt: '2026-03-01T00:00:00Z' })], removed: [] }
     // no ghTarballOf injected → the default pin validator runs; a bad ref
-    // returns null before any URL is built (lands 0 without touching network)
+    // returns null before any URL is built (lands 0 without touching network).
+    // malformed source.version is corrupt index data — skipped before
+    // candidacy (never a fetch candidate, unlike the HEAD-fallback rows the
+    // unpinned counter honestly describes)
     const r = await buildSkillCatalog(idx, out, () => null)
-    expect(r.candidates).toBe(1)
+    expect(r.candidates).toBe(0)
     expect(r.landed).toBe(0)
     rmSync(out, { recursive: true, force: true })
   })

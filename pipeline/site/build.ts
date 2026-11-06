@@ -210,7 +210,10 @@ export function listPage(index: CatalogIndex): string {
       approvalBadge(e).trim(),
     ].filter(Boolean).join(' · ')
     const aka = e.aliases.length ? `<div class=meta>${bi('aka', '又名')} ${e.aliases.map(a => esc(a)).join(', ')}</div>` : ''
-    return `<div class=card data-cats="${esc(JSON.stringify(e.category))}" data-parts="${esc(JSON.stringify(entryParts(e)))}"><a href="${esc(detailHref(e.slug))}"><b>${esc(e.name)}</b></a> <code>${esc(e.type)}</code>${badges ? ` ${badges}` : ''}
+    // unsafe slugs are skipped at write time (see buildSite) — don't link a
+    // card to a page that was never written; corrupt data gets a name, not a 404
+    const href = slugSafe(e.slug) ? `<a href="${esc(detailHref(e.slug))}">` : ''
+    return `<div class=card data-cats="${esc(JSON.stringify(e.category))}" data-parts="${esc(JSON.stringify(entryParts(e)))}">${href}<b>${esc(e.name)}</b>${href ? '</a>' : ''} <code>${esc(e.type)}</code>${badges ? ` ${badges}` : ''}
       <div>${esc(e.description.en ?? '')}${e.description.zh ? `<div class=meta>${esc(e.description.zh)}</div>` : ''}</div>${aka}
       <div class=meta>${lbl(s)} · ${lbl(v)}${e.latestVersion ? ` · v${esc(e.latestVersion)}` : ''}</div></div>`
   }).join('\n')
@@ -464,7 +467,7 @@ export function skillsPage(entries: SkillEntry[], skillsUrl?: string | null,
   ].filter(Boolean).join(' · ')
   const cards = entries.map(s => {
     const ver = s.version.length > 12 ? `${s.version.slice(0, 10)}…` : s.version
-    const detail = s.slug ? ` · <a href="${esc(detailHref(s.slug))}">${bi('details', '详情')}</a>` : ''
+    const detail = s.slug && slugSafe(s.slug) ? ` · <a href="${esc(detailHref(s.slug))}">${bi('details', '详情')}</a>` : ''
     return `<div class=card><b>${esc(s.name)}</b> <code>v${esc(ver)}</code> ${bi(`${s.files.length} file(s)`, `${s.files.length} 个文件`)}${detail}<div class=meta>${s.files.map(f => `<a href="skills/${esc(encodeURI(s.name))}/${esc(encodeURI(f))}">${esc(f)}</a>`).join(' · ') || bi('no files', '无文件')}</div></div>`
   }).join('\n')
   const empty = entries.length ? '' : `<p class=muted>${bi('no skills published yet — skill files are fetched during the site build and may be temporarily unavailable', '暂无已发布技能——技能文件在站点构建时抓取，可能暂时不可用')}</p>`
@@ -670,15 +673,28 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     // can drift from what the (older) scan saw. Dropping them would cut ~30%
     // of github skills from the catalog for a marginal integrity gain; keep
     // serving but COUNT them so health.json/skills.html can disclose it.
-    if (isGh && !/^[0-9a-f]{7,64}$/.test(s.source?.version ?? '')) unpinned++
+    // A PRESENT-but-non-hex source.version is a different shape: ghTarballOf
+    // fails closed on it, so the entry never fetches — counting it as
+    // "served from HEAD" misleads the caveat; corrupt index data gets a warn.
+    if (isGh) {
+      const sv = s.source?.version
+      if (sv == null || sv === '') unpinned++
+      else if (!/^[0-9a-f]{7,64}$/.test(sv)) {
+        console.warn(`[site] skill ${s.slug}: malformed source.version ${JSON.stringify(sv.slice(0, 64))} — skipped`)
+        continue
+      }
+    }
     const base = baseOf(s.name)
     let id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     while (usedIds.has(id)) id += '-x'                // S-12 deterministic suffix
     // id becomes a filesystem path under skills/ AND a published catalog
     // name — name/slug are unconstrained z.string() in the schema, so apply
     // the same segment guard detail pages get (slugSafe): '..' or a backslash
-    // would let rmSync/renameSync escape the skills dir entirely
-    if (!slugSafe(id)) { console.warn(`[site] skill skipped — unsafe catalog id: ${JSON.stringify(id).slice(0, 120)}`); continue }
+    // would let rmSync/renameSync escape the skills dir entirely. SAFE_MEMBER
+    // adds the URL-safety half: id lands in `skills/<id>/<file>` hrefs via
+    // encodeURI, which does NOT encode '#' '?' '%' — a catalog name carrying
+    // one would publish a skill tree no URL can reach (listed but unfetchable)
+    if (!slugSafe(id) || !SAFE_MEMBER.test(id)) { console.warn(`[site] skill skipped — unsafe catalog id: ${JSON.stringify(id).slice(0, 120)}`); continue }
     usedIds.add(id)
     // npm cache pins BY BYTES: dist.integrity identifies the exact tarball the
     // catalog approved — a re-tagged same-version release gets a new key and a
@@ -706,13 +722,23 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       rmSync(hit, { recursive: true, force: true })   // poisoned cache → refetch
     } catch { rmSync(hit, { recursive: true, force: true }) }
     const tmp = `${c.dest}.tmp`
+    // bail() cleans BOTH tmp and dest: tmp sits INSIDE outDir
+    // (`skills/<id>.tmp`), so every early return below would otherwise leave
+    // the extracted payload in the Pages artifact — published unlisted,
+    // defeating the total-bytes cap for the over-budget skill. dest can hold
+    // a stale tree when a cache-hit quality check fell through to a refetch
+    // that then bails — an unlisted stale publish either way.
+    const bail = (): void => {
+      rmSync(tmp, { recursive: true, force: true })
+      rmSync(c.dest, { recursive: true, force: true })
+    }
     try {
       // pin to the approved version — resolving dist-tags.latest would serve
       // the pendingUpdate users must not receive (hold semantics).
       // github: codeload keyed by the resolved commit sha, not HEAD (version
       // marker = the pinned bytes); repo goes through execFile argv, not a shell.
       const tb = c.ghRepo ? ghTarballOf(c.ghRepo, c.s.source?.version) : await tbOf(`${c.s.name}@${c.ver}`)
-      if (!tb) return
+      if (!tb) { bail(); return }
       rmSync(tmp, { recursive: true, force: true })
       mkdirSync(tmp, { recursive: true })
       const tgz = join(tmp, 'pkg.tgz')
@@ -726,21 +752,43 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       // ok !== true (not just === false): an announced-but-unparseable SRI is
       // corrupt index data — publishing unverifiable bytes under it would
       // break the served-bytes=reviewed-bytes invariant, so skip too.
-      if (statSync(tgz).size > MAX_SKILL_TGZ) { console.warn(`[site] skill ${c.id}: tgz over ${MAX_SKILL_TGZ >> 20}MB — skipped`); return }
+      if (statSync(tgz).size > MAX_SKILL_TGZ) { console.warn(`[site] skill ${c.id}: tgz over ${MAX_SKILL_TGZ >> 20}MB — skipped`); bail(); return }
       if (!c.ghRepo && c.s.integrity) {
         const ok = sriOk(readFileSync(tgz), c.s.integrity)
-        if (ok !== true) { console.warn(`[site] skill ${c.id}: integrity ${ok === false ? 'mismatch (re-tag or corrupted artifact)' : 'unverifiable (unparseable SRI)'} — skipped`); return }
+        if (ok !== true) { console.warn(`[site] skill ${c.id}: integrity ${ok === false ? 'mismatch (re-tag or corrupted artifact)' : 'unverifiable (unparseable SRI)'} — skipped`); bail(); return }
       }
       // two-pass extraction (S-4/S-5): only listed members are extracted, so
-      // node_modules and non-skill noise never touch disk. Named members CAN
-      // still be symlinks/hardlinks/fifos — collectFiles deletes every
-      // non-regular-file entry before publishing. '--' ends option parsing so
-      // a member named like a flag cannot be re-parsed (names are registry input).
-      const { stdout } = await execFileP('tar', ['tzf', tgz], { encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 })
-      const all = stdout.split('\n').filter((n) => {
-        if (!n || n.endsWith('/')) return false
+      // node_modules and non-skill noise never touch disk. The name filter
+      // vets member NAMES but not member TYPES: a symlink member followed by
+      // 'x/<file>' writes THROUGH the link outside the temp dir during
+      // extraction (bsdtar refuses; GNU tar — the CI tar — follows it). The
+      // un-anchored fetch classes (HEAD-fallback github skills, integrity-less
+      // npm entries) let a crafted tarball reach this path, so a parallel
+      // `tvzf` pass vets types and only regular files are extracted.
+      // collectFiles still deletes whatever non-file slips through. '--' ends
+      // option parsing so a member named like a flag cannot be re-parsed.
+      const [{ stdout }, { stdout: vlist }] = await Promise.all([
+        execFileP('tar', ['tzf', tgz], { encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 }),
+        execFileP('tar', ['tvzf', tgz], { encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 }),
+      ])
+      const names = stdout.split('\n')
+      // both listings stream the same archive in the same order → index-zip.
+      // A member name containing '\n' desyncs the LISTS the same way in both
+      // (each emits the name verbatim), so pairing stays per-line correct:
+      // a symlink's own line always carries its 'l'. A count mismatch is
+      // corrupt data — fail closed on the skill rather than guess at types.
+      const modes = vlist.split('\n').filter(Boolean).map(l => l.trimStart().charAt(0))
+      if (names.filter(Boolean).length !== modes.length) {
+        console.warn(`[site] skill ${c.id}: tar listing type mismatch — skipped`); bail(); return
+      }
+      let mi = -1
+      const all = names.filter((n) => {
+        if (!n) return false
+        mi++
+        if (n.endsWith('/')) return false
         const segs = n.split('/')
-        return !segs.includes('node_modules') && !segs.includes('..') && !segs.includes('.') && SAFE_MEMBER.test(n) && !ACTIVE_CONTENT.test(n)
+        return !segs.includes('node_modules') && !segs.includes('..') && !segs.includes('.')
+          && SAFE_MEMBER.test(n) && !ACTIVE_CONTENT.test(n) && modes[mi] === '-'
       })
       const members = all.slice(0, MAX_SKILL_MEMBERS)
       if (all.length > MAX_SKILL_MEMBERS) {
@@ -750,18 +798,21 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       if (members.length)
         await execFileP('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1', '--', ...members], { timeout: 30_000 })
       rmSync(tgz, { force: true })
-      if (!members.length) return
+      if (!members.length) { bail(); return }
       const { files: abs, total, droppedActive } = collectFiles(tmp)
       if (droppedActive) console.warn(`[site] skill ${c.id}: ${droppedActive} web-active file(s) withheld from publish`)
-      if (!abs.length) return
-      if (total > MAX_SKILL_TOTAL_BYTES) { console.warn(`[site] skill ${c.id}: payload over ${MAX_SKILL_TOTAL_BYTES >> 20}MB — skipped`); return }
+      if (!abs.length) { bail(); return }
+      if (total > MAX_SKILL_TOTAL_BYTES) { console.warn(`[site] skill ${c.id}: payload over ${MAX_SKILL_TOTAL_BYTES >> 20}MB — skipped`); bail(); return }
       const files = abs.map((f) => relative(tmp, f)).sort()
       rmSync(c.dest, { recursive: true, force: true })
       renameSync(tmp, c.dest)
-      if (hit) { mkdirSync(cacheDir!, { recursive: true }); rmSync(hit, { recursive: true, force: true }); cpSync(c.dest, hit, { recursive: true }) }
+      // a cache-write failure must not cost the landed skill — bail() would
+      // delete the freshly-extracted dest and drop it from the catalog; the
+      // only real cost of a lost cache entry is a refetch next build
+      if (hit) try { mkdirSync(cacheDir!, { recursive: true }); rmSync(hit, { recursive: true, force: true }); cpSync(c.dest, hit, { recursive: true }) } catch { /* cache is an optimization */ }
       entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug })
     } catch (err) {
-      rmSync(tmp, { recursive: true, force: true })
+      bail()
       console.warn(`[site] skill ${c.id} skipped: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`)
     }
   }
