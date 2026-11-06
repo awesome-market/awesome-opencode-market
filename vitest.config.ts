@@ -11,6 +11,9 @@ export default defineConfig({
     // imports it). fileURLToPath decodes back to the real filesystem path.
     alias: {
       '@opencode/plugin/gui': fileURLToPath(new URL('./test/helpers/host-stub.ts', import.meta.url)),
+      // subpath aliases must precede the bare 'solid-js' key — prefix matching
+      // would otherwise mangle 'solid-js/store' into '<root dist>/store'
+      'solid-js/store': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/store/dist/store.js', import.meta.url)),
       'solid-js/web': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url)),
       'solid-js': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url)),
     },

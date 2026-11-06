@@ -591,7 +591,14 @@ export async function verifyPackage(
     if (feats.includes('tui')) {
       const { checkTui } = await import('./tui.ts')
       const tui = await checkTui(env, run, { ...opts.tuiOpts, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
-      if (!tui.ok) return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
+      if (!tui.ok) {
+        // spawn-level tmux failures carry no package evidence (the plugin
+        // never ran) — throw so the shard's harness:true lane drops it
+        // instead of writing a false 'failed' (burns retries + feeds the
+        // diagnose concern short-circuit on packages never actually tested)
+        if (tui.harness) throw new Error(`tui check infrastructure: ${tui.log ?? 'spawn failed'}`)
+        return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
+      }
       level = 'interactive'
     }
 

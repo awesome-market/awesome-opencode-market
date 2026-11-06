@@ -78,6 +78,10 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     const effectModule = await import('effect').catch(() => null)
     const solidModule = await import('solid-js').catch(() => null)
     const solidWeb = await import('solid-js/web').catch(() => null)
+    // the store API is a SEPARATE module from the reactive root — mapping it to
+    // solidModule leaves createStore/produce/reconcile/unwrap undefined and a
+    // legit store-using bundle fails setup() for a harness mistake
+    const solidStore = await import('solid-js/store').catch(() => null)
     const reqmap: Record<string, unknown> = {
       '@opencode/plugin/gui': {
         Plugin, Ipc, Panel, SettingsPage, Command, MenuItem, Tab,
@@ -87,7 +91,7 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     if (solidModule) {
       reqmap['solid-js'] = solidModule
       if (solidWeb) reqmap['solid-js/web'] = solidWeb
-      reqmap['solid-js/store'] = solidModule
+      if (solidStore) reqmap['solid-js/store'] = solidStore
     }
     const req = (name: string): unknown => {
       if (name in reqmap) return reqmap[name]
@@ -233,6 +237,34 @@ function scanForGuiPackage(nm: string): string[] {
   }).map(r => join(nm, r))
 }
 
+/** Resolve a conditional-exports target to a runnable file. The naive pick
+ *  (Object.values(target)[0]) breaks two real layouts: "types"-first objects
+ *  resolve to a .d.ts declaration (guaranteed vm compile failure), and NESTED
+ *  conditions ({import:{default:"./x.js"}}) yield a non-string value that
+ *  crashes path.join entirely — the slot then re-queues forever because merge
+ *  never sees a result for it. Prefer the runtime conditions, skip 'types'
+ *  (compile-time metadata, never the executable bundle), recurse into nested
+ *  condition objects and fallback arrays. */
+export function resolveExportTarget(t: unknown, depth = 0): string | null {
+  if (typeof t === 'string') return /\.d\.[cm]?ts$/.test(t) ? null : t
+  if (depth > 4 || !t || typeof t !== 'object') return null
+  if (Array.isArray(t)) {
+    for (const v of t) { const r = resolveExportTarget(v, depth + 1); if (r) return r }
+    return null
+  }
+  const o = t as Record<string, unknown>
+  for (const k of ['browser', 'import', 'default', 'node', 'require', 'worker']) {
+    const r = resolveExportTarget(o[k], depth + 1)
+    if (r) return r
+  }
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'types') continue
+    const r = resolveExportTarget(v, depth + 1)
+    if (r) return r
+  }
+  return null
+}
+
 /** Locate the installed package dir under XDG_CACHE_HOME/opencode/npm and read
  *  its gui entrypoint (package.json exports key matching /gui/). `spec` is
  *  the install spec actually given to `plugin add` — for git targets the
@@ -273,11 +305,12 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
   }
   const guiKey = Object.keys(exportsMap).find(k => /gui/.test(k))
   if (!guiKey) return { error: 'no gui export key in package.json' }
-  const target = exportsMap[guiKey]
-  const rel = typeof target === 'string' ? target
-    : typeof target === 'object' && target ? (Object.values(target)[0] as string) : null
+  const rel = resolveExportTarget(exportsMap[guiKey])
   if (!rel) return { error: `gui export ${guiKey} has no file target` }
   const file = join(pkgDir, rel)
+  // exports targets are package-relative — a crafted "../" must not read
+  // outside the installed package dir (the host wouldn't resolve it either)
+  if (!file.startsWith(`${pkgDir}/`)) return { error: `gui export ${guiKey} escapes the package dir` }
   if (!existsSync(file)) return { error: `gui entrypoint missing: ${rel}` }
   const bytes = statSync(file).size
   if (bytes > GUI_BUNDLE_MAX) {

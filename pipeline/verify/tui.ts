@@ -7,7 +7,7 @@
  *  die on load; does NOT prove any specific keypath works. */
 import type { ExecFn } from './verify.ts'
 
-export interface TuiCheck { ok: boolean; log?: string }
+export interface TuiCheck { ok: boolean; log?: string; harness?: boolean }
 
 /** Pure judge — unit-testable. Pane text + session liveness → pass/fail. */
 export function judgeTuiPane(paneText: string, sessionAlive: boolean): TuiCheck {
@@ -24,14 +24,21 @@ export async function checkTui(
   run: ExecFn,
   opts: { settleMs?: number; cols?: number; rows?: number; command?: string } = {},
 ): Promise<TuiCheck> {
-  const sess = `vtui-${process.pid}-${Date.now().toString(36)}`
+  // intra-shard lanes share this process+clock — a same-ms pair would mint
+  // identical session names and the second new-session fails 'duplicate'. The
+  // random suffix makes a collision (a harness flake) vanishingly rare.
+  const sess = `vtui-${process.pid}-${Date.now().toString(36)}-${Math.floor(Math.random() * 36 ** 4).toString(36)}`
   const settle = opts.settleMs ?? 8_000
   try {
     await run('tmux', ['new-session', '-d', '-s', sess, '-x', String(opts.cols ?? 200), '-y', String(opts.rows ?? 50),
       opts.command ?? 'opencode'],
       { env, timeout: 10_000 })
   } catch (e) {
-    return { ok: false, log: `tmux spawn failed: ${(e as Error).message}` }
+    // new-session failing means the session was never created — the plugin
+    // code inside it never ran, so there is no package evidence to judge.
+    // This is infrastructure (tmux outage/resource/collision): harness, not
+    // a package 'failed' — same class as the dead-serve throw (V-4).
+    return { ok: false, log: `tmux spawn failed: ${(e as Error).message}`, harness: true }
   }
   try {
     await new Promise(r => setTimeout(r, settle))

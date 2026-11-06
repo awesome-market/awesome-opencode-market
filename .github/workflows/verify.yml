@@ -49,7 +49,9 @@ jobs:
           # bootstrap), anything else non-zero is "can't reach origin" → fail.
           git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
           case ${rc:-0} in
-            0) git fetch origin catalog ;;
+            # depth=1: only the tip tree is read. The forced full refspec keeps
+            # origin/catalog tracking even a rewritten/diverged remote.
+            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' ;;
             2) echo "no catalog branch yet" ;;
             *) echo "cannot reach origin for catalog — refusing an empty green plan" >&2; exit 1 ;;
           esac
@@ -142,9 +144,14 @@ jobs:
         with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
       - if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
-      # pinned in lockstep with OPENCODE_VERSION in pipeline/publish/merge.ts —
-      # verification results are keyed name@version+host (DEV §4)
-      - run: npm i -g @opencode/cli@2.2.5 && opencode --version
+      # installed version is READ from pipeline/merge.ts's OPENCODE_VERSION —
+      # results are keyed name@version+host (DEV §4), so the two pins must
+      # never drift (a stale install stamps every result with the wrong host
+      # version → every verified slot looks host-stale → infinite re-queue)
+      - run: |
+          OCV=$(sed -nE "s/.*OPENCODE_VERSION = '([^']+)'.*/\1/p" pipeline/publish/merge.ts | head -1)
+          [ -n "$OCV" ] || { echo "cannot resolve OPENCODE_VERSION from pipeline/publish/merge.ts" >&2; exit 1; }
+          npm i -g "@opencode/cli@$OCV" && opencode --version
       - uses: actions/download-artifact@v4
         with: { name: shards, path: /tmp }
       # V-1: untrusted plugin code must run as a different uid than the shard
@@ -254,7 +261,7 @@ jobs:
           # here would strand the whole shard set silently
           git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
           case ${rc:-0} in
-            0) git fetch origin catalog ;;
+            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' ;;
             2) echo "no catalog branch yet — nothing to merge into"; exit 0 ;;
             *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
           esac
@@ -266,7 +273,11 @@ jobs:
           ok=0; pushed=0
           RELEASE_FAILED=0
           for i in 1 2 3 4; do
-            git fetch origin catalog
+            # depth=1 + forced refspec: the retry loop's whole point is moving
+            # to the freshest tip — a non-FF remote move must not leave
+            # origin/catalog stale or every remaining attempt burns on the
+            # same rejected push
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
             git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json

@@ -418,10 +418,13 @@ describe('shard-level hoists and boundaries', () => {
     ]) expect(VerifyResultFile.safeParse(bad).success).toBe(false)
   })
 
-  it('verify.yml pins the same opencode version as OPENCODE_VERSION (V-H)', async () => {
-    const { OPENCODE_VERSION } = await import('../pipeline/publish/merge.ts')
+  it('verify.yml derives the opencode install spec from OPENCODE_VERSION (V-H)', async () => {
     const wf = readFileSync(new URL('../.github/workflows/verify.yml', import.meta.url), 'utf8')
-    expect(wf).toContain(`@opencode/cli@${OPENCODE_VERSION}`)
+    // the workflow extracts the version from the source constant — a second
+    // literal pin could silently drift and stamp every result host-stale
+    expect(wf).toContain('npm i -g "@opencode/cli@$OCV"')
+    expect(wf).toContain("OPENCODE_VERSION = '([^']+)'")
+    expect(wf).not.toMatch(/npm i -g @opencode\/cli@\d/)
   })
 })
 
