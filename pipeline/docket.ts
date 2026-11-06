@@ -20,13 +20,14 @@
  *  Usage: tsx pipeline/docket.ts --index index.json --verdicts ai-verdicts.jsonl
  *    [--digest-state digest-state.json] [--dry]
  *    (gh cli + GH_TOKEN env; GH_REPO=owner/repo) */
-import { appendFileSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { exit, env } from 'node:process'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState } from './verdicts.ts'
+import { vkey, akey, atCmp, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 
@@ -46,8 +47,10 @@ export interface DocketTarget {
    *  the only word on the table */
   humanVerdict?: AiVerdict
   /** digest-announce phase for ai verdicts — '已裁决·待日报公告' vs
-   *  '已公告·待放行闸' so the maintainer sees WHY a pass isn't live yet */
-  maturity?: 'announced' | 'pending-announce'
+   *  '已公告·待放行闸' vs 'maturing' (in the LATEST digest — the objection
+   *  window is still open; maturity arrives with the next render) so the
+   *  maintainer sees WHY a pass isn't live yet */
+  maturity?: 'announced' | 'maturing' | 'pending-announce'
   /** evidence surface for the phone decision — detail-page link, scan
    *  counters, hold age, publish date */
   slug?: string
@@ -68,15 +71,24 @@ export interface DocketTarget {
   /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
    *  without opening the detail page */
   scanPreview?: string[]
-  /** aggregate repo-only backlog — a per-entry standing issue per
-   *  version-less pending floods the tracker (400+ rows and growing); the
-   *  aggregate carries the queue in ONE issue whose body regenerates */
-  backlog?: { name: string; heldAt?: string; unscanned?: boolean }[]
+  /** aggregate backlog — a per-entry standing issue per target floods the
+   *  tracker (hundreds of rows and growing); the aggregate carries the queue
+   *  in ONE issue whose body regenerates. Versioned 'none' rows carry
+   *  version+verification; repo-only rows are name-only. */
+  backlog?: { name: string; version?: string | null; heldAt?: string; unscanned?: boolean; verification?: string }[]
 }
 
 /** Reserved name for the aggregate repo-only standing issue — parentheses
  *  can't collide with npm names or owner/repo ids. */
 export const REPO_BACKLOG = '(repo-only backlog)'
+/** Same sentinel for versioned held slots with NO verdict — the diagnose
+ *  queue is behind or the local job is stopped; at scale these aggregate
+ *  into one standing issue instead of flooding the tracker. */
+export const NONE_BACKLOG = '(unreviewed backlog)'
+/** Below this count a versioned 'none' target still earns its own issue —
+ *  a handful of aged holds is individually actionable (full evidence
+ *  surface); past the cap per-version issues are spam, not signal. */
+export const NONE_ISSUE_CAP = 8
 
 export const issueTitle = (t: Pick<DocketTarget, 'name' | 'version'>) =>
   `[review] ${t.name}${t.version ? `@${t.version}` : ''}`
@@ -106,27 +118,25 @@ export function docketTargets(
   index: CatalogIndex,
   verdicts: AiVerdict[],
   digest?: DigestState | null,
-  opts: { now?: string } = {},
+  opts: { now?: string; paused?: boolean } = {},
 ): DocketTarget[] {
   const now = Date.parse(opts.now ?? new Date().toISOString())
   const latest = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
+  const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
   const out: DocketTarget[] = []
   const repoOnly: NonNullable<DocketTarget['backlog']> = []
+  const noneVer: DocketTarget[] = []
   /** Package-level human brake — applyMatureVerdicts' verdictFor overrides
    *  EVERY slot of the package with a human concern on name@null until a
-   *  newer human pass lands on that slot key. Mirrored here so a braked
-   *  package doesn't spawn per-version issues whose release the gate will
-   *  never grant — the brake itself is the standing decision. (version=null
-   *  keys are github-kind SLOTS, not package brakes — verdictFor skips them.) */
-  const pkgBrake = (name: string, ver: string): AiVerdict | undefined => {
-    const h = human.get(vkey(name, null))
-    if (h?.verdict !== 'concern') return undefined
-    const slotHuman = human.get(vkey(name, ver))
-    if (slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, h.at) > 0) return undefined
-    return h
-  }
+   *  newer human pass lands on that slot key. Mirrored here via the SHARED
+   *  release-gate predicate (brakeFor) so a braked package doesn't spawn
+   *  per-version issues whose release the gate will never grant — the
+   *  brake itself is the standing decision. (version=null keys are
+   *  github-kind SLOTS, not package brakes — brakeFor skips them.) */
+  const pkgBrake = (name: string, ver: string): AiVerdict | undefined =>
+    brakeFor(human, name, ver)
   for (const e of index.plugins) {
     // slot = what the issue is about: the pendingUpdate when held, else the
     // entry itself. heldAt/publishedAt follow the candidate, not the entry.
@@ -196,7 +206,7 @@ export function docketTargets(
       // never silently suppress one (fail-visible, matching diagnose).
       const heldMs = candidateHeldAt(e)
       if (!Number.isFinite(heldMs) || now - heldMs >= NO_VERDICT_AGE_MS) {
-        out.push({ name: e.name, version: ver, verdict: 'none', ...meta })
+        noneVer.push({ name: e.name, version: ver, verdict: 'none', ...meta })
       }
       continue
     }
@@ -210,7 +220,8 @@ export function docketTargets(
       ...(rec.sha ? { verdictSha: rec.sha } : {}),
       ...(rec.model ? { model: rec.model } : {}),
       ...(rec.l05 ? { l05Score: rec.l05.score } : {}),
-      maturity: announced.has(akey(rec)) ? 'announced' : 'pending-announce',
+      maturity: !announced.has(akey(rec)) ? 'pending-announce'
+        : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
       ...meta,
     })
   }
@@ -218,6 +229,27 @@ export function docketTargets(
   // ones needing real action: pass (veto window) → none (waiting) →
   // concern (blocked, decide) → flag (live entry, identity signal). Ties:
   // oldest-held first, matching diagnose FIFO.
+  // Versioned 'none' targets aggregate the same way repo-only does — while
+  // the local diagnose job is stopped (diagnose.paused) EVERY aged hold is
+  // queue overflow, not an actionable one-off: one standing issue the
+  // maintainer can work through beats N identical "AI is behind" pages.
+  // Below the cap the per-version issue stays — it carries the full
+  // evidence surface (scan preview, sha drift) the aggregate must summarize.
+  if (opts.paused || noneVer.length > NONE_ISSUE_CAP) {
+    if (noneVer.length) {
+      const rows = noneVer
+        .sort((a, b) => Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
+        .map(t => ({
+          name: t.name, version: t.version,
+          ...(t.heldAt ? { heldAt: t.heldAt } : {}),
+          ...(t.unscanned ? { unscanned: true } : {}),
+          ...(t.verification ? { verification: t.verification } : {}),
+        }))
+      out.push({ name: NONE_BACKLOG, version: null, verdict: 'none', backlog: rows })
+    }
+  } else {
+    out.push(...noneVer)
+  }
   if (repoOnly.length) {
     repoOnly.sort((a, b) => Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
     out.push({ name: REPO_BACKLOG, version: null, verdict: 'none', backlog: repoOnly })
@@ -261,6 +293,9 @@ export interface IssueBodyOpts {
    *  label event won't re-fire, so say so on the body instead of letting
    *  the issue look decided */
   stuckLabel?: string | null
+  /** diagnose.paused exists on the catalog branch — the AI queue is off on
+   *  purpose; say so instead of implying a broken pipeline */
+  paused?: boolean
 }
 
 /** AGENTS.md 检验规则 — 裸枚举不是用户语言：verified→已实测可装可用 etc. */
@@ -284,6 +319,34 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     .replace(/([\\[\]])/g, '\\$1')
     .replace(/\s+/g, ' ').trim().slice(0, max)
   if (t.backlog) {
+    const versioned = t.backlog.some(r => r.version != null)
+    if (versioned) {
+      // aggregate unreviewed-hold standing issue — the diagnose queue is
+      // behind or the local job is stopped; per-version issues at this
+      // scale are tracker spam the maintainer can't act on anyway
+      L.push('- 本单是 **未评审积压总单**：下列版本在押超 48h 且无任何裁决——AI 评审排队过久' +
+        (opts.paused ? '，且本地诊断已**声明暂停**（catalog 分支 `diagnose.paused`）' : '或诊断已停摆') +
+        '。判词落地后该版本自动移出本单并立单版审核单。', '')
+      L.push(`待裁决 ${t.backlog.length} 条（在押久者优先）：`)
+      const SHOW = 60
+      for (const r of t.backlog.slice(0, SHOW)) {
+        L.push(`- \`${r.name}\`@${r.version}${r.unscanned ? '（⚠️ 未跑过静态扫描）' : ''}` +
+          `${r.verification ? ` · ${VERI_ZH[r.verification] ?? r.verification}` : ''}${r.heldAt ? ` — 在押自 ${r.heldAt.slice(0, 10)}` : ''}`)
+      }
+      if (t.backlog.length > SHOW) L.push(`- …另 ${t.backlog.length - SHOW} 条见 index.json`)
+      L.push('',
+        '### 裁决方式',
+        '逐条评论：`/approve 包名@版本` 放行，`/concern 包名@版本 理由` 拦截（写回 `ai-verdicts.jsonl`，该版本即移出本单）。',
+        opts.paused
+          ? '本地诊断已声明暂停——恢复：删除 catalog 分支 `diagnose.paused`（`bin/ai-diagnose.sh resume`）。本单自身不适用 verdict 标签；积压清空时自动关闭。'
+          : '若队列长期不动，检查本地 launchd `ai-diagnose` 是否停摆；声明暂停可推 `diagnose.paused` 到 catalog 分支（`bin/ai-diagnose.sh pause`）。本单自身不适用 verdict 标签；积压清空时自动关闭。')
+      if (opts.repo) {
+        L.push('', `- 数据：[index.json](https://github.com/${opts.repo}/blob/catalog/index.json) / [最新日报](https://github.com/${opts.repo}/tree/catalog/digest)`)
+      } else {
+        L.push('', '- 数据：catalog 分支 `index.json` / `digest/`')
+      }
+      return L.join('\n')
+    }
     // aggregate repo-only standing issue — per-entry issues at this scale are
     // tracker spam; the body regenerates every sync so the list stays live
     L.push('- 本单是 **repo-only 在押积压总单**：下列条目没有可装 npm 包（latestVersion 为空），AI 不审——只能逐条人工裁决。', '')
@@ -334,7 +397,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       ? '已公示——但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
       : t.maturity === 'announced'
         ? '已公告·待放行闸——无人操作时按班放行（本单为异议窗口）'
-        : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
+        : t.maturity === 'maturing'
+          ? '已进最新日报公示——异议窗开放中，下期日报后按班放行'
+          : '已裁决·待日报公告——公示后才进入放行闸（本单为异议窗口）'}`)
   }
   if (t.humanVerdict) {
     L.push(`- 最新人工判词：**${t.humanVerdict.verdict}**${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}` +
@@ -396,7 +461,12 @@ export async function main(
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const verdicts = loadVerdicts(verdictsPath)
   const digest = loadDigestState(digestPath)
-  const targets = docketTargets(index, verdicts, digest)
+  // diagnose.paused on the catalog branch = the local AI queue is stopped on
+  // PURPOSE (declared by bin/ai-diagnose.sh pause) — every aged 'none' hold
+  // then aggregates into the standing issue instead of spamming per-version
+  // ones, and the body says "declared pause" rather than "looks dead"
+  const paused = existsSync(join(dirname(idxPath), 'diagnose.paused'))
+  const targets = docketTargets(index, verdicts, digest, { paused })
   const wanted = new Map(targets.map(t => [issueTitle(t), t]))
   const wantedByName = new Map(targets.map(t => [t.name, t]))
   const pagesBase = env.MARKET_PAGES_URL
@@ -463,7 +533,7 @@ export async function main(
       console.log(`[docket] create ${title}`)
       const args = ['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
-        '--body', issueBody(t, { repo, pagesBase })]
+        '--body', issueBody(t, { repo, pagesBase, paused })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -487,7 +557,7 @@ export async function main(
     const staleAi = [...curLabels].filter(l => l.startsWith('ai:') && l !== wantAi)
     const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
     const stuck = [...curLabels].find(l => l === 'verdict:pass' || l === 'verdict:concern') ?? null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused })
     const bodyDrift = ex.body !== undefined && ex.body.trim() !== body.trim()
     const edit = ['issue', 'edit', '-R', repo, String(ex.number)]
     for (const l of staleAi) edit.push('--remove-label', l)
@@ -520,13 +590,22 @@ export async function main(
   }
 
   const byName = new Map(index.plugins.map(e => [e.name, e]))
+  // slots folded into the unreviewed aggregate this tick — an individual
+  // 'none' issue closing because its target joined the standing issue must
+  // say so, not claim a verdict happened
+  const aggregated = new Set(
+    (wanted.get(issueTitle({ name: NONE_BACKLOG, version: null }))?.backlog ?? [])
+      .map(r => `${r.name}\0${r.version ?? ''}`),
+  )
   /** why an open [review] issue is out of the wanted set — the close comment
    *  must say WHICH, since "tombstoned" and "released" read very differently */
   const closeReason = (i: OpenIssue): string => {
     if (i.title === issueTitle({ name: REPO_BACKLOG, version: null })) return 'repo-only 积压已清空'
+    if (i.title === issueTitle({ name: NONE_BACKLOG, version: null })) return '未评审积压已清空'
     const t = titleTarget(i.title)
     const still = t && wantedByName.get(t.name)
     if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
+    if (t && aggregated.has(`${t.name}\0${t.ver}`)) return '并入未评审积压总单'
     const e = t ? byName.get(t.name) : undefined
     if (!e) return '该版本/条目已不在 catalog 索引中'
     // per-entry repo-only issue superseded by the aggregate — say so instead

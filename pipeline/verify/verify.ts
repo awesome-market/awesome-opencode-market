@@ -32,6 +32,10 @@ export interface VerifyResult {
   name: string
   /** exact version that was installed — write-back routes on this (DEV §4). */
   version?: string
+  /** npm SRI or git commit sha of the bytes actually measured — merge compares
+   *  it against the slot's pinned anchor (re-tag drift check) and reuses
+   *  same-bytes results across version slots. Absent on legacy/unpinned runs. */
+  integrity?: string
   status: 'verified' | 'failed'
   /** for `failed` = the stage that failed; for `verified` = the deepest stage
    *  that passed (feature-routed targets go past 'load'). `structure` is the
@@ -54,6 +58,9 @@ export interface VerifyResult {
 export interface VerifyTarget {
   name: string
   version?: string
+  /** github-kind install path: `plugin add <repo>[#<sha>]` — sha is the commit
+   *  the catalog pipeline scanned (source.version). Absent on npm targets. */
+  git?: { repo: string; sha?: string }
   /** features of the version under test — routes optional L2/L3a checks */
   features?: string[]
   /** installable parts the plan normalized from the entry's `contains`
@@ -120,7 +127,13 @@ export function writeDummyProvider(home: string): void {
   // spec into `plugins`; a blind writeFileSync erases it and the load check
   // can never see the plugin (E2E rehearsal found this)
   const cfgPath = join(dir, 'opencode.json')
-  const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, 'utf8') || '{}') as Record<string, unknown> : {}
+  // tolerate a malformed existing config — the sandboxed path already treats
+  // unparseable JSON as empty (a throw here would classify a broken config
+  // file as a harness failure, inconsistently between the two paths)
+  let cfg: Record<string, unknown> = {}
+  if (existsSync(cfgPath)) {
+    try { cfg = JSON.parse(readFileSync(cfgPath, 'utf8') || '{}') } catch { /* rebuild from empty */ }
+  }
   writeFileSync(cfgPath, JSON.stringify(dummyProviderConfig(cfg)))
 }
 
@@ -155,25 +168,31 @@ export function loadedSignal(logText: string, name: string): boolean {
  *  own handler — plugin code cannot fabricate it by writing files. (Residual:
  *  in-process runtime patching of the handler is out of scope; the uid sandbox
  *  covers the fs-level attack.)
+ *  `names` accepts several candidates: git-installed plugins may report a
+ *  target in an unknown shape (spec string, resolved URL, package name), so
+ *  plan passes [fullName, basename] for github targets — basename collisions
+ *  are harmless because a shard installs one plugin at a time.
  *  Returns the entry's server-reported state.status, or null when the package
  *  is absent from the listing. */
-export function apiPluginState(pluginsJson: string, name: string): string | null {
+export function apiPluginState(pluginsJson: string, names: string | string[]): string | null {
+  const cands = Array.isArray(names) ? names : [names]
   let doc: unknown
   try { doc = JSON.parse(pluginsJson) } catch { return null }
   let found = false
   let status: unknown
+  const matches = (t: string): boolean =>
+    cands.some(n => t === n || t.startsWith(`${n}@`) || t.startsWith(`${n}#`)
+      || t.endsWith(`/${n}`) || t.includes(`/${n}/`))
   const walk = (v: unknown): void => {
     if (found || !v || typeof v !== 'object') return
     if (Array.isArray(v)) { for (const x of v) walk(x); return }
     const o = v as Record<string, unknown>
     const src = o.source as Record<string, unknown> | undefined
     const st = o.state as Record<string, unknown> | undefined
-    if (src && typeof src === 'object' && src.type === 'package' && typeof src.target === 'string') {
-      const t = src.target
-      if (t === name || t.startsWith(`${name}@`) || t.endsWith(`/${name}`) || t.includes(`/${name}/`)) {
-        found = true
-        status = st?.status
-      }
+    if (src && typeof src === 'object' && src.type === 'package' && typeof src.target === 'string'
+        && matches(src.target)) {
+      found = true
+      status = st?.status
     }
     for (const x of Object.values(o)) walk(x)
   }
@@ -182,14 +201,14 @@ export function apiPluginState(pluginsJson: string, name: string): string | null
   return typeof status === 'string' ? status : 'unknown'
 }
 
-export function apiLoaded(pluginsJson: string, name: string): boolean {
-  return apiPluginState(pluginsJson, name) === 'active'
+export function apiLoaded(pluginsJson: string, names: string | string[]): boolean {
+  return apiPluginState(pluginsJson, names) === 'active'
 }
 
 /** Deterministic load failure: the server saw the plugin and moved it to a
  *  terminal 'failed' state — no point polling the rest of the window (V-4). */
-export function apiFailed(pluginsJson: string, name: string): boolean {
-  return apiPluginState(pluginsJson, name) === 'failed'
+export function apiFailed(pluginsJson: string, names: string | string[]): boolean {
+  return apiPluginState(pluginsJson, names) === 'failed'
 }
 
 interface Sandbox { user: string; wrapper: string; uh: string }
@@ -218,42 +237,105 @@ async function setupSandbox(home: string, user: string, run: ExecFn): Promise<Sa
   return { user, wrapper, uh }
 }
 
-/** Skill-payload verification — what skill-only (and the skill half of
- *  dual-nature) packages actually ship to users. `npm pack` of the pinned
- *  spec doubles as the download+integrity check (pacote validates
- *  dist.integrity on the way in); the tarball must then carry a SKILL.md
- *  with a frontmatter `name:` — opencode discovers skills via frontmatter,
- *  so a bare markdown file is not a loadable skill. The same notion of
- *  "skill file" as the admission gate (hasSkillPath): tarballs just carry
- *  a `package/` prefix the repo-tree paths lack. */
+/** Kill leftover processes owned by the sandbox uid that carry THIS target's
+ *  XDG_DATA_HOME in their environment — i.e. descendants of our own wrapper.
+ *  Scoped matching is what makes intra-shard parallelism safe: two lanes run
+ *  under the same nobody uid, so `pkill -u nobody` or `-f 'opencode serve'`
+ *  would kill a sibling lane's in-flight serve. /proc is Linux-only; on other
+ *  platforms fall back to the uid-wide sweep (macOS/local dev doesn't run the
+ *  parallel CI lanes anyway). */
+async function sweepSandboxProcs(run: ExecFn, user: string, uh: string): Promise<void> {
+  if (!existsSync('/proc')) {
+    await run('sudo', ['-n', '-u', user, 'pkill', '-f', 'opencode serve'], { timeout: 10_000 }).catch(() => {})
+    return
+  }
+  const marker = `XDG_DATA_HOME=${join(uh, 'data')}`
+  // environ files are 0400 owner-readable — running the scan AS the sandbox
+  // uid reads exactly the processes it can kill; other users' are skipped.
+  await run('sudo', ['-n', '-u', user, 'sh', '-c',
+    'for e in /proc/[0-9]*/environ; do ' +
+    `if grep -aqF ${shq(marker)} "$e" 2>/dev/null; then ` +
+    'p=${e#/proc/}; kill -TERM "${p%/environ}" 2>/dev/null; fi; done'],
+    { timeout: 15_000 }).catch(() => {})
+}
+
+/** Scan a package tarball's member list for a LOADABLE skill manifest.
+ *  opencode admits any SKILL.md whose frontmatter parses — so the check does
+ *  the same: a package may carry docs/SKILL.md beside the real
+ *  skills/x/SKILL.md, and checking only the first tar member would let
+ *  member ORDERING decide the verdict (a manifest-less file listed first
+ *  failed a perfectly valid package). `stripPrefix` removes the archive's
+ *  leading directory (npm: `package/`, codeload: `<repo>-<sha>/`). */
+export async function checkSkillTgz(
+  tgz: string, run: ExecFn, stripPrefix: RegExp, label: string,
+): Promise<{ ok: boolean; log?: string }> {
+  const list = await run('tar', ['tzf', tgz], { timeout: 30_000 })
+  const skillEntries = list.stdout.split('\n').map(p => p.trim())
+    .filter(p => /(^|\/)SKILL\.md$/.test(p.replace(stripPrefix, '')))
+  if (!skillEntries.length) return { ok: false, log: `no SKILL.md in ${label} tarball` }
+  const rejected: string[] = []
+  for (const entry of skillEntries) {
+    const body = (await run('tar', ['xzf', tgz, '-O', entry], { timeout: 30_000 })).stdout
+    // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
+    // SKILL.md files picked up both from Windows editors; neither changes
+    // whether opencode can parse the manifest
+    const fm = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(body)
+    if (fm?.[1] && /^name:\s*\S/m.test(fm[1])) return { ok: true }
+    rejected.push(entry)
+  }
+  return { ok: false, log: `no parseable SKILL.md frontmatter in ${label} (checked ${skillEntries.length}: ${rejected.join(', ')})` }
+}
+
+/** npm-sourced skill check: `npm pack` of the pinned spec doubles as the
+ *  download+integrity check (pacote validates dist.integrity on the way in).
+ *  The same notion of "skill file" as the admission gate (hasSkillPath). */
 export async function checkSkillStructure(
   home: string, run: ExecFn, spec: string,
 ): Promise<{ ok: boolean; log?: string }> {
   try {
     const pack = await run('npm', ['pack', spec, '--pack-destination', home], { timeout: 60_000 })
-    const tgzName = pack.stdout.trim().split('\n').at(-1) ?? ''
-    const tgz = join(home, tgzName)
-    const list = await run('tar', ['tzf', tgz], { timeout: 30_000 })
-    const skillEntry = list.stdout.split('\n').map(p => p.trim())
-      .find(p => /(^|\/)SKILL\.md$/.test(p.replace(/^package\//, '')))
-    if (!skillEntry) return { ok: false, log: `no SKILL.md in ${spec} tarball` }
-    const body = (await run('tar', ['xzf', tgz, '-O', skillEntry], { timeout: 30_000 })).stdout
-    // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
-    // SKILL.md files picked up both from Windows editors; neither changes
-    // whether opencode can parse the manifest
-    const fm = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(body)
-    if (!fm?.[1] || !/^name:\s*\S/m.test(fm[1])) {
-      return { ok: false, log: `SKILL.md in ${spec} lacks a frontmatter block with a name field` }
-    }
-    return { ok: true }
+    const tgzName = pack.stdout.trim().split('\n').at(-1)!
+    return await checkSkillTgz(join(home, tgzName), run, /^package\//, spec)
   } catch (e) {
     return { ok: false, log: String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(0, 2000) }
   }
 }
 
+/** github-kind equivalent: the codeload tarball of the reviewed commit.
+ *  Listing/streaming members executes no repo code, so a hostile tarball can
+ *  waste CPU but cannot run — the same exposure `npm pack`'s output gets. */
+export async function checkSkillStructureGit(
+  home: string, run: ExecFn, repo: string, sha: string | undefined,
+): Promise<{ ok: boolean; log?: string }> {
+  try {
+    const tgz = join(home, 'repo.tar.gz')
+    await run('curl', ['-sfL', `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`, '-o', tgz],
+      { timeout: 60_000 })
+    return await checkSkillTgz(tgz, run, /^[^/]+\//, `${repo}${sha ? `#${sha}` : ''}`)
+  } catch (e) {
+    return { ok: false, log: String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(0, 2000) }
+  }
+}
+
+/** Content identity of the bytes this run will install. npm targets ask the
+ *  registry for the spec's current dist.integrity — a re-tag between catalog
+ *  scan and verify shows up as a different SRI, which merge then flags as
+ *  drift rather than rubber-stamping. git targets are pinned by commit sha
+ *  already; the sha IS the measured identity. Failures degrade to undefined
+ *  (merge skips the anchor compare) rather than blocking the install. */
+async function measuredIntegrity(
+  run: ExecFn, name: string, opts: { version?: string; git?: VerifyTarget['git'] },
+): Promise<string | undefined> {
+  if (opts.git) return opts.git.sha
+  try {
+    const { stdout } = await run('npm', ['view', `${name}@${opts.version ?? 'latest'}`, 'dist.integrity'], { timeout: 15_000 })
+    return stdout.trim() || undefined
+  } catch { return undefined }
+}
+
 export async function verifyPackage(
   name: string,
-  opts: { version?: string; features?: string[]; parts?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn;
+  opts: { version?: string; git?: VerifyTarget['git']; features?: string[]; parts?: string[]; home?: string; timeoutMs?: number; execFn?: ExecFn;
     sandboxUser?: string; spawnFn?: SpawnFn; opencodeVersion?: string;
     bootWaitMs?: number; apiWaitMs?: number;
     tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {},
@@ -266,20 +348,45 @@ export async function verifyPackage(
   const env = xdgEnv(uh)
   // urun runs commands that may execute untrusted plugin code. Sandboxed, they
   // go through the nobody-uid wrapper; extra opts.env keys are re-injected as
-  // `env K=V` args because sudo strips the child env.
+  // `env K=V` args because sudo strips the child env. Keys that collide with
+  // the base env are OVERRIDES, not dropped — `env K=V cmd` semantics.
   const urun = ((cmd: string, args: string[], o: Record<string, unknown> = {}) => {
     if (!sb) return run(cmd, args, { env, ...o })
     const { env: oe, ...rest } = o
     const extra = Object.entries((oe ?? {}) as Record<string, unknown>)
-      .filter(([k]) => !(k in env)).map(([k, v]) => `${k}=${v ?? ''}`)
+      .map(([k, v]) => `${k}=${v ?? ''}`)
     return run(sb.wrapper, ['env', ...extra, cmd, ...args], { env: { PATH: env.PATH }, ...rest })
   }) as ExecFn
   const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
-  const spec = opts.version ? `${name}@${opts.version}` : name
+  // installable spec: npm name@version, or github owner/repo#sha — the sha is
+  // the commit the catalog pipeline scanned, so verify exercises the REVIEWED
+  // bytes rather than whatever HEAD has drifted to (a bare owner/repo install
+  // could pass code the scan never saw)
+  const spec = opts.git
+    ? (opts.git.sha ? `${opts.git.repo}#${opts.git.sha}` : opts.git.repo)
+    : (opts.version ? `${name}@${opts.version}` : name)
+  // the bytes this run measures — the anchor merge drift-checks and
+  // content-addressed reuse key on. npm: the registry's CURRENT SRI for the
+  // pinned spec (moves when the tag does). git: the pinned commit itself.
+  // Routed through urun so the sandbox invariant "every non-runner command
+  // goes through sb.sh" stays true — npm view is metadata-only either way.
+  const integrity = await measuredIntegrity(urun, name, opts)
+  // /api/plugin reports targets in an install-spec-dependent shape; git
+  // installs get the repo spec, its basename, and lowercase variants as
+  // extra candidates so 'O/R#sha', 'o/r#sha', resolved URLs, and tarball-
+  // derived names all match (one plugin is installed at a time, so loose
+  // candidates can't misattribute). GitHub names are case-insensitive —
+  // opencode may normalize either direction.
+  const repoBase = opts.git?.repo.split('/').pop()!   // split() always yields ≥1 element
+  const apiNames: string[] = opts.git
+    ? [name, opts.git.repo, repoBase, opts.git.repo.toLowerCase(), repoBase.toLowerCase()]
+      .filter((v, i, a) => a.indexOf(v) === i)
+    : [name]
   const base = {
     name,
     ...(opts.version ? { version: opts.version } : {}),
+    ...(integrity ? { integrity } : {}),
     opencodeVersion: opts.opencodeVersion ?? await ocVersion(env, urun).catch(() => 'unknown'),
     verifiedAt: new Date().toISOString(),
   }
@@ -289,7 +396,9 @@ export async function verifyPackage(
   // payload the client actually consumes (tarball → SKILL.md). (DEV §4.5)
   const parts = opts.parts ?? ['plugin']
   if (!parts.includes('plugin')) {
-    const s = await checkSkillStructure(uh, urun, spec)
+    const s = opts.git
+      ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
+      : await checkSkillStructure(uh, urun, spec)
     return {
       ...base, status: s.ok ? 'verified' : 'failed', level: 'structure',
       ...(s.ok ? {} : { logExcerpt: tail(s.log ?? 'skill structure check failed') }),
@@ -354,6 +463,12 @@ export async function verifyPackage(
   const apiPath = join(home, 'plugins.json')   // runner-owned — nobody can't write here
   try {
     let port = '', pw = ''
+    // SECURITY ASSUMPTION: the listening+password markers are scraped from
+    // serve's own stdout/stderr — trusted only because opencode 2.2.5 loads
+    // plugins lazily (no plugin code has run when these lines print). If a
+    // future version loads eagerly at boot, plugin output could print a fake
+    // "server listening" line pointing at a plugin-owned socket; re-audit
+    // this extraction on host upgrades (or switch to a runner-side probe).
     for (const t0 = Date.now(); Date.now() - t0 < (opts.bootWaitMs ?? 15_000) && !dead;) {
       if (/server listening/.test(serveOut)) {
         port = /127\.0\.0\.1:(\d+)/.exec(serveOut)?.[1] ?? ''
@@ -362,7 +477,17 @@ export async function verifyPackage(
       }
       await sleep(250)
     }
-    if (port) {
+    if (!port) {
+      // serve never announced a listener — under 2.2.5's lazy load the plugin
+      // code hasn't run at boot, so the package itself can't be the reason
+      // the server stayed down: this is harness breakage (runner resources,
+      // upstream output drift) and must not be written as a package 'failed'.
+      // A thrown error lands in the shard's harness:true lane — merge drops
+      // it and diagnose never sees a concern-worthy package verdict.
+      throw new Error(`serve did not announce a listener within ${opts.bootWaitMs ?? 15_000}ms` +
+        `${dead ? ' (process exited)' : ''}:\n${tail(serveOut)}`)
+    }
+    {
       const auth = ['-u', `opencode:${pw}`]
       const api = `http://127.0.0.1:${port}/api`
       // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
@@ -379,25 +504,27 @@ export async function verifyPackage(
       for (const t1 = Date.now(); Date.now() - t1 < (opts.apiWaitMs ?? 20_000);) {
         await run('curl', ['-s', ...auth, '-o', apiPath, `${api}/plugin`], { timeout: 15_000 }).catch(() => {})
         const body = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
-        if (apiPluginState(body, name) !== null) break
+        if (apiPluginState(body, apiNames) !== null) break
         await sleep(500)
       }
     }
   } finally {
     try { proc?.kill('SIGTERM') } catch { /* already gone */ }
-    // the sudo chain can orphan the nobody-uid serve — sweep it (same-uid
-    // pkill, can't touch runner processes)
-    if (sb) await run('sudo', ['-n', '-u', sb.user, 'pkill', '-f', 'opencode serve'], { timeout: 10_000 }).catch(() => {})
+    // the sudo chain can orphan the nobody-uid serve — sweep it. Scoped to
+    // THIS target's untrusted home (marker in /proc/<pid>/environ): parallel
+    // lanes run under the same nobody uid, so a blanket `pkill -u` or `-f`
+    // would murder a sibling lane's mid-flight serve.
+    if (sb) await sweepSandboxProcs(run, sb.user, uh)
   }
   // the nobody uid's files may be 700 — open them up for runner-side reads
   if (sb) await run('sudo', ['-n', 'chmod', '-R', 'a+rX', home], { timeout: 30_000 }).catch(() => {})
   const log = readLog(uh)
   const api = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
-  if (!apiLoaded(api, name)) {
+  if (!apiLoaded(api, apiNames)) {
     // why: deterministic (server moved the plugin to 'failed') vs timeout (the
     // entry never showed up) — the distinction surfaces in the published
     // logExcerpt so a flake is visibly different from a broken plugin (V-4)
-    const why = apiFailed(api, name)
+    const why = apiFailed(api, apiNames)
       ? 'serve reports the plugin failed to load'
       : 'plugin absent from /api/plugin after the load window'
     return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${serveOut}\n${log}\n/api/plugin: ${api}`) }
@@ -444,7 +571,9 @@ export async function verifyPackage(
   // dual-nature (plugin + skill): the plugin half just proved itself — check
   // the skill payload too so 'verified' honestly covers both advertised parts
   if (parts.includes('skill')) {
-    const s = await checkSkillStructure(uh, urun, spec)
+    const s = opts.git
+      ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
+      : await checkSkillStructure(uh, urun, spec)
     if (!s.ok) {
       return {
         ...base, status: 'failed', level,
@@ -521,42 +650,59 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
     // spawn). Three in a row is an outage, not three bad packages: stop
     // burning the remaining targets; they stay unverified for the next run.
     let harnessStreak = 0
-    for (const t of targets) {
-      const target = coerceTarget(t)
-      try {
-        results.push(await verifyPackage(target.name, {
-          ...passOpts,
-          opencodeVersion: ocVer,
-          ...(sandboxUser ? { sandboxUser } : {}),
-          ...(target.version ? { version: target.version } : {}),
-          ...(target.features ? { features: target.features } : {}),
-          ...(target.parts ? { parts: target.parts } : {}),
-        }))
-        harnessStreak = 0
-      } catch (e) {
-        harnessStreak++
-        // one bad target must not take the shard down — record it, but flag
-        // it as a harness error so merge drops it instead of writing a false
-        // package 'failed' (burns retries + feeds the diagnose concern
-        // short-circuit on packages never actually tested)
-        results.push({
-          name: target.name,
-          ...(target.version ? { version: target.version } : {}),
-          status: 'failed', level: 'install',
-          opencodeVersion: 'unknown',
-          verifiedAt: new Date().toISOString(),
-          logExcerpt: `harness error: ${String(e).slice(0, 2000)}`,
-          harness: true,
-        })
-      }
-      console.log(`verify ${target.name}@${target.version ?? 'latest'}: ${results.at(-1)!.status}`)
-      flush()
-      if (harnessStreak >= 3) {
-        console.error(`harness failure streak (${harnessStreak} consecutive throws) — aborting shard; ` +
-          `${targets.length - results.length} targets left unverified for the next run`)
-        break
+    // two lanes, each target in its own runner-owned home+sandbox uid subtree.
+    // Isolation points: uh is per-target (mkdtemp), the process sweep is
+    // marker-scoped (sweepSandboxProcs), and results/flush are shared in-
+    // process state on one event loop — no locks needed. ~2× throughput;
+    // serve ports are ephemeral (--port 0) so lanes never collide on a port.
+    const LANES = 2
+    let cursor = 0
+    let aborted = false
+    const lane = async (): Promise<void> => {
+      for (;;) {
+        if (aborted || harnessStreak >= 3) return
+        const i = cursor++
+        if (i >= targets.length) return
+        const target = coerceTarget(targets[i]!)
+        try {
+          results.push(await verifyPackage(target.name, {
+            ...passOpts,
+            opencodeVersion: ocVer,
+            ...(sandboxUser ? { sandboxUser } : {}),
+            ...(target.version ? { version: target.version } : {}),
+            ...(target.git ? { git: target.git } : {}),
+            ...(target.features ? { features: target.features } : {}),
+            ...(target.parts ? { parts: target.parts } : {}),
+          }))
+          harnessStreak = 0
+        } catch (e) {
+          harnessStreak++
+          // one bad target must not take the shard down — record it, but flag
+          // it as a harness error so merge drops it instead of writing a false
+          // package 'failed' (burns retries + feeds the diagnose concern
+          // short-circuit on packages never actually tested)
+          results.push({
+            name: target.name,
+            ...(target.version ? { version: target.version } : {}),
+            status: 'failed', level: 'install',
+            opencodeVersion: 'unknown',
+            verifiedAt: new Date().toISOString(),
+            logExcerpt: `harness error: ${String(e).slice(0, 2000)}`,
+            harness: true,
+          })
+        }
+        const r = results.at(-1)!
+        console.log(`verify ${target.name}@${target.version ?? target.git?.sha?.slice(0, 12) ?? 'latest'}: ${r.status}`)
+        flush()
+        if (harnessStreak >= 3 && !aborted) {
+          aborted = true
+          console.error(`harness failure streak (${harnessStreak} consecutive throws) — aborting shard; ` +
+            `${targets.length - results.length} targets left unverified for the next run`)
+          return
+        }
       }
     }
+    await Promise.all(Array.from({ length: LANES }, lane))
     return results
   } finally {
     process.off('unhandledRejection', onRej)

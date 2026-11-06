@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
-import { main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
+import { main as diagnoseMain, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { main as digestMain } from '../pipeline/ai/digest.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
@@ -33,10 +33,21 @@ import { detectFeatures } from '../src/features.ts'
 import { backfill } from '../pipeline/backfill.ts'
 
 /** serve reports dead on arrival — a test must never boot a real `opencode`
- *  binary (dev boxes may have one installed). */
+ *  binary (dev boxes may have one installed). Boot silence now throws
+ *  (harness lane) — tests exercising post-boot stages use liveSpawn. */
 const deadSpawn = (() => ({
   stdout: { on: () => {} }, stderr: { on: () => {} },
   on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
+/** Fake serve that announces its listener — exercises the post-boot path. */
+const liveSpawn = (() => ({
+  stdout: { on: (_e: 'data', cb: (d: unknown) => void) => {
+    cb('server listening on http://127.0.0.1:4567\nserver password pw\n')
+  } },
+  stderr: { on: () => {} },
+  on: () => {},
   kill: () => {},
 })) as unknown as SpawnFn
 
@@ -59,6 +70,11 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p))
+/** canary-aware l05 mock — the batch always carries the two self-check
+ *  blocks; a map that omits them trips "classifier untrusted" and every
+ *  real score gets dropped (that's the point of the canary). */
+const l05Map = (fixed: Record<string, number> = {}) =>
+  new Map<string, number>([[L05_CANARY_BENIGN.id, 0.1], [L05_CANARY_HOSTILE.id, 0.9], ...Object.entries(fixed)])
 
 describe('ai/diagnose.main', () => {
   const files = (plugins: PluginEntry[], verdicts: AiVerdict[] = []) => {
@@ -76,7 +92,7 @@ describe('ai/diagnose.main', () => {
   it('l05 clean + ornith pass → pass verdict written', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.1]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.1 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -89,7 +105,7 @@ describe('ai/diagnose.main', () => {
   it('l05 flag + ornith pass → composite concern (layering wins)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.9]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.9 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -112,7 +128,7 @@ describe('ai/diagnose.main', () => {
   it('ornith fails + l05 flag → concern still written (fail-closed via L0.5)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['pkg\0manifest', 0.99]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.99 }),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
@@ -123,18 +139,18 @@ describe('ai/diagnose.main', () => {
   it('ornith fails + no l05 → NO verdict (stays held, retried next run)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
     expect(readFileSync(op, 'utf8')).toBe('')
   })
   it('verify-failed → direct concern with excerpt, LLM never called', async () => {
-    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load' }, heldAt: 't' } })
+    const failed = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
     const { ip, vp, op } = files([failed])
     let called = false
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { called = true; throw new Error('must not be called') },
       sha: noSha,
     })
@@ -149,7 +165,7 @@ describe('ai/diagnose.main', () => {
     const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
       sha: noSha,
     })
@@ -162,7 +178,7 @@ describe('ai/diagnose.main', () => {
     const flagged = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { throw new Error('omlx down') },
       sha: noSha,
     })
@@ -188,7 +204,7 @@ describe('ai/diagnose.main', () => {
   it('sha drift on a verdicted version → auto re-review', async () => {
     const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-old' })])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: '重审', reasonEn: 're' }),
       sha: () => 'sha512-new',
     })
@@ -201,7 +217,7 @@ describe('ai/diagnose.main', () => {
     const { ip, vp, op } = files([held])
     let called = false
     await diagnoseMain(argv(ip, vp, op, ['--budget', '0']), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { called = true; throw new Error('x') },
       sha: noSha,
     })
@@ -214,7 +230,7 @@ describe('ai/diagnose.main', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       await diagnoseMain(argv(ip, vp, op, ['--dry', '--name', 'pkg']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
         sha: noSha,
       })
@@ -222,7 +238,7 @@ describe('ai/diagnose.main', () => {
       expect(log.mock.calls.flat().join(' ')).toContain('"name":"pkg"')
       // --limit 1 slices candidates
       await diagnoseMain(argv(ip, vp, op, ['--limit', '1']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
         sha: noSha,
       })
@@ -232,7 +248,7 @@ describe('ai/diagnose.main', () => {
   it('existing verdict (any source) excludes the target; matching sha = no drift', async () => {
     const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-x' })])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
       sha: () => 'sha512-x',
     })
@@ -241,19 +257,38 @@ describe('ai/diagnose.main', () => {
 })
 
 describe('ai/digest.main', () => {
-  it('writes digest/<day>.md + digest-state.json; --date pins the day', async () => {
+  it('writes digest/<day>.md + digest-state.json; --date backfills md only', async () => {
     const d = tmp('dig-')
     const ip = join(d, 'index.json'), vp = join(d, 'v.jsonl'), sp = join(d, 'state.json')
     writeFileSync(ip, JSON.stringify(idx([e()])))
     writeFileSync(vp, JSON.stringify(v({ at: '2026-02-01T00:00:00Z' })) + '\n')
-    await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    // --date backfill render: md lands but state stays untouched (see below)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    } finally { log.mockRestore() }
     const md = readFileSync(join(d, 'digest', '2026-02-02.md'), 'utf8')
     expect(md).toContain('marketplace digest 2026-02-02')
     expect(md).toContain('pkg')
-    // anchor = max seen verdict.at (not render-time now) AND the seen verdict
-    // line lands in `announced` — maturity is membership, not the timestamp
+    // the maturity anchor is left alone — a backdated day/dayAnnounced would
+    // wedge same-day accumulation, and the skipped announcements re-enter at
+    // the next real render anyway
+    expect(existsSync(sp)).toBe(false)
+    // consequence of md-only backfill: with NO prior state ever written, the
+    // next real render sees digest/*.md history + missing state → the
+    // state-loss refusal (fail-closed mass-announce guard) fires. A catalog
+    // that already has state doesn't hit this — provide it and the render
+    // announces the verdict normally
+    writeFileSync(sp, JSON.stringify({ lastDigestAt: '2026-02-01T21:00:00Z', announced: [], day: '2026-02-01', dayAnnounced: [] }))
+    const log2 = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d])
+    } finally { log2.mockRestore() }
     const st = JSON.parse(readFileSync(sp, 'utf8'))
-    expect(st.lastDigestAt).toBe('2026-02-01T00:00:00Z')
+    // real render: anchor is monotonic from prev (never regresses) AND the
+    // seen verdict line lands in `announced` — maturity is membership, not
+    // the timestamp
+    expect(st.lastDigestAt).toBe('2026-02-01T21:00:00Z')
     expect(st.announced).toEqual([akey(v({ at: '2026-02-01T00:00:00Z' }))])
   })
   it('existing state anchors the window; --dry prints without writing', async () => {
@@ -334,7 +369,7 @@ describe('notify-published.main', () => {
       expect(JSON.parse(out[0]!).notified).toBe(true)
       expect(JSON.parse(out[1]!).notified).toBe(false)
       expect(out[2]).toBe('not-json')
-      expect(log.mock.calls.flat().join('')).toBe('42')
+      expect(log.mock.calls.flat().join('')).toBe('42\to/pkg')
     } finally { log.mockRestore() }
   })
 })
@@ -405,14 +440,14 @@ describe('verifyPackage feature routes', () => {
       } })`)
   }
   it('tui feature: tmux survives → level interactive', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: deadSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: liveSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
   })
   it('tui feature: session dies → failed/interactive', async () => {
     const r = await verifyPackage('pkg', {
       home: home(), features: ['tui'], tuiOpts: { settleMs: 1 },
-      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: deadSpawn,
+      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: liveSpawn,
     })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('interactive')
@@ -420,12 +455,12 @@ describe('verifyPackage feature routes', () => {
   it('gui feature: bundle renders → level render', async () => {
     const h = home()
     guiFixture(h)
-    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
   })
   it('gui feature: bundle dir missing → failed/render', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: deadSpawn, features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('render')
   })

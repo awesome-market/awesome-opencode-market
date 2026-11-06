@@ -83,6 +83,12 @@ export default Plugin.define({
       // installs were unguarded (double 'i' raced two tarballs) and 'C' could
       // never reach a fetch.
       const jobs = new Map<string, Set<() => void>>()
+      // the search <input> consumes esc/enter to leave search mode, but the
+      // modal keymap layer is a SEPARATE dispatch — stopPropagation can't reach
+      // it, and depending on dispatch order act() may see the SAME keypress
+      // after searchOn already flipped false (→ dialog.clear()). Timestamp the
+      // input-side exit; act() swallows esc/enter for a short window after.
+      let searchExitAt = 0
       const jobTrack = (name: string, cancel: () => void): (() => void) => {
         let s = jobs.get(name)
         if (!s) jobs.set(name, s = new Set())
@@ -630,7 +636,20 @@ export default Plugin.define({
         if (item.startsWith('chip:')) toggleCat(item.slice(5))
       }
       const toTab = (i: number) => { setTab(TABS()[i][0]); setSel(0); setDetail(null); setCat(''); setMenu(null); setZone('grid') }
-      const act = (k: string): void => {
+      const act = (k: string): void | false => {
+        if ((k === 'escape' || k === 'return') && Date.now() - searchExitAt < 250) return
+        // search mode: the layer stays enabled (disabling it let the host's
+        // own escape→close binding fire and kill the whole dialog). Printable
+        // keys return false so they continue down to the focused <input>;
+        // esc/enter are consumed HERE to leave search — never reaching
+        // act('escape')'s dialog.clear() or act('return')'s detail pop.
+        if (searchOn()) {
+          if (k === 'escape' || k === 'return') {
+            setSearchOn(false); (searchInput as { blur?(): void })?.blur?.()
+            return
+          }
+          return false
+        }
         if (prompt()) {
           if (k === 'escape' || k === 'q') { closePrompt(null); return }
           if (k === 'return') { closePrompt(promptVal()); return }
@@ -738,7 +757,10 @@ export default Plugin.define({
         '0 1 2 3 4 5 6 7 8 9 / * - _ . : ~ @ U C'
       ctx.keymap.layer(() => ({
         mode: 'modal',
-        enabled: () => !searchOn(),
+        // always enabled — act() itself routes keys while searchOn (esc/enter
+        // exit search, everything else falls through to the input). Gating the
+        // layer on !searchOn left escape unbound, so the host's dialog-close
+        // binding fired and killed the whole market dialog on search-exit.
         commands: BINDS.split(' ').map(b => ({ bind: b, run: () => act(b) })),
       }))
       // nav keys go through the modal keymap layer only — re-dispatching them
@@ -748,6 +770,7 @@ export default Plugin.define({
           if (ev.name === 'escape') closePrompt(null)
           else if (ev.name === 'return') closePrompt(promptVal())
         } else if (searchOn() && (ev.name === 'escape' || ev.name === 'return')) {
+          searchExitAt = Date.now()
           setSearchOn(false); (searchInput as { blur?(): void })?.blur?.()
         }
       })
@@ -853,8 +876,16 @@ export default Plugin.define({
                   value={query()}
                   onInput={(v: string) => setQuery(v)}
                   ref={(r) => { searchInput = r as unknown as typeof searchInput }}
-                  onKeyDown={(ev: { name: string }) => {
-                    if (ev.name === 'escape' || ev.name === 'return') { setSearchOn(false); (searchInput as { blur?(): void })?.blur?.() }
+                  onKeyDown={(ev: { name: string; stopPropagation?: () => void; preventDefault?: () => void }) => {
+                    // esc/enter exit search mode ONLY — without stopPropagation
+                    // the same keypress falls through to the modal keymap and
+                    // act('escape') clears the whole dialog (enter would pop a
+                    // detail view the user never asked for)
+                    if (ev.name === 'escape' || ev.name === 'return') {
+                      ev.stopPropagation?.(); ev.preventDefault?.()
+                      searchExitAt = Date.now()
+                      setSearchOn(false); (searchInput as { blur?(): void })?.blur?.()
+                    }
                   }}
                 />
                 <box backgroundColor={chromeFocused(2, 1) ? theme.background.action.primary.focused : undefined}>

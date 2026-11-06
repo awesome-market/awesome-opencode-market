@@ -19,7 +19,7 @@
  *  direction.
  *
  *  Usage: tsx pipeline/verdicts-compact.ts <ai-verdicts.jsonl> [--days N] [--dry] */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { AiVerdict } from '../src/schema.ts'
 import { vkey, atCmp } from './verdicts.ts'
 
@@ -85,7 +85,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   } else if (dry) {
     console.log(`[verdicts-compact] DRY: would drop ${dropped}/${total} superseded AI lines older than ${days}d`)
   } else {
-    writeFileSync(path, lines.join('\n') + '\n')
+    // tmp+rename — the file is the append-only audit log; a mid-write crash
+    // (ENOSPC, signal) must never leave a truncated jsonl for the workflow
+    // to `git add` and push. Same-dir rename is atomic on POSIX.
+    const tmp = `${path}.tmp-${process.pid}`
+    try {
+      writeFileSync(tmp, lines.join('\n') + '\n')
+      renameSync(tmp, path)
+    } catch (x) {
+      try { unlinkSync(tmp) } catch { /* tmp may not exist */ }
+      throw x
+    }
     console.log(`[verdicts-compact] ${path}: dropped ${dropped}/${total} superseded AI lines older than ${days}d → ${lines.length} lines`)
   }
 }

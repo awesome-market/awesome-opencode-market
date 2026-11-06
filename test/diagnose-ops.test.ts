@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { main as diagnoseMain, materialPrompt, MATERIAL_BUDGET } from '../pipeline/ai/diagnose.ts'
+import { main as diagnoseMain, materialPrompt, MATERIAL_BUDGET, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { renderDigest } from '../pipeline/ai/digest.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -28,12 +28,14 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
 })
 const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
 const flaggedHeld = e({ name: 'bad', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['net:exfil'] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
-const failedHeld = e({ name: 'broken', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404' }, heldAt: '2026-01-01T00:00:00Z' } })
+const failedHeld = e({ name: 'broken', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3 }, heldAt: '2026-01-01T00:00:00Z' } })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '2.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 const noSha = () => undefined
-const cleanL05 = () => new Map([['pkg\0manifest', 0.1]])
+// canary-aware: the batch always carries the two self-check blocks — a map
+// missing them trips "classifier untrusted" and every score is dropped
+const cleanL05 = () => new Map<string, number>([[L05_CANARY_BENIGN.id, 0.1], [L05_CANARY_HOSTILE.id, 0.9], ['pkg\0manifest', 0.1]])
 const okOrnith = async () => ({ verdict: 'pass' as const, reasonZh: 'ok', reasonEn: 'ok' })
 
 const files = (plugins: PluginEntry[], verdicts: AiVerdict[] = [], state?: string) => {
@@ -189,7 +191,7 @@ describe('D-12 mid-run LLM circuit breaker', () => {
     let calls = 0
     const { argv, op } = files(targets)
     await diagnoseMain(argv, {
-      l05: () => new Map(),
+      l05: cleanL05,
       ornith: async () => { calls++; throw new Error('omlx died mid-run') },
       sha: noSha, ping: async () => true,
     })
@@ -206,7 +208,7 @@ describe('D-12 mid-run LLM circuit breaker', () => {
     let calls = 0
     const { argv, op } = files(targets)
     await diagnoseMain(argv, {
-      l05: () => new Map(),
+      l05: cleanL05,
       // fail, fail, pass, fail — never 3 consecutive
       ornith: async () => { if (++calls === 3) return okOrnith(); throw new Error('flaky') },
       sha: noSha, ping: async () => true,
