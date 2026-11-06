@@ -9,7 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs, candidateSlot } from './verdicts.ts'
 import { retryable } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
@@ -424,9 +424,10 @@ export async function run(opts: RunOptions = {}) {
     const disp = pk && e.latestVersion
       ? anchorIntegrity(e.capabilities, e.integrity, pk.integrityOf[e.latestVersion] ?? null)
       : { integrity: e.integrity ?? null, capabilities: e.capabilities }
-    const held = pk && e.pendingUpdate
-      ? anchorIntegrity(e.pendingUpdate.capabilities, e.pendingUpdate.integrity ?? null,
-          pk.integrityOf[e.pendingUpdate.version] ?? null)
+    const eSlot = candidateSlot(e)
+    const held = pk && eSlot
+      ? anchorIntegrity(eSlot.capabilities, eSlot.integrity ?? null,
+          pk.integrityOf[eSlot.version] ?? null)
       : null
     // identity findings re-derive with the fresh packument — a repo
     // package.json rename or repository-url drift must not freeze until the
@@ -480,7 +481,7 @@ export async function run(opts: RunOptions = {}) {
       // pins the DISPLAYED version's tarball (R-1)
       integrity: disp.integrity,
       capabilities: caps,
-      ...(held ? { pendingUpdate: { ...e.pendingUpdate!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
+      ...(held ? { pendingUpdate: { ...eSlot!, capabilities: held.capabilities, integrity: held.integrity } } : {}),
       // refresh repoId so repojacking detection works on reused entries too —
       // and write the packument-resolved repo back so a repoint actually lands
       // (repoId then describes the NEW repo's identity; if its id differs from
@@ -518,12 +519,16 @@ export async function run(opts: RunOptions = {}) {
       // version ACTUALLY occupies: a scan-failed pendingUpdate carries no
       // rulesetVersion, and the old `?? prev.capabilities` fallback borrowed
       // the displayed slot's ruleset — failed held scans froze forever.
-      const slotCaps = prev
-        ? prev.pendingUpdate?.version === candVersion ? prev.pendingUpdate.capabilities
-          : prev.latestVersion === candVersion ? prev.capabilities
-          : null
+      // candidateSlot, not raw pendingUpdate: on a pending entry a leftover
+      // hold is the B3 inverted state — its version/caps describe bytes
+      // nobody reviews, so matching it here would short-circuit reuse of an
+      // entry whose REAL candidate (latestVersion) was never re-evaluated
+      const prevSlot = prev ? candidateSlot(prev) : null
+      const prevCandVer = prevSlot?.version ?? prev?.latestVersion
+      const slotCaps = prev && candVersion && prevCandVer === candVersion
+        ? prevSlot?.capabilities ?? prev.capabilities
         : null
-      if (prev && candVersion && candVersion === (prev.pendingUpdate?.version ?? prev.latestVersion)
+      if (prev && candVersion && candVersion === prevCandVer
           && slotCaps?.rulesetVersion === RULESET_VERSION
           && !isBlocked(cand.name, prev.slug)) {
         const stale = Date.parse(now) - Date.parse(prev.metrics.checkedAt) > METRICS_STALE_MS
@@ -531,7 +536,7 @@ export async function run(opts: RunOptions = {}) {
         // backfill the SRI — otherwise they'd stay sha-less until the next bump.
         // Same for held slots whose hold predates pendingUpdate.integrity.
         const needsIntegrity = (!prev.integrity && !!prev.latestVersion)
-          || (!!prev.pendingUpdate && !prev.pendingUpdate.integrity)
+          || (prevSlot !== null && !prevSlot.integrity)
         entries.push(stale || needsIntegrity ? await refreshMeta(prev) : prev)
         reusedNames.add(cand.name)
         return
@@ -1316,9 +1321,12 @@ export async function run(opts: RunOptions = {}) {
     c !== undefined && c.rulesetVersion !== RULESET_VERSION
   const rescanStaleNpm = async (e: PluginEntry, pk: { tarballOf: Record<string, string | undefined>; integrityOf: Record<string, string | undefined> } | null): Promise<PluginEntry> => {
     if (!pk) return e
-    const needScan = staleCaps(e.capabilities) || staleCaps(e.pendingUpdate?.capabilities)
+    // candidateSlot: a pending entry's leftover hold is the B3 inverted
+    // state — rescanning/drift-checking it burns budget on dead bytes and
+    // keeps the shadow alive; the candidate slot is what needs fresh rules
+    const pu = candidateSlot(e)
+    const needScan = staleCaps(e.capabilities) || staleCaps(pu?.capabilities)
     let caps = e.capabilities
-    const pu = e.pendingUpdate
     let puCaps = pu?.capabilities
     let puScanned = false
     if (needScan && rescanBudget > 0) {
@@ -1358,7 +1366,7 @@ export async function run(opts: RunOptions = {}) {
       if (drift) puCaps = { ...puCaps!, redFlags: [...new Set([...puCaps!.redFlags, DRIFT_FLAG])] }
       puIntegrity = puScanned ? (regSha ?? puIntegrity) : (puIntegrity ?? regSha)
     }
-    const puChanged = pu !== undefined
+    const puChanged = pu !== null
       && (puCaps !== pu.capabilities || puIntegrity !== (pu.integrity ?? null))
     return {
       ...e, capabilities: dispA.capabilities, integrity: dispA.integrity,

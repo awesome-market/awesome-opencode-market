@@ -293,7 +293,10 @@ export function applyMatureVerdicts(
   const latest = latestVerdicts(verdicts)
   const releases: string[] = []
   const held: string[] = []
-  if (latest.size === 0) return { index, releases, held }
+  // NO early return on empty verdicts: the per-entry pass below also carries
+  // the R-9 source invariant (a pending entry never keeps a pendingUpdate) —
+  // skipping it would let a hand-built/legacy inverted index pass through
+  // untouched exactly when there is nothing else to adjudicate
   const latestHuman = latestHumanVerdicts(verdicts)
   // Maturity = the verdict LINE was announced in a digest — membership, not a
   // timestamp comparison. A verdict pushed late with an old `at` can never

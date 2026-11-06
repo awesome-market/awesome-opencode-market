@@ -7,6 +7,7 @@
 import type { CatalogIndex, PluginEntry, RemovedEntry } from '../../src/schema.ts'
 import { CatalogIndex as CatalogIndexSchema } from '../../src/schema.ts'
 import { CAT_NAMES, catId } from '../../src/categories.ts'
+import { candidateVer } from '../verdicts.ts'
 
 /** Host opencode version used for verification cache keys (name@version+host, DEV §4).
  *  Bump in lockstep with verify.yml's installed @opencode/cli version. */
@@ -67,7 +68,9 @@ export function trustFlags(prev: PluginEntry | undefined, e: PluginEntry): { fin
   // only observable via distTags). Legacy entries without distTags fall
   // back to the held/displayed markers as before.
   const curUpstream = e.distTags?.latest ?? e.latestVersion
-  const prevUpstream = prev.distTags?.latest ?? prev.pendingUpdate?.version ?? prev.latestVersion
+  // candidateVer, not raw pendingUpdate: on a pending entry a leftover hold
+  // is the B3 inverted state — the stale hold's version is not "upstream"
+  const prevUpstream = prev.distTags?.latest ?? candidateVer(prev) ?? prev.latestVersion
   if (versionCmp(curUpstream, prevUpstream) < 0) redFlags.push('sec:version-rollback')
   // delta scan: rules present in new findings but absent from previous findings.
   // Only meaningful when both sides were scanned by the SAME ruleset — a ruleset
