@@ -52,8 +52,11 @@ jobs:
             # --depth=1: only the tip's files are read below (index/verdicts/
             # digest-state/submissions/blocklist) — index.json is ~14MB per
             # commit, so fetching the whole catalog history every run was an
-            # unbounded download. Same posture site.yml already takes.
-            git fetch --depth=1 origin catalog
+            # unbounded download. Same posture site.yml already takes. The
+            # '+' forced refspec also survives a rewritten catalog branch —
+            # a non-FF tracking update would otherwise fail and leave
+            # origin/catalog stale (every consumer below reads that ref).
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
             git show origin/catalog:index.json > /tmp/old-index.json
             if [ ! -s /tmp/old-index.json ]; then
               echo "catalog branch exists but index.json is empty — refusing to run blind (WF-1)"
@@ -156,7 +159,7 @@ jobs:
             # shallow push is fine (verified: detached-HEAD worktree commit +
             # HEAD:catalog push + refetch-after-move all work under depth=1).
             # Full history would be ~14MB × every index commit, per run.
-            git fetch --depth=1 origin catalog
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
             git worktree add /tmp/cat origin/catalog
             ;;
             2)
@@ -171,7 +174,7 @@ jobs:
           ok=0
           RELEASE_FAILED=0
           for i in 1 2 3 4; do
-            git fetch --depth=1 origin catalog 2>/dev/null || true
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' 2>/dev/null || true
             git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
             # race happened → re-merge our fresh scan against the fresh remote index
             # (preserves remote's verification/removed state instead of clobbering it)
@@ -265,7 +268,7 @@ jobs:
               # the commit instead; a still-staged diff means it never landed.
               git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || continue
               git -C /tmp/cat push origin HEAD:catalog && { flagPushed=1; break; }
-              git fetch --depth=1 origin catalog 2>/dev/null || true
+              git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' 2>/dev/null || true
               git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
               npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
               npx tsx pipeline/seed-outcome.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/seed-outcomes.json

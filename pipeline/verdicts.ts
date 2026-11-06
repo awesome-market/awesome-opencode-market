@@ -186,6 +186,23 @@ export function brakeFor(
   return brake
 }
 
+/** A standing HUMAN pass on this exact key — the sanctioned release
+ *  authority for slots an AI pass can never legitimately release
+ *  (red-flagged or never-scanned). The "ai pass on flagged = ignored" gate
+ *  exists because an AI verdict on those slots is hollow (the AI never
+ *  reviews flagged content) — but when a human already passed the same key,
+ *  a LATER ai pass of the same verdict must not shadow that decision back
+ *  into 'ignored' forever: the same human-stickiness principle as R-4,
+ *  applied to passes. Epoch-gated like every pass: a pass on a previous
+ *  incarnation (pre-tombstone) does not cover a recycled name's bytes. */
+export const humanPassCovers = (
+  human: Map<string, AiVerdict>, name: string, version: string | null,
+  tomb: Map<string, string>,
+): boolean => {
+  const h = human.get(vkey(name, version))
+  return h?.verdict === 'pass' && epochGoverning(h, name, tomb) !== undefined
+}
+
 /** The verdict that actually governs one (name, version) slot — the single
  *  semantic every consumer must share (release gate, run.ts pin checks,
  *  digest phases, docket):
@@ -311,8 +328,11 @@ export function applyMatureVerdicts(
       } else if (v && mature(v)
         // 没扫到 ≠ 安全: an AI pass may not release a slot the scanner never
         // ran on (scannedAt null) — same treatment as red flags. Human pass
-        // stays an informed-decision escape hatch.
-        && !(v.source === 'ai' && (pu.capabilities.redFlags.length > 0 || pu.capabilities.scannedAt === null))
+        // stays an informed-decision escape hatch — and a standing one must
+        // not be shadowed by a later AI pass of the same verdict (the ignore
+        // exists for hollow AI verdicts, not to un-release human decisions)
+        && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, pu.version, latestTomb)
+          && (pu.capabilities.redFlags.length > 0 || pu.capabilities.scannedAt === null))
         // only pu.integrity describes the CANDIDATE's bytes — e.integrity
         // pins the displayed version and would false-block every legacy
         // hold (pre-pu.integrity) whose verdict carries a sha
@@ -391,7 +411,8 @@ export function applyMatureVerdicts(
           if (e.approvalReason && e.approvalReason !== 'awaiting-review')
             e = { ...e, approvalReason: 'awaiting-review' }
           if (mature(v)
-            && !(v.source === 'ai' && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
+            && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
+              && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
             && shaOk(v, shaAnchor(e))
             && RELEASABLE.has(e.verification.status)) {
             e = { ...e, approval: 'approved', approvalReason: undefined }
@@ -457,7 +478,8 @@ export function explainEntry(
   const latestHuman = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
   const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
-  const tomb = tombEpochs(removed).get(e.name.toLowerCase())
+  const tombs = tombEpochs(removed)
+  const tomb = tombs.get(e.name.toLowerCase())
   // mirror applyMatureVerdicts' package brake (shared helpers): a human
   // concern on name@null overrides every slot unless a newer human pass
   // exists on that slot key
@@ -477,6 +499,10 @@ export function explainEntry(
   ): SlotExplain => {
     const { v, packageBrake } = verdictFor(version)
     const raw = latest.get(vkey(e.name, version))
+    // a standing human pass covers the ai-pass-on-flagged ignore — the gate
+    // releases under the human's authority, so '被拦截' would lie
+    const humanCover = v?.verdict === 'pass' && v.source === 'ai'
+      && humanPassCovers(latestHuman, e.name, version, tombs)
     const base = {
       slot, version,
       verdict: v?.verdict ?? null,
@@ -484,8 +510,8 @@ export function explainEntry(
       at: v?.at ?? null,
       announced: v ? announced.has(akey(v)) : false,
       stickyHuman: raw !== undefined && raw !== v && !packageBrake,
-      aiBlockedByFlags: v?.verdict === 'pass' && v.source === 'ai' && redFlags > 0,
-      aiBlockedByNoScan: v?.verdict === 'pass' && v.source === 'ai' && unscanned,
+      aiBlockedByFlags: v?.verdict === 'pass' && v.source === 'ai' && !humanCover && redFlags > 0,
+      aiBlockedByNoScan: v?.verdict === 'pass' && v.source === 'ai' && !humanCover && unscanned,
       verification,
     }
     if (!v) return { ...base, outcome: 'none', why: '无裁决 — 等评审' }
@@ -520,7 +546,8 @@ export function explainEntry(
     // membership), same gate applyMatureVerdicts applies
     if (dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }
-    return { ...base, outcome: 'release', why: `${pre}pass 成熟 + 可放行 → 生效` }
+    return { ...base, outcome: 'release',
+      why: `${pre}pass 成熟 + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
   }
   const out: SlotExplain[] = []
   if (e.pendingUpdate) {

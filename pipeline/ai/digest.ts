@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
   effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp,
-  tombEpochs, epochGoverning } from '../verdicts.ts'
+  tombEpochs, epochGoverning, humanPassCovers } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
@@ -362,10 +362,13 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     if (vf.status === 'failed') return '验证失败'
     // mirror applyMatureVerdicts' AI gates: an announced AI pass on a flagged
     // or never-scanned slot can NEVER auto-release — '待放行闸' would promise
-    // a release that structurally won't happen without a human verdict
+    // a release that structurally won't happen without a human verdict.
+    // Except when a standing human pass covers the same key: that IS the
+    // human verdict, and the live ai line rides its authority to release.
     const caps = e.pendingUpdate?.capabilities ?? e.capabilities
-    if (rec?.verdict === 'pass' && rec.source === 'ai' &&
-        (caps.redFlags.length > 0 || caps.scannedAt === null))
+    if (rec?.verdict === 'pass' && rec.source === 'ai' && ver !== undefined
+        && !humanPassCovers(latestHuman, e.name, ver, tomb)
+        && (caps.redFlags.length > 0 || caps.scannedAt === null))
       return 'AI pass 被旗标/未扫描拦截·需人工'
     if (rec?.verdict === 'pass') {
       // gate order: maturity is checked before RELEASABLE — an unannounced
