@@ -840,6 +840,11 @@ export async function run(opts: RunOptions = {}) {
             // entry.contains is about to be rewound to the displayed version;
             // explicit [] means "no installable payload" and must survive
             contains: entry.contains,
+            // same for the candidate's engines/peer — entry.compat is about to
+            // be pinned to the displayed version below; an empty {} is still
+            // the candidate's truth ("no constraints") and must promote, not
+            // fall back to the displayed version's compat
+            compat: entry.compat,
             // same for the candidate's tarball SRI — entry.integrity is about
             // to be pinned to the displayed version below; release promotes it
             integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
@@ -1039,6 +1044,20 @@ export async function run(opts: RunOptions = {}) {
       if (treeRes.truncated) ghStats.truncated++
       const ev = hasRepoEvidence(treeRes.paths, cand.topics)
       if (!ev.ok) {
+        // mirror the npm-side rule (hasPluginEvidence above): an APPROVED
+        // slot's pinned commit still describes reviewed bytes — HEAD losing
+        // its opencode signals must not tombstone the displayed entry (a
+        // temporary .opencode/ move or a truncated tree would otherwise
+        // delist a live plugin and reset its review state on return).
+        // modifiedAt stays stale on purpose: the reuse fast-path must not
+        // skip re-evaluation, so a restored tree heals the entry next run.
+        if (ghPrev && ghPrev.approval !== 'pending' && !isBlockedAnyCase(ghPrev.name, ghPrev.slug)) {
+          return {
+            ...ghPrev,
+            metrics: { ...ghPrev.metrics, stars: cand.stars, checkedAt: now },
+            capabilities: addFinding(ghPrev.capabilities, `sec:evidence-regressed@${(treeRes.sha ?? 'HEAD').slice(0, 12)}`),
+          }
+        }
         ghStats.evidenceRejected++
         rejectedGh.add(lower)
         if (isSeedRepo(cand)) seedOutcomes.set(lower, 'no-opencode-evidence')

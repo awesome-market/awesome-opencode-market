@@ -73,6 +73,11 @@ export const Verification = z.looseObject({
 export const Approval = z.enum(['approved', 'pending', 'legacy'])
 export type Approval = z.infer<typeof Approval>
 
+export const Compat = z.looseObject({
+  engines: z.string().optional(),
+  peer: z.string().optional(),
+})
+
 /** A version bump held back from display (hold-by-default). Display fields stay
  *  pinned to the last approved version until this releases via verdict+verify. */
 export const PendingUpdate = z.looseObject({
@@ -81,6 +86,10 @@ export const PendingUpdate = z.looseObject({
   verification: Verification,
   /** new version's detected features — promoted to display on release */
   features: z.array(PluginFeature).optional(),
+  /** the HELD version's compat constraints — entry.compat pins the displayed
+   *  version while held, so the candidate's engines/peer must live here for
+   *  release to promote (same version-scoped rule as contains/integrity) */
+  compat: Compat.optional(),
   /** the HELD version's installable parts — entry.contains is pinned to the
    *  displayed version while a hold exists, so the candidate's payload
    *  description must live here (verify routing + release promotion read it).
@@ -98,11 +107,6 @@ export const PendingUpdate = z.looseObject({
   heldAt: z.string(),
 })
 export type PendingUpdate = z.infer<typeof PendingUpdate>
-
-export const Compat = z.looseObject({
-  engines: z.string().optional(),
-  peer: z.string().optional(),
-})
 
 export const PluginEntry = z.looseObject({
   name: z.string(),

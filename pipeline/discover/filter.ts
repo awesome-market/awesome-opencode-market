@@ -70,7 +70,7 @@ export function hasRepoEvidence(
  *  github-kind admission path so `contains` matches the evidence gate's idea
  *  of a skill. */
 export const hasSkillPath = (paths: ReadonlySet<string>): boolean =>
-  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || /(^|\/)\.opencode\/skills/.test(p))
+  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || /(^|\/)\.opencode\/skills\//.test(p))
 
 /** Evidence check post-fetch: does the package actually look like an opencode artifact? */
 export function hasPluginEvidence(pkg: {

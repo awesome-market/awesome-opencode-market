@@ -20,7 +20,21 @@ const normCats = (rec: CatalogIndex['categories']): CatalogIndex['categories'] =
 
 export function remerge(ours: CatalogIndex, remote: CatalogIndex | null): CatalogIndex {
   if (!remote) return ours
+  // remote-side removals our snapshot predates must win: catalog-withdraw
+  // (or any catalog-branch tombstone) landing between generate's fetch and
+  // this publish would otherwise be resurrected — ours.plugins is mapped
+  // wholesale while remote.removed only unions in, so a withdrawn pending
+  // entry could republish and even auto-release on a standing mature pass.
+  // A tombstone evicts a live entry only when it postdates the entry's
+  // identity epoch (firstSeenAt): natural gone-check tombstones filtered
+  // out of ours.removed by a rediscovery are OLDER than the fresh
+  // firstSeenAt and must not kill the rediscovered entry.
+  const remoteTombs = new Map(remote.removed.map(r => [r.name.toLowerCase(), r]))
   const plugins = mergeEntries(ours.plugins, remote, OPENCODE_VERSION, RULESET_VERSION)
+    .filter(e => {
+      const t = remoteTombs.get(e.name.toLowerCase())
+      return !(t && Date.parse(t.disappearedAt) > Date.parse(e.firstSeenAt))
+    })
   for (const e of plugins) e.category = (e.category ?? []).map(catId).filter(id => CAT_NAMES[id] !== undefined)
   const categories: CatalogIndex['categories'] = { ...normCats(remote.categories), ...normCats(ours.categories) }
   for (const e of plugins) for (const id of e.category ?? []) categories[id] ??= CAT_NAMES[id]!

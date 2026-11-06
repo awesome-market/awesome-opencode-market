@@ -337,6 +337,10 @@ export function applyMatureVerdicts(
           // promote the HELD version's parts — e.contains still describes the
           // previously displayed release while the hold was in place
           contains: pu.contains ?? e.contains,
+          // same version-scoped rule for engines/peer: pu.compat describes the
+          // candidate ({} = honestly unconstrained); legacy holds lack the
+          // field → keep the displayed version's compat (status quo)
+          compat: pu.compat ?? e.compat,
           // the released version's own SRI — e.integrity pins the DISPLAYED
           // tarball while held, so it can NEVER describe the new version's
           // bytes. Legacy holds lack pu.integrity → publish the honest null:
