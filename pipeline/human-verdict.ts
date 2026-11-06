@@ -199,8 +199,13 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
   // field or title carrying a newline would inject extra k=v lines (the
   // reason/ver/mismatch fields are already oneLine'd; name was the gap)
   name = oneLine(name)
+  // Do NOT clear `ver` on repo-shaped names here: entry KIND decides version
+  // semantics downstream (the workflow's INFO branch nulls `v` when the
+  // resolved entry is github-kind). A repo-shaped spec hitting an npm twin
+  // via source.repo takes NPM semantics — its version slot — so `o/r@1.5`
+  // must keep the typed version and `o/r@*` the package scope; clearing
+  // early would silently retarget the verdict to whatever the index holds.
   const repo = isRepoName(name)
-  if (repo) ver = ''
   if (!name || !verdict) return { skip: 'noresolve' }
   const out: VerdictResolved = { name, ver, verdict, reason: oneLine(reason) }
   if (mismatch) out.mismatch = oneLine(mismatch)
@@ -256,19 +261,22 @@ export function overriddenHuman(lines: string[], name: string, version: string |
 }
 
 /** Retarget detection (HV-13): the latest human line traced to THIS issue
- *  points at a DIFFERENT package. A [concern] form edit that changes the
- *  package field lands a verdict on the new target while the old target's
- *  verdict — possibly a live brake — keeps standing invisibly. Arg-spec
- *  comments that legitimately judged another package from the same issue
- *  produce the same signal; surfacing it is informative either way. */
-export function retargetedIssueTarget(lines: string[], issue: number, name: string): { name: string; version: string | null } | null {
+ *  points at a DIFFERENT key. A [concern] form edit that changes the
+ *  package OR version field lands a verdict on the new target while the
+ *  old target's verdict — possibly a live brake — keeps standing invisibly
+ *  (a version-only edit strands the old version's keyed verdict the same
+ *  way a package-field edit strands the old package's). Arg-spec comments
+ *  that legitimately judged another target from the same issue produce the
+ *  same signal; surfacing it is informative either way. */
+export function retargetedIssueTarget(lines: string[], issue: number, name: string, version: string | null): { name: string; version: string | null } | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!.trim()
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number }
-      if (v.source !== 'human' || v.issue !== issue || v.name?.toLowerCase() === name.toLowerCase()) continue
-      return { name: v.name!, version: v.version ?? null }
+      if (v.source !== 'human' || v.issue !== issue || typeof v.name !== 'string') continue
+      if (v.name.toLowerCase() === name.toLowerCase() && (v.version ?? null) === version) continue
+      return { name: v.name, version: v.version ?? null }
     } catch { continue }
   }
   return null
@@ -300,30 +308,63 @@ export function amendAt(lines: string[], name: string, version: string | null, v
   return null
 }
 
-/* v8 ignore next 24 — thin env→stdout adapter */
+/** Dedupe-side report for the workflow — exported so the k=v output values
+ *  are unit-testable. Every emitted field is flattened: names, versions,
+ *  ISO `at`, the verdict enum all forbid whitespace legitimately, but the
+ *  values come from raw jsonl lines parsed WITHOUT a schema gate — a crafted
+ *  line carrying `name:"evil\nunresolved=1"` would inject extra k=v pairs
+ *  into $GITHUB_OUTPUT (a forged `unresolved=1`/`dup=1` silently eats the
+ *  real verdict). */
+const flat = (s: string) => s.replace(/\s+/g, '')
+
+export interface DedupeReport {
+  dup: '0' | '1'
+  /** prior human line's `at` to reuse on a reason-only correction ('' = none) */
+  amend: string
+  /** `<verdict>@<at>` — the human decision this write overrides ('' = none) */
+  prev: string
+  /** `<name>[@<ver>|@*]` — a stale verdict THIS issue left on another key
+   *  ('' = none). `name@*` marks a package-scope (version:null) line so the
+   *  ack text reads as the whole package, not a bare name. */
+  previssue: string
+}
+
+export function dedupeReport(
+  lines: string[], name: string, version: string | null,
+  verdict: string, reason: string, issue?: number,
+): DedupeReport {
+  const dup = isDupVerdict(lines, name, version, verdict, reason)
+  // prev = the human decision this write would override (different verdict);
+  // previssue = a stale verdict this issue left on a DIFFERENT key (form
+  // retarget). Both feed ack warnings — nothing is silently reversed.
+  const prev = dup ? null : overriddenHuman(lines, name, version, verdict)
+  const re = issue !== undefined ? retargetedIssueTarget(lines, issue, name, version) : null
+  return {
+    dup: dup ? '1' : '0',
+    amend: flat(dup ? '' : amendAt(lines, name, version, verdict, reason) ?? ''),
+    prev: prev ? flat(`${prev.verdict}@${prev.at}`) : '',
+    previssue: re
+      ? flat(re.version ? `${re.name}@${re.version}` : (isRepoName(re.name) ? re.name : `${re.name}@*`))
+      : '',
+  }
+}
+
+/* v8 ignore next 17 — thin env→stdout adapter */
 if (import.meta.url === `file://${process.argv[1]}`) {
   // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason> [issue]`
   // → prints dup=1|0 plus amend=<at>| (empty) — amend is the prior human
   // line's timestamp to reuse when this is a reason-only correction, so the
   // workflow can stamp the record without resetting digest maturity;
   // prev=<verdict>@<at> = the human decision this write overrides (HV-12);
-  // previssue=<name>[@ver] = a stale verdict this issue left on another
+  // previssue=<name>[@ver|@*] = a stale verdict this issue left on another
   // target (HV-13 form retarget) — both feed ack warnings
   if (process.argv[2] === 'dedupe') {
     const { readFileSync } = await import('node:fs')
     const [, , , file, name, ver, verdict, reason, issue] = process.argv
     const lines = readFileSync(file!, 'utf8').split('\n')
-    const ver_ = ver || null
-    const dup = isDupVerdict(lines, name!, ver_, verdict!, reason ?? '')
-    console.log(`dup=${dup ? 1 : 0}`)
-    console.log(`amend=${dup ? '' : amendAt(lines, name!, ver_, verdict!, reason ?? '') ?? ''}`)
-    // prev = the human decision this write would override (different verdict);
-    // previssue = a stale verdict this issue left on a DIFFERENT target (form
-    // retarget). Both feed ack warnings — nothing is silently reversed.
-    const prev = dup ? null : overriddenHuman(lines, name!, ver_, verdict!)
-    console.log(`prev=${prev ? `${prev.verdict}@${prev.at}` : ''}`)
-    const re = issue ? retargetedIssueTarget(lines, Number(issue), name!) : null
-    console.log(`previssue=${re ? `${re.name}${re.version ? `@${re.version}` : ''}` : ''}`)
+    const r = dedupeReport(lines, name!, ver || null, verdict!, reason ?? '',
+      issue ? Number(issue) : undefined)
+    for (const [k, v] of Object.entries(r)) console.log(`${k}=${v}`)
     process.exit(0)
   }
   const p = process.env

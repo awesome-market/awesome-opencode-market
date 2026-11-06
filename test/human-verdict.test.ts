@@ -203,9 +203,12 @@ describe('form channel (issues opened/edited)', () => {
     const r = resolveVerdictEvent(form('opened', body))
     expect(r).toMatchObject({ verdict: 'pass', ver: '' })
   })
-  it('repo target in form → version cleared', () => {
+  it('repo target in form → version passes through (entry kind decides downstream)', () => {
+    // the parser can't know whether 'o/r' names a github-kind entry or an
+    // npm twin via source.repo — it must carry the typed version to the
+    // index-kind check, which nulls it for true github entries
     const r = resolveVerdictEvent(form('opened', FORM_BODY.replace('evilpkg', 'o/r')))
-    expect(r).toMatchObject({ name: 'o/r', ver: '' })
+    expect(r).toMatchObject({ name: 'o/r', ver: '2.0.0' })
   })
   it('missing package → noresolve', () => {
     expect(resolveVerdictEvent(form('opened', '### 操作 / Action\n\n拦截 (concern)')).skip).toBe('noresolve')
@@ -369,25 +372,35 @@ describe('retargetedIssueTarget — form retarget residue (HV-13)', () => {
   const L = (o: object) => JSON.stringify(o)
   it('latest human line traced to this issue names a DIFFERENT package → returns it', () => {
     const lines = [L({ name: 'oldpkg', version: '1', verdict: 'concern', source: 'human', issue: 9 })]
-    expect(retargetedIssueTarget(lines, 9, 'newpkg')).toEqual({ name: 'oldpkg', version: '1' })
+    expect(retargetedIssueTarget(lines, 9, 'newpkg', '1')).toEqual({ name: 'oldpkg', version: '1' })
   })
-  it('same package → null; other issues → null; AI lines → null', () => {
+  it('same key → null; other issues → null; AI lines → null', () => {
     const lines = [
       L({ name: 'samepkg', version: '1', verdict: 'concern', source: 'human', issue: 9 }),
       L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'ai', issue: 9 }),
       L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'human', issue: 8 }),
     ]
-    expect(retargetedIssueTarget(lines, 9, 'samepkg')).toBeNull()
+    expect(retargetedIssueTarget(lines, 9, 'samepkg', '1')).toBeNull()
+  })
+  it('same package but a DIFFERENT version → stranded keyed verdict surfaces', () => {
+    // a form edit that only changes 版本 retargets the verdict key — the old
+    // version's line still stands; without the version compare this slipped
+    // through name-only detection
+    const lines = [L({ name: 'samepkg', version: '1', verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(lines, 9, 'samepkg', '2')).toEqual({ name: 'samepkg', version: '1' })
+    // package-scope (version:null) line vs a versioned verdict → also a retarget
+    const pkg = [L({ name: 'samepkg', version: null, verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(pkg, 9, 'samepkg', '2')).toEqual({ name: 'samepkg', version: null })
   })
   it('an arg-spec verdict for another package from the same issue is surfaced (documented)', () => {
     // /concern pkgA then /concern pkgB on one issue → the second write warns
     // that pkgA's verdict still stands — informative either way
     const lines = [L({ name: 'pkgA', version: null, verdict: 'concern', source: 'human', issue: 5 })]
-    expect(retargetedIssueTarget(lines, 5, 'pkgB')).toEqual({ name: 'pkgA', version: null })
+    expect(retargetedIssueTarget(lines, 5, 'pkgB', null)).toEqual({ name: 'pkgA', version: null })
   })
   it('malformed lines skipped', () => {
     const lines = ['{bad', L({ name: 'x', source: 'human', issue: 'not-a-number' })]
-    expect(retargetedIssueTarget(lines, 9, 'newpkg')).toBeNull()
+    expect(retargetedIssueTarget(lines, 9, 'newpkg', null)).toBeNull()
   })
 })
 

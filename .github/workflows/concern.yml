@@ -643,7 +643,12 @@ jobs:
               // to the npm entry's canonical name, not "不在目录"
               const e = idx.plugins.find(p => p.name.toLowerCase() === n.toLowerCase())
                 ?? idx.plugins.find(p => (p.source?.repo ?? "").toLowerCase() === n.toLowerCase())
-              const v = e?.pendingUpdate?.version ?? e?.latestVersion
+              // B3 slot rule — same as the verdict path above: a PENDING
+              // entry's candidate is the entry itself; a residual
+              // pendingUpdate is the inverted state and its version/flags
+              // describe the stale hold, not the verifiable target
+              const pu = e?.approval === 'pending' ? undefined : e?.pendingUpdate
+              const v = pu?.version ?? e?.latestVersion
               if (!e) { notes.push(`${n} 不在目录`); continue }
               // github-kind entries have latestVersion=null but ARE verifiable —
               // the planner installs `owner/repo#sha` from source.repo/version —
@@ -651,7 +656,7 @@ jobs:
               // the plan drops it: don't promise a dispatch that does nothing
               const ghInstallable = !v && e.source?.kind === "github" && !!(e.source.repo || e.source.id) && !!e.source?.version
               if (!v && !ghInstallable) { notes.push(`${n} 无可验证版本/锚点`); continue }
-              const caps = e.pendingUpdate?.capabilities ?? e.capabilities
+              const caps = pu?.capabilities ?? e.capabilities
               if ((caps?.redFlags ?? []).length) notes.push(`${n} 带高危标记——计划会跳过`)
               ok.push(e.name)
             }
