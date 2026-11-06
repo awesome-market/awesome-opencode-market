@@ -71,7 +71,11 @@ function heldSlotKeys(index: CatalogIndex): Set<string> {
   const s = new Set<string>()
   for (const e of index.plugins) {
     if (e.pendingUpdate) s.add(vkey(e.name, e.pendingUpdate.version))
-    if (e.approval === 'pending') s.add(vkey(e.name, e.latestVersion))
+    // 'legacy' slots can mature too — applyMatureVerdicts releases passes on
+    // pending AND legacy displayed versions; omitting 'legacy' here made a
+    // pass on a legacy display slot un-announceable → un-maturable forever
+    // (the release branch was unreachable and the verdict never rendered)
+    if (e.approval === 'pending' || e.approval === 'legacy') s.add(vkey(e.name, e.latestVersion))
   }
   return s
 }
@@ -103,13 +107,20 @@ export function nextDigestState(verdicts: AiVerdict[], prev: DigestState | null,
   // phantom-announce in every later digest (Bug-1). Bootstrap (prev=null)
   // additionally windows `seen` — see BOOTSTRAP_WINDOW_MS.
   const cutoff = bootstrapCutoff(prev, now)
+  // `at` comparisons go through Date.parse — loadVerdicts normalizes to ISO-Z
+  // but these exported fns also take caller-built verdicts; a non-Z offset
+  // ('+08:00') would misorder/misfilter under raw string compare
+  const notAfterNow = (v: AiVerdict) => Date.parse(v.at) <= now.getTime()
   const seen = new Set(announcementCandidates(verdicts, index)
-    .filter(v => v.at <= nowIso && Date.parse(v.at) >= cutoff).map(akey))
+    .filter(v => notAfterNow(v) && Date.parse(v.at) >= cutoff).map(akey))
   const prevAnnounced = new Set(prev?.announced ?? [])
   const firstSeen = [...seen].filter(k => !prevAnnounced.has(k))
   const dayAnnounced = [...new Set([...(prev?.day === day ? prev.dayAnnounced : []), ...firstSeen])]
   // Maturity anchor stays monotonic: max `at` over verdicts this render saw.
-  const anchor = verdicts.reduce((m, v) => (v.at <= nowIso && v.at > m ? v.at : m), prev?.lastDigestAt ?? '') || nowIso
+  const anchor = verdicts.reduce((m, v) => {
+    const t = Date.parse(v.at)
+    return t <= now.getTime() && t > (Date.parse(m) || -Infinity) ? v.at : m
+  }, prev?.lastDigestAt ?? '') || nowIso
   // announced is bounded by the CURRENT latest verdict per key: a superseded
   // line can never win latestVerdicts again (`at` is monotonic), so its
   // announcement slot is dead weight — pruning it keeps digest-state small
@@ -149,14 +160,17 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
   const prevAnnounced = new Set(prev?.announced ?? [])
   const todayFirst = new Set(prev?.day === day ? prev.dayAnnounced : [])
   const cutoff = bootstrapCutoff(prev, now)
+  // Date.parse, not lexical compare — caller-built verdicts can carry non-Z
+  // offsets that misorder under string compare (same rule as nextDigestState)
+  const notAfterNow = (v: AiVerdict) => Date.parse(v.at) <= now.getTime()
   for (const v of candidates) {
-    if (v.at <= nowIso && Date.parse(v.at) >= cutoff && !prevAnnounced.has(akey(v))) todayFirst.add(akey(v))
+    if (notAfterNow(v) && Date.parse(v.at) >= cutoff && !prevAnnounced.has(akey(v))) todayFirst.add(akey(v))
   }
   // bootstrap withheld count — candidates old enough to be excluded by the
   // window; surfaced in the header so the staged announce is visible, not
   // silent (they announce normally from the next digest on)
   const withheld = isBootstrap(prev)
-    ? candidates.filter(v => v.at <= nowIso && Date.parse(v.at) < cutoff).length
+    ? candidates.filter(v => notAfterNow(v) && Date.parse(v.at) < cutoff).length
     : 0
   // dedupe by akey — a verdict line pushed twice (a retry that appended the
   // same line) must not render two identical rows
@@ -200,7 +214,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, badLi
   // silently-invisible data: future-dated verdicts can never announce or
   // mature — surface them instead of letting them sit forever (clock skew
   // on a diagnose machine would otherwise look like "nothing to report").
-  const future = candidates.filter(v => v.at > nowIso).length
+  const future = candidates.filter(v => !notAfterNow(v)).length
 
   // 上期公告·已生效 — passes the LAST render announced whose slot is now
   // displayed: the objection window's readers see their own decision land.
