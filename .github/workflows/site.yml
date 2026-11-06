@@ -41,9 +41,21 @@ jobs:
           # FETCH_HEAD = the ref we just fetched — immune to opportunistic
           # remote-tracking updates (origin/catalog could lag a failed fetch)
           git show FETCH_HEAD:index.json > index.json
-          # verdict audit surface for detail pages — absent file just means
-          # "no verdicts yet" (loadVerdicts tolerates missing paths)
-          git show FETCH_HEAD:ai-verdicts.jsonl > ai-verdicts.jsonl 2>/dev/null || touch ai-verdicts.jsonl
+          # health.json.commit must name the CATALOG commit that produced
+          # index.json — github.sha is the code ref (main HEAD on dispatch),
+          # an unrelated provenance stamp on the publish manifest.
+          echo "SITE_COMMIT=$(git rev-parse FETCH_HEAD)" >> "$GITHUB_ENV"
+          # verdict audit surface for detail pages. cat-file -e splits the
+          # two failure modes the old `|| touch` conflated: path absent on the
+          # catalog branch = legitimately "no verdicts yet" (empty file);
+          # path present but git show failing = real fetch corruption → the
+          # step's -e aborts the deploy rather than publishing a silently
+          # empty audit surface.
+          if git cat-file -e "FETCH_HEAD:ai-verdicts.jsonl" 2>/dev/null; then
+            git show FETCH_HEAD:ai-verdicts.jsonl > ai-verdicts.jsonl
+          else
+            : > ai-verdicts.jsonl
+          fi
           # the redirection above creates the file even when git show fails —
           # check content like catalog.yml's WF-1 rule instead of letting a
           # bare JSON.parse error stand in for "fetch failed"
@@ -80,9 +92,9 @@ jobs:
         env:
           SKILL_CACHE: .skill-cache
           SKIP_SKILLS: ${{ inputs.skip_skills }}
-          SITE_COMMIT: ${{ github.sha }}
-          # SITE_BASE/SITE_URL come from the derive step above (GITHUB_ENV) —
-          # an org-page repo must not inherit a /repo/ base it doesn't serve
+          # SITE_COMMIT (catalog sha) comes from GITHUB_ENV via the fetch
+          # step above; SITE_BASE/SITE_URL likewise (derive step) — an
+          # org-page repo must not inherit a /repo/ base it doesn't serve
       # S-3: deploy gate — an empty/broken catalog published is worse than a
       # stale one. Compare against the LIVE site's health.json; if that fetch
       # fails the absolute floor still applies (never gate on network flakiness).

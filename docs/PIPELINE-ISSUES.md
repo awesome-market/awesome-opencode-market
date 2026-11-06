@@ -934,3 +934,20 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 **评估未改**：digest/docket 的 slotVerdict 直用侧不加 epoch（concern 照常渲染；stale pass 只表现为"公示过但永不放行"，放行的权威闸在 applyMatureVerdicts，重裁即解）；消失窗口内（disappearedAt<at<再进）的裸 jsonl 裁决不入闸——受护栏通道无法产出（写裁决要求 index 命中），属可接受残余。
 
 **验证**：typecheck 0 错；release-gates.test.ts +10 例（pu.reason 归一/再治理/幂等、stale pass 展示槽+在押槽不放行、post-epoch pass 照常放、stale concern 仍刹车、墓碑名大小写、explain 专属 why）；全量 vitest 绿；catalog.yml YAML 校验通过；DATA-FLOWS §7 同步（闸列表新增同名片段闸、shaOk 锚三态、pu.reason 归一注记）。
+
+## 附二十五：站点发布流专项审计（pipeline/site/build.ts 全流程，W 系列）
+
+> 范围：`docs/DATA-FLOWS.md` §9/§10 全文 + build.ts 734 行逐函数 + site.yml 158 行 + verdicts.ts 键语义 + 客户端 catalog.ts 消费契约 + site.test.ts 覆盖面复核。线上 catalog index.json 实测（4679 插件/2082 可见/308 github 技能）。与附二十四 L-4 的 `cat-file -e` 修法同向汇合（catalog.yml aux 文件判存在）。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| W-1 详情页裁决记录大小写敏感：管线 vkey() 全键小写，但 verdictsByName 分组与 mine/allMine 过滤用精确 `===`——github 条目 'Owner/Repo' 遇小写裁决行 'owner/repo' 时放行闸正常生效、公开审计面却显示"无评审记录"（上游 vkey 改造留下的跨流语义裂缝） | ✅ | buildSite 分组键 + detailPage 过滤两侧统一 toLowerCase()，与 vkey 同谓词；新增 detailPage 单测 + buildSite 落盘 jsonl 端到端回归 |
+| W-2 health.json.commit 是代码 sha 不是 catalog sha：site.yml 传 github.sha（dispatch=main HEAD），index.json 实为 FETCH_HEAD 产物——发布清单的数据溯源字段标错对象（watchdog 只用 builtAt 未爆，但字段本身不实） | ✅ | fetch 步 `git rev-parse FETCH_HEAD` → GITHUB_ENV SITE_COMMIT，构建步不再传 github.sha |
+| W-3 遗产 github 技能无 source.version → codeload HEAD 移动目标：线上实测 308 个可见 github 技能中 91 个（30%）属此类——fail-closed 跳过会砍掉近三分之一目录，取披露路线 | ✅ | buildSkillCatalog 统计 unpinned → health.json.skills.unpinned + skills.html 非零时出诚实注记（"缺少 commit-sha 钉定，内容可能与最初扫描不同"） |
+| W-4 MAX_SKILL_MEMBERS=100 截断只在 stderr 告警：tar 顺序攻击者可控，用户拿到残缺技能无从得知 | ✅ | 统计 membersDropped（Σ 截断成员数）→ health.json.skills.membersDropped + skills.html 注记 |
+| W-5 sriOk 对公告了却解析不了的 integrity 返回 null→放行：发布面 fail-open（实际数据 238/238 全部 well-formed，属纵深缺口非现行风险） | ✅ | `ok !== true` 即跳过——发布面 fail-closed；客户端安装路径"不可验证→放行"契约不变（用户本机取舍），文档已注明两侧语义差异 |
+| W-6 ai-verdicts.jsonl `|| touch` 把"分支上不存在"与"取回失败"混为一谈：后者会让详情页审计面静默清空 | ✅ | cat-file -e 区分：路径缺失→合法空文件；路径存在但 git show 失败→步骤 -e 中止部署（与 index.json WF-1 同姿态；同附二十四 L-4 修法） |
+
+**评估未改**：healthGate 的 skills.degraded 阈值（candidates≥10）对 unpinned 不重复计数是正确的——unpinned 行仍参与 landed/candidates 比率，HEAD 抓取失败会真实拉低 landed；`npm ci` 装脚本与全仓 workflow 同姿态不算站点独有；冷启动 ~700 技能 ÷ SKILL_POOL=8 最坏情况可逼近 job timeout 30min，稳态有 actions/cache 兜底，mass version bump 日才需关注（已在 DATA-FLOWS 注明池化语义）。
+
+**验证**：site.test.ts 58 例全绿（新增 4 例：大小写单测+落盘端到端、unpinned 计数、membersDropped 截断计数、skillsPage caveat）；typecheck 0 错；DATA-FLOWS §9 同步（裁决匹配/SRI 语义/health.json 字段/commit 溯源）。

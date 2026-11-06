@@ -443,7 +443,7 @@ describe('L-2: pu.reason normalizes when its governing concern is superseded', (
     const r = applyMatureVerdicts(
       mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0', { reason: 'flagged' }) })]),
       v, digestStateOf(DIGEST, v, v.map(akey)))
-    const e = r.index.plugins[0]
+    const e = r.index.plugins[0]!
     expect(e.latestVersion).toBe('1.0.0')
     expect(e.pendingUpdate?.reason).toBe('awaiting-review')
   })
@@ -451,7 +451,7 @@ describe('L-2: pu.reason normalizes when its governing concern is superseded', (
     const v = [mkVerdict('p', '2.0.0', 'concern', '2026-02-01T10:00:00Z', 'human', 'still bad')]
     const r = applyMatureVerdicts(
       mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0') })]), v, digestStateOf(DIGEST, v))
-    expect(r.index.plugins[0].pendingUpdate?.reason).toBe('still bad')
+    expect(r.index.plugins[0]!.pendingUpdate?.reason).toBe('still bad')
     expect(r.held).toEqual(['p@2.0.0'])
   })
   it('idempotent: a second apply leaves the normalized reason alone', () => {
@@ -475,7 +475,7 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
     const idx = { ...mkIndex([pendingEntry()]), removed: [tomb('2026-02-01T00:00:00Z')] }
     const r = applyMatureVerdicts(idx, [OLD_PASS], digestStateOf(DIGEST, [OLD_PASS]))
     expect(r.releases).toEqual([])
-    expect(r.index.plugins[0].approval).toBe('pending')
+    expect(r.index.plugins[0]!.approval).toBe('pending')
   })
   it('a fresh pass (post-tombstone) still releases — the epoch is not a freeze', () => {
     const v = mkVerdict('p', '1.0.0', 'pass', '2026-02-02T10:00:00Z', 'human')
@@ -487,7 +487,7 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
     const c = mkVerdict('p', '1.0.0', 'concern', '2026-01-20T10:00:00Z', 'human', 'was bad')
     const idx = { ...mkIndex([pendingEntry()]), removed: [tomb('2026-02-01T00:00:00Z')] }
     const r = applyMatureVerdicts(idx, [c], digestStateOf(DIGEST, [c]))
-    expect(r.index.plugins[0].approvalReason).toBe('was bad')
+    expect(r.index.plugins[0]!.approvalReason).toBe('was bad')
     expect(r.held).toEqual(['p@1.0.0'])
   })
   it('no tombstone → the same pass still works (no regression on live entries)', () => {
@@ -503,7 +503,7 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
     }
     const r = applyMatureVerdicts(idx, [v], digestStateOf(DIGEST, [v]))
     expect(r.releases).toEqual([])
-    expect(r.index.plugins[0].pendingUpdate?.version).toBe('2.0.0')
+    expect(r.index.plugins[0]!.pendingUpdate?.version).toBe('2.0.0')
   })
   it('tombstone name match is case-insensitive (recycled repo names)', () => {
     const v = mkVerdict('Owner/Repo', null, 'pass', '2026-01-20T10:00:00Z', 'human')
@@ -520,7 +520,7 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
     const s = explainEntry(
       mkEntry('p', { approval: 'pending' }), [OLD_PASS], digestStateOf(DIGEST, [OLD_PASS]),
       [tomb('2026-02-01T00:00:00Z')])
-    expect(s[0].outcome).toBe('wait')
-    expect(s[0].why).toContain('上一个同名对象')
+    expect(s[0]!.outcome).toBe('wait')
+    expect(s[0]!.why).toContain('上一个同名对象')
   })
 })

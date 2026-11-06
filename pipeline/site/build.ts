@@ -269,9 +269,14 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[], landed?: Set<
   // surface the recent lines so "why was this braked/released" doesn't require
   // digging through ai-verdicts.jsonl. Collapsed like findings (AGENTS rule):
   // audit detail is there when wanted, not in the main reading path.
-  const mine = (verdicts ?? []).filter(x => x.name === e.name)
+  // name matching is case-insensitive — same rule as verdicts.ts vkey():
+  // github entries keep canonical 'Owner/Repo' casing while verdict lines
+  // arrive typed/lowercased; an exact-match lookup would show an empty audit
+  // trail on the public detail page while the pipeline holds the verdict.
+  const en = e.name.toLowerCase()
+  const mine = (verdicts ?? []).filter(x => x.name.toLowerCase() === en)
     .sort((a, b) => atCmp(b.at, a.at)).slice(0, 10)
-  const allMine = verdicts?.filter(x => x.name === e.name).length ?? 0
+  const allMine = verdicts?.filter(x => x.name.toLowerCase() === en).length ?? 0
   // verdict reasons are bilingual in the record: AI lines carry zh in reason
   // and en in reasonEn — route both through bi() like every other label so
   // the en page isn't left reading Chinese (and vice versa). Human lines
@@ -343,8 +348,9 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
   // O(entries × verdicts) for no reason; each page gets only its own lines.
   const verdictsByName = new Map<string, AiVerdict[]>()
   for (const v of verdicts ?? []) {
-    const l = verdictsByName.get(v.name)
-    if (l) l.push(v); else verdictsByName.set(v.name, [v])
+    const k = v.name.toLowerCase()   // vkey() parity — see detailPage
+    const l = verdictsByName.get(k)
+    if (l) l.push(v); else verdictsByName.set(k, [v])
   }
   // index.json ships the FULL catalog (pending included) — it is the auditable
   // data plane; every UI/install surface filters pending itself.
@@ -361,7 +367,7 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
   // a degraded skills catalog would otherwise hold the whole deploy hostage.
   const skipSkills = process.env.SKIP_SKILLS === '1' || process.env.SKIP_SKILLS === 'true'
   const skillStats = skipSkills
-    ? { candidates: 0, landed: 0, degraded: false, entries: [] as SkillEntry[] }
+    ? { candidates: 0, landed: 0, degraded: false, entries: [] as SkillEntry[], unpinned: 0, membersDropped: 0 }
     : await buildSkillCatalog(visible, outDir, undefined, cacheDir)
   if (skipSkills) {
     mkdirSync(join(outDir, 'skills'), { recursive: true })
@@ -378,7 +384,11 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
     // manifest probe (1MB cap → fall back to full index fetch); embedding the
     // catalog here made it ~130KB and growing. skills.html reads the in-memory
     // stats directly, nothing consumes entries via health.json.
-    skills: { candidates: skillStats.candidates, landed: skillStats.landed, degraded: skillStats.degraded },
+    skills: { candidates: skillStats.candidates, landed: skillStats.landed, degraded: skillStats.degraded,
+      // disclosure counters — unpinned = github skills fetched from codeload
+      // HEAD (pre-sha index rows, bytes can drift from the scanned tree);
+      // membersDropped = tar members cut by MAX_SKILL_MEMBERS this build.
+      unpinned: skillStats.unpinned, membersDropped: skillStats.membersDropped },
     generatedAt: index.generatedAt,
     builtAt: new Date().toISOString(),
     commit: process.env.SITE_COMMIT || undefined,
@@ -386,7 +396,7 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
     bytes: Buffer.byteLength(indexJson),
   }))
   writeFileSync(join(outDir, 'index.html'), listPage(visible))
-  writeFileSync(join(outDir, 'skills.html'), skillsPage(skillStats.entries, siteOriginUrl()))
+  writeFileSync(join(outDir, 'skills.html'), skillsPage(skillStats.entries, siteOriginUrl(), skillStats))
   writeFileSync(join(outDir, 'removed.html'), removedPage(index))
   // Pages serves 404.html at the REQUESTED url — a missing deep link keeps its
   // depth, so relative links would resolve under it. Absolute site-base links
@@ -398,7 +408,7 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
     if (!slugSafe(e.slug)) { console.warn(`[site] skipping detail page — unsafe slug: ${JSON.stringify(e.slug)}`); continue }
     const p = join(outDir, 'p', `${e.slug}.html`)
     mkdirSync(dirname(p), { recursive: true })
-    writeFileSync(p, detailPage(e, verdictsByName.get(e.name), landedSlugs))
+    writeFileSync(p, detailPage(e, verdictsByName.get(e.name.toLowerCase()), landedSlugs))
   }
 }
 
@@ -439,17 +449,25 @@ export interface SkillEntry { name: string; version: string; files: string[]; sl
  *  `skillsUrl` = the absolute catalog URL for the copy-paste opencode.json
  *  snippet — without it the page lists files but never says how to USE them
  *  (AGENTS: a functional page owes the reader the next step). */
-export function skillsPage(entries: SkillEntry[], skillsUrl?: string | null): string {
+export function skillsPage(entries: SkillEntry[], skillsUrl?: string | null,
+  stats?: { unpinned?: number; membersDropped?: number }): string {
   const usage = skillsUrl
     ? `<div class=card>${bi('add this catalog to', '把本目录加入')} <code>opencode.json</code> ${bi('and every skill below becomes loadable:', '即可加载下列全部技能：')}<pre>"skills": ["${esc(skillsUrl)}"]</pre>${bi('or install individual skills via the market client/plugin — each card links its catalog entry.', '也可以用市场客户端/插件逐个安装——每张卡片链接到对应目录条目。')}</div>`
     : ''
+  // honest caveats, only when nonzero: unpinned github skills serve codeload
+  // HEAD (bytes may differ from the originally scanned tree); membersDropped
+  // means some tar members beyond the per-skill cap were not published.
+  const caveats = [
+    stats?.unpinned ? bi(`${stats.unpinned} github skill(s) lack a commit-sha pin (pre-anchoring catalog rows fetch the repo's current HEAD — contents may differ from what was originally scanned)`, `${stats.unpinned} 个 github 技能缺少 commit-sha 钉定（早于锚定的目录行抓取仓库当前 HEAD——内容可能与最初扫描时不同）`) : '',
+    stats?.membersDropped ? bi(`${stats.membersDropped} tar member(s) exceeded the per-skill file cap and were not published`, `${stats.membersDropped} 个归档成员超出单技能文件数上限，未发布`) : '',
+  ].filter(Boolean).join(' · ')
   const cards = entries.map(s => {
     const ver = s.version.length > 12 ? `${s.version.slice(0, 10)}…` : s.version
     const detail = s.slug ? ` · <a href="${esc(detailHref(s.slug))}">${bi('details', '详情')}</a>` : ''
     return `<div class=card><b>${esc(s.name)}</b> <code>v${esc(ver)}</code> ${bi(`${s.files.length} file(s)`, `${s.files.length} 个文件`)}${detail}<div class=meta>${s.files.map(f => `<a href="skills/${esc(encodeURI(s.name))}/${esc(encodeURI(f))}">${esc(f)}</a>`).join(' · ') || bi('no files', '无文件')}</div></div>`
   }).join('\n')
   const empty = entries.length ? '' : `<p class=muted>${bi('no skills published yet — skill files are fetched during the site build and may be temporarily unavailable', '暂无已发布技能——技能文件在站点构建时抓取，可能暂时不可用')}</p>`
-  return page('skills', `<h1>${bi('skills', '技能')}</h1><p class=meta>${bi(`${entries.length} skills`, `${entries.length} 个技能`)} · <a href="skills/index.json">index.json</a> · <a href="index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${usage}${empty}${cards}`)
+  return page('skills', `<h1>${bi('skills', '技能')}</h1><p class=meta>${bi(`${entries.length} skills`, `${entries.length} 个技能`)} · <a href="skills/index.json">index.json</a> · <a href="index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${usage}${caveats ? `<p class=meta>${caveats}</p>` : ''}${empty}${cards}`)
 }
 
 /** Recently removed entries — explains the 404s for vanished plugins. */
@@ -569,7 +587,14 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       if (sha != null && sha !== '' && !/^[0-9a-f]{7,64}$/.test(sha)) return null
       return `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`
     })
-  : Promise<{ candidates: number; landed: number; degraded: boolean; entries: SkillEntry[] }> {
+  : Promise<{ candidates: number; landed: number; degraded: boolean; entries: SkillEntry[];
+      /** github skills served from codeload HEAD because the index predates
+       *  commit-sha anchoring — disclosed, not silent (see plan loop). */
+      unpinned: number;
+      /** tar members dropped by MAX_SKILL_MEMBERS — tar order is
+       *  attacker-controlled, so truncation is a completeness caveat worth
+       *  surfacing rather than only logging to stderr. */
+      membersDropped: number }> {
   // injected impls (tests) own their scheme; the default is https-validated above
   const tbOf = tarballOf ?? npmTarballResolver()
   // entryParts, not raw contains: legacy rows without the field fall back on
@@ -579,6 +604,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   const dir = join(outDir, 'skills')
   mkdirSync(dir, { recursive: true })
   const entries: SkillEntry[] = []
+  let membersDropped = 0   // Σ members cut by MAX_SKILL_MEMBERS across fresh fetches
   // conditional ids (same rule as market installSkillTar): bare basename for
   // singletons; same-basename packages all get the namespaced `a--test` form
   const baseOf = (n: string) => n.split('/').pop()!.replace(/^@/, '')
@@ -622,6 +648,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   // the collision suffix can't shuffle between builds; fetch work is pooled.
   interface Cand { s: PluginEntry; id: string; ver: string; dest: string; key: string; ghRepo: string | null }
   const cands: Cand[] = []
+  let unpinned = 0   // github skills whose index row predates commit-sha anchoring → codeload HEAD
   for (const s of skills) {
     const isGh = s.source?.kind === 'github'
     const ghRepo = isGh ? ghRepoOf(s) : null
@@ -631,6 +658,11 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     const ver = isGh ? (s.source?.version ?? s.modifiedAt) : s.latestVersion
     if (isGh && !ghRepo) continue                     // malformed repo id
     if (!ver) continue                                // npm entry without a version — nothing to serve
+    // pre-sha rows fetch codeload HEAD — a moving target, so the served tree
+    // can drift from what the (older) scan saw. Dropping them would cut ~30%
+    // of github skills from the catalog for a marginal integrity gain; keep
+    // serving but COUNT them so health.json/skills.html can disclose it.
+    if (isGh && !/^[0-9a-f]{7,64}$/.test(s.source?.version ?? '')) unpinned++
     const base = baseOf(s.name)
     let id = ((counts.get(base) ?? 0) > 1 ? s.name.replace(/^@/, '').replace(/\//g, '--') : base) || s.slug
     while (usedIds.has(id)) id += '-x'                // S-12 deterministic suffix
@@ -678,10 +710,13 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       // drift check: when the index announces an SRI for this version, the
       // served bytes must equal the reviewed bytes — same fail-closed rule the
       // client applies on skill install (a re-tagged tarball never ships).
+      // ok !== true (not just === false): an announced-but-unparseable SRI is
+      // corrupt index data — publishing unverifiable bytes under it would
+      // break the served-bytes=reviewed-bytes invariant, so skip too.
       if (statSync(tgz).size > MAX_SKILL_TGZ) { console.warn(`[site] skill ${c.id}: tgz over ${MAX_SKILL_TGZ >> 20}MB — skipped`); return }
       if (!c.ghRepo && c.s.integrity) {
         const ok = sriOk(readFileSync(tgz), c.s.integrity)
-        if (ok === false) { console.warn(`[site] skill ${c.id}: integrity mismatch (re-tag or corrupted artifact) — skipped`); return }
+        if (ok !== true) { console.warn(`[site] skill ${c.id}: integrity ${ok === false ? 'mismatch (re-tag or corrupted artifact)' : 'unverifiable (unparseable SRI)'} — skipped`); return }
       }
       // two-pass extraction (S-4/S-5): only listed members are extracted, so
       // node_modules and non-skill noise never touch disk. Named members CAN
@@ -695,7 +730,10 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
         return !segs.includes('node_modules') && !segs.includes('..') && !segs.includes('.') && SAFE_MEMBER.test(n) && !ACTIVE_CONTENT.test(n)
       })
       const members = all.slice(0, MAX_SKILL_MEMBERS)
-      if (all.length > MAX_SKILL_MEMBERS) console.warn(`[site] skill ${c.id}: ${all.length} members — capped at ${MAX_SKILL_MEMBERS}`)
+      if (all.length > MAX_SKILL_MEMBERS) {
+        membersDropped += all.length - members.length
+        console.warn(`[site] skill ${c.id}: ${all.length} members — capped at ${MAX_SKILL_MEMBERS}`)
+      }
       if (members.length)
         await execFileP('tar', ['xzf', tgz, '-C', tmp, '--strip-components=1', '--', ...members], { timeout: 30_000 })
       rmSync(tgz, { force: true })
@@ -730,5 +768,5 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   // slug is page-only metadata (detail backlink) — strip it so the published
   // {name,version,files} contract opencode consumes stays unchanged
   writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries.map(({ name, version, files }) => ({ name, version, files })) }))
-  return { candidates: cands.length, landed, degraded, entries }
+  return { candidates: cands.length, landed, degraded, entries, unpinned, membersDropped }
 }
