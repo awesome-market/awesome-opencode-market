@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
   effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp,
-  tombEpochs, epochGoverning, humanPassCovers } from '../verdicts.ts'
+  tombEpochs, epochGoverning, humanPassCovers, candidateSlot } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
@@ -76,7 +76,12 @@ const bootstrapCutoff = (prev: DigestState | null, now: Date) =>
 function heldSlotKeys(index: CatalogIndex): Set<string> {
   const s = new Set<string>()
   for (const e of index.plugins) {
-    if (e.pendingUpdate) s.add(vkey(e.name, e.pendingUpdate.version))
+    // candidateSlot, not raw pendingUpdate: on a pending entry a leftover
+    // hold is the B3 inverted state — its key describes bytes nobody is
+    // reviewing, so announcing it would pin a dead akey and render phantom
+    // rows for a slot applyMatureVerdicts will never query
+    const slot = candidateSlot(e)
+    if (slot) s.add(vkey(e.name, slot.version))
     // 'legacy' slots can mature too — applyMatureVerdicts releases passes on
     // pending AND legacy displayed versions; omitting 'legacy' here made a
     // pass on a legacy display slot un-announceable → un-maturable forever
@@ -267,7 +272,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // different opencodeVersion re-enter the verify queue ahead of normal work
   const hostStale = index.plugins.filter(e => hostStaleVerify(e)).length
   const weekAgo = now.getTime() - 7 * 86_400_000
-  const verOf = (e: PluginEntry) => (e.pendingUpdate ? e.pendingUpdate.verification : e.verification)
+  const verOf = (e: PluginEntry) => candidateSlot(e)?.verification ?? e.verification
   const recentFailed = index.plugins.filter(e => {
     const v = verOf(e)
     return v.status === 'failed' && Number.isFinite(Date.parse(v.verifiedAt ?? '')) && Date.parse(v.verifiedAt!) >= weekAgo
@@ -340,8 +345,8 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // wait for verify, wait for review, or it's already decided and just
   // waiting out the maturity/release gates
   const phaseOf = (e: PluginEntry): string => {
-    const ver = e.pendingUpdate?.version ?? e.latestVersion
-    const vf = e.pendingUpdate?.verification ?? e.verification
+    const ver = candidateSlot(e)?.version ?? e.latestVersion
+    const vf = candidateSlot(e)?.verification ?? e.verification
     // mirror the release gate's shared slot semantics (slotVerdict): a
     // package-level human brake governs every VERSIONED slot — the slot's
     // own verify/verdict state is moot while the brake stands. (version=null
@@ -368,7 +373,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     // a release that structurally won't happen without a human verdict.
     // Except when a standing human pass covers the same key: that IS the
     // human verdict, and the live ai line rides its authority to release.
-    const caps = e.pendingUpdate?.capabilities ?? e.capabilities
+    const caps = candidateSlot(e)?.capabilities ?? e.capabilities
     if (rec?.verdict === 'pass' && rec.source === 'ai' && ver !== undefined
         && !humanPassCovers(latestHuman, e.name, ver, tomb)
         && (caps.redFlags.length > 0 || caps.scannedAt === null))
@@ -445,12 +450,13 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     // pending npm entries DO have a candidate version (latestVersion) — show
     // it so the row maps to its §①/§③ verdict lines; only repo-only stays
     // version-less
-    const ver = e.pendingUpdate ? `v${e.pendingUpdate.version}`
+    const slot = candidateSlot(e)
+    const ver = slot ? `v${slot.version}`
       : e.latestVersion === null ? '(repo-only — AI 不审，需人工)'
       : `v${e.latestVersion}（未上架）`
     // 'awaiting-review' is the DEFAULT pending reason — rendering it adds
     // noise, not signal; real reasons (concern text) stay visible
-    const reason = e.pendingUpdate?.reason ?? e.approvalReason
+    const reason = slot?.reason ?? e.approvalReason
     const reasonTxt = reason && reason !== 'awaiting-review' ? ` — ${oneLine(escMd(reason))}` : ''
     const heldMs = heldAt(e)
     const heldTxt = heldMs ? ` · 在押自 ${new Date(heldMs).toISOString().slice(0, 10)}` : ''

@@ -371,7 +371,10 @@ describe('digest/human-verdict/verdicts residual arms', () => {
       approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, ...over,
     } as Partial<PluginEntry>)
-    const pu = held('pu', { latestVersion: '9.9.9', pendingUpdate: { version: '2.0.0', heldAt: 't', reason: 'r', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never })
+    // approval:'approved' — a pendingUpdate only describes the candidate on a
+    // displayed entry; on a pending entry it's the B3 inverted state and the
+    // digest must show latestVersion instead (audit #6)
+    const pu = held('pu', { approval: 'approved', latestVersion: '9.9.9', pendingUpdate: { version: '2.0.0', heldAt: 't', reason: 'r', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never })
     const concern = held('cc')
     const idx = mkIdx([pu, concern])
     const vs: AiVerdict[] = [

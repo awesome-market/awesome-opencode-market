@@ -382,7 +382,9 @@ describe('digest residual branches', () => {
         approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
         verification: { status: 'unverified' }, ...over,
       } as Partial<PluginEntry>)
-      const puEntry = held('pu', { latestVersion: '9.9.9', pendingUpdate: { version: '2.0.0', heldAt: 't', reason: 'r', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never })
+      // approval:'approved' — pendingUpdate is only the candidate slot on a
+      // displayed entry; on pending it's the B3 inverted state (audit #6)
+      const puEntry = held('pu', { approval: 'approved', latestVersion: '9.9.9', pendingUpdate: { version: '2.0.0', heldAt: 't', reason: 'r', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never })
       const concernEntry = held('cc')   // latest verdict = concern → not pass → other phase
       const alarmEntries = Array.from({ length: 35 }, (_, i) => mkEntry(`al${i}`, {
         approval: 'approved', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-recreated'] },
