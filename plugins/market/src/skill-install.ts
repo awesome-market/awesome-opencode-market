@@ -12,7 +12,11 @@ import { assertSkillId, skillId, skillsRoot } from './hostx.js'
  *  (path separator on Windows — a crafted `..\` name must not survive). */
 export function safeTarRel(raw: string): string | null {
   const rel = raw.replace(/\\/g, '/').replace(/^(\.\/)?(package\/)?/, '')
-  if (!rel || rel.startsWith('/') || rel.split('/').some(p => p === '..' || p === '.' || p === '')) return null
+  // control chars (C0/DEL/C1) are legal POSIX filename bytes but hostile in
+  // every terminal that lists the skills dir — the site mirror rejects the
+  // same class via SAFE_MEMBER; skip the member rather than fail the install
+  if (!rel || rel.startsWith('/') || /[\x00-\x1f\x7f-\x9f]/.test(rel)
+    || rel.split('/').some(p => p === '..' || p === '.' || p === '')) return null
   return rel
 }
 
@@ -56,112 +60,135 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
   // is foreign. Unscoped names have no namespaced fallback at all, and even
   // scoped ones never merge into a foreign dir at the namespaced path — refuse
   // rather than drop a manifest into it (uninstall would delete user files).
-  if (existsSync(dest) && manifestOwner(dest) !== opts.name)
-    throw new Error(`skill dir '${id}' already exists and is not managed by market — refusing to overwrite`)
+  if (existsSync(dest) && manifestOwner(dest) !== opts.name) {
+    // An EMPTY dir holds no user files — it is a leftover from an install
+    // that died between mkdir and manifest write, not foreign data. Sweep it
+    // so retry isn't wedged; a non-empty manifest-less dir still refuses.
+    let empty = false
+    try { empty = readdirSync(dest).length === 0 } catch { /* unreadable → foreign */ }
+    if (!empty)
+      throw new Error(`skill dir '${id}' already exists and is not managed by market — delete ${dest} manually to reinstall`)
+    rmSync(dest, { recursive: true, force: true })
+  }
+  // createdDest decides whether a failure may remove dest — only a dir THIS
+  // call made. A pre-existing dir keeps its previous version's files and
+  // manifest on a failed upgrade instead of being destroyed.
+  const createdDest = !existsSync(dest)
   mkdirSync(dest, { recursive: true })
-  let off = 0, wrote = 0
-  // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
-  // ustar stores paths ≤255B as prefix(155B @345) + '/' + name(100B @0).
-  let pendingLong: string | null = null
-  const paxPath = (rec: string): string | null => {
-    let i = 0
-    while (i < rec.length) {
-      const sp = rec.indexOf(' ', i)
-      if (sp < 0) return null
-      const len = parseInt(rec.slice(i, sp), 10)
-      if (!len || i + len > rec.length) return null
-      const kv = rec.slice(sp + 1, i + len - 1)
-      const eq = kv.indexOf('=')
-      if (eq > 0 && kv.slice(0, eq) === 'path') return kv.slice(eq + 1)
-      i += len
-    }
-    return null
-  }
-  // pass 1 — collect safe entries. Two passes let us detect a wrapper root:
-  // github codeload archives ship every path under `<repo>-<ref>/`, which must
-  // be stripped like npm's `package/` or the skill nests stay one level deep.
-  const items: { type: string; rel: string; body: number; size: number }[] = []
-  while (off + 512 <= tar.length) {
-    let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
-    if (!f) break
-    const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
-    const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
-    const type = tar.toString('utf8', off + 156, off + 157)
-    const body = off + 512
-    const next = body + Math.ceil(size / 512) * 512
-    if (type === 'L') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
-    if (type === 'x') { pendingLong = paxPath(tar.toString('utf8', body, body + size)) ?? pendingLong; off = next; continue }
-    if (pendingLong) { f = pendingLong; pendingLong = null }
-    else if (prefix) f = `${prefix}/${f}`
-    const rel = safeTarRel(f)
-    if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
-    items.push({ type, rel, body, size })
-    off = next
-  }
-  // shared leading segment that is not a real skill-nest name = archive wrapper
-  const STRUCT = new Set(['.opencode', '.claude', '.agents', 'skills', 'package'])
-  const first = items[0]?.rel.split('/')[0]
-  const wrap = first && !STRUCT.has(first) && items.every(i => { const s = i.rel.split('/'); return s.length > 1 && s[0] === first })
-    ? `${first}/` : ''
-  // pass 2 — extract
-  for (const { type, rel: r0, body, size } of items) {
-    const rel = wrap ? r0.slice(wrap.length) : r0
-    if (!rel) continue
-    if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
-    if (type === '0' || type === '' || type === ' ') {
-      const fp = join(dest, rel)
-      if (!resolve(fp).startsWith(resolve(dest) + sep)) continue
-      mkdirSync(dirname(fp), { recursive: true })
-      writeFileSync(fp, tar.subarray(body, body + size)); wrote++
-    }
-  }
-  if (!wrote) throw new Error('empty tarball')
-  const root = dirname(dest)
-  // paths we created on a previous install may be overwritten in place;
-  // a foreign dir at the same name forces the <id>- prefix instead
-  const owned = new Set<string>()
+  let committed = false
   try {
-    const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
-    for (const rel of prev.paths ?? []) owned.add(rel)
-  } catch { /* first install */ }
-  const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
-    ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
-  const paths: string[] = []
-  for (const nest of nests) {
-    const nd = join(dest, nest)
-    let subs: string[]
-    try { subs = readdirSync(nd) } catch { continue }
-    for (const sub of subs) {
-      if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
-      // collision → try <id>-<sub>, then <id>-<sub>-2, … — but NEVER rmSync a
-      // path we don't own (a foreign dir that happens to match the prefixed
-      // name would otherwise be deleted). Give up on that skill instead.
-      let rel = sub
-      for (let n = 0; n < 100 && existsSync(join(root, rel)) && !owned.has(rel); n++)
-        rel = `${id}-${sub}${n ? `-${n}` : ''}`
-      if (existsSync(join(root, rel)) && !owned.has(rel)) continue
-      const target = join(root, rel)
-      if (!resolve(target).startsWith(resolve(root) + sep)) continue
-      rmSync(target, { recursive: true, force: true })
-      renameSync(join(nd, sub), target); paths.push(rel)
-      // mark the lifted dir as market-made — uninstall can then tell a
-      // leftover `<id>-*` dir of ours from a foreign dir with the same name
-      try { writeFileSync(join(target, '.market-lift'), JSON.stringify({ name: opts.name })) } catch { /* cosmetic */ }
+    let off = 0, wrote = 0
+    // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
+    // ustar stores paths ≤255B as prefix(155B @345) + '/' + name(100B @0).
+    let pendingLong: string | null = null
+    const paxPath = (rec: string): string | null => {
+      let i = 0
+      while (i < rec.length) {
+        const sp = rec.indexOf(' ', i)
+        if (sp < 0) return null
+        const len = parseInt(rec.slice(i, sp), 10)
+        if (!len || i + len > rec.length) return null
+        const kv = rec.slice(sp + 1, i + len - 1)
+        const eq = kv.indexOf('=')
+        if (eq > 0 && kv.slice(0, eq) === 'path') return kv.slice(eq + 1)
+        i += len
+      }
+      return null
     }
-    // only remove the emptied nest — a sub that couldn't be lifted (all 100
-    // prefixed name variants collided) must survive, not be silently deleted
-    try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
+    // pass 1 — collect safe entries. Two passes let us detect a wrapper root:
+    // github codeload archives ship every path under `<repo>-<ref>/`, which must
+    // be stripped like npm's `package/` or the skill nests stay one level deep.
+    const items: { type: string; rel: string; body: number; size: number }[] = []
+    while (off + 512 <= tar.length) {
+      let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
+      if (!f) break
+      const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
+      const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
+      const type = tar.toString('utf8', off + 156, off + 157)
+      const body = off + 512
+      const next = body + Math.ceil(size / 512) * 512
+      if (type === 'L') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
+      if (type === 'x') { pendingLong = paxPath(tar.toString('utf8', body, body + size)) ?? pendingLong; off = next; continue }
+      if (pendingLong) { f = pendingLong; pendingLong = null }
+      else if (prefix) f = `${prefix}/${f}`
+      const rel = safeTarRel(f)
+      if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
+      items.push({ type, rel, body, size })
+      off = next
+    }
+    // shared leading segment that is not a real skill-nest name = archive wrapper
+    const STRUCT = new Set(['.opencode', '.claude', '.agents', 'skills', 'package'])
+    const first = items[0]?.rel.split('/')[0]
+    const wrap = first && !STRUCT.has(first) && items.every(i => { const s = i.rel.split('/'); return s.length > 1 && s[0] === first })
+      ? `${first}/` : ''
+    // pass 2 — extract
+    for (const { type, rel: r0, body, size } of items) {
+      const rel = wrap ? r0.slice(wrap.length) : r0
+      if (!rel) continue
+      if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
+      if (type === '0' || type === '' || type === ' ') {
+        const fp = join(dest, rel)
+        if (!resolve(fp).startsWith(resolve(dest) + sep)) continue
+        mkdirSync(dirname(fp), { recursive: true })
+        writeFileSync(fp, tar.subarray(body, body + size)); wrote++
+      }
+    }
+    if (!wrote) throw new Error('empty tarball')
+    const root = dirname(dest)
+    // paths we created on a previous install may be overwritten in place;
+    // a foreign dir at the same name forces the <id>- prefix instead
+    const owned = new Set<string>()
+    try {
+      const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
+      for (const rel of prev.paths ?? []) owned.add(rel)
+    } catch { /* first install */ }
+    const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
+      ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
+    const paths: string[] = []
+    for (const nest of nests) {
+      const nd = join(dest, nest)
+      let subs: string[]
+      try { subs = readdirSync(nd) } catch { continue }
+      for (const sub of subs) {
+        if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
+        // collision → try <id>-<sub>, then <id>-<sub>-2, … — but NEVER rmSync a
+        // path we don't own (a foreign dir that happens to match the prefixed
+        // name would otherwise be deleted). Give up on that skill instead.
+        let rel = sub
+        for (let n = 0; n < 100 && existsSync(join(root, rel)) && !owned.has(rel); n++)
+          rel = `${id}-${sub}${n ? `-${n}` : ''}`
+        if (existsSync(join(root, rel)) && !owned.has(rel)) continue
+        const target = join(root, rel)
+        if (!resolve(target).startsWith(resolve(root) + sep)) continue
+        rmSync(target, { recursive: true, force: true })
+        renameSync(join(nd, sub), target); paths.push(rel)
+        // mark the lifted dir as market-made — uninstall can then tell a
+        // leftover `<id>-*` dir of ours from a foreign dir with the same name
+        try { writeFileSync(join(target, '.market-lift'), JSON.stringify({ name: opts.name })) } catch { /* cosmetic */ }
+      }
+      // only remove the emptied nest — a sub that couldn't be lifted (all 100
+      // prefixed name variants collided) must survive, not be silently deleted
+      try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
+    }
+    // lifts the previous version shipped but this one doesn't must go — left
+    // behind they'd become manifest-less foreign dirs the user can never
+    // uninstall (and the skill would keep silently loading)
+    for (const rel of owned) {
+      if (paths.includes(rel)) continue
+      const t = join(root, rel)
+      if (resolve(t).startsWith(resolve(root) + sep)) rmSync(t, { recursive: true, force: true })
+    }
+    writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
+    committed = true
+    return `wrote ${wrote}, lifted ${paths.length}`
+  } finally {
+    // A failed FRESH install must not leave a manifest-less dir behind — the
+    // foreign-dir guard would then refuse every retry, permanently wedging
+    // the package until the user deletes the dir by hand. A pre-existing dir
+    // is left alone: a partial overwrite still leaves the previous version's
+    // manifest + files in place.
+    if (!committed && createdDest) { try { rmSync(dest, { recursive: true, force: true }) } catch { /* best effort */ } }
   }
-  // lifts the previous version shipped but this one doesn't must go — left
-  // behind they'd become manifest-less foreign dirs the user can never
-  // uninstall (and the skill would keep silently loading)
-  for (const rel of owned) {
-    if (paths.includes(rel)) continue
-    const t = join(root, rel)
-    if (resolve(t).startsWith(resolve(root) + sep)) rmSync(t, { recursive: true, force: true })
-  }
-  writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
-  return `wrote ${wrote}, lifted ${paths.length}`
 }
 
 /** `<id>-*` dirs at root whose lift marker names this package — leftover

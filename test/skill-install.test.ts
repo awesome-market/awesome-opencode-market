@@ -93,6 +93,59 @@ describe('installSkillTar', () => {
     await expect(installSkillTar({ name: 'x', gzipped: gzipSync(Buffer.alloc(1024)), root })).rejects.toThrow('empty')
   })
 
+  it('a failed FRESH install leaves no wedge — retry succeeds', async () => {
+    // died between mkdir and manifest write → manifest-less dir → the foreign
+    // guard used to refuse every retry ('already exists and is not managed')
+    await expect(installSkillTar({ name: 'wedged', gzipped: gzipSync(Buffer.alloc(1024)), root })).rejects.toThrow('empty')
+    expect(existsSync(join(root, 'wedged'))).toBe(false)
+    const gz = makeGz(['package/SKILL.md', '# s'])
+    await installSkillTar({ name: 'wedged', gzipped: gz, root })
+    expect(readFileSync(join(root, 'wedged', 'SKILL.md'), 'utf8')).toBe('# s')
+  })
+
+  it('a failed REINSTALL preserves the previous version', async () => {
+    const gz = makeGz(['package/SKILL.md', '# v1'], ['package/extra.txt', 'e'])
+    await installSkillTar({ name: 'upg', gzipped: gz, root })
+    await expect(installSkillTar({ name: 'upg', gzipped: gzipSync(Buffer.alloc(1024)), root })).rejects.toThrow('empty')
+    // old install must survive a failed upgrade — files AND manifest intact
+    expect(readFileSync(join(root, 'upg', 'SKILL.md'), 'utf8')).toBe('# v1')
+    expect(readFileSync(join(root, 'upg', 'extra.txt'), 'utf8')).toBe('e')
+    expect(existsSync(join(root, 'upg', '.market-skills.json'))).toBe(true)
+    const gz2 = makeGz(['package/SKILL.md', '# v2'])
+    await installSkillTar({ name: 'upg', gzipped: gz2, root })
+    expect(readFileSync(join(root, 'upg', 'SKILL.md'), 'utf8')).toBe('# v2')
+  })
+
+  it('an EMPTY manifest-less dir is a failed-install leftover — healed, not refused', async () => {
+    mkdirSync(join(root, 'leftover'), { recursive: true })
+    const gz = makeGz(['package/SKILL.md', '# s'])
+    await installSkillTar({ name: 'leftover', gzipped: gz, root })
+    expect(readFileSync(join(root, 'leftover', 'SKILL.md'), 'utf8')).toBe('# s')
+  })
+
+  it('a NON-EMPTY manifest-less dir is foreign — refuses and says how to unblock', async () => {
+    mkdirSync(join(root, 'foreign'), { recursive: true })
+    writeFileSync(join(root, 'foreign', 'SKILL.md'), '# mine')
+    const gz = makeGz(['package/SKILL.md', '# s'])
+    await expect(installSkillTar({ name: 'foreign', gzipped: gz, root }))
+      .rejects.toThrow(/not managed by market.*delete .* manually/)
+    expect(readFileSync(join(root, 'foreign', 'SKILL.md'), 'utf8')).toBe('# mine')
+  })
+
+  it('control-char filenames are skipped, not written to the skills dir', async () => {
+    const gz = makeGz(
+      ['package/ok.txt', 'fine'],
+      ['package/bad\x07name.txt', 'evil'],
+      ['package/sub/bad\x01f.txt', 'evil2'],
+      ['package/esc\x1b[31m.txt', 'evil3'])
+    await installSkillTar({ name: 'ctrl', gzipped: gz, root })
+    expect(readFileSync(join(root, 'ctrl', 'ok.txt'), 'utf8')).toBe('fine')
+    const names = readdirSync(join(root, 'ctrl'))
+    expect(names).toContain('ok.txt')
+    expect(names.filter(n => /[\x00-\x1f\x7f-\x9f]/.test(n))).toEqual([])
+    expect(existsSync(join(root, 'ctrl', 'sub'))).toBe(false)  // nested bad name never materializes its dir either
+  })
+
   it('foreign collision prefixes with <id>-', async () => {
     mkdirSync(join(root, 'shared'), { recursive: true })  // pre-existing foreign dir
     const gz = makeGz(
