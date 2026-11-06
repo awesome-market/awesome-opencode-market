@@ -367,7 +367,19 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     if (rec?.verdict === 'pass' && rec.source === 'ai' &&
         (caps.redFlags.length > 0 || caps.scannedAt === null))
       return 'AI pass 被旗标/未扫描拦截·需人工'
-    if (rec?.verdict === 'pass') return willAnnounce(rec) ? '已公告·待放行闸' : '已裁决·待日报公告'
+    if (rec?.verdict === 'pass') {
+      // gate order: maturity is checked before RELEASABLE — an unannounced
+      // pass can't release regardless of verification, so the announcement
+      // phase is the honest first blocker
+      if (!willAnnounce(rec)) return '已裁决·待日报公告'
+      // announced pass on an unverified slot: the release gate hard-blocks
+      // unverified (RELEASABLE = verified|skipped) — '待放行闸' would promise
+      // a release that structurally can't happen until verify lands. Same
+      // blocker order the docket body documents (旗标/未扫描 → 装测未过 →
+      // 还没验 → 字节不符 → 才到公告相位).
+      if (vf.status === 'unverified') return '待验证'
+      return '已公告·待放行闸'
+    }
     if (vf.status === 'unverified') return '待验证'
     // repo-only slots are never in the AI review queue — '待评审' would imply
     // the diagnose worker picks them up; only a human verdict moves them

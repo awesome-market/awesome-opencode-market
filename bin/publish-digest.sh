@@ -118,10 +118,17 @@ for i in 1 2 3 4; do
   git reset --hard origin/catalog -q || { log "reset attempt $i failed"; sleep 3; continue; }
   # reset 不碰 untracked:上轮的残留渲染产物会混进 git add,先清掉
   git clean -fd digest/ >/dev/null 2>&1 || true
+  # 与 digest.yml 班内同款压实:丢超 180d 被取代的 AI 行(human/最新/窗内全保留,
+  # 语义不变)。兜底路径漏了它,长期只走本机时 jsonl 无界增长且压实改动不落库。
+  # 失败非致命——日志变大而已,不挡渲染。渲染代码在 $CODED(catalog 分支无源码)。
+  (cd "$CODED" && npx tsx pipeline/verdicts-compact.ts "$CATDG/ai-verdicts.jsonl") \
+    || log "verdicts compact failed (non-fatal) — rendering on the un-compacted log"
   (cd "$CODED" && npx tsx pipeline/ai/digest.ts \
     --index "$CATDG/index.json" --verdicts "$CATDG/ai-verdicts.jsonl" \
     --state "$CATDG/digest-state.json" --out-dir "$CATDG") || { log "render attempt $i failed"; sleep 3; continue; }
   git add digest/ digest-state.json
+  # 压实可能改写了 jsonl——存在才暂存(与 CI 同条件)
+  [ -f "$CATDG/ai-verdicts.jsonl" ] && git add ai-verdicts.jsonl || true
   git diff --cached --quiet && { log "nothing changed vs origin"; exit 0; }
   git commit -qm "digest: $(date +%F)" || { log "commit attempt $i failed"; sleep 3; continue; }
   git push -q origin catalog && exit 0

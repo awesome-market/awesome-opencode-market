@@ -206,6 +206,22 @@ describe('renderDigest', () => {
     expect(md).toContain('`stuck` v2.0 · 验证失败')
     expect(md).not.toContain('`stuck` v2.0 · 已公告·待放行闸')
   })
+  it('mature pass on an unverified slot shows 待验证, not 待放行闸 (RELEASABLE hard-blocks unverified)', () => {
+    const pu = {
+      version: '2.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'unverified' as const }, heldAt: '2026-01-01T00:00:00Z',
+    }
+    const ver = v({ name: 'awaiting-run', version: '2.0' })
+    const md = renderDigest({
+      index: idx([entry({ name: 'awaiting-run', approval: 'approved', pendingUpdate: pu })]),
+      verdicts: [ver],
+      prev: digestStateOf('2026-01-02T21:00:00Z', [ver]),   // pass already announced — would mature
+      now: new Date('2026-01-03T21:00:00Z'),
+    })
+    expect(md).toContain('`awaiting-run` v2.0 · 待验证')
+    expect(md).not.toContain('`awaiting-run` v2.0 · 已公告·待放行闸')
+    expect(md).not.toContain('`awaiting-run` v2.0 · 已裁决·待日报公告')
+  })
   it('D-C pendingReview shares unreviewedTargets — unverified <48h held is deferred, not counted', () => {
     // 'young' is held+unverified but held <48h → diagnose defers to verify;
     // counting it as review backlog inflates §⑤ vs what diagnose picks up

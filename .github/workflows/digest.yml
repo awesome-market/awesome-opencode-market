@@ -111,7 +111,11 @@ jobs:
     if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { issues: write }
+    # contents:read — this job checks out the repo AND fetches the catalog
+    # branch (worktree + git log probes); issues:write alone leaves contents
+    # at none, so it only works while the public repo's anonymous git read
+    # happens to suffice (docket.yml grants the same pair explicitly)
+    permissions: { issues: write, contents: read }
     steps:
       # outbound: github (fetch/checkout), api.github.com (gh), *.github.io
       # (health.json probe), npm (ci) — same posture as the digest job
@@ -143,9 +147,13 @@ jobs:
           # worker. Diagnose commits carry the fixed 'ai-diagnose:' prefix.
           LAST=$(git -C /tmp/cat log -1 --format=%ct --grep='^ai-diagnose:' -- ai-verdicts.jsonl 2>/dev/null || echo 0)
           AGE_H=$(( ($(date +%s) - ${LAST:-0}) / 3600 ))
-          # digest 的输入也要看:index.json 陈旧 = catalog.yml 挂了,digest 照样
-          # 在旧数据上"成功"渲染——光盯 verdicts 会漏掉上游停摆
-          LAST_IDX=$(git -C /tmp/cat log -1 --format=%ct -- index.json 2>/dev/null || echo 0)
+          # digest 的输入也要看:catalog publish 停摆 = digest 照样在旧数据上
+          # "成功"渲染——光盯 verdicts 会漏掉上游停摆。探针必须按提交者区分:
+          # 裸 `git log -- index.json` 会被 verify merge / 人工裁决 APPLY_INDEX
+          # / re-features 的提交刷新——catalog 死了但 verify 活着时该腿永远
+          # 新鲜。catalog publish 每班必提交("catalog: …",generatedAt=now 使
+          # staged-diff 恒脏),按此前缀取最后一次发布提交才是真探针。
+          LAST_IDX=$(git -C /tmp/cat log -1 --format=%ct --grep='^catalog:' -- index.json 2>/dev/null || echo 0)
           IDX_AGE_H=$(( ($(date +%s) - ${LAST_IDX:-0}) / 3600 ))
           # 第三条腿:digest-state.json 陈旧 = digest job 绿过但没落盘
           # (含 false-green 吞掉的 commit 失败)——成熟锚静默冻结的最后兜底
@@ -176,7 +184,7 @@ jobs:
           # launchd 手动期/上线前的有意停机不该每班都报 pipeline-alert；
           # 其余三条腿（index/digest-state/site）与本地诊断无关，照常检查。
           PAUSED=$([ -f /tmp/cat/diagnose.paused ] && echo 1 || echo 0)
-          echo "last ai-diagnose commit age: ${AGE_H}h; index.json age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}; diagnose paused: ${PAUSED}"
+          echo "last ai-diagnose commit age: ${AGE_H}h; last catalog publish age: ${IDX_AGE_H}h; digest-state age: ${DS_AGE_H}h; site health age: ${SITE_AGE_H}h; unreviewed targets: ${PENDING}; diagnose paused: ${PAUSED}"
           REASONS=""
           # leg fingerprint — REASONS embed changing counters (age grows every
           # day), so dedupe compares WHICH legs fired instead of the text:
@@ -203,7 +211,7 @@ jobs:
             LEGS="${LEGS}5"
           fi
           if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
-            REASONS="${REASONS}index.json ${IDX_AGE_H}h 未更新——catalog.yml 疑似停摆，digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
+            REASONS="${REASONS}catalog 分支 ${IDX_AGE_H}h 无 catalog: 发布提交——catalog.yml 疑似停摆（generate/publish 连续失败或未跑），digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
             LEGS="${LEGS}2"
           fi
           if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
