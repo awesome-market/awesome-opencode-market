@@ -127,18 +127,40 @@ a{color:#06c;text-decoration:none}code{background:#f4f4f4;padding:1px 4px;border
 pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;overflow-x:auto}
 @media(prefers-color-scheme:dark){body{background:#141414;color:#ddd}.card{border-color:#333}code{background:#2a2a2a}a{color:#6af}.ok{color:#6d6}.warn{color:#e8b34d}.bad{color:#f77}.meta{color:#999}}`
 
+/** Normalize a repo URL before it lands in PUBLIC hrefs — esc() stops HTML
+ *  injection, not scheme/userinfo injection. scp-form 'git@host:o/r' and
+ *  'ssh://user@host/o/r' collapse to https; userinfo is stripped (a
+ *  token-embedded remote — `https://x-access-token:…@host/o/r` — would
+ *  otherwise leak credentials into every page footer and repo link);
+ *  http upgrades to https; query/hash/junk paths are dropped; any scheme a
+ *  browser should never follow (javascript:, file:, garbage) → null so the
+ *  caller falls back instead of publishing a hostile href. */
+export function normalizeRepoUrl(u: string): string | null {
+  const httpish = u.trim()
+    .replace(/^[\w.-]+@([\w.-]+):/, 'https://$1/')      // scp-style 'git@host:path'
+    .replace(/^ssh:\/\/[^@/]*@/i, 'https://')           // 'ssh://user@host/path'
+  try {
+    const p = new URL(httpish)
+    if (p.protocol !== 'https:' && p.protocol !== 'http:') return null
+    p.username = p.password = ''
+    p.protocol = 'https:'
+    p.search = p.hash = ''
+    return (p.origin + p.pathname).replace(/\/+$/, '').replace(/\.git$/i, '')
+  } catch { return null }
+}
+const DEFAULT_REPO_URL = 'https://github.com/awesome-market/awesome-opencode-market'
 /** Footer repo link — env override, else this repo's own origin remote
  *  (memoized; a rename/transfer must not 404 every page footer). */
 let memoRepo: string | null = null
 function siteRepoUrl(): string {
   if (memoRepo) return memoRepo
   const env = process.env.MARKET_REPO_URL
-  if (env) return (memoRepo = env.replace(/\.git$/, '').replace(/\/$/, ''))
+  if (env) { const n = normalizeRepoUrl(env); if (n) return (memoRepo = n) }
   try {
     const u = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
-    memoRepo = u.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '')
+    memoRepo = normalizeRepoUrl(u) ?? DEFAULT_REPO_URL
   } catch {
-    memoRepo = 'https://github.com/awesome-market/awesome-opencode-market'
+    memoRepo = DEFAULT_REPO_URL
   }
   return memoRepo
 }
@@ -718,7 +740,10 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       // and re-warned on every future build
       if (dropped) { rmSync(hit, { recursive: true, force: true }); cpSync(c.dest, hit, { recursive: true }) }
       const files = abs.map((f) => relative(c.dest, f)).sort()
-      if (files.length && total <= MAX_SKILL_TOTAL_BYTES) { entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug }); return }
+      // the member cap is a publish rule like the size cap — a cache entry
+      // written before MAX_SKILL_MEMBERS existed (or hand-poisoned) must
+      // refetch through the capping extractor, not ship over the bound
+      if (files.length && files.length <= MAX_SKILL_MEMBERS && total <= MAX_SKILL_TOTAL_BYTES) { entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug }); return }
       rmSync(hit, { recursive: true, force: true })   // poisoned cache → refetch
     } catch { rmSync(hit, { recursive: true, force: true }) }
     const tmp = `${c.dest}.tmp`
