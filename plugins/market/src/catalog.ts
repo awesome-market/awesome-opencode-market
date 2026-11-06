@@ -237,6 +237,24 @@ const LOOPBACK_INDEX_RE = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/\
 export function isIndexUrl(u: unknown): u is string {
   return typeof u === 'string' && (INDEX_URL_RE.test(u) || LOOPBACK_INDEX_RE.test(u))
 }
+/** skills[] catalog URL written into opencode.json — same trust rule as the
+ *  index: https anywhere, http only on loopback (dev loop). Trailing slash
+ *  required — `skills/` is a namespace, not a file. */
+const SKILLS_URL_RE = /^https:\/\/\S+\/$|^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\/\S+\/$/
+export function isSkillsUrl(u: unknown): u is string {
+  return typeof u === 'string' && SKILLS_URL_RE.test(u)
+}
+/** fetch() follows redirects — the entry-URL https check is void if a 302
+ *  downgrades to plaintext http (the same reasoning the pipeline applies to
+ *  registry fetches). res.url is the FINAL url after the redirect chain;
+ *  https or loopback-http (dev index/registry) pass, anything else refuses.
+ *  Empty res.url = undici/webview always set it, but treat absent as the
+ *  pre-validated request URL rather than fail closed on an unknown shape. */
+export function assertFetchFinalUrl(res: Response, what: string): void {
+  const u = res.url
+  if (u && !/^https:\/\//i.test(u) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(u))
+    throw new Error(`${what}: redirect landed on non-https ${u.slice(0, 80)} — refusing`)
+}
 /** catalog source: opencode.json plugin options > env > published default. */
 export function resolveIndexUrl(options?: { indexUrl?: unknown } | null): string {
   const o = options?.indexUrl
@@ -495,6 +513,7 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
     try {
       const res = await fetch(hUrl, { signal: AbortSignal.timeout(10_000) })
       if (res.ok) {
+        assertFetchFinalUrl(res, 'health.json')
         const htext = new TextDecoder().decode(await readBodyBounded(res, 1_000_000, 'health.json'))
         const h = JSON.parse(htext) as { sha256?: unknown }
         if (typeof h.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h.sha256)) healthSha = h.sha256
@@ -518,6 +537,7 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
     if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
+    assertFetchFinalUrl(res, 'catalog index')
     const bytes = await readBodyBounded(res, MAX_INDEX_BYTES, 'catalog index')
     let sha: string | undefined
     if (healthSha) {
@@ -899,6 +919,7 @@ export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ 
   if (!pk) {
     const res = await fetch(`${npmRegistry()}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`packument fetch failed: ${res.status}`)
+    assertFetchFinalUrl(res, 'packument')
     // bounded read — same 64MB cap the pipeline's fetchPackument uses; a
     // hostile/glitched registry (npm_config_registry is user-controlled)
     // must not balloon the host process on an unbounded res.json()

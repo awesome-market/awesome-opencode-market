@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -1489,6 +1489,8 @@ export default Plugin.define({
           try {
             const res = await fetch(url, { signal: AbortSignal.any([ac.signal, AbortSignal.timeout(30_000)]) })
             if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
+            // redirects must not downgrade past the https-pinned tarball URL
+            assertFetchFinalUrl(res, 'skill tarball')
             // stream-bounded read — a lying/absent content-length can't push
             // the whole tarball through memory before the size check runs
             bytes = await readBodyBounded(res, MAX_SKILL_TGZ, 'skill tarball')
@@ -1505,7 +1507,10 @@ export default Plugin.define({
         // read when no input; enable:true appends the url, enable:false strips
         // it — other skills[] entries are preserved either way
         skillSource: async (p: { url?: unknown; enable?: unknown } = {}) => {
-          const url = typeof p?.url === 'string' && /^https:\/\/\S+\/$/.test(p.url) ? p.url : skillsUrl(urlOrDefault(null))
+          // loopback-http counts (isSkillsUrl) — a dev index derives a
+          // loopback skills url; rejecting it silently toggled the DEFAULT
+          // published catalog instead of the one the user asked for
+          const url = isSkillsUrl(p?.url) ? p.url : skillsUrl(urlOrDefault(null))
           return withConfigLock(async () => {
             const cfg = await cfgPath()
             const d = await readJson(cfg)
