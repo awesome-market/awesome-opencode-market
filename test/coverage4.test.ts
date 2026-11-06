@@ -172,6 +172,9 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([]), outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     const gh = idx.plugins.find(e => e.name === 'solo/gh-plug')
     expect(gh?.source.kind).toBe('github')
-    expect(gh?.verification.status).toBe('skipped')
+    // the mock tree carries a plugin artifact (.opencode/plugin/x.ts) — a
+    // payload verify.ts can install via `plugin add owner/repo#sha`, so the
+    // entry queues as 'unverified' rather than the old blanket 'skipped'
+    expect(gh?.verification.status).toBe('unverified')
   })
 })

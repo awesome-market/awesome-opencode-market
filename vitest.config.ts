@@ -1,16 +1,18 @@
-import { defineConfig } from 'vitest/config'
 import { fileURLToPath } from 'node:url'
-// fileURLToPath decodes %XX — a checkout under a non-ASCII path (e.g. a dir
-// named 副本) would otherwise alias to a percent-ENCODED path that doesn't
-// exist and break module resolution only on those machines
-const here = (p: string) => fileURLToPath(new URL(p, import.meta.url))
+import { defineConfig } from 'vitest/config'
+// fileURLToPath (not .pathname): non-ASCII checkout paths percent-encode and
+// the aliased targets silently miss → "Cannot find package 'solid-js'".
 export default defineConfig({
   resolve: {
     conditions: ['browser', 'solid', 'development'],
+    // fileURLToPath, not .pathname — URL.pathname stays percent-encoded, so
+    // a checkout under a non-ASCII path breaks every alias (CJK/accents in
+    // the dir name → "Cannot find package 'solid-js'" on any file that
+    // imports it). fileURLToPath decodes back to the real filesystem path.
     alias: {
-      '@opencode/plugin/gui': here('./test/helpers/host-stub.ts'),
-      'solid-js/web': here('./plugins/market/node_modules/solid-js/web/dist/web.js'),
-      'solid-js': here('./plugins/market/node_modules/solid-js/dist/solid.js'),
+      '@opencode/plugin/gui': fileURLToPath(new URL('./test/helpers/host-stub.ts', import.meta.url)),
+      'solid-js/web': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url)),
+      'solid-js': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url)),
     },
   },
   test: {

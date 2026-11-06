@@ -29,8 +29,11 @@ const verdict = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   source: 'ai', ...over,
 })
 
+// dayAnnounced defaults to [] — announced keys were in an EARLIER digest
+// (mature under the dayAnnounced objection-window rule); a same-day test
+// passes { dayAnnounced: keys } via `over`
 const dg = (announced: string[], over: Partial<DigestState> = {}): DigestState =>
-  ({ lastDigestAt: '2026-01-10T00:00:00Z', announced, day: '2026-01-10', dayAnnounced: announced, ...over })
+  ({ lastDigestAt: '2026-01-10T00:00:00Z', announced, day: '2026-01-10', dayAnnounced: [], ...over })
 
 describe('verdicts applyMatureVerdicts matrix', () => {
   it('concern on legacy→pending, pending reason update, approved+concern→pending, pass release gates', async () => {
@@ -212,7 +215,7 @@ describe('submission-status.main dry path', () => {
     const { main } = await import('../pipeline/submission-status.ts')
     const dir = mkdtempSync(join(tmpdir(), 'ss-'))
     const idx = join(dir, 'index.json'), subs = join(dir, 'subs.txt')
-    writeFileSync(idx, JSON.stringify(mkIdx([mkEntry('p')]).valueOf()))
+    writeFileSync(idx, JSON.stringify(mkIdx([mkEntry('p', { approval: 'pending' })]).valueOf()))
     writeFileSync(subs, '{"name":"p","issue":1,"notified":false}\n')
     const logs: string[] = []
     const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(a.join(' ')) })
@@ -237,7 +240,7 @@ describe('notify-published.main + repo-name match', () => {
     const logs: string[] = []
     const spy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(String(a[0])) })
     try { main(['node', 'x', idx, subs, stale, dead]) } finally { spy.mockRestore() }
-    expect(logs).toContain('3')
+    expect(logs).toContain('3\to/r')
     const after = readFileSync(subs, 'utf8')
     expect(after).toContain('"notified":true')
     expect(after).toContain('"dead":true')

@@ -49,10 +49,20 @@ def main() -> None:
     ids = [x + [0] * (n - len(x)) for x in ids]
     masks = [x + [0] * (n - len(x)) for x in masks]
 
+    # chunked forward — one shot over hundreds of padded blocks spikes
+    # activation memory (N × 512 tokens through a ~500MB ModernBERT). The
+    # padded ids/masks are tiny ints; chunking caps the peak at ~64 rows
+    # worth of activations with identical per-row scores.
+    B = 64
+    scores = []
     with torch.no_grad():
-        out = model(input_ids=torch.tensor(ids), attention_mask=torch.tensor(masks))
-        probs = torch.sigmoid(out.logits.float()).tolist()
-    scores = [p[0] if len(p) == 1 else p[-1] for p in probs]
+        for i in range(0, len(ids), B):
+            out = model(
+                input_ids=torch.tensor(ids[i:i + B]),
+                attention_mask=torch.tensor(masks[i:i + B]),
+            )
+            scores.extend(torch.sigmoid(out.logits.float()).tolist())
+    scores = [p[0] if len(p) == 1 else p[-1] for p in scores]
     print(json.dumps([{"id": i["id"], "score": s} for i, s in zip(items, scores)]))
 
 

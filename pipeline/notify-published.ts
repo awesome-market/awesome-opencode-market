@@ -11,11 +11,14 @@ export function markNotified(
   index: CatalogIndex,
   lines: string[],
   opts: { staleDays?: number; deadDays?: number; now?: number } = {},
-): { lines: string[]; issues: number[]; stale: number[]; dead: number[] } {
+): { lines: string[]; issues: number[]; stale: number[]; dead: number[]; slugs: Map<number, string> } {
   // "已收录" = user-visible. A pending entry is in the index but not displayed —
   // notify only once it actually publishes (approved or legacy), AI-DIAGNOSIS §9.
   const byName = new Map(index.plugins.map(e => [e.name, e]))
   const issues = new Set<number>()
+  // issue → detail-page slug: the notify comment links straight to the
+  // landed entry instead of sending the author hunting through the list
+  const slugs = new Map<number, string>()
   const stale = new Set<number>()
   const dead = new Set<number>()
   const now = opts.now ?? Date.now()
@@ -52,6 +55,7 @@ export function markNotified(
       if (s.dead) {
         if (key && s.issue && e && e.approval !== 'pending') {
           issues.add(s.issue)
+          slugs.set(s.issue, e.slug)
           return [JSON.stringify({ ...s, notified: true })]
         }
         const age = s.at ? now - Date.parse(s.at) : 0
@@ -59,6 +63,7 @@ export function markNotified(
       }
       if (key && s.issue && e && e.approval !== 'pending') {
         issues.add(s.issue)
+        slugs.set(s.issue, e.slug)
         return [JSON.stringify({ ...s, notified: true })]
       }
       // dead = terminal: the seed aged past deadDays without ever becoming
@@ -79,16 +84,17 @@ export function markNotified(
     } catch { /* keep unreadable lines verbatim */ }
     return [l]
   })
-  return { lines: out, issues: [...issues], stale: [...stale], dead: [...dead] }
+  return { lines: out, issues: [...issues], stale: [...stale], dead: [...dead], slugs }
 }
 
 export function main(argv: string[] = process.argv): void {
   const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2]!, 'utf8')))
   const path = argv[3]!
   const lines = readFileSync(path, 'utf8').split('\n')
-  const { lines: out, issues, stale, dead } = markNotified(index, lines)
+  const { lines: out, issues, stale, dead, slugs } = markNotified(index, lines)
   writeFileSync(path, out.join('\n'))
-  for (const i of issues) console.log(i)
+  // issue<TAB>slug — the notify comment links the entry's detail page
+  for (const i of issues) console.log(`${i}\t${slugs.get(i) ?? ''}`)
   // optional stale-out / dead-out paths
   if (argv[4]) writeFileSync(argv[4], stale.join('\n'))
   if (argv[5]) writeFileSync(argv[5], dead.join('\n'))

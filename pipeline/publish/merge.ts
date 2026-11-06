@@ -270,9 +270,12 @@ export function mergeEntries(
     // ("有高危信号没跑"), not 'unverified' ("还没验"). 'failed' results keep
     // their real outcome. Applies to both layers — trust flags can add
     // redFlags after scan time produced 'unverified'.
+    // Evidence survives the downgrade: verifiedAt/runUrl/integrity stay so
+    // the detail page keeps the audit trail of what WAS measured before the
+    // flags appeared — and plan can re-enter a cleared slot honestly.
     const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
       flagged && (v.status === 'verified' || v.status === 'unverified')
-        ? { status: 'skipped', level: v.level ?? 'install' }
+        ? { ...v, status: 'skipped', level: v.level ?? 'install' }
         : v
     out.verification = skipIfFlagged(out.verification, out.capabilities.redFlags.length > 0)
     if (out.pendingUpdate) {
