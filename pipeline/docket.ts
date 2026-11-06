@@ -466,9 +466,16 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push(`- AI 审计：${t.model ?? '模型未记录'}${t.l05Score !== undefined ? ` · L0.5 ${t.l05Score.toFixed(2)}` : ''}`)
     }
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
-      L.push(`- ⚠️ 静态扫描红旗 ${t.redFlags} 项：AI pass 已被忽略规则拦截——本版本**只能人工放行**（勾 \`verdict:pass\`）或维持拦截（勾 \`verdict:concern\`）`)
+      // a standing human pass COVERS the flag exemption (§7 humanPassCovers):
+      // the gate releases under that authority — "只能人工放行" would tell the
+      // maintainer to act on a slot that already resolves itself
+      L.push(t.humanVerdict?.verdict === 'pass'
+        ? `- ⚠️ 静态扫描红旗 ${t.redFlags} 项——人工 pass 已就此槽位判过：AI 对旗标槽无放行权，但人工判词覆盖豁免，按成熟相位放行`
+        : `- ⚠️ 静态扫描红旗 ${t.redFlags} 项：AI pass 已被忽略规则拦截——本版本**只能人工放行**（勾 \`verdict:pass\`）或维持拦截（勾 \`verdict:concern\`）`)
     } else if (t.verdict === 'pass' && t.unscanned) {
-      L.push('- ⚠️ 本版本**从未跑过静态扫描**（扫描失败或超限）——没扫到不等于安全：AI pass 已被忽略规则拦截，**只能人工放行**（勾 `verdict:pass`）或维持拦截（勾 `verdict:concern`）')
+      L.push(t.humanVerdict?.verdict === 'pass'
+        ? '- ⚠️ 本版本**从未跑过静态扫描**——没扫到不等于安全：AI 对未扫描槽无放行权，但人工 pass 已判，覆盖豁免按成熟相位放行'
+        : '- ⚠️ 本版本**从未跑过静态扫描**（扫描失败或超限）——没扫到不等于安全：AI pass 已被忽略规则拦截，**只能人工放行**（勾 `verdict:pass`）或维持拦截（勾 `verdict:concern`）')
     } else if (t.verdict === 'concern') {
       L.push('- AI concern 已拦截放行——无人翻案则该版本保持 held；人工 pass 可放行，人工 concern 锁死。')
     }
@@ -481,8 +488,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     // re-review (same honesty rule as digest's phase tag). Report the FIRST
     // blocker in gate order and always name the next action.
     const shaMismatch = t.verdictSha !== undefined && t.integrity != null && t.verdictSha !== t.integrity
+    // the flag/unscanned lock only binds while no human pass covers the key —
+    // a covered slot releases under the human's authority on the normal phase
     const blocker =
-      (t.redFlags ?? 0) > 0 || t.unscanned ? '但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
+      ((t.redFlags ?? 0) > 0 || t.unscanned) && t.humanVerdict?.verdict !== 'pass'
+        ? '但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
       : vs === 'failed' ? '但装测未过——放行闸不会按此裁决生效：修复后评论 `/retest` 重验，或人工改判'
       : vs === 'unverified' ? '但还没验——装测通过前放行闸不会放行（等 verify 班或人工 verdict:pass）'
       : shaMismatch ? '但裁决字节与现槽位不符（疑似 re-tag）——等 drift 复审或人工重判'
@@ -738,23 +748,34 @@ export async function main(
     // the aggregate check precedes same-name: a row inside the standing
     // issue is the precise reason, "target changed" only when it isn't one
     if (t && aggregated.has(`${t.name}\0${t.ver}`)) return '并入未评审积压总单'
-    const still = t && wantedByName.get(t.name)
-    if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
     const e = t ? byName.get(t.name) : undefined
     if (!t || !e) return '该版本/条目已不在 catalog 索引中'
+    // "verdict 已决议" must be TRUE — read the ISSUE's own key, so a
+    // candidate-key move (npm bump, ruleset rescan refreshing the hold
+    // clock) that dropped the target with zero verdicts never gets a
+    // pointer to a judgment that doesn't exist. epoch gate matches
+    // docketTargets: a stale pre-tombstone pass is not a decision about
+    // this incarnation — same honest "left the queue" reason
+    const decided = !!(epochGoverning(latestV.get(vkey(t.name, t.ver || null)), t.name, tomb)
+      || brakeFor(humanV, t.name, t.ver || null))
+    if (decided) {
+      // the one shape where '已放行' is the precise reason: a stale issue
+      // whose version RELEASED (approved, flags gone). When the displayed
+      // slot still carries sec:* flags this was a flag issue the verdict
+      // retired — '已放行' would describe a release that didn't happen this
+      // tick (the degraded-apply window leaves the entry approved+flagged
+      // while the verdict already rules it)
+      if (!(e.approval === 'pending' || e.pendingUpdate)
+          && !e.capabilities.redFlags.some(f => f.startsWith('sec:')))
+        return '该版本已放行'
+      return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
+    }
+    const still = wantedByName.get(t.name)
+    if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
     // per-entry issue superseded by an aggregate — say so instead of the
     // generic verdicted reason (the entry is still pending!)
     if (e.approval === 'pending' && e.latestVersion === null) return '并入 repo-only 积压总单'
     if (!(e.approval === 'pending' || e.pendingUpdate)) return '该版本已放行'
-    // "verdict 已决议" must be TRUE: a candidate-key move (npm bump, ruleset
-    // rescan refreshing the hold clock) can drop a target with zero verdicts
-    // on its key — closing with a pointer to a judgment that doesn't exist
-    // sends the maintainer hunting through the jsonl for nothing
-    // epoch gate matches docketTargets: a stale pre-tombstone pass is not a
-    // decision about this incarnation — same honest "left the queue" reason
-    if (epochGoverning(latestV.get(vkey(t.name, t.ver || null)), t.name, tomb)
-        || brakeFor(humanV, t.name, t.ver || null))
-      return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
     return '评审目标已离开队列（版本位移或在押时钟重置），该版本尚无裁决——如需先行人工裁决请在本单评论'
   }
 
