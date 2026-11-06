@@ -209,6 +209,11 @@ export const AiVerdict = z.looseObject({
   /** human verdicts: the issue the decision came from (audit trail back to
    *  the [review]/[concern]/[submit] thread) */
   issue: z.number().optional(),
+  /** sha-reuse provenance (AI-DIAGNOSIS §4): this judgment was copied from
+   *  ANOTHER version's verdict on identical bytes — which version, and whose
+   *  call it was. Loose passthrough preserved it before; declared so the
+   *  audit field is part of the schema contract. */
+  reusedFrom: z.looseObject({ version: z.string().nullable(), source: z.enum(['ai', 'human']) }).optional(),
 })
 export type AiVerdict = z.infer<typeof AiVerdict>
 

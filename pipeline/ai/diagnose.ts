@@ -442,7 +442,7 @@ export async function omlxAlive(): Promise<boolean> {
 
 export function verdictRecord(
   e: CatalogIndex['plugins'][number], v: 'pass' | 'concern', reason: string,
-  extra: { sha?: string | undefined; reasonEn?: string | undefined; model?: string | undefined; l05Score?: number | undefined; reusedFrom?: { version: string | null; source: string } | undefined } = {},
+  extra: { sha?: string | undefined; reasonEn?: string | undefined; model?: string | undefined; l05Score?: number | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined } = {},
 ): AiVerdict {
   return {
     name: e.name,
@@ -595,25 +595,32 @@ export async function main(
   // injected deps imply an offline fixture, so tarball defaults to absent
   const tarballOf = deps.tarball ?? (deps.sha ? async () => null : async (name: string, ver: string) =>
     (await pkOf(name))?.tarballOf[ver] ?? null)
+  // process.exit(string) throws ERR_INVALID_ARG_TYPE — usage errors printed a
+  // TypeError stack instead of the message. Print, then exit with a number.
+  const die = (m: string): never => { console.error(m); exit(1) }
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
   const numArg = (k: string, dflt: number) => {
     const raw = arg(k)
     if (raw === undefined) return dflt
     const n = Number(raw)
-    if (!Number.isFinite(n) || n < 0) exit(`usage: ${k} must be a non-negative number`)
+    if (!Number.isFinite(n) || n < 0) die(`usage: ${k} must be a non-negative number`)
     return n
   }
-  const [idxPath, verdictsPath, outPath, statePath] = ['--index', '--verdicts', '--out', '--state'].map(arg)
+  const usage = 'usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>]'
+  // `?? die(...)`: die returns never, so the result type is string — a plain
+  // `if (!x) die()` does not narrow these destructured bindings.
+  const idxPath = arg('--index') ?? die(usage)
+  const verdictsPath = arg('--verdicts') ?? die(usage)
+  const outPath = arg('--out') ?? die(usage)
+  const statePath = arg('--state')
   const limit = numArg('--limit', 50) // bounded by default — a bare run must not fan the whole backlog into the LLM
   const budgetMs = numArg('--budget', 120) * 60_000 // bounded even for manual runs — Infinity let a bare invocation burn days
   const names = args.includes('--name')
-    ? (arg('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)) : exit('usage: --name needs a value'))
+    ? (arg('--name') ? new Set(arg('--name')!.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)) : die('usage: --name needs a value'))
     : null
   const force = args.includes('--force')
   if (force && !args.includes('--name')) console.warn('[diagnose] --force has no effect without --name')
   const dry = args.includes('--dry')
-  if (!idxPath || !verdictsPath || !outPath)
-    exit('usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>]')
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const allVerdicts = loadVerdicts(verdictsPath)
@@ -672,7 +679,7 @@ export async function main(
     // stamping it would make the next full run skip the real sweep for up
     // to SWEEP_MIN_MS (drift detection silently deferred). Same predicate
     // that reads the stamp.
-    if (sweepPath && !names && !force) { try { writeFileSync(sweepPath, new Date().toISOString()) } catch { /* advisory stamp */ } }
+    if (sweepPath && !names && !force && !dry) { try { writeFileSync(sweepPath, new Date().toISOString()) } catch { /* advisory stamp */ } }
   }
   const drifted = idx.plugins.filter(e => driftedSet.has(e)) // index order, deterministic
   const targets = unreviewedTargets(idx, allVerdicts, names, { force: force && names !== null })
@@ -834,10 +841,24 @@ export async function main(
     const { e, ver } = w
     // 0. sha reuse
     if (w.twin) {
-      emit(w, verdictRecord(e, w.twin.verdict,
-        `同 sha 复用 ${w.twin.version ?? '?'} 判词${w.twin.reason ? `：${w.twin.reason}` : ''}`,
-        { reasonEn: `same tarball sha as ${w.twin.version ?? '?'} — verdict reused${w.twin.reasonEn ? `: ${w.twin.reasonEn}` : ''}`, sha: w.sha,
-          reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+      // §10 applies to reused verdicts too — a red-flagged candidate can never
+      // take 'pass' from any AI path: the flags force concern and the twin's
+      // judgment rides along as draft context for the human. A reused 'pass'
+      // would also exit this key from the review queue without ever writing
+      // the mechanical concern that surfaces flagged holds (the release gate
+      // ignores it, so it reads as "decided" while blocking forever).
+      if (w.flagged) {
+        const flags = [...(candidateSlot(e)?.capabilities ?? e.capabilities).redFlags].join('; ').slice(0, 300)
+        emit(w, verdictRecord(e, 'concern',
+          `机械红旗待人工（同 sha ${w.twin.version ?? '?'} 判 ${w.twin.verdict}，仅作草稿参考）：${flags}`,
+          { reasonEn: `red-flagged — same-sha ${w.twin.version ?? '?'} verdict '${w.twin.verdict}' is draft context only: ${flags}`,
+            sha: w.sha, reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+      } else {
+        emit(w, verdictRecord(e, w.twin.verdict,
+          `同 sha 复用 ${w.twin.version ?? '?'} 判词${w.twin.reason ? `：${w.twin.reason}` : ''}`,
+          { reasonEn: `same tarball sha as ${w.twin.version ?? '?'} — verdict reused${w.twin.reasonEn ? `: ${w.twin.reasonEn}` : ''}`, sha: w.sha,
+            reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+      }
       console.log(`[diagnose] ${e.name}@${ver} verdict reused via sha (${w.twin.version ?? '?'})`)
       continue
     }
