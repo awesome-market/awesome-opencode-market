@@ -56,14 +56,36 @@ jobs:
               exit 1
             fi
             npx tsx -e "import { CatalogIndex } from './src/schema.ts'; import { readFileSync } from 'node:fs'; CatalogIndex.parse(JSON.parse(readFileSync('/tmp/old-index.json','utf8'))); console.log('old index valid')"
-            git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
+            # absent-vs-unreadable: `git show || touch/rm` conflates "file was
+            # never created" (legitimate bootstrap) with "blob exists but the
+            # read failed" (transient corruption). cat-file -e splits them —
+            # an unreadable aux file hard-fails instead of silently running on
+            # partial state (dropped seeds / disabled blocklist / frozen passes
+            # with no trace). Same pattern as concern/submit (D-Z).
+            if git cat-file -e origin/catalog:submissions.txt 2>/dev/null; then
+              git show origin/catalog:submissions.txt > /tmp/submissions.txt || { echo "submissions.txt exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              touch /tmp/submissions.txt
+            fi
             # absent blocklist → optional, run without it; PRESENT-but-corrupt
             # must hard-fail inside run.ts (fail-open would silently unblock, C-4)
-            git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || rm -f /tmp/blocklist.json
-            git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || touch /tmp/ai-verdicts.jsonl
+            if git cat-file -e origin/catalog:blocklist.json 2>/dev/null; then
+              git show origin/catalog:blocklist.json > /tmp/blocklist.json || { echo "blocklist.json exists but is unreadable — refusing to run unprotected" >&2; exit 1; }
+            else
+              rm -f /tmp/blocklist.json
+            fi
+            if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+              git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || { echo "ai-verdicts.jsonl exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              touch /tmp/ai-verdicts.jsonl
+            fi
             # missing digest-state = -∞: all pass verdicts stay frozen until the
             # first daily digest publishes (fail-closed bootstrap, AI-DIAGNOSIS §4)
-            git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null || rm -f /tmp/digest-state.json
+            if git cat-file -e origin/catalog:digest-state.json 2>/dev/null; then
+              git show origin/catalog:digest-state.json > /tmp/digest-state.json || { echo "digest-state.json exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              rm -f /tmp/digest-state.json
+            fi
             ;;
             2) touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl ;;   # first run ever — no blocklist yet (absent = disabled, not corrupt)
             *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc}) — refusing to run blind (WF-1)" >&2; exit 1 ;;

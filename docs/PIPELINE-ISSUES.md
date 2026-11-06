@@ -917,9 +917,27 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 
 **验证**：typecheck 0 错；audit-hardening +17 例（同 rank 免疫/头尾存留/覆盖披露）、ai-diagnose-shell +6 例、全量 vitest 绿；Galvanize-2 真实冒烟：canary benign 0.0111/hostile 0.9974、长 SKILL.md 0.9102、manifest 0.0221；DATA-FLOWS §4/AI-DIAGNOSIS §5 同步。
 
-## 附二十四：站点发布流专项审计（pipeline/site/build.ts 全流程，W 系列）
+## 附二十四：放行流专项审计（applyMatureVerdicts + catalog run 前置应用，L 系列）
 
-> 范围：`docs/DATA-FLOWS.md` §9/§10 全文 + build.ts 734 行逐函数 + site.yml 158 行 + verdicts.ts 键语义 + 客户端 catalog.ts 消费契约 + site.test.ts 覆盖面复核。线上 catalog index.json 实测（4679 插件/2082 可见/308 github 技能）。
+> 范围：`docs/DATA-FLOWS.md` §0/§6/§7/§11/§12 + verdicts.ts 全文 + release.ts/remerge.ts/verdicts-compact.ts + run.ts 前置应用/hold 手术 + publish/merge.ts + ai/digest.ts 生产端 + catalog-append.sh/catalog.yml/verify.yml 三写者折叠。前两轮（附八 R-1…R-6、附十五 R-9…R-15+G/B 系列）已覆盖主体；本表只列新发现。远端并行批 `1a30c82`/`97a1356` 已先修 L-1（legacy 槽公告）/L-5（in:title）/L-6 大部分/`r3→r4` 文档，语义核实无回归。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| L-1 legacy 展示槽不在公告候选——`legacy→approved` 升级路径生产不可达（G5 测试因 digestStateOf 全量公告掩盖） | ✅（`1a30c82`） | `heldSlotKeys` 展示槽条件 pending→pending∥legacy |
+| L-2 `pu.reason` 只写不归一——held 槽在"concern 已被新 pass 取代但未成熟"期间挂过期刹车理由渲染（展示槽 G6 有对称复位，在押槽没有） | ✅ | applyMatureVerdicts pu 分支新增 else-if：非 concern 且 `pu.reason !== 'awaiting-review'` → 归一重置（不计 held，纯归一） |
+| L-3 同名片段：墓碑条目再进（重建/回收名）时，旧对象时代的无 sha pass 对同 name@version 新对象仍生效——shaOk 拦不住无锚老裁决 | ✅ | `tombEpochs(index.removed)` + verdictFor 前置 `epochOk`：pass 早于该名最新 disappearedAt → 不治理；concern 豁免（回收名继承不信任=保守方向）；explainEntry 新增 removed 参 + 专属 'wait' why（"判的是上一个同名对象，需重裁"），release.ts 传 index.removed |
+| L-4 catalog.yml generate `git show ai-verdicts \|\| touch` 把"存在但读失败"当"不存在"（dedupe/判重面瞬断静默降级） | ✅ | 四个 aux 文件全部 `git cat-file -e` 判存在：缺失→合法 bootstrap 语义（touch/rm 按各文件约定），存在但读失败→exit 1——blocklist 的 C-4 fail-closed 语义补实（原 `git show || rm` 恰好把"读失败"变成"无 blocklist"运行） |
+| L-5 catalog RELEASE_FAILED 告警 `--search` 无 `in:title`，正文含同款短语的 pipeline-alert 会误占去重位 | ✅（`97a1356`） | search 限定 `in:title` |
+| L-6 digest.ts 字典序 `at` 比较：latestConcern 决胜与 resolved 的 `l.at > c.at` 在精度不齐时取错"最新" | ✅（`1a30c82` 大部 + 本批残余两处） | 全部换 `atCmp`（mixed-precision 安全）；notAfterNow/anchor 归约已在远端批改 Date.parse |
+| O-8 loadVerdicts 坏行 sink 在 run.ts 未挂——generate 日志里畸形行只有 console.warn 一行，无人读 | ✅ | run.ts `verdicts:` 汇总行透出 `malformed=N`；全坏行时条件含 bad 计数不再静默跳过 |
+
+**评估未改**：digest/docket 的 slotVerdict 直用侧不加 epoch（concern 照常渲染；stale pass 只表现为"公示过但永不放行"，放行的权威闸在 applyMatureVerdicts，重裁即解）；消失窗口内（disappearedAt<at<再进）的裸 jsonl 裁决不入闸——受护栏通道无法产出（写裁决要求 index 命中），属可接受残余。
+
+**验证**：typecheck 0 错；release-gates.test.ts +10 例（pu.reason 归一/再治理/幂等、stale pass 展示槽+在押槽不放行、post-epoch pass 照常放、stale concern 仍刹车、墓碑名大小写、explain 专属 why）；全量 vitest 绿；catalog.yml YAML 校验通过；DATA-FLOWS §7 同步（闸列表新增同名片段闸、shaOk 锚三态、pu.reason 归一注记）。
+
+## 附二十五：站点发布流专项审计（pipeline/site/build.ts 全流程，W 系列）
+
+> 范围：`docs/DATA-FLOWS.md` §9/§10 全文 + build.ts 734 行逐函数 + site.yml 158 行 + verdicts.ts 键语义 + 客户端 catalog.ts 消费契约 + site.test.ts 覆盖面复核。线上 catalog index.json 实测（4679 插件/2082 可见/308 github 技能）。与附二十四 L-4 的 `cat-file -e` 修法同向汇合（catalog.yml aux 文件判存在）。
 
 | 项 | 状态 | 落点 |
 |---|---|---|
@@ -928,7 +946,7 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | W-3 遗产 github 技能无 source.version → codeload HEAD 移动目标：线上实测 308 个可见 github 技能中 91 个（30%）属此类——fail-closed 跳过会砍掉近三分之一目录，取披露路线 | ✅ | buildSkillCatalog 统计 unpinned → health.json.skills.unpinned + skills.html 非零时出诚实注记（"缺少 commit-sha 钉定，内容可能与最初扫描不同"） |
 | W-4 MAX_SKILL_MEMBERS=100 截断只在 stderr 告警：tar 顺序攻击者可控，用户拿到残缺技能无从得知 | ✅ | 统计 membersDropped（Σ 截断成员数）→ health.json.skills.membersDropped + skills.html 注记 |
 | W-5 sriOk 对公告了却解析不了的 integrity 返回 null→放行：发布面 fail-open（实际数据 238/238 全部 well-formed，属纵深缺口非现行风险） | ✅ | `ok !== true` 即跳过——发布面 fail-closed；客户端安装路径"不可验证→放行"契约不变（用户本机取舍），文档已注明两侧语义差异 |
-| W-6 ai-verdicts.jsonl `|| touch` 把"分支上不存在"与"取回失败"混为一谈：后者会让详情页审计面静默清空 | ✅ | cat-file -e 区分：路径缺失→合法空文件；路径存在但 git show 失败→步骤 -e 中止部署（与 index.json WF-1 同姿态） |
+| W-6 ai-verdicts.jsonl `|| touch` 把"分支上不存在"与"取回失败"混为一谈：后者会让详情页审计面静默清空 | ✅ | cat-file -e 区分：路径缺失→合法空文件；路径存在但 git show 失败→步骤 -e 中止部署（与 index.json WF-1 同姿态；同附二十四 L-4 修法） |
 
 **评估未改**：healthGate 的 skills.degraded 阈值（candidates≥10）对 unpinned 不重复计数是正确的——unpinned 行仍参与 landed/candidates 比率，HEAD 抓取失败会真实拉低 landed；`npm ci` 装脚本与全仓 workflow 同姿态不算站点独有；冷启动 ~700 技能 ÷ SKILL_POOL=8 最坏情况可逼近 job timeout 30min，稳态有 actions/cache 兜底，mass version bump 日才需关注（已在 DATA-FLOWS 注明池化语义）。
 

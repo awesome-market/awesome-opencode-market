@@ -7,7 +7,10 @@
  *  G5 legacy entries upgrade on a mature pass;
  *  G6 stale approvalReason resets when a newer pass supersedes;
  *  G8 pkg@* package-level human brake;
- *  G9 verify-merge flagged-slot results land as 'skipped'. */
+ *  G9 verify-merge flagged-slot results land as 'skipped';
+ *  L-2 held-slot pu.reason normalizes when its concern verdict is superseded;
+ *  L-3 tombstone epoch — a pass predating disappearance cannot release a
+ *      recreated/recycled-name entry (concerns still brake, conservatively). */
 import { describe, it, expect } from 'vitest'
 import { applyMatureVerdicts, digestStateOf, explainEntry, akey } from '../pipeline/verdicts.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
@@ -425,5 +428,99 @@ describe('pkg@* resolves to the package-scope sentinel', () => {
   })
   it('blank version still resolves empty (unchanged old behavior)', () => {
     expect(resolveVerdictEvent(ev({ commentBody: '/concern pkg bad' })).ver).toBe('')
+  })
+})
+
+// ————— L-2: held-slot reason mirror of the displayed slot's G6 reset —————
+describe('L-2: pu.reason normalizes when its governing concern is superseded', () => {
+  it('a newer (still-immature) pass resets a stale concern reason on the held slot', () => {
+    const v = [
+      mkVerdict('p', '2.0.0', 'concern', '2026-01-30T10:00:00Z', 'human', 'flagged'),
+      mkVerdict('p', '2.0.0', 'pass', '2026-02-01T10:00:00Z', 'human'),
+    ]
+    // announced TODAY → still inside the objection window → not mature, the
+    // hold stays — but its reason must not keep claiming the dead concern
+    const r = applyMatureVerdicts(
+      mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0', { reason: 'flagged' }) })]),
+      v, digestStateOf(DIGEST, v, v.map(akey)))
+    const e = r.index.plugins[0]!
+    expect(e.latestVersion).toBe('1.0.0')
+    expect(e.pendingUpdate?.reason).toBe('awaiting-review')
+  })
+  it('a still-governing concern keeps annotating (no reset)', () => {
+    const v = [mkVerdict('p', '2.0.0', 'concern', '2026-02-01T10:00:00Z', 'human', 'still bad')]
+    const r = applyMatureVerdicts(
+      mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0') })]), v, digestStateOf(DIGEST, v))
+    expect(r.index.plugins[0]!.pendingUpdate?.reason).toBe('still bad')
+    expect(r.held).toEqual(['p@2.0.0'])
+  })
+  it('idempotent: a second apply leaves the normalized reason alone', () => {
+    const v = [mkVerdict('p', '2.0.0', 'pass', '2026-02-01T10:00:00Z', 'human')]
+    const once = applyMatureVerdicts(
+      mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0', { reason: 'flagged' }) })]),
+      v, digestStateOf(DIGEST, v, v.map(akey)))
+    const twice = applyMatureVerdicts(once.index, v, digestStateOf(DIGEST, v, v.map(akey)))
+    expect(twice.index.plugins[0]).toEqual(once.index.plugins[0])
+  })
+})
+
+// ————— L-3: tombstone epoch — a pass predating disappearance judged a different object —————
+describe('L-3: pass predating disappearance does not govern a re-entered entry', () => {
+  const tomb = (disappearedAt: string, name = 'p') =>
+    ({ slug: name.toLowerCase(), name, disappearedAt, reason: 'npm-404' as const })
+  const pendingEntry = () => mkEntry('p', { approval: 'pending', approvalReason: 'awaiting-review' })
+  const OLD_PASS = mkVerdict('p', '1.0.0', 'pass', '2026-01-20T10:00:00Z', 'human')
+
+  it('stale pass (pre-tombstone) does not release a pending re-entry', () => {
+    const idx = { ...mkIndex([pendingEntry()]), removed: [tomb('2026-02-01T00:00:00Z')] }
+    const r = applyMatureVerdicts(idx, [OLD_PASS], digestStateOf(DIGEST, [OLD_PASS]))
+    expect(r.releases).toEqual([])
+    expect(r.index.plugins[0]!.approval).toBe('pending')
+  })
+  it('a fresh pass (post-tombstone) still releases — the epoch is not a freeze', () => {
+    const v = mkVerdict('p', '1.0.0', 'pass', '2026-02-02T10:00:00Z', 'human')
+    const idx = { ...mkIndex([pendingEntry()]), removed: [tomb('2026-02-01T00:00:00Z')] }
+    const r = applyMatureVerdicts(idx, [v], digestStateOf(DIGEST, [v]))
+    expect(r.releases).toEqual(['p@1.0.0'])
+  })
+  it('a stale CONCERN still brakes — a recycled name inherits distrust', () => {
+    const c = mkVerdict('p', '1.0.0', 'concern', '2026-01-20T10:00:00Z', 'human', 'was bad')
+    const idx = { ...mkIndex([pendingEntry()]), removed: [tomb('2026-02-01T00:00:00Z')] }
+    const r = applyMatureVerdicts(idx, [c], digestStateOf(DIGEST, [c]))
+    expect(r.index.plugins[0]!.approvalReason).toBe('was bad')
+    expect(r.held).toEqual(['p@1.0.0'])
+  })
+  it('no tombstone → the same pass still works (no regression on live entries)', () => {
+    const idx = mkIndex([pendingEntry()])
+    const r = applyMatureVerdicts(idx, [OLD_PASS], digestStateOf(DIGEST, [OLD_PASS]))
+    expect(r.releases).toEqual(['p@1.0.0'])
+  })
+  it('stale pass on a HELD slot does not release it either', () => {
+    const v = mkVerdict('p', '2.0.0', 'pass', '2026-01-20T10:00:00Z', 'human')
+    const idx = {
+      ...mkIndex([mkEntry('p', { pendingUpdate: mkPu('2.0.0') })]),
+      removed: [tomb('2026-02-01T00:00:00Z')],
+    }
+    const r = applyMatureVerdicts(idx, [v], digestStateOf(DIGEST, [v]))
+    expect(r.releases).toEqual([])
+    expect(r.index.plugins[0]!.pendingUpdate?.version).toBe('2.0.0')
+  })
+  it('tombstone name match is case-insensitive (recycled repo names)', () => {
+    const v = mkVerdict('Owner/Repo', null, 'pass', '2026-01-20T10:00:00Z', 'human')
+    const idx = {
+      ...mkIndex([mkEntry('Owner/Repo', {
+        source: { kind: 'github', id: 'x', version: 'abc' }, latestVersion: null, approval: 'pending',
+      })]),
+      removed: [tomb('2026-02-01T00:00:00Z', 'owner/repo')],
+    }
+    const r = applyMatureVerdicts(idx, [v], digestStateOf(DIGEST, [v]))
+    expect(r.releases).toEqual([])
+  })
+  it('explainEntry reports the epoch, not a misleading gate', () => {
+    const s = explainEntry(
+      mkEntry('p', { approval: 'pending' }), [OLD_PASS], digestStateOf(DIGEST, [OLD_PASS]),
+      [tomb('2026-02-01T00:00:00Z')])
+    expect(s[0]!.outcome).toBe('wait')
+    expect(s[0]!.why).toContain('上一个同名对象')
   })
 })

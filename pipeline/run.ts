@@ -118,14 +118,15 @@ export async function run(opts: RunOptions = {}) {
   const latestByKey = new Map<string, AiVerdict>()
   const latestHumanByKey = new Map<string, AiVerdict>()
   if (old) {
-    const verdicts = loadVerdicts(opts.verdictsPath)
+    const verdictBad = { bad: 0 }
+    const verdicts = loadVerdicts(opts.verdictsPath, verdictBad)
     for (const [k, v] of latestVerdicts(verdicts)) latestByKey.set(k, v)
     for (const [k, v] of latestHumanVerdicts(verdicts)) latestHumanByKey.set(k, v)
     const digest = loadDigestState(opts.digestStatePath)
-    if (verdicts.length || digest !== null) {
+    if (verdicts.length || digest !== null || verdictBad.bad) {
       const applied = applyMatureVerdicts(old, verdicts, digest)
       old = applied.index
-      console.log(`verdicts: ${verdicts.length} loaded, lastDigestAt=${digest?.lastDigestAt ?? '-inf'} announced=${digest?.announced.length ?? 0} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
+      console.log(`verdicts: ${verdicts.length} loaded${verdictBad.bad ? `, malformed=${verdictBad.bad}` : ''}, lastDigestAt=${digest?.lastDigestAt ?? '-inf'} announced=${digest?.announced.length ?? 0} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
     }
   }
   // name keys are canonical lowercase — a github entry stored as 'Owner/Repo'

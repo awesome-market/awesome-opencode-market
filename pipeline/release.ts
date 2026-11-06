@@ -27,7 +27,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (explain) {
     for (const e of index.plugins) {
       if (nameFilter && e.name !== nameFilter) continue
-      for (const s of explainEntry(e, verdicts, digest)) {
+      for (const s of explainEntry(e, verdicts, digest, index.removed)) {
         if (s.outcome === 'none' && !nameFilter) continue
         console.error(`  ${e.name}@${s.version ?? 'null'} [${s.slot}] ${s.outcome}` +
           ` — verdict=${s.verdict ?? '-'} src=${s.source ?? '-'} announced=${s.announced}` +
