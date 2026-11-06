@@ -1,11 +1,15 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+// fileURLToPath, not .pathname — a checkout under a non-ASCII path (e.g.
+// "opencode-market_副本8") percent-encodes into a path that doesn't exist
+// and every solid-js import fails with "Cannot find package"
 export default defineConfig({
   resolve: {
     conditions: ['browser', 'solid', 'development'],
     alias: {
-      '@opencode/plugin/gui': new URL('./test/helpers/host-stub.ts', import.meta.url).pathname,
-      'solid-js/web': new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url).pathname,
-      'solid-js': new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url).pathname,
+      '@opencode/plugin/gui': fileURLToPath(new URL('./test/helpers/host-stub.ts', import.meta.url)),
+      'solid-js/web': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/web/dist/web.js', import.meta.url)),
+      'solid-js': fileURLToPath(new URL('./plugins/market/node_modules/solid-js/dist/solid.js', import.meta.url)),
     },
   },
   test: {

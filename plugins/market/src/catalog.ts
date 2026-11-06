@@ -74,7 +74,9 @@ const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? saniti
  *  (incl. version/metrics timestamps/verification strings/findings), and
  *  tolerate missing array fields instead of crashing the whole catalog. */
 export function sanitizeIndex(idx: MarketIndex): MarketIndex {
-  const plugins = (Array.isArray(idx?.plugins) ? idx.plugins : [])
+  // structural caps — 32MB of JSON can hold hundreds of thousands of
+  // entries; bound before any downstream map/filter multiplies the work
+  const plugins = (Array.isArray(idx?.plugins) ? idx.plugins.slice(0, 50_000) : [])
     .filter((e): e is MarketEntry => !!e && typeof e.name === 'string' && typeof e.slug === 'string')
     .map(e => {
       const caps = e.capabilities
@@ -108,8 +110,10 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
               ...(typeof pu.version === 'string' ? { version: sanitize(pu.version) } : {}),
               ...(typeof pu.heldAt === 'string' ? { heldAt: sanitize(pu.heldAt) } : {}),
               ...(typeof pu.reason === 'string' ? { reason: sanitize(pu.reason) } : {}),
-              ...(pu.verification && typeof pu.verification === 'object' && typeof pu.verification.status === 'string'
-                ? { verification: { status: sanitize(pu.verification.status) } }
+              // enum-clamped like the display slot — a crafted status must not
+              // reach the detail page as free text
+              ...(pu.verification && typeof pu.verification === 'object'
+                ? { verification: { status: typeof pu.verification.status === 'string' && (VERIFICATION_STATUSES as readonly string[]).includes(pu.verification.status) ? pu.verification.status : 'unverified' } }
                 : {}),
             } }
           : {}),
@@ -134,6 +138,13 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
             ...(typeof v.runUrl === 'string' ? { runUrl: sanitize(v.runUrl) } : {}),
             ...(typeof v.logExcerpt === 'string' ? { logExcerpt: sanitize(v.logExcerpt) } : {}),
           } } : {}),
+        // metrics are NUMBERS, not strings — a crafted string value rides
+        // through fmtN's String() fallback into the terminal unsanitized
+        // (ANSI injection via a hostile custom index). Clamp to finite|null.
+        ...(e.metrics && typeof e.metrics === 'object' ? { metrics: {
+            stars: typeof e.metrics.stars === 'number' && Number.isFinite(e.metrics.stars) ? e.metrics.stars : null,
+            npmDownloads30d: typeof e.metrics.npmDownloads30d === 'number' && Number.isFinite(e.metrics.npmDownloads30d) ? e.metrics.npmDownloads30d : null,
+          } } : {}),
       }
     })
   const categories: MarketIndex['categories'] = {}
@@ -143,7 +154,7 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
       const c = v as { en?: unknown; zh?: unknown }
       categories[k] = { ...(typeof c.en === 'string' ? { en: sanitize(c.en) } : {}), ...(typeof c.zh === 'string' ? { zh: sanitize(c.zh) } : {}) }
     }
-  const removed = (Array.isArray(idx?.removed) ? idx.removed : [])
+  const removed = (Array.isArray(idx?.removed) ? idx.removed.slice(0, 50_000) : [])
     .filter((r): r is RemovedEntry => !!r && typeof r === 'object' && (typeof r.name === 'string' || typeof r.slug === 'string'))
     .map(r => ({
       ...(typeof r.slug === 'string' ? { slug: sanitize(r.slug) } : {}),
@@ -354,13 +365,23 @@ const lsIdx = (): Storage | null => {
   return null
 }
 let memIdx: CachedIndex | null = null
+// memIdx is ONLY the localStorage-quota fallback — not a second cache.
+// Serving it unconditionally would let a stale in-memory copy mask a newer
+// localStorage write (and leak index state across storage lifetimes)
+let lsQuotaFailed = false
 const readIdxCache = (): CachedIndex | null => {
+  if (lsQuotaFailed) return memIdx
   try { const l = lsIdx(); return l ? JSON.parse(l.getItem(LS_IDX) ?? 'null') as CachedIndex | null : memIdx } catch { return null }
 }
 const writeIdxCache = (c: CachedIndex) => {
   const l = lsIdx()
-  if (l) { try { l.setItem(LS_IDX, JSON.stringify(c)) } catch { /* quota */ } }
-  else memIdx = c
+  if (l) {
+    // a multi-MB index can exceed the webview's localStorage quota — fall
+    // back to the in-memory slot or every panel open re-pulls the index
+    try { l.setItem(LS_IDX, JSON.stringify(c)); lsQuotaFailed = false } catch { memIdx = c; lsQuotaFailed = true }
+    return
+  }
+  memIdx = c
 }
 
 /** What the last fetchIndexCached call did — UIs can say "already latest"
@@ -378,16 +399,79 @@ export const fetchOutcome = (): FetchOutcome => lastOutcome
  *  hostile/broken custom indexUrl can't balloon the webview/main memory. */
 export const MAX_INDEX_BYTES = 32 * 1024 * 1024
 
-export async function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): Promise<MarketIndex> {
+/** Stream a response body with a REAL byte ceiling — content-length is
+ *  advisory only (absent or lying), so the bound must count bytes as they
+ *  arrive instead of checking after the whole body already sits in memory. */
+export async function readBodyBounded(res: Response, max: number, what: string): Promise<Uint8Array> {
+  const cl = Number(res.headers.get('content-length') ?? 0)
+  if (cl > max) throw new Error(`${what} too large (${cl} bytes)`)
+  if (!res.body) {   // non-streaming runtimes — post-hoc check is all we have
+    const buf = new Uint8Array(await res.arrayBuffer())
+    if (buf.byteLength > max) throw new Error(`${what} too large (${buf.byteLength} bytes)`)
+    return buf
+  }
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let n = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    n += value?.byteLength ?? 0
+    if (n > max) {
+      await reader.cancel().catch(() => {})
+      throw new Error(`${what} too large (> ${max} bytes)`)
+    }
+    if (value) chunks.push(value)
+  }
+  const out = new Uint8Array(n)
+  let o = 0
+  for (const c of chunks) { out.set(c, o); o += c.byteLength }
+  return out
+}
+
+/** sha256 over raw bytes — hashing the DECODED text and re-encoding can
+ *  change bytes (invalid UTF-8 → replacement chars) and break the
+ *  manifest comparison; the publisher hashes file bytes, so must we. */
+export async function sha256HexBytes(buf: Uint8Array): Promise<string | null> {
+  try {
+    const d = await globalThis.crypto.subtle.digest('SHA-256', buf as BufferSource)
+    return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('')
+  } catch { return null }
+}
+
+// concurrent callers share one request — cold-start index() + installed()
+// used to pull the multi-MB index twice because neither saw the other's
+// in-flight promise
+const idxInflight = new Map<string, Promise<MarketIndex>>()
+
+export function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): Promise<MarketIndex> {
+  const fKey = `${url}\0f`, nKey = `${url}\0n`
+  // a force call gets its own run (it must bypass TTL), but a non-force
+  // caller may join any in-flight request — fresher data is never wrong
+  const shared = idxInflight.get(fKey) ?? (!force ? idxInflight.get(nKey) : undefined)
+  if (shared) return shared
+  const key = force ? fKey : nKey
+  const p = fetchIndexCachedRun(url, force).finally(() => { if (idxInflight.get(key) === p) idxInflight.delete(key) })
+  idxInflight.set(key, p)
+  return p
+}
+
+async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketIndex> {
   const cached = readIdxCache()
+  // offline fast-path — a known-down network shouldn't stall the UI behind
+  // two fetch timeouts when a usable snapshot already exists
+  if (cached && typeof navigator !== 'undefined' && navigator.onLine === false) {
+    setCatDict(cached.index.categories)
+    lastOutcome = 'stale'
+    return cached.index
+  }
   let healthSha: string | null = null
   const hUrl = healthUrl(url)
   if (hUrl) {
     try {
       const res = await fetch(hUrl, { signal: AbortSignal.timeout(10_000) })
       if (res.ok) {
-        const htext = await res.text()
-        if (htext.length > 1_000_000) throw new Error('health.json too large')
+        const htext = new TextDecoder().decode(await readBodyBounded(res, 1_000_000, 'health.json'))
         const h = JSON.parse(htext) as { sha256?: unknown }
         if (typeof h.sha256 === 'string' && /^[0-9a-f]{64}$/.test(h.sha256)) healthSha = h.sha256
       }
@@ -396,36 +480,35 @@ export async function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): 
   if (healthSha && cached?.sha === healthSha) {
     writeIdxCache({ ...cached, at: Date.now() })
     lastOutcome = 'fresh'
-    return cached.index
+    setCatDict(cached.index.categories)   // warm-start: dict must track the
+    return cached.index                   // served copy, not just new downloads
   }
   // a moved manifest hash means the publication changed — fresher data beats
   // the TTL heuristic, so only hash-stable or manifest-less caches skip on TTL
   const moved = !!(healthSha && cached?.sha && cached.sha !== healthSha)
   if (!force && !moved && cached && Date.now() - cached.at < TTL_MS) {
     lastOutcome = 'fresh'
+    setCatDict(cached.index.categories)
     return cached.index
   }
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
     if (!res.ok) throw new Error(`catalog fetch failed: ${res.status}`)
-    const cl = Number(res.headers.get('content-length') ?? 0)
-    if (cl > MAX_INDEX_BYTES) throw new Error(`catalog index too large (${cl} bytes)`)
-    const text = await res.text()
-    if (text.length > MAX_INDEX_BYTES) throw new Error(`catalog index too large (${text.length} bytes)`)
+    const bytes = await readBodyBounded(res, MAX_INDEX_BYTES, 'catalog index')
     let sha: string | undefined
     if (healthSha) {
-      const got = await sha256Hex(text)
+      const got = await sha256HexBytes(bytes)
       if (got && got !== healthSha) {
         // the edge node served bytes older/newer than the announced manifest —
         // refuse to cache a pair we can't prove belongs together
         lastOutcome = 'mismatch'
-        if (cached) return cached.index
+        if (cached) { setCatDict(cached.index.categories); return cached.index }
         throw new Error('catalog hash mismatch — published manifest and index disagree; retry shortly')
       }
       // subtle crypto unavailable → can't verify, don't pin the pair either
       sha = got ?? undefined
     }
-    const idx = sanitizeIndex(JSON.parse(text) as MarketIndex)
+    const idx = sanitizeIndex(JSON.parse(new TextDecoder().decode(bytes)) as MarketIndex)
     const out = { ...idx, plugins: idx.plugins.filter(isVisible) }
     setCatDict(out.categories)
     writeIdxCache({ at: Date.now(), index: out, ...(sha ? { sha } : {}) })
@@ -433,9 +516,80 @@ export async function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): 
     return out
   } catch (e) {
     if (lastOutcome !== 'mismatch') lastOutcome = cached ? 'stale' : lastOutcome
-    if (cached) return cached.index          // snapshot fallback beats failure
+    if (cached) { setCatDict(cached.index.categories); return cached.index }   // snapshot fallback beats failure
     throw e
   }
+}
+
+/** Re-confirm a pinned spec still matches the catalog-approved version
+ *  before an install touches the network/spawn — the renderer's entry can
+ *  lag the publication by up to TTL, and a version concern'd inside that
+ *  window must not install. Callers pass fetchIndexCached so the check sees
+ *  the CURRENT publication (a moved health sha forces a real pull), not the
+ *  render-time snapshot. Returns the fresh entry for downstream use. */
+export async function assertApprovedPin(getIndex: () => Promise<MarketIndex | null>, name: string, pin: string): Promise<MarketEntry> {
+  const idx = await getIndex()
+  const e = idx?.plugins?.find(x => x.name === name)
+  if (!e) throw new Error(`not in catalog: ${name}`)
+  if (pinSpec(e) !== pin) throw new Error('catalog moved — refresh data and retry')
+  return e
+}
+
+/** Evaluate an npm-style engines range against the running host version.
+ *  compat.engines serializes as "name range; name range" — the opencode
+ *  clause is picked (a lone bare range is read as opencode's). Returns null
+ *  when the expression isn't one we can evaluate honestly — an unparseable
+ *  range must not produce a confident "incompatible" warning. */
+export function enginesSatisfied(host: string, expr: string): boolean | null {
+  const clauses = expr.split(';').map(s => s.trim()).filter(Boolean)
+  let cond = clauses.find(s => /^opencode\b/i.test(s))
+  if (cond) cond = cond.replace(/^opencode\s*/i, '')
+  else if (clauses.length === 1 && cond === undefined && clauses[0] !== undefined && !/^[a-zA-Z]+\s/.test(clauses[0])) cond = clauses[0]
+  if (!cond) return null
+  const h = host.trim().replace(/^v/, '')
+  if (!/^\d+(\.\d+)*([-+].*)?$/.test(h)) return null
+  const parts = (v: string) => v.trim().replace(/^v/, '').replace(/[-+].*$/, '').split('.').map(s => parseInt(s, 10) || 0)
+  const cmp = (a: string, b: string): number => {
+    const pa = parts(a), pb = parts(b)
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+      if (d) return d
+    }
+    return 0
+  }
+  let sawUnknown = false
+  for (const alt of cond.split('||')) {
+    let ok = true
+    for (const c0 of alt.trim().split(/\s+/).filter(Boolean)) {
+      const m = /^([><=^~]*)(.+)$/.exec(c0)
+      if (!m?.[2]) { ok = false; sawUnknown = true; break }
+      const op = m[1] || '='
+      const ver = m[2]
+      if (ver === '*' || ver === 'x') continue
+      const wild = /^(\d+(?:\.\d+)*)\.[x*]$/.exec(ver)
+      if (wild) {
+        if (op !== '=' && op !== '~' && op !== '^') { ok = false; sawUnknown = true; break }
+        const pre = `${wild[1]}.`
+        if (!h.startsWith(pre) && h !== wild[1]) ok = false
+        if (!ok) break
+        continue
+      }
+      if (!/^\d+(\.\d+)*([-+].*)?$/.test(ver)) { ok = false; sawUnknown = true; break }
+      const c = cmp(h, ver)
+      switch (op) {
+        case '>=': ok = c >= 0; break
+        case '<=': ok = c <= 0; break
+        case '>': ok = c > 0; break
+        case '<': ok = c < 0; break
+        case '^': ok = c >= 0 && parts(h)[0] === parts(ver)[0]; break
+        case '~': ok = c >= 0 && parts(h)[0] === parts(ver)[0] && parts(h)[1] === parts(ver)[1]; break
+        default: ok = c === 0
+      }
+      if (!ok) break
+    }
+    if (ok) return true
+  }
+  return sawUnknown ? null : false
 }
 
 /** Freshness label for the UI header — "data from N min ago". */
@@ -448,32 +602,41 @@ import { createSignal } from 'solid-js'
 
 export type LangMode = 'auto' | 'zh' | 'en'
 export const [langMode, setLangMode] = createSignal<LangMode>('auto')
-const browserZh = () => /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
+// 'auto' must follow the SYSTEM. In the webview navigator.language is the
+// real signal; under Node (TUI/host) it is a stub always reporting 'en-US',
+// so the process locale env vars carry the actual answer instead
+const envZh = () => /zh/i.test(typeof process !== 'undefined'
+  ? `${process.env?.LANGUAGE ?? ''} ${process.env?.LC_ALL ?? ''} ${process.env?.LANG ?? ''}`
+  : '')
+const browserZh = () => /zh/i.test(typeof navigator !== 'undefined' ? navigator.language : 'en') || envZh()
 const zhNow = () => langMode() === 'auto' ? browserZh() : langMode() === 'zh'
 
 export type I18nKey =
   'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'|'lang'|'langAuto'|'langZh'|'langEn'|
   'partsHint'|'installing'|'installFailed'|'failedRetry'|'verifying'|'installedPending'|'skill'|'plugin'|'uncataloged'|'updateAll'|'needRestartDesk'|'allLatest'|'updatingN'|'updatedOk'|'updatedMix'|
   'tabDiscover'|'tabPlugins'|'tabSkills'|'tabFavorites'|'tabInstalled'|'tabMySkills'|'tabAdvanced'|'filter'|'sortField'|'sortDownloads'|'sortStars'|'sortName'|'sortVerified'|'sortDirLabel'|'sortDesc'|'sortAsc'|'publishRange'|'rangeAll'|'range1d'|'range7d'|'range30d'|'range90d'|'range1y'|'allN'|
-  'refreshData'|'refreshing'|'refreshedN'|'refreshFailed'|'timeout25'|'backupRestore'|'backupDesc'|'exportBackup'|'exportedN'|'pasteBackup'|'restore'|'restored'|'restoreInvalid'|'clearData'|'confirmClear'|'cleared'|'devlogLabel'|'devlogDesc'|'noLogs'|'clearLogs'|
+  'refreshData'|'refreshing'|'refreshedN'|'refreshFailed'|'refreshTimeout'|'backupRestore'|'backupDesc'|'exportBackup'|'exportedN'|'pasteBackup'|'restore'|'restored'|'restoreInvalid'|'clearData'|'confirmClear'|'cleared'|'devlogLabel'|'devlogDesc'|'noLogs'|'clearLogs'|
   'cat'|'keysHint'|'menuSettings'|'exportBackupTui'|'restoreTui'|'restorePrompt'|'clearDataTui'|'confirmClearTui'|'clearConfirm'|'devlogTui'|'devlogOn'|'devlogOff'|'viewLogs'|'devlogMenu'|'useHttpCatalog'|'retryKey'|'updateN'|'confirmEnter'|
   'all'|'expand'|'installingN'|'updatedN'|'removedN'|'installFailN'|'uninstallFail'|'uninstallPartial'|'updateFail'|'exportFail'|'restoreFail'|'catalogFail'|'catalogAlready'|'catalogEnabled'|'cancelled'|'heldReview'|'dataFresh'|'integrityFail'|
-  'deprecated'|'replacedBy'|'legacy'|'removedFrom'|'reasonNpm404'|'reasonRepo404'|'reasonFiltered'|'reasonCapped'|'reasonManual'|'reasonUnknown'|'viewOnSite'|'compat'|'heldReason'|'verifyLevel'|'verifyLog'|'verifyRun'|'permTitle'|'permAllow'|'permAsk'|'permDeny'|'permOff'|'disable'|'revertTo'|'featFilter'|'installRunning'|'catalogDisabled'
+  'deprecated'|'replacedBy'|'legacy'|'removedFrom'|'reasonNpm404'|'reasonRepo404'|'reasonFiltered'|'reasonCapped'|'reasonManual'|'reasonUnknown'|'viewOnSite'|'compat'|'heldReason'|'verifyLevel'|'verifyLog'|'verifyRun'|'permTitle'|'permAllow'|'permAsk'|'permDeny'|'permOff'|'disable'|'revertTo'|'featFilter'|'installRunning'|'catalogDisabled'|
+  'scannedClean'|'catalogMoved'|'compatWarn'|'invDown'|'keysHintGui'|'heldAtLabel'
 const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English',
   partsHint: '{k} parts (multi-select)', installing: 'installing…', installFailed: 'install failed', failedRetry: 'failed — retry', verifying: 'verifying…', installedPending: 'installed (verify pending)', skill: 'skill', plugin: 'plugin', uncataloged: 'uncataloged', updateAll: 'update all', needRestartDesk: 'restart desktop required', allLatest: 'all up to date', updatingN: 'updating {n}/{total}…', updatedOk: 'updated {ok}', updatedMix: 'updated {ok}, {fail} failed',
   tabDiscover: 'discover', tabPlugins: 'plugins', tabSkills: 'skills', tabFavorites: 'favorites', tabInstalled: 'my plugins', tabMySkills: 'my skills', tabAdvanced: 'settings', filter: 'filter', sortField: 'sort by', sortDownloads: 'npm downloads (30d)', sortStars: 'stars', sortName: 'name', sortVerified: 'verification', sortDirLabel: 'direction', sortDesc: 'descending', sortAsc: 'ascending', publishRange: 'published', rangeAll: 'all time', range1d: 'last 1 day', range7d: 'last 7 days', range30d: 'last 30 days', range90d: 'last 90 days', range1y: 'last year', allN: 'all({n})',
-  refreshData: 'refresh data (force index reload)', refreshing: 'refreshing…', refreshedN: 'refreshed {n} entries', refreshFailed: 'refresh failed: {err}', timeout25: 'timeout 25s', backupRestore: 'backup & restore', backupDesc: 'favorites live in localStorage. Export a backup as JSON; paste it back to restore.', exportBackup: 'export backup', exportedN: 'exported {file}', pasteBackup: 'paste backup JSON…', restore: 'restore', restored: 'restored', restoreInvalid: 'restore failed: not a valid backup JSON', clearData: 'clear data', confirmClear: 'clear all favorites?', cleared: 'cleared', devlogLabel: 'dev log', devlogDesc: 'record debug logs (install stages + errors, stored locally)', noLogs: 'no logs yet', clearLogs: 'clear logs',
-  cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
+  refreshData: 'refresh data (force index reload)', refreshing: 'refreshing…', refreshedN: 'refreshed {n} entries', refreshFailed: 'refresh failed: {err}', refreshTimeout: 'timeout 45s', backupRestore: 'backup & restore', backupDesc: 'favorites live in localStorage. Export a backup as JSON; paste it back to restore.', exportBackup: 'export backup', exportedN: 'exported {file}', pasteBackup: 'paste backup JSON…', restore: 'restore', restored: 'restored', restoreInvalid: 'restore failed: not a valid backup JSON', clearData: 'clear data', confirmClear: 'clear all favorites?', cleared: 'cleared', devlogLabel: 'dev log', devlogDesc: 'record debug logs (install stages + errors, stored locally)', noLogs: 'no logs yet', clearLogs: 'clear logs',
+  cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · r refresh · U update all · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
   all: 'all', expand: 'expand', installingN: 'installing {name}…', updatedN: '{name} updated', removedN: '{name} removed', installFailN: '{name} install failed{exit} — press {key} to retry', uninstallFail: 'uninstall failed: {err} — press {key} to retry', uninstallPartial: '{name} removed — skill dir kept: {err}', updateFail: 'update failed: {err}', exportFail: 'export failed: {err}', restoreFail: 'restore failed: {err} — check the backup file and retry', catalogFail: 'catalog source failed: {err} — check {cfg} and retry', catalogAlready: 'already enabled', catalogEnabled: 'enabled', cancelled: 'cancelled', heldReview: 'v{v} pending review — not installable yet', dataFresh: 'already up to date', integrityFail: 'downloaded bytes do not match the reviewed artifact — retry, or report if it persists',
-  deprecated: 'deprecated', replacedBy: 'use {name} instead', legacy: 'legacy', removedFrom: 'removed from catalog', reasonNpm404: 'gone from npm', reasonRepo404: 'repository gone', reasonFiltered: 'filtered out', reasonCapped: 'over catalog cap', reasonManual: 'removed by maintainer', reasonUnknown: 'reason unknown', viewOnSite: 'view on site', compat: 'requires', heldReason: 'reason', verifyLevel: 'level', verifyLog: 'verify log', verifyRun: 'verify run', permTitle: 'skill permissions', permAllow: 'allow', permAsk: 'ask', permDeny: 'deny', permOff: 'clear', disable: 'disable', revertTo: 'revert to approved', featFilter: 'parts', installRunning: 'install already running', catalogDisabled: 'disabled' }
+  deprecated: 'deprecated', replacedBy: 'use {name} instead', legacy: 'legacy', removedFrom: 'removed from catalog', reasonNpm404: 'gone from npm', reasonRepo404: 'repository gone', reasonFiltered: 'filtered out', reasonCapped: 'over catalog cap', reasonManual: 'removed by maintainer', reasonUnknown: 'reason unknown', viewOnSite: 'view on site', compat: 'requires', heldReason: 'reason', verifyLevel: 'level', verifyLog: 'verify log', verifyRun: 'verify run', permTitle: 'skill permissions', permAllow: 'allow', permAsk: 'ask', permDeny: 'deny', permOff: 'clear', disable: 'disable', revertTo: 'revert to approved', featFilter: 'parts', installRunning: 'install already running', catalogDisabled: 'disabled',
+  scannedClean: 'scanned, no findings — this does not mean safe', catalogMoved: 'catalog updated — refresh data and retry', compatWarn: 'requires opencode {req} — you have {cur}', invDown: 'inventory unavailable — installed state may be stale', keysHintGui: '↑↓←→/hjkl move · enter detail · i install · u uninstall · * fav · / search · esc back', heldAtLabel: 'held' }
 // AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
 const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English',
   partsHint: '{k} 部件（可多选）', installing: '安装中…', installFailed: '安装失败', failedRetry: '失败 — 重试', verifying: '验证中…', installedPending: '已安装（等待验证）', skill: '技能', plugin: '插件', uncataloged: '未收录', updateAll: '全部更新', needRestartDesk: '需重启桌面端', allLatest: '全部已是最新', updatingN: '更新中 {n}/{total}…', updatedOk: '已更新 {ok} 个', updatedMix: '更新 {ok} 成功 {fail} 失败',
   tabDiscover: '发现', tabPlugins: '插件', tabSkills: '技能', tabFavorites: '收藏', tabInstalled: '我的插件', tabMySkills: '我的技能', tabAdvanced: '设置', filter: '筛选', sortField: '排序字段', sortDownloads: 'npm 下载量（近 30 天）', sortStars: 'Star 数', sortName: '名称', sortVerified: '验证状态', sortDirLabel: '排序方向', sortDesc: '降序', sortAsc: '升序', publishRange: '发布时间范围', rangeAll: '全部时间', range1d: '最近 1 天', range7d: '最近 7 天', range30d: '最近 30 天', range90d: '最近 90 天', range1y: '最近 1 年', allN: '全部({n})',
-  refreshData: '更新数据（强制刷新索引）', refreshing: '刷新中…', refreshedN: '已刷新 {n} 条', refreshFailed: '刷新失败: {err}', timeout25: '超时 25s', backupRestore: '备份与恢复', backupDesc: '收藏存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。', exportBackup: '导出备份', exportedN: '已导出 {file}', pasteBackup: '粘贴备份 JSON…', restore: '恢复', restored: '已恢复', restoreInvalid: '恢复失败：不是有效的备份 JSON', clearData: '清空数据', confirmClear: '清空所有收藏？', cleared: '已清空', devlogLabel: '开发日志', devlogDesc: '记录调试日志（装包各阶段+错误，存本机）', noLogs: '暂无日志', clearLogs: '清空日志',
-  cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
+  refreshData: '更新数据（强制刷新索引）', refreshing: '刷新中…', refreshedN: '已刷新 {n} 条', refreshFailed: '刷新失败: {err}', refreshTimeout: '超时 45s', backupRestore: '备份与恢复', backupDesc: '收藏存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。', exportBackup: '导出备份', exportedN: '已导出 {file}', pasteBackup: '粘贴备份 JSON…', restore: '恢复', restored: '已恢复', restoreInvalid: '恢复失败：不是有效的备份 JSON', clearData: '清空数据', confirmClear: '清空所有收藏？', cleared: '已清空', devlogLabel: '开发日志', devlogDesc: '记录调试日志（装包各阶段+错误，存本机）', noLogs: '暂无日志', clearLogs: '清空日志',
+  cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · r 刷新 · U 全更 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
   all: '全部', expand: '展开', installingN: '{name} 安装中…', updatedN: '{name} 已更新', removedN: '{name} 已卸载', installFailN: '{name} 安装失败{exit} — 按 {key} 重试', uninstallFail: '卸载失败: {err} — 按 {key} 重试', uninstallPartial: '{name} 已卸载——技能目录保留：{err}', updateFail: '更新失败: {err}', exportFail: '导出失败: {err}', restoreFail: '恢复失败: {err} — 检查备份文件后重试', catalogFail: 'catalog 源失败: {err} — 检查 {cfg} 后重试', catalogAlready: '已开启', catalogEnabled: '已启用', cancelled: '已取消', heldReview: 'v{v} 在审——暂不可装', dataFresh: '数据已是最新', integrityFail: '下载的字节与评审过的产物不一致——重试，持续出现请反馈',
-  deprecated: '已弃用', replacedBy: '建议改用 {name}', legacy: '门禁前收录', removedFrom: '已从目录移除', reasonNpm404: 'npm 上已消失', reasonRepo404: '仓库已消失', reasonFiltered: '被入场过滤移除', reasonCapped: '超出目录上限', reasonManual: '被人工移除', reasonUnknown: '原因未知', viewOnSite: '站点详情', compat: '要求', heldReason: '原因', verifyLevel: '阶段', verifyLog: '验证日志', verifyRun: '验证记录', permTitle: '技能权限', permAllow: '允许', permAsk: '询问', permDeny: '拒绝', permOff: '清除', disable: '关闭', revertTo: '回退到批准版', featFilter: '部件', installRunning: '安装进行中', catalogDisabled: '已关闭' }
+  deprecated: '已弃用', replacedBy: '建议改用 {name}', legacy: '门禁前收录', removedFrom: '已从目录移除', reasonNpm404: 'npm 上已消失', reasonRepo404: '仓库已消失', reasonFiltered: '被入场过滤移除', reasonCapped: '超出目录上限', reasonManual: '被人工移除', reasonUnknown: '原因未知', viewOnSite: '站点详情', compat: '要求', heldReason: '原因', verifyLevel: '阶段', verifyLog: '验证日志', verifyRun: '验证记录', permTitle: '技能权限', permAllow: '允许', permAsk: '询问', permDeny: '拒绝', permOff: '清除', disable: '关闭', revertTo: '回退到批准版', featFilter: '部件', installRunning: '安装进行中', catalogDisabled: '已关闭',
+  scannedClean: '扫过了没发现——但这不等于安全', catalogMoved: '目录已更新——先刷新数据再重试', compatWarn: '需要 opencode {req}——当前 {cur}', invDown: '装态清单不可用——已安装状态可能不准', keysHintGui: '↑↓←→/hjkl 移动 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · esc 返回', heldAtLabel: '在押' }
 export function t(key: I18nKey): string {
   return (zhNow() ? ZH : EN)[key]
 }
@@ -680,12 +843,25 @@ const pkMetaCache = new Map<string, { at: number; pk: Packument }>()
  *  without a cap every distinct package ever installed pins its packument
  *  (up to MBs each) for the process lifetime. LRU order via delete+set. */
 const PK_META_MAX = 100
+/** Registry for packument lookups — honor the user's npm config the same
+ *  way `plugin add` does (restrictedEnv forwards non-secret npm_config_*):
+ *  a private-registry package must resolve against that registry, not leak
+ *  its name to the public one. https, or http on loopback for dev. */
+const npmRegistry = (): string => {
+  try {
+    const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+    const r = env?.npm_config_registry ?? env?.NPM_CONFIG_REGISTRY
+    if (typeof r === 'string' && (/^https:\/\/\S+$/.test(r) || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/\S*)?$/.test(r)))
+      return r.replace(/\/+$/, '')
+  } catch { /* webview has no process */ }
+  return 'https://registry.npmjs.org'
+}
 export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ tarball: string | null; integrity: string | null }> {
   const hit = pkMetaCache.get(name)
   let pk = hit && Date.now() - hit.at < 600_000 ? hit.pk : null
   if (hit) { pkMetaCache.delete(name); pkMetaCache.set(name, hit) }
   if (!pk) {
-    const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15_000) })
+    const res = await fetch(`${npmRegistry()}/${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) throw new Error(`packument fetch failed: ${res.status}`)
     pk = (await res.json()) as Packument
     pkMetaCache.set(name, { at: Date.now(), pk })

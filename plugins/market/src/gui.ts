@@ -9,9 +9,9 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission } from './hostx.js'
+import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 const Market = Ipc.define({
@@ -114,6 +114,15 @@ export default Plugin.define({
       if (real) return Object.keys(real)
       return e.features ?? []
     }
+    // pre-install compat check — the catalog declares engines; the host app
+    // reports its own version, so an unsatisfiable requirement is a warning
+    // BEFORE the user clicks install, not a load failure after
+    const hostVersion = String(ctx.app?.version ?? '')
+    const compatWarnOf = (e: MarketEntry): string | null => {
+      const eng = e.compat?.engines
+      if (!eng || !hostVersion) return null
+      return enginesSatisfied(hostVersion, eng) === false ? tf('compatWarn', { req: eng, cur: hostVersion }) : null
+    }
     const [err, setErr] = createSignal('')
     const [query, setQuery] = createSignal('')
     // catalog entry names the renderer already fetched — passed to
@@ -156,7 +165,19 @@ export default Plugin.define({
     } catch { /* older host: no events */ }
 
     safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e)))
-    safe.installed?.({ names: catalogNames() }).then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}) }, () => {})
+    // inventory health — the list degrades to uncataloged-only when the host
+    // inventory is unreachable, and the UI says so instead of pretending
+    // nothing is installed
+    const [invDown, setInvDown] = createSignal(false)
+    const pullInventory = () => void safe.installed?.({ names: catalogNames() })
+      .then(s => { setInstalled(s?.versions ?? {}); setInstalledExtra(s?.extras ?? []); setFeatMap(s?.features ?? {}); setInvDown(false) },
+        () => setInvDown(true))
+    pullInventory()
+    // external installs (CLI, other windows) never reach this renderer —
+    // the TUI gets ctx.data.on('plugin.updated'), the GUI window has no
+    // such bus; a periodic reconcile keeps the inventory honest. Skips
+    // hidden windows so an idle panel costs nothing.
+    setInterval(() => { if (typeof document === 'undefined' || !document.hidden) pullInventory() }, 30_000)
 
     // tab scope — shared by filtered() and the 全部(N) category chips so the
     // count always matches what the list actually shows on every tab
@@ -298,15 +319,19 @@ export default Plugin.define({
             setProg({ ...prog(), [e.name]: { lines: [sErr], done: true, ok: false } })
             b.disabled = false; armed = false; b.textContent = t('uninstall'); b.title = sErr
           }
-          // daemon rescans config async — wait, then reconcile; drop the
-          // entry from the fresh data too so it can't resurrect
-          await new Promise(r => setTimeout(r, 2000))
-          const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
-          if (fresh) {
+          // daemon rescans config async — poll the inventory until the spec
+          // is actually gone (bounded ~9s) instead of a blind 2s sleep that
+          // could report removal before the rescan even ran
+          for (let tries = 0; tries < 6; tries++) {
+            await new Promise(r => setTimeout(r, 1500))
+            const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
+            if (!fresh) continue
+            const still = !!fresh.versions[e.name]
             const v = { ...fresh.versions }; delete v[e.name]
             setInstalled(v)
             setInstalledExtra(fresh.extras.filter(x => x.name !== e.name))
             setFeatMap(fresh.features)
+            if (!still) break
           }
         })
       }
@@ -363,7 +388,10 @@ export default Plugin.define({
       b.onclick = ev => {
         ev.stopPropagation()
         b.disabled = true; b.textContent = '…'
-        setProg({ ...prog(), [e.name]: { lines: ['installing…'], done: false, ok: false } })
+        // compat warning rides the progress lines — visible in the card and
+        // the detail log, never silently dropped
+        const cw = compatWarnOf(e)
+        setProg({ ...prog(), [e.name]: { lines: [...(cw ? [cw] : []), 'installing…'], done: false, ok: false } })
         const failOut = (x: unknown) => {
           b.disabled = false; b.textContent = t('failedRetry'); b.title = String(x); b.style.color = '#c66'
           setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
@@ -554,8 +582,9 @@ export default Plugin.define({
       title.appendChild(btn)
       const meta = el('div', 'opacity:.5;font-size:11px;margin-top:1px')
       const dl = e.metrics?.npmDownloads30d, st = e.metrics?.stars
-      // github-kind entries carry no npm version — their marker is pushedAt
-      meta.textContent = [e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10),
+      // github-kind entries carry no npm version — their marker is pushedAt;
+      // 'local'/'?' are install-kind markers, not versions — never "vlocal"
+      meta.textContent = [e.latestVersion ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`) : (e.modifiedAt ?? '?').slice(0, 10),
         dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
         .filter(Boolean).join(' · ')
       // desc clamps at 2 lines; ⌄ sits at the end of the last visible line and flips to ⌃ once expanded
@@ -621,6 +650,7 @@ export default Plugin.define({
 
     const listView = () => {
       const root = el('div', '')
+      if (invDown()) root.appendChild(el('div', 'font-size:11px;opacity:.6;padding:4px 2px', t('invDown')))
       const list = el('div')
       list.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-content:start'
       // paged render — a filtered() change used to rebuild ~3000 cards at once;
@@ -894,6 +924,7 @@ export default Plugin.define({
         // held-back newer version — the index knows it exists; review hasn't
         // cleared it, so the client must never install it (hold semantics)
         ...(e.pendingUpdate?.version ? [tf('heldReview', { v: e.pendingUpdate.version })] : []),
+        ...(e.pendingUpdate?.heldAt ? [`  ${t('heldAtLabel')}: ${e.pendingUpdate.heldAt.slice(0, 10)}`] : []),
         ...(e.pendingUpdate?.reason ? [`  ${t('heldReason')}: ${e.pendingUpdate.reason}`] : []),
         ...(e.pendingUpdate?.verification?.status ? [`  ${t('verifyLevel')}: ${e.pendingUpdate.verification.status}`] : []),
         // tombstone: installed name left the catalog — say why, don't
@@ -915,10 +946,13 @@ export default Plugin.define({
         ...(e.compat?.engines || e.compat?.peer
           ? [`${t('compat')}: ${[e.compat.engines ? `opencode ${e.compat.engines}` : '', e.compat.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}`]
           : []),
-        // github-kind identity: source.version is the scanned TREE sha (not a
-        // commit, not an npm version) — label it accordingly and never show
-        // it for npm entries where the same field holds a semver
-        ...(e.source?.kind === 'github' && e.source?.version ? [`tree: ${e.source.version.slice(0, 12)}`] : []),
+        // requirements the running host can't satisfy — data was already on
+        // the page; now it's an actual pre-install warning, not trivia
+        ...(() => { const w = compatWarnOf(e); return w ? [w] : [] })(),
+        // github-kind identity: source.version is the pinned COMMIT sha the
+        // scan reviewed (§15: git/trees/{ref} resolves to commit sha) — never
+        // shown for npm entries where the same field holds a semver
+        ...(e.source?.kind === 'github' && e.source?.version ? [`commit: ${e.source.version.slice(0, 12)}`] : []),
         ...(e.integrity ? [`integrity: ${e.integrity.slice(0, 32)}…`] : []),
         `verify: ${v?.status ?? 'unverified'}${v?.level ? ` · ${t('verifyLevel')}: ${v.level}` : ''}`,
         `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
@@ -941,8 +975,11 @@ export default Plugin.define({
       // verify-log excerpt — the failed/skipped story in the pipeline's own
       // words; collapsed like findings (AGENTS: 默认收起进详情页)
       if (v?.logExcerpt) root.appendChild(fold(t('verifyLog'), [v.logExcerpt], v.status === 'failed'))
+      // "not found ≠ safe" has two honest variants: never-scanned entries
+      // (scannedAt null/absent) vs entries the scan actually covered and
+      // cleared — AGENTS forbids dressing the second as the first
       if (!caps?.findings?.length && !caps?.redFlags?.length)
-        root.appendChild(el('div', 'font-size:11px;opacity:.55;margin:8px 0', t('notSafe')))
+        root.appendChild(el('div', 'font-size:11px;opacity:.55;margin:8px 0', caps?.scannedAt ? t('scannedClean') : t('notSafe')))
       // audit-trail links: pipeline verify run + the site detail page that
       // aggregates evidence — https-only so a crafted runUrl can't open file:
       const links = el('div', 'display:flex;gap:10px;margin:8px 0;flex-wrap:wrap')
@@ -1004,7 +1041,7 @@ export default Plugin.define({
       const doRefresh = () => void (async () => {
         void safe.devlog?.('refBtn fire').catch(() => {})
         refBtn.disabled = true; refBtn.textContent = t('refreshing'); setRefText(''); refStatus.textContent = ''
-        const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('timeout25'))), 25_000))])
+        const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('refreshTimeout'))), 45_000))])
         try {
           const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
           if (idx) setDataWrap(idx)
@@ -1133,6 +1170,12 @@ export default Plugin.define({
         if (tab() === 'advanced') return settingsPanel()
         const n = v.kind === 'detail' ? detailView(v.e) : listView()
         n.style.padding = '0 12px 12px'
+        // keyboard path discoverability — the webview is mouse-first, but
+        // the keymap exists and users can't find what isn't advertised.
+        // NOTE: must live inside THIS insert's node — a second insert() on
+        // the same parent clobbers the first region's anchor in the
+        // plain-DOM runtime (settings panel rendered empty)
+        if (v.kind === 'list') n.appendChild(el('div', 'font-size:10px;opacity:.4;padding-top:8px', t('keysHintGui')))
         return n
       })
       parent.appendChild(shell)
@@ -1165,6 +1208,8 @@ export default Plugin.define({
   },
   main(m: any) {
     const jobs = new Map<string, import('node:child_process').ChildProcess>()
+    // skill downloads own AbortControllers — cancelInstall reaches them too
+    const skillJobs = new Map<string, AbortController>()
       const specByName: Record<string, string> = {}
       const idByName: Record<string, string> = {}
       const featByName: Record<string, Record<string, true> | undefined> = {}
@@ -1265,14 +1310,19 @@ export default Plugin.define({
           } catch { lg('installed(): catalog unreachable — extras degraded (no uncataloged split)') }
           return { versions: map, extras, features: featByName }
         },
-        install: (p: { name: string; spec?: string }) =>
-          new Promise<string>((resolve, reject) => {
-            const { spawn } = require('node:child_process') as typeof import('node:child_process')
-            try { assertSpecForName(p.name, p.spec) } catch (e) { reject(e); return }
-            // double-click / retry-during-flight guard — jobs.set would orphan
-            // the first child while its stdout handlers still emit progress
-            if (jobs.has(p.name)) { reject(new Error('install already running')); return }
-            const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
+        install: async (p: { name: string; spec?: string }) => {
+          const { spawn } = require('node:child_process') as typeof import('node:child_process')
+          assertSpecForName(p.name, p.spec)
+          // double-click / retry-during-flight guard — jobs.set would orphan
+          // the first child while its stdout handlers still emit progress
+          if (jobs.has(p.name)) throw new Error('install already running')
+          const spec = p.spec ?? p.name          // catalog-approved pinned spec (name@ver)
+          // the renderer's entry can lag the publication by up to TTL — a
+          // version concern'd inside that window must NOT install. Health-
+          // cheap recheck: a moved manifest sha forces a real re-pull.
+          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl), p.name, spec) }
+          catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
+          return withConfigLock(() => new Promise<string>((resolve, reject) => {
             const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
             jobs.set(p.name, child)
             const push = (line: string) => m.emit?.('progress', { name: p.name, line })
@@ -1285,46 +1335,57 @@ export default Plugin.define({
               code === 0 ? resolve('installed') : reject(new Error(`exit ${code}`))
             })
             child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); reject(e) })
-          }),
+          }))
+        },
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
           if (jobs.has(p.name)) throw new Error('install already running')
           lg(`update ${p.name}: called`)
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
+          // same stale-window guard as install — pin must still equal the
+          // catalog-approved spec before spawn/config writes happen
+          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl), p.name, pin) }
+          catch (x) { throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
           const done = (ok: boolean) => m.emit?.('progress', { name: p.name, line: '', done: true, ok })
-          try {
-            // pinned update: `plugin add` does NOT dedupe — a second spec for the
-            // same package appends. Install the pinned spec first, then rewrite
-            // config down to exactly that spec. Never plugin.update — it resolves
-            // npm latest, which would bypass the approved-version gate.
-            push(`install ${pin}`)
-            await new Promise<void>((res, rej) => {
-              const { spawn } = require('node:child_process') as typeof import('node:child_process')
-              const child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
-              jobs.set(p.name, child)
-              child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-              child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-              const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
-              child.on('close', code => { clearTimeout(kill); jobs.delete(p.name); code === 0 ? res() : rej(new Error(`plugin add exit ${code}`)) })
-              child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
-            })
-            {
-              const cfg = await cfgPath()
-              const d = await readJson(cfg)
-              const list = strArrayField(d, 'plugins')
-              const before = list.filter(s => cleanSpec(s) === clean)
-              d.plugins = dedupeToSpec(list, pin)
-              await writeJsonAtomic(cfg, d)
-              if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`update ${p.name}: config rewritten (${before.length} specs → ${pin})`) }
-            }
-            lg(`update ${p.name}: pinned update ok`); done(true); return 'updated'
-          } catch (x) { push(`update failed: ${String(x)}`); lg(`update ${p.name}: FAILED ${String(x)}`); done(false); throw x }
+          return withConfigLock(async () => {
+            try {
+              // pinned update: `plugin add` does NOT dedupe — a second spec for the
+              // same package appends. Install the pinned spec first, then rewrite
+              // config down to exactly that spec. Never plugin.update — it resolves
+              // npm latest, which would bypass the approved-version gate.
+              push(`install ${pin}`)
+              await new Promise<void>((res, rej) => {
+                const { spawn } = require('node:child_process') as typeof import('node:child_process')
+                const child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
+                jobs.set(p.name, child)
+                child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+                child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+                const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
+                child.on('close', code => { clearTimeout(kill); jobs.delete(p.name); code === 0 ? res() : rej(new Error(`plugin add exit ${code}`)) })
+                child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
+              })
+              {
+                const cfg = await cfgPath()
+                const d = await readJson(cfg)
+                const list = strArrayField(d, 'plugins')
+                const before = list.filter(s => cleanSpec(s) === clean)
+                d.plugins = dedupeToSpec(list, pin)
+                await writeJsonAtomic(cfg, d)
+                if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`update ${p.name}: config rewritten (${before.length} specs → ${pin})`) }
+              }
+              lg(`update ${p.name}: pinned update ok`); done(true); return 'updated'
+            } catch (x) { push(`update failed: ${String(x)}`); lg(`update ${p.name}: FAILED ${String(x)}`); done(false); throw x }
+          })
         },
         cancelInstall: async (name: string) => {
-          jobs.get(name)?.kill('SIGTERM'); jobs.delete(name); return 'cancelled'
+          jobs.get(name)?.kill('SIGTERM'); jobs.delete(name)
+          // a skill-half download owns an AbortController instead of a child —
+          // 'cancel' must reach it too (was spawn-only: skill fetches ran on)
+          skillJobs.get(name)?.abort(); skillJobs.delete(name)
+          return 'cancelled'
         },
         uninstall: async (name: string) => {
           // broader than assertPkgName on purpose: git-spec installs record
@@ -1335,16 +1396,18 @@ export default Plugin.define({
           lg(`uninstall ${name}: called`)
           // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
           // takes a spec, not the catalog name, and silently misses pinned specs
-          const cfg = await cfgPath()
-          const d = await readJson(cfg)
-          const list = strArrayField(d, 'plugins')
-          let keep: string[]
-          try { keep = removeSpec(list, name, idByName) }
-          catch { lg(`uninstall ${name}: no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
-          d.plugins = keep
-          await writeJsonAtomic(cfg, d)
-          lg(`uninstall ${name}: removed ${list.length - keep.length} spec(s)`)
-          return 'removed'
+          return withConfigLock(async () => {
+            const cfg = await cfgPath()
+            const d = await readJson(cfg)
+            const list = strArrayField(d, 'plugins')
+            let keep: string[]
+            try { keep = removeSpec(list, name, idByName) }
+            catch { lg(`uninstall ${name}: no spec matched (plugins=${JSON.stringify(list)})`); throw new Error(`${name} not found in opencode.json plugins`) }
+            d.plugins = keep
+            await writeJsonAtomic(cfg, d)
+            lg(`uninstall ${name}: removed ${list.length - keep.length} spec(s)`)
+            return 'removed'
+          })
         },
         // skills are file-system installs: extract tarball → config/skills/<name>.
         // The renderer only NAMES the entry — the host resolves the download
@@ -1371,12 +1434,16 @@ export default Plugin.define({
             url = meta.tarball
             integrity = entry.integrity ?? meta.integrity
           } else throw new Error('no skill part to install')
-          const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-          if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
-          const cl = Number(res.headers.get('content-length') ?? 0)
-          if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
-          const bytes = new Uint8Array(await res.arrayBuffer())
-          if (bytes.byteLength > MAX_SKILL_TGZ) throw new Error('skill tarball too large')
+          const ac = new AbortController()
+          skillJobs.set(p.name, ac)
+          let bytes: Uint8Array
+          try {
+            const res = await fetch(url, { signal: AbortSignal.any([ac.signal, AbortSignal.timeout(30_000)]) })
+            if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
+            // stream-bounded read — a lying/absent content-length can't push
+            // the whole tarball through memory before the size check runs
+            bytes = await readBodyBounded(res, MAX_SKILL_TGZ, 'skill tarball')
+          } finally { skillJobs.delete(p.name) }
           // fail closed on a KNOWN mismatch; null = unverifiable (no SRI /
           // no subtle crypto) and proceeds — github repo tarballs carry none
           const ok = await integrityMatches(bytes, integrity)
@@ -1387,13 +1454,15 @@ export default Plugin.define({
         // it — other skills[] entries are preserved either way
         skillSource: async (p: { url?: unknown; enable?: unknown } = {}) => {
           const url = typeof p?.url === 'string' && /^https:\/\/\S+\/$/.test(p.url) ? p.url : skillsUrl(urlOrDefault(null))
-          const cfg = await cfgPath()
-          const d = await readJson(cfg)
-          const list = strArrayField(d, 'skills')
-          const wasEnabled = list.includes(url)
-          if (p?.enable === true && !wasEnabled) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
-          if (p?.enable === false && wasEnabled) { d.skills = list.filter(u => u !== url); await writeJsonAtomic(cfg, d) }
-          return { url, enabled: p?.enable === true ? true : p?.enable === false ? false : wasEnabled }
+          return withConfigLock(async () => {
+            const cfg = await cfgPath()
+            const d = await readJson(cfg)
+            const list = strArrayField(d, 'skills')
+            const wasEnabled = list.includes(url)
+            if (p?.enable === true && !wasEnabled) { d.skills = [...list, url]; await writeJsonAtomic(cfg, d) }
+            if (p?.enable === false && wasEnabled) { d.skills = list.filter(u => u !== url); await writeJsonAtomic(cfg, d) }
+            return { url, enabled: p?.enable === true ? true : p?.enable === false ? false : wasEnabled }
+          })
         },
         skillPermission: async (p: { id: string; mode: 'allow' | 'deny' | 'ask' | null }) => {
           const cfg = await cfgPath()
@@ -1409,7 +1478,7 @@ export default Plugin.define({
                 typeof (r as { effect?: unknown }).effect === 'string')
             return Object.fromEntries(perms.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
           }
-          return writeSkillPermission(cfg, p.id, p.mode ?? null)
+          return withConfigLock(() => writeSkillPermission(cfg, p.id, p.mode ?? null))
         },
         readDevlog: async () => {
           try { const { readFileSync } = require('node:fs') as typeof import('node:fs')
@@ -1435,43 +1504,11 @@ export default Plugin.define({
         // self-confirm: isolated serve + API hit → real "did it load" verdict.
         // input is the pinned spec (name@approvedVersion) — a bare name would
         // resolve dist-tags.latest and test a version the user never got.
-        verifyActivation: (spec: string) =>
-          new Promise<string>((resolve, reject) => {
-            let name: string
-            try { name = cleanSpec(String(spec)); assertSpecForName(name, spec) } catch (e) { reject(e); return }
-            const { execFile } = require('node:child_process') as typeof import('node:child_process')
-            const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } = require('node:fs') as typeof import('node:fs')
-            const { tmpdir } = require('node:os') as typeof import('node:os')
-            const { join } = require('node:path') as typeof import('node:path')
-            const home = mkdtempSync(join(tmpdir(), 'mkt-verify-'))
-            mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
-            writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [spec] }))
-            // HOME override is load-bearing on macOS: XDG_* alone leaves opencode
-            // resolving config/state via the real ~ (the canary would read the
-            // user's real config — false activated if the plugin is already in it,
-            // permanent not-loaded otherwise). Same fix as pipeline/verify's xdgEnv.
-            const env = restrictedEnv({ HOME: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache') })
-            // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
-            // triggers the load (same fix as pipeline/verify/verify.ts), then
-            // poll the log for the canary instead of a fixed sleep (races writer)
-            const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'; for i in $(seq 1 16); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done; kill $SPID 2>/dev/null; true`
-            const logEnv = { ...env, LOG: join(home, 'data', 'opencode', 'log', 'opencode.log') }
-            execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, (err) => {
-              const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
-              // every probe leaves a temp home (serve.out + config + logs) —
-              // clean it on ALL paths or each install leaks a tmpdir forever
-              const finish = (v: string) => {
-                try { rmSync(home, { recursive: true, force: true }) } catch { /* best effort */ }
-                resolve(v)
-              }
-              // tri-state: 'unknown' when the probe itself couldn't run (no sh
-              // on Windows, serve never wrote a log) — the caller must not
-              // dress that up as a confident not-loaded diagnosis
-              if (err || !existsSync(log)) return finish('unknown')
-              const ok = new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
-              finish(ok ? 'activated' : 'not-loaded')
-            })
-          }),
+        verifyActivation: (spec: string) => {
+          const name = cleanSpec(String(spec))
+          assertSpecForName(name, spec)
+          return probeActivation(name, spec)
+        },
       })
   },
 })

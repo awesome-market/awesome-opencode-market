@@ -144,19 +144,50 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
       if (!resolve(target).startsWith(resolve(root) + sep)) continue
       rmSync(target, { recursive: true, force: true })
       renameSync(join(nd, sub), target); paths.push(rel)
+      // mark the lifted dir as market-made — uninstall can then tell a
+      // leftover `<id>-*` dir of ours from a foreign dir with the same name
+      try { writeFileSync(join(target, '.market-lift'), JSON.stringify({ name: opts.name })) } catch { /* cosmetic */ }
     }
     // only remove the emptied nest — a sub that couldn't be lifted (all 100
     // prefixed name variants collided) must survive, not be silently deleted
     try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
   }
+  // lifts the previous version shipped but this one doesn't must go — left
+  // behind they'd become manifest-less foreign dirs the user can never
+  // uninstall (and the skill would keep silently loading)
+  for (const rel of owned) {
+    if (paths.includes(rel)) continue
+    const t = join(root, rel)
+    if (resolve(t).startsWith(resolve(root) + sep)) rmSync(t, { recursive: true, force: true })
+  }
   writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
   return `wrote ${wrote}, lifted ${paths.length}`
+}
+
+/** `<id>-*` dirs at root whose lift marker names this package — leftover
+ *  lifts we made, safe to sweep. Marker-less lookalikes stay foreign. */
+function sweepMarkedStrays(
+  fs: typeof import('node:fs'), rootRes: string, name: string,
+  join: (...p: string[]) => string, rmSync: (p: string, o: { recursive: boolean; force: boolean }) => void,
+): string[] {
+  const ids = [...new Set([skillId(name), name.split('/').pop()!])]
+  let dirents: string[] = []
+  try { dirents = fs.readdirSync(rootRes) } catch { return [] }   // root gone — nothing to sweep
+  const foreign: string[] = []
+  for (const d of dirents) {
+    if (!ids.some(id => d.startsWith(`${id}-`))) continue
+    let markerName: string | undefined
+    try { markerName = (JSON.parse(fs.readFileSync(join(rootRes, d, '.market-lift'), 'utf8')) as { name?: string }).name } catch { markerName = undefined }
+    if (markerName === name) rmSync(join(rootRes, d), { recursive: true, force: true })
+    else foreign.push(d)
+  }
+  return foreign
 }
 
 export async function uninstallSkillDir(name: string, root: string): Promise<string> {
   const fs = await import('node:fs')
   const { join, resolve, sep, basename } = await import('node:path')
-  const { readdirSync, readFileSync, rmSync, existsSync } = fs
+  const { readFileSync, rmSync, existsSync } = fs
   const rootRes = resolve(root)
   assertSkillId(name)
   // Ownership is proven by .market-skills.json — the manifest has existed
@@ -175,23 +206,26 @@ export async function uninstallSkillDir(name: string, root: string): Promise<str
     if (!existsSync(mf)) continue                                  // foreign — not ours
     let m: { name?: string; paths?: string[] }
     try { m = JSON.parse(readFileSync(mf, 'utf8')) as typeof m } catch { continue }
-    if (typeof m.name === 'string' && m.name !== name) continue   // another package's dir
+    // ownership is EXACT: a manifest without a matching name field is as
+    // foreign as a missing manifest (install refuses to merge into it too)
+    if (m.name !== name) continue
     // owned → remove exactly what installSkillTar recorded, then the dir
     for (const rel of m.paths ?? []) {
       const t = resolve(rootRes, rel)
       if (t.startsWith(rootRes + sep)) rmSync(t, { recursive: true, force: true })
     }
     rmSync(dest, { recursive: true, force: true })
+    const strays = sweepMarkedStrays(fs, rootRes, name, join, rmSync)
+    if (strays.length)
+      throw new Error(`removed — but ${strays.length} foreign '${strays[0]!}-*'-like dir(s) left untouched`)
     return 'removed'
   }
   if (existing.length)
     throw new Error(`skill dir '${basename(existing[0]!)}' exists but is not managed by market — left untouched (delete it manually if unwanted)`)
-  // no package dir — stray `<id>-*` lifts may linger from a manually deleted
-  // install, but they are indistinguishable from foreign dirs; report rather
-  // than delete (the card keeps showing them as installed, which is honest —
-  // the files ARE still there and functional)
-  const ids = [...new Set([skillId(name), name.split('/').pop()!])]
-  const strays = readdirSync(rootRes).filter(d => ids.some(id => d.startsWith(`${id}-`)))
+  // no package dir — leftover `<id>-*` lifts (manually deleted package dir)
+  // that carry OUR marker are ours: sweep them. Marker-less lookalikes are
+  // foreign and reported, never deleted.
+  const strays = sweepMarkedStrays(fs, rootRes, name, join, rmSync)
   if (strays.length)
     throw new Error(`${strays.length} '${strays[0]!.split('-')[0]}-*' dir(s) found but not managed by market — left untouched`)
   return 'removed'

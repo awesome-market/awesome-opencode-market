@@ -1202,13 +1202,19 @@ index URL 解析：ctx.options.indexUrl > OPENCODE_MARKET_INDEX > Pages 默认
        （https-only；healthUrl/skillsUrl 同目录推导——换源一处生效）
 fetchIndexCached（manifest-first 两段式）：
   ① health.json {sha256} — ~100B（1MB 上限）；命中缓存 sha → fresh，0 下载
-  ② sha 变了（moved）或 force → 拉 index.json **原始 text** 先算 sha256，
+  ② sha 变了（moved）或 force → 拉 index.json **原始字节**先算 sha256，
      与公告比对——不匹配=mismatch，保留旧缓存绝不钉存错对；
      匹配才 JSON.parse → sanitizeIndex → isVisible 过滤 → 写缓存；
-     content-length+实际字节双闸 32MB 上限（自定义 indexUrl 打不爆 webview）
+     content-length+流式字节双闸 32MB 上限（content-length 谎报/缺失
+     时流式计数照样掐断——自定义 indexUrl 打不爆 webview）
+  同 url 并发调用共享一条 in-flight promise——冷启动 index()+installed()
+  不再整拉两遍 index；fetch 失败且有快照 → stale 兜底返回缓存不炸 UI；
+  navigator.onLine===false → 缓存可用时直接离线快径，不白等超时
   health 不可达 → 退回 1h TTL + 失败快照兜底；crypto 不可用 → 不 pin 不谎称验证
-  缓存后端 storage()：webview=localStorage；Node 侧（TUI/main）无
-  localStorage → 模块级槽位兜底——否则每次开 dialog 都整拉 index（N-9）
+  缓存后端：webview=localStorage，setItem quota 超限才落模块级 memIdx
+  （lsQuotaFailed 门控——只做配额兜底，不是第二份缓存，避免旧内存影
+  子盖掉更新的 localStorage 值）；Node 侧（TUI/main）无 localStorage
+  → 模块级槽位兜底——否则每次开 dialog 都整拉 index（N-9）
   fetchOutcome()：first|updated|fresh|stale|mismatch —— 刷新按钮如实区分
   "已是最新"/"已刷新 N 条"/"校验未通过"
 UI（gui.ts webview / tui.tsx 终端）：
@@ -1226,11 +1232,18 @@ UI（gui.ts webview / tui.tsx 终端）：
     jobs map 防双击并发起两个 spawn
   插件安装：pinSpec(e) = name@latestVersion（钉到批准版；VER_SAFE 字符
        校验——crafted version 直接拒装，不让怪串进 spec）（N-8）
+       装/更前 assertApprovedPin 新鲜度复查——渲染时持有的条目可能
+       落后 TTL 1h，版本被 concern 撤回后重解析仍批准才放行；
+       compat.engines 对 ctx.app.version 装前校验，不满足出警告
+       不装完才 load fail（不可解析 range 不谎称不兼容）
        gui: api.install → host `plugin add <spec>`（restrictedEnv 放行
-       HTTP(S)_PROXY/NO_PROXY/XDG/OPENCODE_*，剥其余环境秘密；90s kill）
+       HTTP(S)_PROXY/NO_PROXY/XDG，剥秘密；npm_config_registry 透传
+       给私有 registry 用户；90s kill）
        tui: 同 spawn + 90s 超时 + 子进程输出 sanitize 后上状态行 + 'C' 取消
   技能安装（npm）：fetchPkgVersionMeta(name,latestVersion) 取批准版
-       tarball+integrity → fetch(15-30s timeout；content-length+字节双闸
+       tarball+integrity（registry 解析 npm_config_registry/
+       NPM_CONFIG_REGISTRY→默认 npmjs，packument 缓存 100 条 LRU）
+       → fetch(15-30s timeout；content-length+流式字节双闸
        过 MAX_SKILL_TGZ) → integrityMatches SRI
        sha512 校验（公告值不匹配=拒装 fail-closed）→ installSkillTar；
        gui 渲染端只传 name——URL/SRI 由主进程自己查缓存 index 决议
@@ -1238,28 +1251,42 @@ UI（gui.ts webview / tui.tsx 终端）：
   技能安装（github）：codeload <repo>/tar.gz/<commit sha> —— 钉到管线扫描过的
        source.version（装的就是扫的），无 sha 遗产条目才退 HEAD；
        → installSkillTar 两段式解包剥 `<repo>-<ref>/` wrapper 根；
-       version 记账=modifiedAt
+       version 记账=source.version（commit sha）——verMarker 优先它，
+       没有才退 modifiedAt
   installSkillTar：assertEntryId(npm名∨owner/repo) → 路径逃逸双闸 →
        48/256MB 双顶 → 提升 .opencode|.claude|.agents skills 嵌套到根
        （包根有 SKILL.md 时连 `skills/` 目录一起提）、撞名 <id>- 前缀、
        目标目录存在且无本包 .market-skills.json → 拒装（unscoped 撞名
        不混入外来目录，卸载不会删用户文件；scoped 走 namespace 回退）、
        提升失败的嵌套非空保留不静默删、.market-skills.json 清单
-       （卸载按清单精确删）、__skill_<base> 安装键
+       （卸载按清单精确删）、提升的目录写 .market-lift 归属标——
+       重装时上版提过但新版已删的目录按标记清走（不留孤儿），
+       标记属别包的 <id>-* lookalike 只报告绝不动；__skill_<base> 安装键
   更新：add 钉版 spec → dedupeToSpec 重写 config plugins[]
        （plugin add 不去重会留双 spec——E2E 实锤；从不调 `plugin update`——它走 latest=旁路）
-       技能更新走 verMarker（npm=latestVersion,github=modifiedAt）比较；
+       技能更新走 verMarker（npm=latestVersion,github=source.version∨modifiedAt）比较；
        versionCmp 语义化比较——已装>批准版显示「回退到批准版」不误称更新；
-       updateAll 双端都含技能且 TUI 串行 await（并发改配置曾丢 spec）
+       updateAll 双端都含技能且防重入（插件 lane 串行写配置、技能 lane
+       串行解包，两 lane 可重叠）
   卸载：removeSpec(list,name,idByName) 重写 config plugins[]
        （id≠spec 名时靠 list 的 id 映射找到真 spec）；
-       装了技能的面才清技能目录（__skill_ 键探测——纯插件条目绝不扫技能根）
+       装了技能的面才清技能目录（__skill_ 键探测——纯插件条目绝不扫技能根）；
+       uninstallSkillDir 严格归属——清单 name 必须精确等于包名，
+       无 name/异形清单=外来目录只报告绝不动（对称 install 拒装）；
+       插件/技能两半独立成败——一半失败不谎称全卸
+  配置写互斥：withConfigLock 进程内串行队列包住一切
+       read-modify-write（update/uninstall/skillSource/skillPermission
+       /updateAll——跨操作类型也互斥，不再只靠 updateAll 内部 lane）
   配置/技能根路径：OPENCODE_CONFIG > XDG_CONFIG_HOME > ~/.config
        （configPath()/skillsRoot() 共享—— spawn 的 plugin add 与直接写
-       的 opencode.json 永远同一文件）
-  verifyActivation：隔离 HOME 起 serve → POST /api/session 触发懒加载
-       → 轮询日志 canary → activated/not-loaded/unknown 三态
-       （探针跑不起来=unknown，不谎称 not-loaded）
+       的 opencode.json 永远同一文件；skillsRoot() 同样认
+       OPENCODE_CONFIG 的目录，自定义 config 用户技能不分叉）
+  verifyActivation/probeActivation：隔离 HOME+临时 config 起 serve
+       → POST /api/session 触发懒加载 → 轮询日志 canary →
+       activated/not-loaded/unknown 三态（探针跑不起来=unknown，
+       不谎称 not-loaded）；OPENCODE_CONFIG 显式钉到沙箱文件——
+       restrictedEnv 原样转发 OPENCODE_*，不显式盖会让探针去读用户
+       真配置出假判词
   skillSource：skillsUrl(indexUrl) 双向开关 opencode.json skills[]
        （enable:false 可关，其余 skills[] 条目不动）
   skillPermission：写 permission 条目（action:skill, resource:id,
@@ -1285,7 +1312,14 @@ UI（gui.ts webview / tui.tsx 终端）：
   devlog：宿主写 market.log（clearDevlog 清它；marketLogPath 走 XDG）；
        渲染端 localStorage ring 300
   sanitizeIndex：顶层 generatedAt/removed[]/categories 字典也过消毒；
-       墓碑无 name/slug 的丢弃
+       墓碑无 name/slug 的丢弃；metrics 只收有限数值否则 null
+       （非数字原样透传会把 ANSI 控制序列打进终端）；plugins/removed
+       各 5 万条上限（32MB 内塞几十万条照样卡爆内存）；
+       pendingUpdate.verification.status 同样枚举钳位
+  扫描语义：caps.scannedAt===null → "没扫过"，findings/redFlags 皆空
+       的已扫条目 → "扫过没发现"——两句都带「这不等于安全」，但绝不混用
+  extras 降级：host inventory 拉不到 → 双端 invDown 提示"已装状态可能
+       过期"，GUI extras 不再因目录挂掉而整页空表
 ```
 
 ---

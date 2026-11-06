@@ -9,10 +9,10 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
-import { dedupeToSpec, removeSpec, cleanSpec } from './spec.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { dedupeToSpec, removeSpec, cleanSpec, featuresMap } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission } from './hostx.js'
+import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
@@ -64,6 +64,13 @@ export default Plugin.define({
       // internal plugin ids keyed by catalog name — removeSpec needs them to
       // match pinned specs whose id != package name (GUI parity)
       const [installedIds, setInstalledIds] = createSignal<Record<string, string>>({})
+      // live host features per name (GUI parity — installed entries filter
+      // on what the host ACTUALLY reports, not the catalog's scanned guess)
+      const [featMap, setFeatMap] = createSignal<Record<string, Record<string, true> | undefined>>({})
+      // inventory health — refreshInstalled has several independent failure
+      // paths; when ALL of them fail the installed badges silently vanish,
+      // so say it out loud instead of looking like an empty inventory
+      const [invDown, setInvDown] = createSignal(false)
       const [tab, setTab] = createSignal<Tab>('discover')
       const [query, setQuery] = createSignal(pendingQuery)
       const [cat, setCat] = createSignal('')
@@ -99,8 +106,11 @@ export default Plugin.define({
       const refreshInstalled = async () => {
         const map: Record<string, string> = {}
         const ids: Record<string, string> = {}
+        let apiOk = false
         try {
           const res = await ctx.client.plugin.list({ location: location() })
+          apiOk = true
+          setFeatMap(featuresMap(res.data ?? []) as Record<string, Record<string, true> | undefined>)
           for (const p of res.data ?? []) {
             if (p.source?.type === 'package' && p.source.target) {
               const clean = cleanSpec(String(p.source.target))
@@ -134,6 +144,10 @@ export default Plugin.define({
           [await globalSkillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
           d => readdirSync(d), p => existsSync(p)))
         setInstalled(map); setInstalledIds(ids)
+        // plugin.list is THE plugin inventory — its failure means every
+        // installed badge is a lie (skills still scan from disk). Flag it.
+        if (!apiOk && !Object.keys(map).length) setInvDown(true)
+        else setInvDown(false)
       }
       onMount(() => {
         setLangMode(store.lang ?? 'auto')
@@ -175,7 +189,7 @@ export default Plugin.define({
         }
         if (days()) list = list.filter(p => inDays(p, days()))
         if (cat()) list = list.filter(p => categoriesOf(p).includes(cat()))
-        if (featSel().size) list = list.filter(p => (p.features ?? []).some(f => featSel().has(f)))
+        if (featSel().size) list = list.filter(p => featuresOf(p).some(f => featSel().has(f)))
         if (query()) list = search(list, query())
         const s = sortEntries(list, sortKey())
         return asc() ? s.reverse() : s
@@ -201,9 +215,25 @@ export default Plugin.define({
         for (let i = 0; i < l.length; i += c) out.push(l.slice(i, i + c))
         return out
       })
+      // host-reported features beat catalog-declared ones for installed
+      // entries — a plugin that only registers tui must not filter as server
+      const featuresOf = (e: MarketEntry): string[] => {
+        const real = featMap()[e.name]
+        if (real) return Object.keys(real)
+        return e.features ?? []
+      }
       const verOf = (e: MarketEntry) => {
         const disk = skillInstalledVer(installed(), e.name)
         return disk ? (store.skillVers?.[e.name] ?? disk) : undefined
+      }
+      // pre-install compat warning — engines declared in the index vs the
+      // running host version (ctx.app.version); warn BEFORE the click, not
+      // after a load failure
+      const compatWarnOf = (e: MarketEntry): string | null => {
+        const eng = e.compat?.engines
+        const v = String((ctx.app as { version?: string } | undefined)?.version ?? '')
+        if (!eng || !v) return null
+        return enginesSatisfied(v, eng) === false ? tf('compatWarn', { req: eng, cur: v }) : null
       }
       const pick = () => pool()[sel()]
       let listScroll: { scrollTop: number; scrollTo(y: number): void } | undefined
@@ -230,6 +260,14 @@ export default Plugin.define({
       const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<boolean> => {
         const pin = pinSpec(e)
         try { assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
+        // the render-time entry can lag the publication by up to TTL — a
+        // version concern'd inside that window must NOT install (GUI host
+        // does the same recheck before its spawn). Cheap when health.json
+        // hasn't moved; a real re-pull when it has.
+        try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL), e.name, pin) }
+        catch { setStatus(t('catalogMoved')); return false }
+        const cw = compatWarnOf(e)
+        if (cw) setStatus(cw)
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         else setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
@@ -250,14 +288,26 @@ export default Plugin.define({
             else if (code === 0) {
               void (async () => {
                 try {
-                  const cfg = await configPath()
-                  const d = await readJson(cfg)
-                  const list = strArrayField(d, 'plugins')
-                  d.plugins = dedupeToSpec(list, pin)
-                  await writeJsonAtomic(cfg, d)
+                  // config dedupe shares the process-wide lock — an uninstall
+                  // or skillSource toggle must not interleave its RMW here
+                  await withConfigLock(async () => {
+                    const cfg = await configPath()
+                    const d = await readJson(cfg)
+                    const list = strArrayField(d, 'plugins')
+                    d.plugins = dedupeToSpec(list, pin)
+                    await writeJsonAtomic(cfg, d)
+                  })
                 } catch (x) { setStatus(tf('updateFail', { err: String(x) })); resolve(false); return }
-                setStatus(updating ? tf('updatedN', { name: e.name }) : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
-                void refreshInstalled(); resolve(true)
+                void refreshInstalled()
+                // activation probe — GUI parity: an isolated serve sandbox
+                // proves the spec actually loads; 'unknown' is uncertainty,
+                // not a negative verdict
+                if (!updating) {
+                  const verdict = await probeActivation(e.name, pin).catch(() => 'unknown' as const)
+                  setStatus(verdict === 'activated' ? `${e.name} ${t('installed')} · ${t('activated')}`
+                    : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
+                } else setStatus(tf('updatedN', { name: e.name }))
+                resolve(true)
               })()
             }
             else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve(false) }
@@ -276,39 +326,44 @@ export default Plugin.define({
         const timer = setTimeout(() => ac.abort(), 30_000)
         try {
           setStatus(tf('installingN', { name: e.name }))
+          // the render-time entry can lag the publication — resolve the
+          // CURRENT catalog entry (moved health sha forces a re-pull) and
+          // build the download from IT, never the possibly-stale click.
+          const fresh = (await fetchIndexCached(INDEX_URL).catch(() => null))?.plugins?.find(x => x.name === e.name) ?? e
+          const planNow = installPlan(fresh)
+          if (!planNow.skill) throw new Error(t('catalogMoved'))
           let url: string
           let integrity: string | null = null
-          if (plan.skill === 'github') {
-            // repo skills pin to the scanned tree sha (source.version) —
+          if (planNow.skill === 'github') {
+            // repo skills pin to the scanned COMMIT sha (source.version) —
             // installed bytes equal what the pipeline reviewed; gitPinRef
             // fails closed on a malformed pin (crafted/custom index), HEAD
             // only for pre-pin index data (no SRI exists for git archives)
-            url = `https://codeload.github.com/${e.source!.repo}/tar.gz/${gitPinRef(e.source?.version)}`
+            url = `https://codeload.github.com/${fresh.source!.repo}/tar.gz/${gitPinRef(fresh.source?.version)}`
           } else {
             // pin to the catalog-approved version — dist-tags.latest is the
             // pendingUpdate users are NOT allowed to get yet (hold semantics)
-            if (!e.latestVersion) throw new Error('no approved version to install')
-            const meta = await fetchPkgVersionMeta(e.name, e.latestVersion)
-            if (!meta.tarball) throw new Error(`no tarball for approved v${e.latestVersion}`)
+            if (!fresh.latestVersion) throw new Error('no approved version to install')
+            const meta = await fetchPkgVersionMeta(fresh.name, fresh.latestVersion)
+            if (!meta.tarball) throw new Error(`no tarball for approved v${fresh.latestVersion}`)
             url = meta.tarball
-            integrity = e.integrity ?? meta.integrity
+            integrity = fresh.integrity ?? meta.integrity
           }
-          // zip-bomb guard: refuse before buffering the whole body; the
-          // decompressed ceiling inside installSkillTar is the second wall
+          // zip-bomb guard: stream-counted read caps actual bytes — a lying/
+          // absent content-length can't buffer the whole body unchecked;
+          // the decompressed ceiling inside installSkillTar is the second wall
           const tgz = await fetch(url, { signal: ac.signal })
           if (!tgz.ok) throw new Error(`tarball fetch failed: ${tgz.status}`)
-          const cl = Number(tgz.headers.get('content-length') ?? 0)
-          if (cl > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${cl} bytes)`)
-          const buf = new Uint8Array(await tgz.arrayBuffer())
+          const buf = await readBodyBounded(tgz, MAX_SKILL_TGZ, 'skill tarball')
           // fail closed on a KNOWN mismatch — bytes must equal the artifact
           // the pipeline scanned (null = unverifiable, proceed honestly)
           const okI = await integrityMatches(buf, integrity)
           if (okI === false) throw new Error(t('integrityFail'))
-          const msg = await installSkillTar({ name: e.name, gzipped: buf, root: await globalSkillsRoot() })
-          const v = verMarker(e) ?? 'local'
-          await mutate(d => { d.skillVers ??= {}; d.skillVers[e.name] = v })
-          setInstalled({ ...installed(), [`__skill_${skillId(e.name)}`]: v })
-          setStatus(`${e.name} ${t('installed')} (${msg})`)
+          const msg = await installSkillTar({ name: fresh.name, gzipped: buf, root: await globalSkillsRoot() })
+          const v = verMarker(fresh) ?? 'local'
+          await mutate(d => { d.skillVers ??= {}; d.skillVers[fresh.name] = v })
+          setInstalled({ ...installed(), [`__skill_${skillId(fresh.name)}`]: v })
+          setStatus(`${fresh.name} ${t('installed')} (${msg})`)
           return true
         } catch (x) {
           if (userCancel) { setStatus(t('cancelled')); return false }
@@ -375,11 +430,15 @@ export default Plugin.define({
           // (same fix as the GUI host uninstall). installedIds lets removeSpec
           // match specs whose internal id differs from the package name.
           try {
-            const cfg = await configPath()
-            const d = await readJson(cfg)
-            const list = strArrayField(d, 'plugins')
-            d.plugins = removeSpec(list, e.name, installedIds())
-            await writeJsonAtomic(cfg, d)
+            // serialized with every other config RMW — a concurrent update's
+            // dedupe write must not resurrect this spec (or lose itself)
+            await withConfigLock(async () => {
+              const cfg = await configPath()
+              const d = await readJson(cfg)
+              const list = strArrayField(d, 'plugins')
+              d.plugins = removeSpec(list, e.name, installedIds())
+              await writeJsonAtomic(cfg, d)
+            })
             const next = { ...installed() }; delete next[e.name]
             setInstalled(next)
           } catch (x) { pluginErr = String(x) }
@@ -447,7 +506,7 @@ export default Plugin.define({
         return Object.fromEntries(perms.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
       }
       const setPerm = async (id: string, mode: 'allow' | 'ask' | 'deny' | null) => {
-        try { await writeSkillPermission(await configPath(), id, mode); setStatus(`${id}: ${mode ?? t('permOff')}`) }
+        try { await withConfigLock(async () => writeSkillPermission(await configPath(), id, mode)); setStatus(`${id}: ${mode ?? t('permOff')}`) }
         catch (x) { setStatus(String(x)) }
       }
       const openSkillPerms = async () => {
@@ -484,7 +543,9 @@ export default Plugin.define({
             const { homedir } = await import('node:os')
             // field-shape validation — a crafted backup file must not corrupt state
             const d = sanitizeState(JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as unknown) as MarketState
-            void mutate(x => { Object.assign(x, { favorites: d.favorites, skillVers: d.skillVers }) })
+            // same restore scope as the GUI — favorites + version bookkeeping
+            // + devlog + language, not just the two storage blobs
+            void mutate(x => { Object.assign(x, { favorites: d.favorites, skillVers: d.skillVers, devlog: d.devlog, lang: d.lang }) })
             setStatus(t('restored'))
           } catch (x) { setStatus(tf('restoreFail', { err: String(x) })) }
         }) },
@@ -507,21 +568,27 @@ export default Plugin.define({
         { label: t('useHttpCatalog'), run: () => void (async () => {
           const cfg = await configPath()
           try {
-            const d = await readJson(cfg)
-            const list = strArrayField(d, 'skills')
-            const on = list.includes(CATALOG_URL)
-            // reversible — enable appends the url, re-running disables it
-            // (other skills[] entries are preserved either way)
-            if (on) await writeJsonAtomic(cfg, { ...d, skills: list.filter(u => u !== CATALOG_URL) })
-            else await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
+            const on = await withConfigLock(async () => {
+              const d = await readJson(cfg)
+              const list = strArrayField(d, 'skills')
+              const was = list.includes(CATALOG_URL)
+              // reversible — enable appends the url, re-running disables it
+              // (other skills[] entries are preserved either way)
+              if (was) await writeJsonAtomic(cfg, { ...d, skills: list.filter(u => u !== CATALOG_URL) })
+              else await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
+              return was
+            })
             setStatus(`catalog source ${on ? t('catalogDisabled') : t('catalogEnabled')} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
         { label: t('permTitle'), run: () => void openSkillPerms() },
       ])
 
-      // github-kind entries carry no npm version — their marker is pushedAt
-      const dispVer = (e: MarketEntry) => e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)
+      // github-kind entries carry no npm version — their marker is pushedAt;
+      // 'local'/'?' are install-kind markers, not versions — never "vlocal"
+      const dispVer = (e: MarketEntry) => e.latestVersion
+        ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`)
+        : (e.modifiedAt ?? '?').slice(0, 10)
       const actionLabel = (e: MarketEntry) => {
         // per-half state — a current plugin half must not mask a stale skill
         // half (and vice versa); the old merged-version check did exactly that
@@ -551,7 +618,12 @@ export default Plugin.define({
       const openDetail = (e: MarketEntry) => { setFindingsOpen(false); setDetail(e) }
       // 2D nav: left/right moves 1, up/down moves 2 (columns)
       const move = (d: number) => setSel(i => { const n = Math.max(0, Math.min(pool().length - 1, i + d)); growCap(n); return n })
+      let updateAllRunning = false
       const updateAll = () => {
+        // re-entrancy guard — 'U' while a sweep is in flight would start a
+        // second pair of lanes racing the same config/skills surfaces
+        if (updateAllRunning) { setStatus(t('installRunning')); return }
+        updateAllRunning = true
         // per-half targeting — only halves installed AND outdated; the old
         // merged-version filter missed whichever half lagged behind
         const items = (idx()?.plugins ?? [])
@@ -595,6 +667,7 @@ export default Plugin.define({
           }
           setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
           void refreshInstalled()
+          updateAllRunning = false
         })()
       }
       // passive "N updatable" count on the [U] button — the sweep used to be
@@ -810,7 +883,7 @@ export default Plugin.define({
             <For each={wrap2(descOf(e), descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
             {/* catalog-declared feature parts — same signal the GUI chips show;
                 without them a dual entry's plugin half was invisible on cards */}
-            <text fg={theme.text.faint}>{[categoriesOf(e).map(catLabel).join('  '), (e.features ?? []).join('·')].filter(Boolean).join('  ')}</text>
+            <text fg={theme.text.faint}>{[categoriesOf(e).map(catLabel).join('  '), featuresOf(e).join('·'), e.uncataloged ? t('uncataloged') : ''].filter(Boolean).join('  ')}</text>
           </box>
         )
       }
@@ -898,6 +971,7 @@ export default Plugin.define({
                     )}</For>
                   </box>
                 : <box flexDirection="column" flexGrow={1} minHeight={0}>
+                    <Show when={invDown()}><text fg={theme.text.muted} paddingLeft={1}>{t('invDown')}</text></Show>
                     <Show when={idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('fetchFailed')}: {idxErr()} — {tf('retryKey', { key: 'r' })}</text></Show>
                     <Show when={!idx() && !idxErr()}><text fg={theme.text.muted} paddingLeft={1}>{t('loading')}</text></Show>
                     <scrollbox flexGrow={1} minHeight={0} height={Math.max(6, dims().height - 12)}
@@ -927,6 +1001,7 @@ export default Plugin.define({
                     </box>
                     <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
                     <Show when={e.pendingUpdate?.version}><text fg={theme.text.muted}>{tf('heldReview', { v: e.pendingUpdate!.version! })}</text></Show>
+                    <Show when={e.pendingUpdate?.heldAt}><text fg={theme.text.muted}>  {t('heldAtLabel')}: {e.pendingUpdate!.heldAt!.slice(0, 10)}</text></Show>
                     <Show when={e.pendingUpdate?.reason}><text fg={theme.text.muted}>  {t('heldReason')}: {e.pendingUpdate!.reason}</text></Show>
                     <Show when={e.pendingUpdate?.verification?.status}><text fg={theme.text.muted}>  {t('verifyLevel')}: {e.pendingUpdate!.verification!.status}</text></Show>
                     {/* tombstone — installed name left the catalog; reason + date, never auto-uninstall */}
@@ -941,7 +1016,10 @@ export default Plugin.define({
                     <Show when={e.compat?.engines || e.compat?.peer}>
                       <text fg={theme.text.muted}>{t('compat')}: {[e.compat?.engines ? `opencode ${e.compat.engines}` : '', e.compat?.peer ? `peer ${e.compat.peer}` : ''].filter(Boolean).join(' · ')}</text>
                     </Show>
-                    <Show when={e.source?.kind === 'github' && e.source?.version}><text fg={theme.text.muted}>tree: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
+                    <Show when={compatWarnOf(e)}>{(w) => <text fg={theme.text.base}>{w()}</text>}</Show>
+                    {/* source.version is the pinned COMMIT sha the scan reviewed
+                        (§15) — not a tree sha, not an npm version */}
+                    <Show when={e.source?.kind === 'github' && e.source?.version}><text fg={theme.text.muted}>commit: {(e.source!.version ?? '').slice(0, 12)}</text></Show>
                     <Show when={e.firstSeenAt || e.aliases?.length || (e.distTags && Object.keys(e.distTags).length)}>
                       <text fg={theme.text.muted}>{[e.firstSeenAt ? `first seen: ${e.firstSeenAt.slice(0, 10)}` : '', e.aliases?.length ? `aka: ${e.aliases.join(', ')}` : '', e.distTags && Object.keys(e.distTags).length ? `dist-tags: ${Object.entries(e.distTags).map(([k, v]) => `${k}=${v}`).join(' · ')}` : ''].filter(Boolean).join(' · ')}</text>
                     </Show>
@@ -971,8 +1049,11 @@ export default Plugin.define({
                       <text fg={theme.text.base}>{t('findings')}</text>
                       <For each={caps!.findings.slice(0, 20)}>{(f) => <text fg={theme.text.muted}>  · {f}</text>}</For>
                     </Show>
+                    {/* "not found ≠ safe" — two honest variants: never-scanned
+                        (scannedAt null) vs scanned-and-clean; AGENTS forbids
+                        dressing the second as the first */}
                     <Show when={!caps?.findings?.length && !caps?.redFlags?.length}>
-                      <text fg={theme.text.muted}>{t('notSafe')}</text>
+                      <text fg={theme.text.muted}>{caps?.scannedAt ? t('scannedClean') : t('notSafe')}</text>
                     </Show>
                   </box>
                 </scrollbox>

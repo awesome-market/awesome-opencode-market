@@ -118,10 +118,29 @@ export async function configPath(): Promise<string> {
   return join(base, 'opencode', 'opencode.json')
 }
 
-/** Skills dir under the same config root as configPath(). */
+/** Serialize config mutations — every opencode.json write is a
+ *  read-modify-write, and two concurrent RMWs silently lose whichever
+ *  write lands first (update vs uninstall vs skillSource vs permission
+ *  toggle, plus the spawned `plugin add` that also writes the file).
+ *  A process-wide promise queue is enough: cross-PROCESS races (the
+ *  opencode CLI itself, another plugin host) can't see this lock, but
+ *  our own writers were the observed data-loss source. */
+let configQueue: Promise<void> = Promise.resolve()
+export function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
+  const p = configQueue.then(fn)
+  // keep the chain alive past fn's rejection — one failed write must not
+  // wedge every later caller behind an already-rejected promise
+  configQueue = p.then(() => undefined, () => undefined)
+  return p
+}
+
+/** Skills dir under the same config root as configPath() — when the CLI
+ *  runs with OPENCODE_CONFIG pointing at a custom file, its skills live
+ *  next to THAT file, not under the default ~/.config root. */
 export async function skillsRoot(): Promise<string> {
   const { homedir } = await import('node:os')
-  const { join } = await import('node:path')
+  const { join, dirname } = await import('node:path')
+  if (process.env.OPENCODE_CONFIG) return join(dirname(process.env.OPENCODE_CONFIG), 'skills')
   const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
   return join(base, 'opencode', 'skills')
 }
@@ -137,17 +156,24 @@ export async function writeSkillPermission(
     throw new Error('invalid permission mode')
   const d = await readJson(cfgPath)
   const raw = d.permissions
-  const perms = (Array.isArray(raw) ? raw : [])
-    .filter((r): r is { action: string; resource: string; effect: string } =>
-      !!r && typeof r === 'object' &&
-      typeof (r as { action?: unknown }).action === 'string' &&
-      typeof (r as { resource?: unknown }).resource === 'string' &&
-      typeof (r as { effect?: unknown }).effect === 'string')
-  const rest = perms.filter(r => !(r.action === 'skill' && r.resource === id))
+  // a non-array permissions value is a schema we don't own — refuse to
+  // clobber it, and keep malformed entries in place (dropping them would
+  // silently revoke grants we can't even model)
+  if (raw != null && !Array.isArray(raw))
+    throw new Error('unsupported permissions shape in opencode.json — expected an array')
+  const perms = (raw ?? []) as unknown[]
+  const rest = perms.filter(r =>
+    !(!!r && typeof r === 'object' &&
+      (r as { action?: unknown }).action === 'skill' &&
+      (r as { resource?: unknown }).resource === id))
   if (mode) rest.push({ action: 'skill', resource: id, effect: mode })
   d.permissions = rest
   await writeJsonAtomic(cfgPath, d)
-  return Object.fromEntries(rest.filter(r => r.action === 'skill').map(r => [r.resource, r.effect]))
+  return Object.fromEntries(
+    (rest as Array<{ action?: unknown; resource?: unknown; effect?: unknown }>)
+      .filter(r => !!r && typeof r === 'object' && r.action === 'skill' &&
+        typeof r.resource === 'string' && typeof r.effect === 'string')
+      .map(r => [r.resource as string, r.effect as string]))
 }
 
 const LOG_MAX = 256 * 1024
@@ -187,4 +213,55 @@ export function restrictedEnv(over: Record<string, string> = {}): Record<string,
     if (/^(?:NPM_CONFIG_|npm_config_)/.test(k) && !/(?:TOKEN|KEY|SECRET|PASS|CREDENTIAL|AUTH)/i.test(k)) out[k] = v as string
   }
   return { ...out, ...over }
+}
+
+/** Activation probe: spawn `opencode serve` against a throwaway HOME whose
+ *  opencode.json lists ONLY the installed spec, create a session (2.2.5
+ *  loads plugins lazily on session CREATE — a bare serve never triggers
+ *  the load), then grep the daemon log for the plugin id. Shared by GUI
+ *  main and TUI. The env pins OPENCODE_CONFIG to the sandbox file:
+ *  restrictedEnv forwards every OPENCODE_* var, and the user's own
+ *  OPENCODE_CONFIG would make the probe read their REAL config — a false
+ *  `activated` when it already carries the plugin, a permanent
+ *  `not-loaded` when it doesn't. */
+export function probeActivation(name: string, spec: string): Promise<'activated' | 'not-loaded' | 'unknown'> {
+  return new Promise(resolve => {
+    void (async () => {
+      const { execFile } = await import('node:child_process')
+      const { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } = await import('node:fs')
+      const { tmpdir } = await import('node:os')
+      const { join } = await import('node:path')
+      const home = mkdtempSync(join(tmpdir(), 'ocm-verify-'))
+      mkdirSync(join(home, '.config', 'opencode'), { recursive: true })
+      writeFileSync(join(home, '.config', 'opencode', 'opencode.json'), JSON.stringify({ plugins: [spec] }))
+      // HOME override is load-bearing on macOS: XDG_* alone leaves opencode
+      // resolving config/state via the real ~ — the canary would read the
+      // user's real config (false activated if the plugin is already in it,
+      // permanent not-loaded otherwise). OPENCODE_CONFIG is pinned to the
+      // sandbox file for the same reason: restrictedEnv forwards it, and the
+      // user's own value would override the sandbox HOME outright.
+      const env = restrictedEnv({
+        HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
+        XDG_DATA_HOME: join(home, 'data'), XDG_CACHE_HOME: join(home, 'cache'),
+        OPENCODE_CONFIG: join(home, '.config', 'opencode', 'opencode.json'),
+      })
+      const boot = `opencode serve --port 0 > serve.out 2>&1 & SPID=$!; for i in $(seq 1 20); do grep -q "server listening" serve.out 2>/dev/null && break; sleep 0.5; done; PORT=$(sed -n 's/.*127.0.0.1:\\([0-9]*\\).*/\\1/p' serve.out | head -1); PW=$(sed -n 's/server password //p' serve.out | head -1); [ -n "$PORT" ] && curl -s -u "opencode:$PW" -o /dev/null -X POST "http://127.0.0.1:$PORT/api/session" -H 'content-type: application/json' -d '{}'; for i in $(seq 1 16); do grep -q "loading plugin" "$LOG" 2>/dev/null && break; sleep 0.5; done; kill $SPID 2>/dev/null; true`
+      const logEnv = { ...env, LOG: join(home, 'data', 'opencode', 'log', 'opencode.log') }
+      execFile('sh', ['-c', boot], { env: logEnv, cwd: home, timeout: 25_000 }, (err) => {
+        const log = join(home, 'data', 'opencode', 'log', 'opencode.log')
+        // every probe leaves a temp home (serve.out + config + logs) —
+        // clean it on ALL paths or each install leaks a tmpdir forever
+        const finish = (v: 'activated' | 'not-loaded' | 'unknown') => {
+          try { rmSync(home, { recursive: true, force: true }) } catch { /* best effort */ }
+          resolve(v)
+        }
+        // 'unknown' when the probe itself couldn't run (no sh on Windows,
+        // serve never wrote a log) — callers must not dress uncertainty up
+        // as a confident not-loaded diagnosis
+        if (err || !existsSync(log)) return finish('unknown')
+        const ok = new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
+        finish(ok ? 'activated' : 'not-loaded')
+      })
+    })().catch(() => resolve('unknown'))
+  })
 }

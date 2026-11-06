@@ -158,9 +158,16 @@ describe('uninstallSkillDir', () => {
 
   it('manifest paths cannot escape the root', async () => {
     mkdirSync(join(root, 'evil'), { recursive: true })
-    writeFileSync(join(root, 'evil', '.market-skills.json'), JSON.stringify({ paths: ['../outside', '/abs'] }))
+    // a name-matching manifest proves ownership; its path entries still get
+    // the root/ prefix guard — traversal entries are filtered, not honored
+    writeFileSync(join(root, 'evil', '.market-skills.json'), JSON.stringify({ name: 'evil', paths: ['../outside', '/abs'] }))
     await uninstallSkillDir('evil', root)
-    // path traversal entries filtered by the root/ prefix guard
     expect(existsSync(join(root, 'evil'))).toBe(false)
+    // a manifest WITHOUT the package name is foreign — ownership is exact,
+    // symmetric with install's refusal to merge into unowned dirs
+    mkdirSync(join(root, 'noname'), { recursive: true })
+    writeFileSync(join(root, 'noname', '.market-skills.json'), JSON.stringify({ paths: [] }))
+    await expect(uninstallSkillDir('noname', root)).rejects.toThrow(/not managed by market/)
+    expect(existsSync(join(root, 'noname'))).toBe(true)
   })
 })

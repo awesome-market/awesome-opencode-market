@@ -72,7 +72,9 @@ try {
   let refreshed = false
   for (let attempt = 0; attempt < 3 && !refreshed; attempt++) {
     await refBtn.dispatchEvent('mousedown').catch(() => {})
-    refreshed = await page.locator('text=已刷新').first()
+    // honest outcome: '已刷新 N 条' when the index moved, '数据已是最新' when
+    // the manifest sha matched — both prove the refresh round-trip completed
+    refreshed = await page.locator('text=/已刷新|数据已是最新/').first()
       .waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false)
   }
   t('更新数据 refreshes', refreshed)
