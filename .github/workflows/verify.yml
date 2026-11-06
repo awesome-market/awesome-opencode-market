@@ -26,6 +26,7 @@ jobs:
     # terry2010's fork (current prod — client default index + live catalog).
     if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
+    timeout-minutes: 15                 # npm ci + plan is minutes-scale; a hang must not hold 6h
     outputs: { shards: "${{ steps.shards.outputs.list }}" }
     permissions: { contents: read }
     steps:
@@ -69,9 +70,10 @@ jobs:
         if: inputs.targets != ''
         env: { T: "${{ inputs.targets }}" }
         run: |
-          node -e 'const ns=process.env.T.split(",").map(s=>s.trim()).filter(Boolean);
+          node -e 'const ns=process.env.T.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
             const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));
-            i.plugins=i.plugins.filter(p=>ns.includes(p.name));
+            // npm names are case-insensitive — a case typo is not "not found"
+            i.plugins=i.plugins.filter(p=>ns.includes(p.name.toLowerCase()));
             console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)");
             // a typoed target name must FAIL, not green-no-op — the operator
             // thinks they verified something that never ran
