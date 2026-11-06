@@ -70,6 +70,16 @@ export const vkey = (name: string, version: string | null | undefined) => `${nam
 export const candidateVer = (e: Pick<PluginEntry, 'approval' | 'latestVersion' | 'pendingUpdate'>) =>
   e.approval === 'pending' ? e.latestVersion : e.pendingUpdate?.version ?? undefined
 
+/** The pendingUpdate slot ONLY when it is the version under review — the
+ *  object half of candidateVer's rule. A pending entry's candidate is the
+ *  entry itself, so a leftover hold (the B3 inverted state applyMatureVerdicts
+ *  refuses to adjudicate and publish-merge drops) must not feed review
+ *  material, verdict keys, or part routing: its fields describe bytes nobody
+ *  is reviewing. Consumers read `candidateSlot(e)?.x ?? e.x` — never
+ *  `e.pendingUpdate?.x` directly. */
+export const candidateSlot = (e: Pick<PluginEntry, 'approval' | 'pendingUpdate'>) =>
+  e.approval === 'pending' ? null : e.pendingUpdate ?? null
+
 /** `at` ordering must be chronological, not lexicographic — ISO strings with
  *  non-Z offsets ('+08:00') misorder under string compare. Numeric parse wins;
  *  string tiebreak keeps same-ms appends deterministic (later line wins). */

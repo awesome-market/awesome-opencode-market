@@ -152,27 +152,43 @@ esac
 # hour; two runners double-burn the LLM and rebase-race on push. mkdir is
 # atomic on macOS (no flock shipped). A SIGKILL'd/wedged run leaves the dir —
 # without an age check every future tick skips forever (D-11). Runs are
-# bounded (~45min LLM budget + prep), so a lock older than 2h is reclaimed.
+# bounded (~45min LLM budget + prep), so a lock older than 2h is reclaimed —
+# but ONLY when the recorded owner pid is actually gone: age alone can't tell
+# a wedged-but-alive run (stuck in an uninterruptible wait) from a dead one,
+# and stealing a live run's lock lets its EXIT trap rmdir the NEW owner's
+# lock below → a third run starts → double LLM burn + push races.
 LOCK=$STATED/diagnose.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
+  OLD_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
+  OWNER_DEAD=0
+  case $OLD_PID in
+    '') OWNER_DEAD=1 ;;                          # pre-pid-era lock, or crash before the write
+    *[!0-9]*) OWNER_DEAD=1 ;;                    # corrupt pid file — treat as dead
+    *) kill -0 "$OLD_PID" 2>/dev/null || OWNER_DEAD=1 ;;
+  esac
   # stale reclaim must be atomic: rmdir+mkdir lets a second reclaimer delete
   # the fresh lock the first just made (double-run + its trap later rmdir's
   # the winner's lock). mv IS atomic — the first rename takes the stale dir;
   # a loser's mv hits ENOENT after the winner's rename and falls through to
   # the skip branch like any live lock. The fresh mkdir is re-verified too:
   # a new contender can slip in between mv and mkdir and legitimately win.
-  if [ "$AGE" -gt 7200 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
-    rmdir "$LOCK.stale.$$" 2>/dev/null   # best-effort sweep of the moved dir
-    log "reclaimed stale lock (${AGE}s old)"
-  else
-    log "another run in progress — skipping"; exit 0
+  RECLAIMED=0
+  if [ "$AGE" -gt 7200 ] && [ "$OWNER_DEAD" = 1 ] \
+     && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+    RECLAIMED=1
+    log "reclaimed stale lock (${AGE}s old${OLD_PID:+, owner pid $OLD_PID gone})"
   fi
+  rm -rf "$LOCK.stale.$$" 2>/dev/null   # the dir now holds a pid file — rmdir can't
+  [ "$RECLAIMED" = 1 ] || { log "another run in progress — skipping"; exit 0; }
 fi
+echo $$ > "$LOCK/pid" 2>/dev/null || true
 # release on EVERY exit — the plain EXIT trap misses signals; explicit TERM/
 # INT handlers exit with the conventional status so cleanup still runs and a
-# normal kill never waits 2h for the stale-lock reclaimer
-trap 'rm -f "${TMPV:-}" "${PAY:-}" "${VVIEW:-}"; rmdir "$LOCK" 2>/dev/null' EXIT
+# normal kill never waits 2h for the stale-lock reclaimer. The rmdir is
+# ownership-checked: after a stale reclaim the dir at $LOCK belongs to the
+# NEW owner — an old run's late exit must not delete it.
+trap 'rm -f "${TMPV:-}" "${PAY:-}" "${VVIEW:-}"; [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ] && { rm -f "$LOCK/pid"; rmdir "$LOCK"; }' EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 

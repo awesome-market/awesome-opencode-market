@@ -32,8 +32,12 @@ describe('audit residuals — fixable risks (lock reclaim / gates / future at)',
     // the racy pattern must be gone: a plain rmdir of the LIVE lock path
     // before mkdir would let a second reclaimer delete the winner's new lock
     expect(src).not.toMatch(/rmdir "\$LOCK" 2>\/dev\/null && mkdir/)
-    // the reclaim still requires the age check first
-    const reclaim = src.match(/if \[ "\$AGE" -gt 7200 \] && mv[^;]+; then/)
+    // the reclaim still requires the age check first — and, since audit #4,
+    // proof the recorded owner pid is gone (age alone can't tell a wedged-
+    // but-alive run from a dead one; stealing a live lock lets its EXIT trap
+    // rmdir the NEW owner's lock)
+    expect(src).toContain('[ "$AGE" -gt 7200 ] && [ "$OWNER_DEAD" = 1 ]')
+    const reclaim = src.match(/if \[ "\$AGE" -gt 7200 \][\s\S]*?mv "\$LOCK" "\$LOCK\.stale\.\$\$"[\s\S]*?mkdir "\$LOCK"[\s\S]*?; then/)
     expect(reclaim).toBeTruthy()
   })
 

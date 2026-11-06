@@ -140,6 +140,31 @@ describe('ai-diagnose.sh — single-instance lock', () => {
       expect(existsSync(join(stated, 'diagnose.lock'))).toBe(false) // released on exit
     })
   }, 120_000)
+
+  it('audit#4: stale lock with a LIVE owner pid is NOT reclaimed; dead pid is', () => {
+    withCanned({ CANNED_VERDICTS: `${VERDICT_A}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const lockDir = join(stated, 'diagnose.lock')
+      const old = new Date(Date.now() - 3 * 3600 * 1000)
+      const stamp = old.toISOString().replace(/[-:T]/g, '').slice(0, 12)
+      // live owner: this vitest process — kill -0 succeeds → age alone must
+      // not steal the lock (its late EXIT trap would rmdir the new owner's)
+      mkdirSync(lockDir, { recursive: true })
+      writeFileSync(join(lockDir, 'pid'), `${process.pid}\n`)
+      execFileSync('touch', ['-t', stamp, lockDir])
+      const skip = runScript()
+      expect(skip.out).toContain('another run in progress')
+      expect(existsSync(lockDir)).toBe(true)   // lock preserved for the live owner
+      rmSync(lockDir, { recursive: true, force: true })
+      // dead owner: pid above pid_max can never exist → reclaim proceeds
+      mkdirSync(lockDir)
+      writeFileSync(join(lockDir, 'pid'), '99999999\n')
+      execFileSync('touch', ['-t', stamp, lockDir])
+      const run = runScript()
+      expect(run.out).not.toContain('another run in progress')
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-a')
+      expect(existsSync(lockDir)).toBe(false)
+    })
+  }, 120_000)
 })
 
 describe('ai-diagnose.sh — verdict push + health publish', () => {

@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { CatalogIndex, type AiVerdict, type PluginEntry } from '../../src/schema.ts'
 import { candidateHeldAt } from '../ai/diagnose.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
-import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, tombEpochs } from '../verdicts.ts'
+import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, tombEpochs, candidateSlot } from '../verdicts.ts'
 import type { VerifyTarget } from './verify.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
@@ -15,7 +15,7 @@ export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: 
   // a pending entry's candidate is the ENTRY itself — a leftover
   // pendingUpdate is the B3 inverted state (dropped by the R-9 cleanup);
   // verifying the stale hold's version would measure bytes not under review
-  const slot = e.approval === 'pending' ? null : e.pendingUpdate ?? null
+  const slot = candidateSlot(e)
   const version = slot ? slot.version : e.latestVersion
   const verification = slot ? slot.verification : e.verification
   const caps = slot ? slot.capabilities : e.capabilities
@@ -105,10 +105,11 @@ export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains
   // an explicit contains field — including [] — is authoritative: []
   // means "no installable payload" and must NOT fall back to type-inferred
   // parts (skill-only npm packages would re-enter the plugin verify chain)
-  // Mirror verifyTargetOf's slot rule: on a PENDING entry the candidate is
-  // the entry itself — a leftover pendingUpdate is the B3 inverted state
-  // (dropped by the R-9 cleanup) whose parts describe bytes not under review.
-  const slot = e.approval === 'pending' ? null : e.pendingUpdate ?? null
+  // Mirror verifyTargetOf's slot rule (candidateSlot): on a PENDING entry the
+  // candidate is the entry itself — a leftover pendingUpdate is the B3
+  // inverted state (dropped by the R-9 cleanup) whose parts describe bytes
+  // not under review.
+  const slot = candidateSlot(e)
   const c = slot?.contains ?? e.contains
   return c !== undefined ? c : [e.type === 'skill' ? 'skill' : 'plugin']
 }
