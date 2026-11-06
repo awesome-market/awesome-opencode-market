@@ -436,3 +436,69 @@ describe('run — forceGate + resilience edges', () => {
     expect(e!.capabilities.findings).toContain('sec:tree-truncated')
   })
 })
+
+describe('run — ruleset rescan keeps github drift flags (aged-out entries)', () => {
+  // gone-check → rescanStaleGh re-anchors source.version to the new HEAD just
+  // like ghWorker does — without the drift flags a moved repo would silently
+  // re-point an approved entry's install pin at unreviewed bytes
+  it('approved github entry aged out + moved HEAD → sec:repo-moved-since-release', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a10-ghrescan-'))
+    const prev = mkEntry('Owner/Repo', {
+      slug: 'owner/repo', discoveredVia: ['github-topic'],
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 5, version: 'oldsha' },
+      latestVersion: null, approval: 'approved',
+      capabilities: { scannedAt: 't', rulesetVersion: 'r0', findings: [], redFlags: [] },
+    })
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(mkIndex([prev])))
+    const vf = join(dir, 'v.jsonl')
+    writeFileSync(vf, JSON.stringify({
+      name: 'Owner/Repo', version: null, verdict: 'pass', source: 'human',
+      at: '2026-01-15T00:00:00Z', sha: 'oldsha', by: 'terry',
+    }) + '\n')
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const idx = await run({
+      outPath: join(dir, 'out.json'), oldIndexPath: oldPath, verdictsPath: vf,
+      fetchFn: mkFetch({
+        ghMeta: { id: 5, full_name: 'Owner/Repo', archived: false, pushed_at: '2026-01-20T00:00:00Z', created_at: '2020-01-01', stargazers_count: 3 },
+        ghTree: { paths: ['.opencode/plugin/x.js', 'package.json'], sha: 'newsha0000000000000000000001' },
+        tgz,
+      }),
+      now: '2026-02-02T00:00:00Z',
+    })
+    const e = idx.plugins.find(p => p.slug === 'owner/repo')!
+    expect(e).toBeTruthy()
+    expect(e.source.version).toBe('newsha0000000000000000000001')
+    expect(e.capabilities.rulesetVersion).toBe(RULESET_VERSION)
+    expect(e.capabilities.redFlags).toContain('sec:repo-moved-since-release:newsha000000')
+    expect(idx.removed).toHaveLength(0)
+  })
+  it('same-sha rescan adds no drift flag', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a10-ghrescan2-'))
+    const prev = mkEntry('Owner/Repo', {
+      slug: 'owner/repo', discoveredVia: ['github-topic'],
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 5, version: 'samehash' },
+      latestVersion: null, approval: 'approved',
+      capabilities: { scannedAt: 't', rulesetVersion: 'r0', findings: [], redFlags: [] },
+    })
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(mkIndex([prev])))
+    const vf = join(dir, 'v.jsonl')
+    writeFileSync(vf, JSON.stringify({
+      name: 'Owner/Repo', version: null, verdict: 'pass', source: 'human',
+      at: '2026-01-15T00:00:00Z', sha: 'samehash', by: 'terry',
+    }) + '\n')
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const idx = await run({
+      outPath: join(dir, 'out.json'), oldIndexPath: oldPath, verdictsPath: vf,
+      fetchFn: mkFetch({
+        ghMeta: { id: 5, full_name: 'Owner/Repo', archived: false, pushed_at: '2026-01-20T00:00:00Z', created_at: '2020-01-01', stargazers_count: 3 },
+        ghTree: { paths: ['.opencode/plugin/x.js', 'package.json'], sha: 'samehash' },
+        tgz,
+      }),
+      now: '2026-02-02T00:00:00Z',
+    })
+    const e = idx.plugins.find(p => p.slug === 'owner/repo')!
+    expect(e.capabilities.redFlags.filter(f => f.startsWith('sec:repo-moved'))).toHaveLength(0)
+  })
+})

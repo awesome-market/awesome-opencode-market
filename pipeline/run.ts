@@ -1300,12 +1300,31 @@ export async function run(opts: RunOptions = {}) {
       const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/${tree.sha ?? 'HEAD'}`, { fetchFn: f })
       const r = await scanTarball(tgz)
       const strip = (p: string) => p.replace(/^[^/]+\//, '')
+      const redFlags = r.redFlags.map(x => `${x.rule}:${strip(x.file)}`)
+      // an aged-out entry never sees ghWorker — mirror its drift flags here
+      // or a moved HEAD re-anchors source.version silently (reviewed commit →
+      // unreviewed pin with nothing for the flag/docket surfaces to catch)
+      const sub = seedRepoMeta.get(repo.toLowerCase())
+      if (sub?.version && tree.sha && sub.version !== tree.sha
+          && (e.approval ?? 'pending') === 'pending') {
+        redFlags.push(`sec:repo-moved-since-review:${tree.sha.slice(0, 12)}`)
+      }
+      const hvPass = latestHumanByKey.get(vkey(e.name, null))
+      if (tree.sha && hvPass?.verdict === 'pass' && hvPass.sha && hvPass.sha !== tree.sha
+          && (e.approval === 'approved' || e.approval === 'legacy')) {
+        redFlags.push(`sec:repo-moved-since-release:${tree.sha.slice(0, 12)}`)
+      }
+      if (sub?.pkg && tree.paths.has('package.json')) {
+        const repoPkg = await fetchRepoPackage(repo, { fetchFn: f })
+        if (repoPkg.pkg?.name && sub.pkg !== repoPkg.pkg.name)
+          redFlags.push(`sec:repo-pkg-changed:${clip(repoPkg.pkg.name)}`)
+      }
       return {
         ...e,
         capabilities: {
           scannedAt: now, rulesetVersion: RULESET_VERSION,
           findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
-          redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
+          redFlags,
         },
         ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),
       }
