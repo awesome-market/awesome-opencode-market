@@ -21,7 +21,8 @@ import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
-  effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp } from '../verdicts.ts'
+  effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp,
+  tombEpochs, epochGoverning } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
@@ -97,8 +98,14 @@ function announcementCandidates(verdicts: AiVerdict[], index?: CatalogIndex): Ai
   if (!index) return live
   const slots = heldSlotKeys(index)
   const inIndex = new Set(index.plugins.map(e => e.name.toLowerCase()))
+  // stale-identity epoch: a 'pass' predating the name's last tombstone
+  // judged a different object — announcing it would promise a maturity the
+  // release gate refuses (epochGoverning), and pin its dead akey in
+  // announced forever. Concerns stay: distrust survives name recycling.
+  const tomb = tombEpochs(index.removed)
   return live.filter(v =>
-    slots.has(vkey(v.name, v.version)) || !inIndex.has(v.name.toLowerCase()) || v.verdict === 'concern')
+    epochGoverning(v, v.name, tomb)
+    && (slots.has(vkey(v.name, v.version)) || !inIndex.has(v.name.toLowerCase()) || v.verdict === 'concern'))
 }
 
 /** State transition for one render — kept separate from markdown so the
@@ -193,6 +200,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // verdict lookups shared by the row marks below
   const latest = latestVerdicts(verdicts)
   const latestHuman = latestHumanVerdicts(verdicts)
+  const tomb = tombEpochs(index.removed)
   const eff = (v: AiVerdict | undefined) => effectiveVerdict(v, latestHuman)
   const inIndex = new Set(index.plugins.map(e => e.name.toLowerCase()))
 
@@ -336,13 +344,16 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     // own verify/verdict state is moot while the brake stands. (version=null
     // = github-kind slot whose null key is the slot's own verdict, never a
     // package brake.)
-    const governing = slotVerdict(latest, latestHuman, e.name, ver)
+    // epoch gate matches the release gate (epochGoverning): a pass predating
+    // this name's last tombstone judged a different object — rendering it as
+    // '已公告·待放行闸' would promise a release that structurally can't happen
+    const governing = epochGoverning(slotVerdict(latest, latestHuman, e.name, ver), e.name, tomb)
     if (ver !== null && governing && governing === packageBrake(latestHuman, e.name))
       return '包级刹车·需人工解除'
     // ver === null (repo-only/github-kind): the null key IS a real slot key
     // — a human verdict there can mature and release, so look it up instead
     // of falling through to '待评审'
-    const rec = ver === undefined ? undefined : latest.get(vkey(e.name, ver))
+    const rec = ver === undefined ? undefined : epochGoverning(latest.get(vkey(e.name, ver)), e.name, tomb)
     if (rec && eff(rec)?.verdict === 'concern') return '已打标 concern'
     // failed outranks the pass phases: a mature pass whose slot then failed
     // verification can NEVER release (release gate excludes failed) — showing

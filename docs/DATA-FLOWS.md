@@ -1275,6 +1275,11 @@ docket.ts：index+verdicts → docketTargets
       decision；github-kind 的 null 键是槽位键不是刹车，不适用）
   （AI 已判、待人过目：pass 等放行窗口，concern 等人工翻案；
     人工裁决=终局 → 不进 wanted → 已开的单下轮自动关）
+  **同名身份纪元（epochGoverning 共享谓词）**：早于该名最近一次墓碑
+  （`removed[].disappearedAt`）的 pass 判的是上一个同名对象——放行闸
+  拒收，docket 目标判定同样不算裁决（回落 none/积压面），diagnose
+  `unreviewedTargets` 同样不视其为已判而**重新排队**（concern 豁免——
+  重生名应继承不信任）；否则回收名条目会永久卡 pending 且无审核面
   ∨ flag 目标：可见条目（approval≠pending）展示槽含身份级 sec:* redFlag
     且展示版键与**包级 name@* 键**上都**无晚于该 flag 首次观察时刻
     （flaggedAt）的人工裁决** → [review] name@latestVersion 开单，
@@ -1737,7 +1742,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
 | `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并（其后 release.ts 追赶应用裁决，R-10） |
-| `verdicts.ts` | `loadVerdicts` `latestVerdicts` `latestHumanVerdicts` `effectiveVerdict` `packageBrake` `brakeFor` `slotVerdict` `vkey` `akey` `atCmp` `candidateVer` `tombEpochs` `loadDigestState` `loadLastDigestAt` `digestStateOf` `applyMatureVerdicts` `explainEntry` | 裁决读盘+NUL 键+放行判定（announced 成熟+human stickiness+包级闸+sha 校验+同名片段闸）+判定链解释器 |
+| `verdicts.ts` | `loadVerdicts` `latestVerdicts` `latestHumanVerdicts` `effectiveVerdict` `packageBrake` `brakeFor` `slotVerdict` `vkey` `akey` `atCmp` `candidateVer` `tombEpochs` `epochGoverning` `loadDigestState` `loadLastDigestAt` `digestStateOf` `applyMatureVerdicts` `explainEntry` | 裁决读盘+NUL 键+放行判定（announced 成熟+human stickiness+包级闸+sha 校验+同名片段闸）+判定链解释器 |
 | `verdicts-compact.ts` | `compactLines` | ai-verdicts.jsonl 压实——丢超窗被取代的 AI 行（畸形/human/最新/窗内全保留），digest.yml 班内跑 |
 | `human-verdict.ts` | `resolveVerdictEvent` `titleTarget` `splitSpec` `isDupVerdict` `amendAt` `overriddenHuman` `retargetedIssueTarget` | 人工裁决三通道解析+歧义规则+mismatch+dedupe/amend/反转与改标审计信号（§5） |
 | `release.ts` | — | applyMatureVerdicts CLI 壳——裁决写盘同 commit 落 index（R-2 即时通道）；`--explain` 槽位判定链；catalog publish remerge 后追赶应用（R-10） |

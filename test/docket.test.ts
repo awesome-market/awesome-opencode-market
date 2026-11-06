@@ -1224,4 +1224,24 @@ describe('docket audit — round 3 regressions', () => {
     // the pkg2 create was attempted despite its sibling exploding
     expect(calls.some(c => c.includes('create') && c.join(' ').includes('pkg2@1.0.0'))).toBe(true)
   })
+  it('recycled name: a pass predating the tombstone governs NOTHING (docket + diagnose align with release)', async () => {
+    const { unreviewedTargets } = await import('../pipeline/ai/diagnose.ts')
+    const tomb = [{ slug: 'o/pkg', name: 'pkg', disappearedAt: '2026-01-10T00:00:00Z', reason: 'npm-404' as const }]
+    const recycled = e({ approval: 'pending', firstSeenAt: '2026-02-01T00:00:00Z' })
+    const withTomb = { ...idx([recycled]), removed: tomb }
+    const stalePass = v({ at: '2026-01-01T00:00:00Z' })       // judged the OLD object
+    const freshPass = v({ at: '2026-02-02T00:00:00Z' })       // judged THIS object
+    // docket: the stale pass is not a decision — the entry falls back to the
+    // aged 'none' standing-issue path instead of reading as decided
+    const noneT = docketTargets(withTomb, [stalePass], null, { now: '2026-02-06T00:00:00Z' })
+    expect(noneT[0]?.verdict).toBe('none')
+    expect(docketTargets(withTomb, [freshPass])[0]?.verdict).toBe('pass')
+    // diagnose: the stale pass must not suppress re-review either — without
+    // the epoch gate here the recycled entry is pending forever, invisible
+    expect(unreviewedTargets(withTomb, [stalePass])).toHaveLength(1)
+    expect(unreviewedTargets(withTomb, [freshPass])).toHaveLength(0)
+    // concern is exempt — recycled names inherit distrust
+    const staleConcern = v({ at: '2026-01-01T00:00:00Z', verdict: 'concern' })
+    expect(unreviewedTargets(withTomb, [staleConcern])).toHaveLength(0)
+  })
 })

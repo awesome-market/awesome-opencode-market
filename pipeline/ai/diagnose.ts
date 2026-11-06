@@ -50,7 +50,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { extract } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor } from '../verdicts.ts'
+import { candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 
@@ -484,12 +484,17 @@ export function unreviewedTargets(
   const now = Date.parse(opts.now ?? new Date().toISOString())
   const seen = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
+  const tomb = tombEpochs(index.removed)
   return index.plugins.filter(e => {
     if (names && !names.has(e.name)) return false
     const ver = candidateVer(e) ?? null
     if (!ver) return false
     if (opts.force) return true
-    if (seen.get(vkey(e.name, ver)) !== undefined) return false
+    // a 'pass' predating the name's tombstone judged a DIFFERENT object —
+    // the release gate refuses it (epochGoverning), and if the queue also
+    // counted it as "already reviewed" the recycled entry would sit
+    // pending forever with no verdict anywhere. Re-queue it.
+    if (epochGoverning(seen.get(vkey(e.name, ver)), e.name, tomb) !== undefined) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as

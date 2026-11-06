@@ -148,6 +148,25 @@ export function tombEpochs(removed: RemovedEntry[] | undefined): Map<string, str
   return m
 }
 
+/** Is `v` a governing decision for THIS incarnation of `name`? A 'pass'
+ *  predating the name's latest tombstone judged a DIFFERENT object — a
+ *  recreated package / recycled name re-entering under the same
+ *  name@version key must not be covered by the old object's pass anywhere
+ *  (release gate, docket targets, diagnose queue, digest phases — one
+ *  predicate so "decided" can't drift per callsite). 'concern' is exempt:
+ *  a recycled name SHOULD inherit distrust (conservative direction).
+ *  Returns the verdict when it governs, undefined otherwise — so
+ *  `epochGoverning(map.get(key), name, tomb)` drops straight into the
+ *  "no governing verdict" path at every consumer. */
+export const epochGoverning = (
+  v: AiVerdict | undefined, name: string, tomb: Map<string, string>,
+): AiVerdict | undefined => {
+  if (!v) return undefined
+  if (v.verdict !== 'pass') return v
+  const t = tomb.get(name.toLowerCase())
+  return !t || Date.parse(v.at) >= Date.parse(t) ? v : undefined
+}
+
 /** Lift-aware slot brake — the package brake LINE when it applies to
  *  (name, version), else undefined: a newer human 'pass' on the exact slot
  *  key lifts it for that slot only. version===null slots (github-kind) own
@@ -262,19 +281,14 @@ export function applyMatureVerdicts(
   // a recycled name SHOULD inherit distrust (the conservative direction).
   // Verdicts stamped during the gone window can't be produced by the
   // guarded channels — index membership is required to write one.
+  // Shared predicate: epochGoverning — the same gate docket/diagnose/digest
+  // apply so "which verdict counts" can't drift per callsite.
   const latestTomb = tombEpochs(index.removed)
-  const epochOk = (v: AiVerdict, name: string): boolean => {
-    if (v.verdict !== 'pass') return true
-    const t = latestTomb.get(name.toLowerCase())
-    return !t || Date.parse(v.at) >= Date.parse(t)
-  }
   // package-level brake + R-4 stickiness: shared with every other surface
   // (run.ts pin checks, digest phases, docket) via slotVerdict so "which
   // verdict governs this key" cannot drift into per-callsite semantics
-  const verdictFor = (name: string, version: string | null): AiVerdict | undefined => {
-    const v = slotVerdict(latest, latestHuman, name, version)
-    return v && epochOk(v, name) ? v : undefined
-  }
+  const verdictFor = (name: string, version: string | null): AiVerdict | undefined =>
+    epochGoverning(slotVerdict(latest, latestHuman, name, version), name, latestTomb)
 
   const plugins = index.plugins.map(entry => {
     let e = entry

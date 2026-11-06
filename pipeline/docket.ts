@@ -34,7 +34,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor } from './verdicts.ts'
+import { vkey, akey, atCmp, candidateVer, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 
@@ -147,6 +147,11 @@ export function docketTargets(
   const now = Date.parse(opts.now ?? new Date().toISOString())
   const latest = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
+  // stale-identity epoch (same gate as applyMatureVerdicts): a 'pass'
+  // predating the name's latest tombstone judged a different object — it
+  // must not count as a decision here either, or a recycled entry never
+  // resurfaces (no release AND no review surface)
+  const tomb = tombEpochs(index.removed)
   const announced = new Set(digest?.announced ?? [])
   const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
   const out: DocketTarget[] = []
@@ -230,7 +235,8 @@ export function docketTargets(
       // at real scale (500+ repo-only pendings) that is tracker spam the
       // maintainer can't act on anyway — aggregate into ONE standing issue
       // whose body lists the queue; entries drop out as human verdicts land.
-      if (e.approval === 'pending' && e.latestVersion === null && !latest.has(vkey(e.name, null))) {
+      if (e.approval === 'pending' && e.latestVersion === null
+          && !epochGoverning(latest.get(vkey(e.name, null)), e.name, tomb)) {
         repoOnly.push({
           name: e.name,
           ...(held ? { heldAt: held } : {}),
@@ -245,7 +251,7 @@ export function docketTargets(
     // 的"未决"状态可呈现（与同键人工裁决同等终局语义）；槽位上更新的人工
     // pass 已按 verdictFor 规则解除了刹车，不在此列
     if (pkgBrake(e.name, ver)) continue
-    const rec = latest.get(vkey(e.name, ver))
+    const rec = epochGoverning(latest.get(vkey(e.name, ver)), e.name, tomb)
     if (!rec) {
       // no verdict AT ALL on a held version: the diagnose queue is behind or
       // dead (launchd pause). Young holds stay AI's job; aged ones get the
@@ -263,7 +269,7 @@ export function docketTargets(
       continue
     }
     if (rec.source !== 'ai') continue
-    const hv = human.get(vkey(e.name, ver))
+    const hv = epochGoverning(human.get(vkey(e.name, ver)), e.name, tomb)
     out.push({
       name: e.name, version: ver, verdict: rec.verdict,
       ...(rec.reason ? { reason: rec.reason } : {}),
@@ -566,6 +572,7 @@ export async function main(
   // with a pointer to a judgment that never existed
   const latestV = latestVerdicts(verdicts)
   const humanV = latestHumanVerdicts(verdicts)
+  const tomb = tombEpochs(index.removed)
   // diagnose.paused on the catalog branch = the local AI queue is stopped on
   // PURPOSE (declared by bin/ai-diagnose.sh pause) — every aged 'none' hold
   // then aggregates into the standing issue instead of spamming per-version
@@ -734,7 +741,10 @@ export async function main(
     // rescan refreshing the hold clock) can drop a target with zero verdicts
     // on its key — closing with a pointer to a judgment that doesn't exist
     // sends the maintainer hunting through the jsonl for nothing
-    if (latestV.has(vkey(t.name, t.ver || null)) || brakeFor(humanV, t.name, t.ver || null))
+    // epoch gate matches docketTargets: a stale pre-tombstone pass is not a
+    // decision about this incarnation — same honest "left the queue" reason
+    if (epochGoverning(latestV.get(vkey(t.name, t.ver || null)), t.name, tomb)
+        || brakeFor(humanV, t.name, t.ver || null))
       return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
     return '评审目标已离开队列（版本位移或在押时钟重置），该版本尚无裁决——如需先行人工裁决请在本单评论'
   }
