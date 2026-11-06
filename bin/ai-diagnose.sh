@@ -152,7 +152,14 @@ esac
 LOCK=$STATED/diagnose.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
-  if [ "$AGE" -gt 7200 ] && rmdir "$LOCK" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+  # stale reclaim must be atomic: rmdir+mkdir lets a second reclaimer delete
+  # the fresh lock the first just made (double-run + its trap later rmdir's
+  # the winner's lock). mv IS atomic — the first rename takes the stale dir;
+  # a loser's mv hits ENOENT after the winner's rename and falls through to
+  # the skip branch like any live lock. The fresh mkdir is re-verified too:
+  # a new contender can slip in between mv and mkdir and legitimately win.
+  if [ "$AGE" -gt 7200 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+    rmdir "$LOCK.stale.$$" 2>/dev/null   # best-effort sweep of the moved dir
     log "reclaimed stale lock (${AGE}s old)"
   else
     log "another run in progress — skipping"; exit 0

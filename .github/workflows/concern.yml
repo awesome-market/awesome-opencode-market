@@ -44,7 +44,15 @@ jobs:
         && (startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')
           || startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A')
           || startsWith(github.event.comment.body, ' /c') || startsWith(github.event.comment.body, ' /C')
-          || startsWith(github.event.comment.body, ' /a') || startsWith(github.event.comment.body, ' /A'))))
+          || startsWith(github.event.comment.body, ' /a') || startsWith(github.event.comment.body, ' /A')
+          // arbitrary whitespace padding can't be expressed with startsWith —
+          // word-level contains() covers every indent; a mid-text mention
+          // falls through to skip=noresolve, which grep-filters to a silent
+          // exit (no comment, no label) so over-matching stays harmless
+          || contains(github.event.comment.body, '/concern') || contains(github.event.comment.body, '/Concern')
+          || contains(github.event.comment.body, '/CONCERN')
+          || contains(github.event.comment.body, '/approve') || contains(github.event.comment.body, '/Approve')
+          || contains(github.event.comment.body, '/APPROVE'))))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # NOT catalog-branch: every verdict event must land, so bursts queue
@@ -553,8 +561,15 @@ jobs:
       && github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
       && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
       && !contains(github.event.issue.labels.*.name, 'submission')
+      // anchored prefixes only — unlike the verdict job, a mid-text
+      // '/retest' mention on a [review] issue would dispatch real work, so
+      // contains() is unsafe here; bounded padding covers realistic indents
+      // (unbounded whitespace remains inexpressible in if: expressions)
       && (startsWith(github.event.comment.body, '/retest') || startsWith(github.event.comment.body, '/Retest') || startsWith(github.event.comment.body, '/RETEST')
-        || startsWith(github.event.comment.body, ' /retest') || startsWith(github.event.comment.body, ' /Retest') || startsWith(github.event.comment.body, ' /RETEST'))
+        || startsWith(github.event.comment.body, ' /retest') || startsWith(github.event.comment.body, ' /Retest') || startsWith(github.event.comment.body, ' /RETEST')
+        || startsWith(github.event.comment.body, '  /retest') || startsWith(github.event.comment.body, '  /Retest') || startsWith(github.event.comment.body, '  /RETEST')
+        || startsWith(github.event.comment.body, '   /retest') || startsWith(github.event.comment.body, '   /Retest') || startsWith(github.event.comment.body, '   /RETEST')
+        || startsWith(github.event.comment.body, '    /retest') || startsWith(github.event.comment.body, '    /Retest') || startsWith(github.event.comment.body, '    /RETEST'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency: concern-retest-${{ github.event.issue.number }}

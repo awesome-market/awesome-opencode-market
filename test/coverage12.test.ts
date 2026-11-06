@@ -152,12 +152,14 @@ describe('digest main() arg parsing + render arms', () => {
     writeFileSync(sp, JSON.stringify({ lastDigestAt: null, announced: [], day: '', dayAnnounced: [] }))
     await digestMain(['node', 'x', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', op, '--date', '2026-01-03', '--dry'])
     // renderDigest: approved entry (ver→null arm) + liveAlarm with latestVersion null + unannounced pass
-    const prev: DigestState = { lastDigestAt: '2026-01-01T00:00:00Z', announced: [], day: '2026-01-01', dayAnnounced: [] }
     const liveNull = mkEntry('ln', { approval: 'approved', latestVersion: null, capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
     const heldPass = mkEntry('hp', { approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } })
     const idx = mkIdx([liveNull, heldPass, mkEntry('ap', { approval: 'approved' })])
-    const vs: AiVerdict[] = [verdict({ name: 'hp', version: '1.0.0', verdict: 'pass', at: '2027-01-01T00:00:00Z' })]  // future-dated → never announced → willAnnounce false
-    const md = renderDigest({ index: idx, verdicts: vs, prev, now: new Date('2026-01-03T00:00:00Z') })
+    // bootstrap-withheld pass: prev=null + at older than the 14d window —
+    // the only non-future way to reach willAnnounce=false ('已裁决·待日报公告');
+    // a future-dated line is now quarantined by latestVerdicts' grace guard
+    const vs: AiVerdict[] = [verdict({ name: 'hp', version: '1.0.0', verdict: 'pass', at: '2025-12-01T00:00:00Z' })]
+    const md = renderDigest({ index: idx, verdicts: vs, prev: null, now: new Date('2026-01-03T00:00:00Z') })
     expect(md).toContain('已裁决·待日报公告')   // pass verdict not yet announced
     expect(md).toContain('—')
   })

@@ -89,10 +89,22 @@ export function digestStateOf(lastDigestAt: string, verdicts: AiVerdict[], dayAn
   return { lastDigestAt, announced: verdicts.map(akey), day: lastDigestAt.slice(0, 10), dayAnnounced }
 }
 
+/** A line stamped beyond a clock-skew grace never ranks as latest: `at` is
+ *  the ranking key, so a far-future stamp (writer bug, ms-vs-s confusion, a
+ *  hand-edited line) would pin one judgment on top of EVERY later real
+ *  verdict until wall-clock catches up — effectively forever. The line stays
+ *  in the log (digest header surfaces it); it just can't govern. */
+const FUTURE_GRACE_MS = 10 * 60 * 1000
+// unparseable `at` stays rankable: production lines passed AiVerdict.parse's
+// iso check (always a real date), and caller-built test fixtures stamp 't'
+const rankable = (at: string, now: number) => { const t = Date.parse(at); return !Number.isFinite(t) || t <= now + FUTURE_GRACE_MS }
+
 /** Newest verdict per name@version — the file is append-only, `at` wins. */
 export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
   const m = new Map<string, AiVerdict>()
+  const now = Date.now()
   for (const v of verdicts) {
+    if (!rankable(v.at, now)) continue
     const k = vkey(v.name, v.version)
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)
@@ -105,8 +117,9 @@ export function latestVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
  *  (docket/digest) that need to show "a human brake stands" context. */
 export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdict> {
   const m = new Map<string, AiVerdict>()
+  const now = Date.now()
   for (const v of verdicts) {
-    if (v.source !== 'human') continue
+    if (v.source !== 'human' || !rankable(v.at, now)) continue
     const k = vkey(v.name, v.version)
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)

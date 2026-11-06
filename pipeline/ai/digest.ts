@@ -227,7 +227,10 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // silently-invisible data: future-dated verdicts can never announce or
   // mature — surface them instead of letting them sit forever (clock skew
   // on a diagnose machine would otherwise look like "nothing to report").
-  const future = candidates.filter(v => !notAfterNow(v)).length
+  // count future-stamped lines off the RAW verdict list — a line excluded
+  // from latestVerdicts by the future-grace guard is silently inert, which
+  // is exactly when this warning matters most
+  const future = verdicts.filter(v => !notAfterNow(v)).length
 
   // 上期公告·已生效 — passes the LAST render announced whose slot is now
   // displayed: the objection window's readers see their own decision land.
