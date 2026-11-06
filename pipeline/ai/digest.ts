@@ -498,7 +498,7 @@ ${concerns.length || resolved.length ? table([...concerns, ...resolved]) : '_无
 
 ${liveAlarms.length
     ? liveAlarms.slice(0, 30).map(x =>
-        `- \`${escMd(x.e.name)}\` v${x.e.latestVersion ?? '—'} · ${x.flags.map(escMd).join('; ')} — 需人工裁决：审核单或 [concern] issue 落在展示版即刹车`)
+        `- \`${escMd(x.e.name)}\` ${x.e.latestVersion ? `v${x.e.latestVersion}` : '—'} · ${x.flags.map(escMd).join('; ')} — 需人工裁决：审核单或 [concern] issue 落在展示版即刹车`)
       .join('\n') + (liveAlarms.length > 30 ? `\n- …还有 ${liveAlarms.length - 30} 条（完整清单见 index.json redFlags）` : '')
     : '_无_'}
 ${removedDay.length ? `
