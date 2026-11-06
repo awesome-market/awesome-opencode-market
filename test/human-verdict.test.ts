@@ -108,6 +108,22 @@ describe('comment channel', () => {
     const r = resolveVerdictEvent(ev({ issueTitle: '[concern] whatever title', issueBody: FORM_BODY, commentBody: '/approve' }))
     expect(r).toMatchObject({ name: 'evilpkg', ver: '2.0.0', verdict: 'pass' })
   })
+  it('arg spec diverging from the [concern] FORM target → mismatch flagged (issue stays open)', () => {
+    // H-4 parity for the form channel: the verdict lands on the arg, but the
+    // form's own target was never judged — the issue must not close silently
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern other@1.0.0 oops' }))
+    expect(r).toMatchObject({ name: 'other', ver: '1.0.0', verdict: 'concern' })
+    expect(r.mismatch).toContain('other@1.0.0')
+    expect(r.mismatch).toContain('evilpkg')
+  })
+  it('arg spec matching the [concern] form target → no mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern evilpkg@2.0.0 yes' }))
+    expect(r.name).toBe('evilpkg'); expect(r.mismatch).toBeUndefined()
+  })
+  it('arg spec same name but different version vs form target → mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern evilpkg@9.9.9' }))
+    expect(r.mismatch).toBeDefined()
+  })
   it('bare command on a plain issue → noresolve', () => {
     expect(resolveVerdictEvent(ev({ issueTitle: 'plain issue' })).skip).toBe('noresolve')
   })

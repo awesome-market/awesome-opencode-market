@@ -116,7 +116,16 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
     if (rest && !rest.startsWith('#')) {
       const sp = rest.split(/\s+/)
       const t = splitSpec(sp[0]!)
+      // The issue's own target — a [review] title, or a [concern] form's
+      // package field. An arg-spec diverging from EITHER must not close the
+      // issue: the form's target would never get judged while its issue is
+      // marked decided (H-4 semantics extended to the form channel).
       const tt = titleTarget(e.issueTitle)
+      const it = tt ?? (e.issueTitle.startsWith('[concern]')
+        ? (() => { const map = sections(e.issueBody)
+            const fn = formField(map, 'npm 包名或 owner/repo', '包名')
+            return fn ? { name: fn, ver: formField(map, '版本（可留空）', '版本') } : null })()
+        : null)
       // Spec shape = '@' or '/' in the first token (pkg@ver, owner/repo,
       // @scope/p). On a TITLED issue a bare charset word is far more likely
       // the start of a reason (`/concern steals data`) than a cross-target
@@ -132,9 +141,12 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
         name = t.name; ver = t.ver === '*' ? '*' : cleanVer(t.ver); reason = sp.slice(1).join(' ')
         // arg-spec on a titled issue that points somewhere else: land the
         // verdict on the ARG (explicit intent), but flag it so the workflow
-        // doesn't close the wrong review issue (H-4)
-        if (specShape && tt && (tt.name !== name || (tt.ver !== '' && ver !== '' && tt.ver !== ver)))
-          mismatch = `评论参数指向 ${name}${ver ? `@${ver}` : ''}，但本单目标是 ${tt.name}${tt.ver ? `@${tt.ver}` : ''}`
+        // doesn't close the wrong review issue (H-4). Names compare
+        // case-insensitively — `Owner/Repo` vs `owner/repo` is the same
+        // target, not a divergence.
+        if (specShape && it && (it.name.toLowerCase() !== name.toLowerCase()
+            || (it.ver !== '' && ver !== '' && it.ver !== ver)))
+          mismatch = `评论参数指向 ${name}${ver ? `@${ver}` : ''}，但本单目标是 ${it.name}${it.ver ? `@${it.ver}` : ''}`
       }
     }
     if (!name) {

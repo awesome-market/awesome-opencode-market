@@ -914,7 +914,7 @@ Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_AP
 
 **实现**：`pipeline/human-verdict.ts::resolveVerdictEvent`（三通道解析+歧义规则+mismatch 检测，纯函数可测）· `bin/catalog-append.sh`（共享写盘循环：worktree+整行去重+staged-diff 判空+`APPLY_INDEX=1` 经 `pipeline/release.ts` 即时生效）· 目标键 `verdicts.ts::vkey`
 
-四条通道，全部写 `source:human` verdict（带 `by`=裁决人、`issue`=单号、sha=dist.integrity）：
+四条通道，全部写 `source:human` verdict（带 `by`=裁决人、`issue`=单号；sha=npm `dist.integrity` / github-kind `source.version` commit——与 shaAnchor 同构的钉字节锚）：
 
 ```mermaid
 flowchart TB
@@ -940,22 +940,22 @@ flowchart TB
 | ③ 带参命令 | **任意** issue 评论 `/concern pkg[@ver] [理由]`（同上） | 参数 spec |
 | ④ 表单 | `[concern]` issue opened/**edited**（模板，下拉选 pass/concern + 包名/版本/理由） | 表单字段（`###` 段解析，`#` 字符安全） |
 
-**歧义规则（H 系列）**：有标题目标的 issue 上，**裸词一律当理由**（`/concern steals data` 是理由不是包名）；跨目标裁决必须写显式 spec（`name@ver`、`owner/repo`）；spec 与标题目标不一致 → `mismatch`：记录裁决但**不关错单**，评论说明。
+**歧义规则（H 系列）**：有标题目标的 issue 上，**裸词一律当理由**（`/concern steals data` 是理由不是包名）；跨目标裁决必须写显式 spec（`name@ver`、`owner/repo`）；spec 与本单目标（`[review]` 标题或 `[concern]` 表单字段）不一致 → `mismatch`：记录裁决但**不关错单**，评论说明——表单单同理，arg 打到别处时表单目标永远没被裁决，单不得标 decided。
 
 **守卫链**：
 - 顶层 `if`：`sender != 'github-actions[bot]'` + `!pull_request`（bot/PR 永不产 verdict）
 - `[concern]` 表单/评论命令：`author_association ∈ OWNER|MEMBER|COLLABORATOR`（job if 直接卡死）
 - labeled 事件没有 labeler 身份 → `gh api collaborators/{actor}/permission` 要求 admin|maintain|write；**瞬断重试一次**，仍失败保留标签提示重试（不把假拒绝当真）；权限不足→撤标签+评论
 - `[submit]` 标题或 `submission` 标签的 issue 跳过（submit.yml 的地盘——否则同一条 `/concern` 评论会被两个 workflow 各写一条裁决）
-- 目标必须在 index 里——**大小写不敏感命中后改用 index 规范名**（手打 `Owner/Repo`/`@Scope/Pkg` 裁决落到索引拼写的键上，不产生幽灵键）；catalog 分支不存在（纯 bootstrap）→ 专属提示"数据面未初始化"，不误报裁决丢失；**版本解析 index-first**：`pendingUpdate.version ?? latestVersion`（裁决对象是在押版本，不是 registry 最新）→ 回落 `npm view`；npm 条目仍解析不出 → 评论说明**不写 verdict**（没有 `name\0` 死信）
-- `owner/repo`（含 `/` 非 scoped）→ version:null + `dist.integrity` sha
+- 目标必须在 index 里——**大小写不敏感命中后改用 index 规范名**（手打 `Owner/Repo`/`@Scope/Pkg` 裁决落到索引拼写的键上，不产生幽灵键）；**`source.repo` 是第二查找键**（`o/r` spec 能命中 npm 条目的仓库身份，name 匹配优先于 repo 匹配）；**isrepo 按 `entry.source.kind` 而非键入形状**——`o/r` 打到 npm 孪生时走 npm 语义（版本槽+integrity 锚），绝不写 version:null+commit sha 的组合（那会让 shaOk 永久失配）；catalog 分支不存在（纯 bootstrap）→ 专属提示"数据面未初始化"，不误报裁决丢失；**版本解析 index-first**：`pendingUpdate.version ?? latestVersion`（裁决对象是在押版本，不是 registry 最新）→ 回落 `npm view`；npm 条目仍解析不出 → 评论说明**不写 verdict**（没有 `name\0` 死信）
+- `owner/repo`（含 `/` 非 scoped，且命中条目确为 github-kind）→ version:null + `source.version` commit sha（shaOk 拒放 HEAD 前移后的字节，与 npm `dist.integrity` 同构）
 - `pkg@*`（npm 包，显式 `*`）→ **包级裁决** version:null：concern 刹车该包
   所有版本槽（含未来 pendingUpdate），更新的包级 pass 解套——"封杀整个包"
   不再需要对每个版本逐个裁决；包级 pass 解套时顺带归一槽位陈旧
   approvalReason；github-kind 的 `name\0` 槽位键与 npm 包级键同形但语义
   互不误伤（kind 不同槽位不同）
 - reason 折叠空白（防写坏 `$GITHUB_OUTPUT`）；标签路径理由自动生成 `via label X by actor (issue #N)`
-- ack 评论带**当前验证状态**与在押版本提示；`deadslot`（裁决的版本既不在押也不展示）→ 明示"已存档但没有生效槽位"；pass 落红旗槽 → 回显高危标记数（知情放行）；pass 落无在押的展示版 → 明示"仅审计存档，不进公示"
+- ack 评论带**当前验证状态**与在押版本提示（github-kind 单槽条目同样发 `verification.status`——unverified 的 repo pass 成熟后仍不放行，不空诺"进入上架流程"）；`deadslot`（裁决的版本既不在押也不展示）→ 明示"已存档但没有生效槽位"；pass 落红旗槽 → 回显高危标记数（知情放行）；pass 落无在押的展示版 → 明示"仅审计存档，不进公示"
 - `noresolve`（裸命令落空）→ 用法提示评论——**但先卡命令形**：评论闸是 `/a`/`/c` 宽前缀（为兜 `/CONCERN`），`/close`、`/check` 这类非裁决前缀词**静默跳过**（不给无关 issue 打 verdict:blocked）；`^/(concern|approve)` 开头的笔误（如 `/concerned`）仍给用法提示
 - 命令**大小写不敏感**（`/Approve`、`/CONCERN`——手机自动首字母大写是真实场景）；`verdict:blocked` 标签标记"未落地"单（noresolve/exists=0/unresolved），落地即摘除
 - **关单规则**：`[review]` issue（标签/评论都会关）+ `[concern]` 表单 issue（写完即关）；mismatch/任意 issue 带参命令只写盘不关单；非 maintainer 开 `[concern]` → triage job 解释+关闭
@@ -972,7 +972,7 @@ flowchart TB
 
 **并发模型**：`concurrency: concern-verdict-${{issue.number}}`（submit 侧 `submit-verdict-N`，两流不互斥）——裁决事件**跨 issue**必须落盘，**不能共享 catalog-branch 锁**（GitHub 并发组只留 1 个 pending，burst 会静默丢裁决——实锤过）。跨 issue 写竞争由 `catalog-append.sh` 的 fetch→reset→dedupe→commit→push **4 次**重试吸收；`APPLY_INDEX=1` 让裁决经 `release.ts` 在同一 commit 落到 index.json（concern 即时刹车，不用等下一班 catalog）。`vstatus` 按**裁决解析到的槽位**取（展示版裁决在 hold 存在时不误报在押版的验证状态）。
 
-  > 已知限制（GitHub 平台语义，权衡后接受）：**同一 issue** 的并发组也只保 1 running + 1 pending——1–2 分钟跑时内第三个事件会顶掉 pending 事件，那条裁决永不落盘但标签留在 issue 上。docket 的 stuck-label 检测能兜住 open [review] 单上的此类残留；闭单场景则不可见。取舍依据：去掉并发组后，同 issue 的 edited/created 连发可能乱序（旧事件后写覆盖新意图），丢中间事件比接受序反转安全。
+  > 已知限制（GitHub 平台语义，权衡后接受）：**同一 issue** 的并发组也只保 1 running + 1 pending——1–2 分钟跑时内第三个事件会顶掉 pending 事件，那条裁决永不落盘但标签留在 issue 上。write-failure 步钩 `failure() || cancelled()`——被驱逐的 run 会给 issue 留"裁决可能未落盘"评论（残留从不可见变可见）；docket 的 stuck-label 检测兜 open [review] 单上的标签残影；闭单场景仍以标签为唯一残影。取舍依据：去掉并发组后，同 issue 的 edited/created 连发可能乱序（旧事件后写覆盖新意图），丢中间事件比接受序反转安全。
 
 **submit.yml verdict job**（投稿通道，同语义，`concurrency: submit-verdict-N`）：
 - 非 bot 打 `submission:approved` 标签 或 collaborator 评论 `/approve`/`/concern [理由]`（整词匹配+大小写不敏感，`/approved`/`/approveanything` 不触发）；外层不再有"标签名任意 issue"的冗余析取

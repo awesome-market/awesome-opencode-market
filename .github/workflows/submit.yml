@@ -294,6 +294,15 @@ jobs:
     concurrency: submit-verdict-${{ github.event.issue.number }}
     permissions: { issues: write, contents: write, actions: write }
     steps:
+      # write-side job parsing untrusted issue text — same eBPF egress posture
+      # as concern.yml's verdict job (npm ci/npm view, gh api, catalog push)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - name: association gate — non-collaborator commands get told, not dropped
         if: github.event_name == 'issue_comment'
         id: perm
@@ -429,7 +438,10 @@ jobs:
             const n=process.env.SUB_NAME||"", r=process.env.SUB_REPO||""
             let hit=null
             for(const l of i.split("\n")){try{const s=JSON.parse(l)
-              if(n&&s.name===n)hit=s;else if(!n&&r&&s.repo===r)hit=s}catch{}}
+              // case-insensitive both sides — seedLine stores canonical
+              // lowercase names while SUB_NAME keeps the typed form case, and
+              // legacy rows predate the write-side normalization
+              if(n&&s.name?.toLowerCase()===n.toLowerCase())hit=s;else if(!n&&r&&s.repo?.toLowerCase()===r.toLowerCase())hit=s}catch{}}
             if(hit)console.log(JSON.stringify(hit))' || true)
           git show FETCH_HEAD:index.json > /tmp/index.json 2>/dev/null || true
           # flagged-override recovery: a pass on a submission that was reviewed
@@ -468,7 +480,7 @@ jobs:
           # prose, not a cross-target attempt
           if [ -n "$SPEC_TOK" ] && [ -s /tmp/index.json ]; then
             TOKNAME=$(node -e 'const s=process.argv[1];const at=s.lastIndexOf("@");console.log(at>0?s.slice(0,at):s)' "$SPEC_TOK")
-            if [ "$TOKNAME" != "$ENTRY" ] && node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));process.exit(i.plugins.some(p=>p.name===process.argv[1])?0:1)' "$TOKNAME"; then
+            if [ "${TOKNAME,,}" != "${ENTRY,,}" ] && node -e 'const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));const k=process.argv[1].toLowerCase();process.exit(i.plugins.some(p=>p.name.toLowerCase()===k)?0:1)' "$TOKNAME"; then
               echo "argignored=$SPEC_TOK" >> "$GITHUB_OUTPUT"
             fi
           fi
@@ -551,8 +563,15 @@ jobs:
           fi
           # Semantic dedupe (HV-2) + reason-only amend BEFORE the record —
           # identical re-runs are no-ops; a reason-only change reuses the
-          # prior line's `at` so digest maturity isn't restarted by an edit
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl 2>/dev/null || touch /tmp/av.jsonl
+          # prior line's `at` so digest maturity isn't restarted by an edit.
+          # cat-file -e distinguishes a legitimately-missing verdicts file
+          # from an unreadable one — deduping on a silently-empty file could
+          # miss a dup/amend/prev signal (D-Z shape, concern.yml parity)
+          if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/av.jsonl || { echo "verdicts blob unreadable — refusing to dedupe on partial state"; exit 1; }
+          else
+            touch /tmp/av.jsonl
+          fi
           DEDUPE=$(npx tsx pipeline/human-verdict.ts dedupe /tmp/av.jsonl "$ENTRY" "$VER" "$VERDICT" "$REASON" "$ISSUE_NUM")
           printf '%s\n' "$DEDUPE" >> "$GITHUB_OUTPUT"
           AMEND=$(printf '%s\n' "$DEDUPE" | sed -n 's/^amend=//p')
@@ -755,8 +774,10 @@ jobs:
                 issue_number: context.issue.number, state: 'closed' })
       - name: write-failure feedback
         # a failed append otherwise leaves the issue silent while the
-        # maintainer believes the verdict landed (HV-3)
-        if: failure() && steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1'
+        # maintainer believes the verdict landed (HV-3). cancelled() too —
+        # a concurrency-evicted pending event loses the whole run before any
+        # step ran; the comment is the only residue that names the gap
+        if: (failure() || cancelled()) && steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}

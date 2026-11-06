@@ -874,3 +874,24 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | 清理 | ✅ | PIPELINE-ISSUES 附十九尾部 `>>>>>>> origin/main` 残留冲突标记行删除；DATA-FLOWS §15 两行过时表述修正（github 云验证 ❌→✅、验证槽位无位→已按 commit 钉）、§0 字段表枚举注生产者、§1 全链同步（code-search 段、refreshMeta 五探针、coveredRepos 豁免真实化、alert cancelled()+in:title、双锚漂移旗） |
 
 **验证**：typecheck 0 错；新增 `test/catalog-audit-n.test.ts` 15 例（gh sha 锚放行/拒放、repo-moved-since-release 旗、vkey 大小写、markNotified/submissionStatuses 小写匹配、seedLine 小写、refreshMeta repo 刷新、coveredRepos 豁免走 ghWorker、clip 收口、searchCode/discoverGithub）；全量 vitest 1176 例绿。
+
+## 附二十二：人工裁决流三审（H 系列续，concern.yml + submit.yml verdict job 全量落地）
+
+对照 DATA-FLOWS §5/§7/§12 逐行复核后落地。主题：**表单单异目标盲区补齐、npm 孪生 repo 可裁决、取消静默消除、写盘 job egress 硬化**；另修复附二十一小写化引入的两处大小写回归。
+
+| 项 | 状态 | 落点 |
+|---|---|---|
+| R-1 submit.yml 种子查找大小写回归：附二十一 `seedLine` 写入侧小写化后，`s.name===n` 对 typed-case `SUB_NAME` 失配 → `/approve` 误判 noseed 被拒 | ✅ | `s.name?.toLowerCase()===n.toLowerCase()` / `s.repo?.toLowerCase()===r.toLowerCase()`（兼容 legacy 混合大小写行） |
+| R-2 `argignored` 两处大小写：`p.name===TOKNAME` 对 typed-case spec 漏配真条目；`TOKNAME != ENTRY` 对同包异大小写误报 | ✅ | 两侧均小写比较 |
+| H-A write-failure 只钩 `failure()`：per-issue 并发组驱逐 pending 事件 → 整条裁决无痕迹丢失（concern/submit 同病，N-1 同型） | ✅ | 两 job 同改 `(failure() \|\| cancelled())`——被驱逐 run 给 issue 留"verdict 可能未落盘"+run 链接，残留从不可见变可见 |
+| H-B `[concern]` 单上 arg-spec 偏离**表单目标**无 mismatch：裁决写到异目标且表单单被关单（表单目标永远没被裁决却被标 decided——H-4 的表单通道版） | ✅ | `resolveVerdictEvent` 的 issue-target 改为 `[review]` 标题 \|\| `[concern]` 表单字段（`npm 包名或 owner/repo`+`版本`）；名比较全小写——`Owner/Repo` vs `owner/repo` 不再误报 mismatch |
+| H-C `exists` 只按 `p.name` 查：npm 条目的 `source.repo` 不可裁决（`/concern o/r` 回"不在目录"）；且 naive source.repo 匹配会埋坑——typed repo spec + npm 条目 → version:null+commit sha → shaOk 永久失配 | ✅ | `exists` 双键匹配（`p.name` 优先，`source.repo` 兜底，全小写）+ 输出条目 kind；`isrepo` 在 `n` 步内按 `e.source.kind` 重算——`o/r` 打 npm 孪生走 index-first 版本+dist.integrity，打真 github-kind 走 version:null+commit sha |
+| H-D concern/submit verdict job 无 harden-runner（解析不可信 issue 文本 + npm ci/npm view + catalog push 全裸） | ✅ | verdict job：registry.npmjs.org+api.github.com+github.com；retest/triage：api.github.com |
+| H-E repo 槽 `vstatus` 恒空 → pass ack 不带 H-17 验证态提示（unverified repo pass 成熟后不放行，ack 却空诺"进入上架流程"） | ✅ | `vstatus` 对 github-kind 条目发 `e.verification.status`（单槽即目标槽） |
+| H-F `mismatch` 早退不清 `verdict:blocked`——裁决已落地（异目标）而旧 blocked 签残留 | ✅ | mismatch 分支先 `removeLabel verdict:blocked` 再评论返回 |
+| H-H `git show ...:ai-verdicts.jsonl \|\| touch` 把"存在但读失败"当"不存在"——dedupe/amend/prev 面瞬断静默降级 | ✅ | `git cat-file -e` 判存在：缺失→touch（首轮合法态），存在但读失败→exit 1（D-Z 同型，concern/submit 同改） |
+| H-I labeled noresolve 对 `[review] (...)` 哨兵总单贴 verdict:blocked+评论——误触标签累积噪音 | ✅ | noresolve feedback 步对 `[review] (` 前缀直接跳过 |
+
+**评估未改**：`/retest` 三种拼写闸（宽前缀会把 `/remove` 类词误判为 bare retest——窄拼写是刻意取舍，/rEtEsT 静默丢的代价可接受）；`issues.edited` 对 [review] 标题不重解析（标题是 docket 生成的，编辑无裁决语义）；dedupe 的 `git show` 输出中途截断（`git show` 失败先于读文件，cat-file -e 已卡主路径）。
+
+**验证**：typecheck 0 错；human-verdict.test.ts 新增 3 例（mismatch@[concern] 偏离/同版异名/同名牌异版）；DATA-FLOWS §5 同步（sha 锚双通道、mismatch 表单目标、source.repo 双键+kind 判定、vstatus repo 槽、cancelled 注记）。
