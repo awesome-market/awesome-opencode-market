@@ -4,7 +4,7 @@
  *  package's reviewed-but-unreleased version gets a deterministic release
  *  window instead of being starved by the next version bump. */
 import { readFileSync } from 'node:fs'
-import { AiVerdict, DigestState, type CatalogIndex, type PluginEntry, type PendingUpdate } from '../src/schema.ts'
+import { AiVerdict, DigestState, type CatalogIndex, type PluginEntry, type PendingUpdate, type RemovedEntry } from '../src/schema.ts'
 
 export function loadVerdicts(path?: string, sink?: { bad: number }): AiVerdict[] {
   if (!path) return []
@@ -135,6 +135,19 @@ export function packageBrake(human: Map<string, AiVerdict>, name: string): AiVer
   return h?.verdict === 'concern' ? h : undefined
 }
 
+/** Latest disappearance epoch per name — a name can cycle in and out of the
+ *  index, so the most recent tombstone marks the identity break any verdict
+ *  is judged against (release flow's stale-pass gate). */
+export function tombEpochs(removed: RemovedEntry[] | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  for (const r of removed ?? []) {
+    const k = r.name.toLowerCase()
+    const cur = m.get(k)
+    if (!cur || Date.parse(r.disappearedAt) > Date.parse(cur)) m.set(k, r.disappearedAt)
+  }
+  return m
+}
+
 /** Lift-aware slot brake — the package brake LINE when it applies to
  *  (name, version), else undefined: a newer human 'pass' on the exact slot
  *  key lifts it for that slot only. version===null slots (github-kind) own
@@ -240,11 +253,28 @@ export function applyMatureVerdicts(
   // a human pass on commit A must not release commit B.
   const shaAnchor = (e: PluginEntry): string | null | undefined =>
     e.source.kind === 'github' ? e.source.version : e.integrity
+  // stale-identity epoch (tombstone gate): a verdict predating this name's
+  // last disappearance judged a DIFFERENT object — a recreated package /
+  // recycled name re-entering under the same name@version key must not be
+  // released by the old object's pass. shaOk already refuses sha-bearing
+  // mismatches, but sha-less legacy verdicts have no anchor to compare —
+  // the tombstone's disappearedAt is the epoch. CONCERN lines are exempt:
+  // a recycled name SHOULD inherit distrust (the conservative direction).
+  // Verdicts stamped during the gone window can't be produced by the
+  // guarded channels — index membership is required to write one.
+  const latestTomb = tombEpochs(index.removed)
+  const epochOk = (v: AiVerdict, name: string): boolean => {
+    if (v.verdict !== 'pass') return true
+    const t = latestTomb.get(name.toLowerCase())
+    return !t || Date.parse(v.at) >= Date.parse(t)
+  }
   // package-level brake + R-4 stickiness: shared with every other surface
   // (run.ts pin checks, digest phases, docket) via slotVerdict so "which
   // verdict governs this key" cannot drift into per-callsite semantics
-  const verdictFor = (name: string, version: string | null): AiVerdict | undefined =>
-    slotVerdict(latest, latestHuman, name, version)
+  const verdictFor = (name: string, version: string | null): AiVerdict | undefined => {
+    const v = slotVerdict(latest, latestHuman, name, version)
+    return v && epochOk(v, name) ? v : undefined
+  }
 
   const plugins = index.plugins.map(entry => {
     let e = entry
@@ -302,6 +332,12 @@ export function applyMatureVerdicts(
           pendingUpdate: undefined,
         }
         releases.push(`${e.name}@${pu.version}`)
+      } else if (pu.reason && pu.reason !== 'awaiting-review') {
+        // held-slot mirror of the displayed slot's G6 reset: the verdict that
+        // annotated this hold no longer governs (a newer pass superseded the
+        // concern and is awaiting maturity) — a lifted brake must not keep
+        // rendering as if still standing on the digest/§② surfaces
+        e = { ...e, pendingUpdate: { ...pu, reason: 'awaiting-review' } }
       }
     }
     // 2. displayed-version slot — pending entries approve here; displayed
@@ -389,11 +425,15 @@ export function explainEntry(
       source?: Pick<PluginEntry['source'], 'kind' | 'version'> | undefined },
   verdicts: AiVerdict[],
   digest: DigestState | null,
+  /** index.removed — the stale-pass epoch gate applyMatureVerdicts applies:
+   *  a pass predating this name's last tombstone judged a different object */
+  removed: RemovedEntry[] = [],
 ): SlotExplain[] {
   const latest = latestVerdicts(verdicts)
   const latestHuman = latestHumanVerdicts(verdicts)
   const announced = new Set(digest?.announced ?? [])
   const dayAnnounced = new Set(digest?.dayAnnounced ?? [])
+  const tomb = tombEpochs(removed).get(e.name.toLowerCase())
   // mirror applyMatureVerdicts' package brake (shared helpers): a human
   // concern on name@null overrides every slot unless a newer human pass
   // exists on that slot key
@@ -436,6 +476,11 @@ export function explainEntry(
     // long ago (that's why the slot is displayed)
     if (slot === 'displayed' && e.approval !== 'pending' && e.approval !== 'legacy')
       return { ...base, outcome: 'release', why: '展示版已上架（pass 无需再生效）' }
+    // stale-identity epoch: the pass predates this name's last tombstone —
+    // applyMatureVerdicts treats it as no verdict at all; say so instead of
+    // reporting whichever gate happens to fire first
+    if (v.verdict === 'pass' && tomb && Date.parse(v.at) < Date.parse(tomb))
+      return { ...base, outcome: 'wait', why: `${pre}pass 早于本条目上次消失（${tomb.slice(0, 10)}）— 判的是上一个同名对象，不生效，需重裁` }
     // pass: run the release gates in order and report the first blocker.
     // Structural impossibilities (flags/no-scan — AI can never release this
     // slot regardless of timing) outrank the temporal gates or the report

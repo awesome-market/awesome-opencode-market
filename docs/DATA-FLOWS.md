@@ -1195,7 +1195,9 @@ pending 条目 bump → 就地换候选 + approvalReason 重置（旧理由说�
      源不变量"pending 永不带 pu"，mergeEntries R-9 同款归一前置到源头）；
    human pass → 刹车解套（槽位无自身裁决时顺带归一陈旧 approvalReason）
 concern（任何 source）→ 立即生效不等成熟：
-   pendingUpdate → pu.reason 标注（仍 held）
+   pendingUpdate → pu.reason 标注（仍 held；标注它的 concern 被更新的
+   非 concern 裁决取代时，pu.reason 归一重置 awaiting-review——
+   展示槽 G6 复位的在押槽镜像，过期的刹车理由不会继续渲染成"还在刹车"）
    展示槽 pending 条目 → approvalReason 标注（仍 pending）
    展示槽 approved/legacy → approval 拉回 pending + approvalReason（人工刹车）
    顺带归一：approval=pending 的条目不得残留 pendingUpdate（B3 倒置态，
@@ -1208,10 +1210,15 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
    && !(source=ai && (目标 capabilities.redFlags>0 || scannedAt===null))
       ← AI pass 落红旗/未扫描条目=忽略（纵深防御；"没扫到"≠"扫干净"，
       AI 不享有对无扫描信号槽位的放行权——人工 pass 仍放行，保留知情决策）
-   && !(verdict.sha && 槽位 integrity && verdict.sha≠integrity)
-      ← 钉字节校验（G2）：裁决盖章的 sha 与槽位现钉 SRI 不一致=同版本
-      被 re-tag 换包，成熟 pass 不放未审字节；任一侧缺失不拦
-      （老 verdict/老 pu 兼容降级）
+   && !(verdict=pass && v.at < 该名最新墓碑 disappearedAt)
+      ← 同名片段闸（L-3）：同名条目消失后再进=新对象（重建/回收名），
+      旧对象时代的 pass 不治理新对象——无 sha 老裁决缺钉字节锚时
+      的唯一保护；concern 豁免，回收名应继承不信任（保守方向）
+   && !(verdict.sha && 槽位锚 && verdict.sha≠槽位锚)
+      ← 钉字节校验（G2）：裁决盖章的 sha 与槽位现钉锚不一致=同版本
+      被 re-tag 换包，成熟 pass 不放未审字节。锚：在押槽=pu.integrity，
+      展示槽=shaAnchor(e)（npm→e.integrity SRI，github→source.version
+      commit sha）；任一侧缺失不拦（老 verdict/老 pu 兼容降级）
    && verification.status ∈ {verified, skipped}      ← RELEASABLE
       verified=实测可装；skipped=没跑（高危信号 或 无可装对象）
       ——红旗 skipped 的 AI pass 已被上行忽略 → 事实只人工 pass 能放

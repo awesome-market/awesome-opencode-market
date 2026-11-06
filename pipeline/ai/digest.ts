@@ -21,7 +21,7 @@ import { exit } from 'node:process'
 import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
-  effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey } from '../verdicts.ts'
+  effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 
@@ -205,14 +205,14 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   for (const v of verdicts) {
     if (v.verdict !== 'concern') continue
     const cur = latestConcern.get(akey(v))
-    if (!cur || v.at > cur.at) latestConcern.set(akey(v), v)
+    if (!cur || atCmp(v.at, cur.at) > 0) latestConcern.set(akey(v), v)
   }
   const resolved = [...prevAnnounced]
     .map(k => latestConcern.get(k))
     .filter((v): v is AiVerdict => v !== undefined)
     .filter(c => {
       const l = latest.get(vkey(c.name, c.version))
-      return l !== undefined && eff(l)?.verdict === 'pass' && l.at > c.at
+      return l !== undefined && eff(l)?.verdict === 'pass' && atCmp(l.at, c.at) > 0
     })
   const willAnnounce = (v: AiVerdict) => prevAnnounced.has(akey(v)) || todayFirst.has(akey(v))
 
