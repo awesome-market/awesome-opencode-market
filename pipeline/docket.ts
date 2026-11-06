@@ -241,7 +241,10 @@ export function docketTargets(
       // at real scale (500+ repo-only pendings) that is tracker spam the
       // maintainer can't act on anyway — aggregate into ONE standing issue
       // whose body lists the queue; entries drop out as human verdicts land.
-      if (e.approval === 'pending' && e.latestVersion === null
+      // !latestVersion (not === null): a malformed '' pending would
+      // otherwise fall through BOTH branches — no versioned target AND
+      // no backlog row — invisible forever. Empty reads as version-less.
+      if (e.approval === 'pending' && !e.latestVersion
           && !epochGoverning(latest.get(vkey(e.name, null)), e.name, tomb)) {
         repoOnly.push({
           name: e.name,
@@ -420,6 +423,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       } else {
         L.push('', '- 数据：catalog 分支 `index.json` / `digest/`')
       }
+      // a verdict:* label on a sentinel issue can NEVER land — [review] (
+      // titles resolve no target by design — so the usual "re-apply" advice
+      // is wrong here; say the label is inert and name the real channel
+      if (opts.stuckLabel) {
+        L.push('',
+          `> ⚠️ 本单已贴 \`${opts.stuckLabel}\`——聚合总单不适用 verdict 标签（哨兵目标无法解析，标签永不会写盘）——请摘除该标签；逐条裁决请按上方指引评论。`)
+      }
       return L.join('\n')
     }
     // aggregate repo-only standing issue — per-entry issues at this scale are
@@ -447,6 +457,12 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push('', `- 数据：[index.json](https://github.com/${opts.repo}/blob/catalog/index.json) / [最新日报](https://github.com/${opts.repo}/tree/catalog/digest)`)
     } else {
       L.push('', '- 数据：catalog 分支 `index.json` / `digest/`')
+    }
+    // same inert-label surface as the versioned aggregate — a sentinel
+    // title resolves no target, so the label can never land
+    if (opts.stuckLabel) {
+      L.push('',
+        `> ⚠️ 本单已贴 \`${opts.stuckLabel}\`——聚合总单不适用 verdict 标签（哨兵目标无法解析，标签永不会写盘）——请摘除该标签；逐条裁决请按上方指引评论。`)
     }
     return L.join('\n')
   }
@@ -589,8 +605,26 @@ export async function main(
     throw new Error('usage: --index <p> --verdicts <p> [--digest-state <p>] [--dry]   (GH_REPO=owner/repo required)')
 
   const index = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
-  const verdicts = loadVerdicts(verdictsPath)
+  // exists-but-corrupt ≠ empty: the workflow's git-layer probe covers
+  // "exists but git show fails"; a file that fetches fine yet holds ZERO
+  // parseable lines is corrupt input — syncing against it strips every
+  // ai:* label, rewrites every body to 'none', and regresses announced
+  // passes a full maturity phase (the same churn the defer guard exists
+  // to prevent, one layer down). index.json already fails closed via
+  // JSON.parse/schema — the aux files get the same gate here. A missing
+  // file at THIS layer is operator error (the workflow touches the
+  // absent-on-branch case into existence) — fail fast either way.
+  const sink = { bad: 0 }
+  const verdicts = loadVerdicts(verdictsPath, sink)
+  // loadVerdicts swallows read failures into [] — probe directly so an
+  // exists-but-unreadable file can't masquerade as empty either
+  const verdictsRaw = (() => { try { return readFileSync(verdictsPath, 'utf8') } catch { return null } })()
+  if (verdictsRaw === null || (sink.bad > 0 && verdicts.length === 0))
+    throw new Error(`[docket] verdicts file ${verdictsPath} ${verdictsRaw === null ? 'is missing/unreadable' : `contains only malformed lines (${sink.bad})`} — refusing to sync against a corrupt/empty verdict log`)
   const digest = loadDigestState(digestPath)
+  const digestRaw = (() => { try { return digestPath ? readFileSync(digestPath, 'utf8') : null } catch { return null } })()
+  if (digestPath && !digest && (digestRaw === null || digestRaw.trim()))
+    throw new Error(`[docket] digest-state ${digestPath} ${digestRaw === null ? 'is missing/unreadable' : 'is malformed'} — refusing to regress announced maturity to empty`)
   // closeReason needs the raw maps too — claiming "verdict 已决议" without
   // checking the key is how a version-bumped/clock-reset issue used to close
   // with a pointer to a judgment that never existed
