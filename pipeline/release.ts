@@ -14,10 +14,16 @@ import { loadVerdicts, loadDigestState, applyMatureVerdicts, explainEntry } from
 
 /* v8 ignore next 24 */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const explain = process.argv.includes('--explain')
-  const nameAt = process.argv.indexOf('--name')
-  const nameFilter = nameAt > -1 ? process.argv[nameAt + 1] : undefined
-  const args = process.argv.slice(2).filter(a => a !== '--explain' && a !== '--name' && a !== nameFilter)
+  const argv = process.argv.slice(2)
+  const explain = argv.includes('--explain')
+  const nameAt = argv.indexOf('--name')
+  // the --name VALUE lives at nameAt+1 — filter by position, not by string
+  // equality: `a !== nameFilter` also deleted a positional path that happened
+  // to equal the package name ('--name index.json' ate the index arg)
+  const nameFilter = nameAt > -1 && nameAt + 1 < argv.length ? argv[nameAt + 1] : undefined
+  // guard nameAt>-1: nameAt=-1 makes nameAt+1=0, which would eat argv[0]
+  const args = argv.filter((a, i) =>
+    a !== '--explain' && a !== '--name' && (nameAt === -1 || i !== nameAt + 1))
   const index = CatalogIndex.parse(JSON.parse(readFileSync(args[0]!, 'utf8')))
   const verdicts = loadVerdicts(args[1])
   const digest = loadDigestState(args[2])

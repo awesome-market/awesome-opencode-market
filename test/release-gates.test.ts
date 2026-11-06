@@ -106,15 +106,24 @@ describe('B3: pending entries never carry pendingUpdate out of applyMatureVerdic
     expect(out.approval).toBe('pending')
     expect(out.pendingUpdate).toBeUndefined()
   })
-  it('released candidate replaces the display — a brake on the OLD display version is a dead slot', () => {
+  it('displayed concern brakes before the hold can release past it — "concern 立即生效"', () => {
     const e = mkEntry('p', { pendingUpdate: mkPu('2.0.0') })
     const vp = mkVerdict('p', '2.0.0', 'pass', BEFORE, 'ai')
     const stale = mkVerdict('p', '1.0.0', 'concern', AFTER, 'human', 'old-version issue')
     const r = applyMatureVerdicts(mkIndex([e]), [vp, stale], digestStateOf(DIGEST, [vp]))
     const out = r.index.plugins[0]!
-    expect(out.approval).toBe('approved')          // 2.0.0 released; the 1.0.0 concern targets a version no longer displayed
-    expect(out.latestVersion).toBe('2.0.0')
+    // the displayed slot judges FIRST: a concern on the version people are
+    // seeing right now must take effect — releasing the hold first would
+    // promote latestVersion past the concern's key and the brake would
+    // land nowhere (its target replaced in the same iteration). The held
+    // 2.0.0 is dropped by R-9; its mature pass stays keyed and it releases
+    // when 2.0.0 re-enters as a fresh candidate.
+    expect(out.approval).toBe('pending')
+    expect(out.approvalReason).toBe('old-version issue')
+    expect(out.latestVersion).toBe('1.0.0')
     expect(out.pendingUpdate).toBeUndefined()
+    expect(r.releases).toEqual([])
+    expect(r.held).toContain('p@1.0.0')
   })
   it('pre-existing pending+pu input is healed even without touching verdicts', () => {
     const e = mkEntry('p', { approval: 'pending', pendingUpdate: mkPu('2.0.0') })
@@ -232,13 +241,15 @@ describe('G8: version:null human concern brakes the whole package', () => {
     expect(out.approval).toBe('pending')
     expect(out.approvalReason).toBe('malicious package')
   })
-  it('brakes BOTH slots — the held candidate is annotated and the display pulled', () => {
+  it('brakes BOTH slots — the display is pulled and the hold discarded with it', () => {
     const e = mkEntry('p', { pendingUpdate: mkPu('2.0.0') })
     const r = applyMatureVerdicts(mkIndex([e]), [brake()], null)
     const out = r.index.plugins[0]!
     expect(out.approval).toBe('pending')
     expect(out.pendingUpdate).toBeUndefined()   // held slot's annotation collapses with the hold (B3)
-    expect(r.held).toContain('p@2.0.0')
+    // the displayed slot is adjudicated first under a package brake — the
+    // pull to pending makes the hold dead on arrival (R-9), so annotating
+    // it would be bookkeeping on a shadow that no longer exists
     expect(r.held).toContain('p@1.0.0')
   })
   it('a mature ai pass cannot release under a package brake', () => {
@@ -248,13 +259,27 @@ describe('G8: version:null human concern brakes the whole package', () => {
     expect(r.releases).toHaveLength(0)
     expect(r.index.plugins[0]!.approval).toBe('pending')
   })
-  it('a NEWER human pass on a slot un-brakes only that version', () => {
+  it('a NEWER human pass on a slot un-brakes only that version — the brake lands first, the lift releases on re-entry', () => {
     const e = mkEntry('p', { pendingUpdate: mkPu('2.0.0', { integrity: 'sha512-N' }) })
     const vp = mkVerdict('p', '2.0.0', 'pass', AFTER, 'human')           // after the brake
-    const r = applyMatureVerdicts(mkIndex([e]), [brake(BEFORE), vp], digestStateOf(DIGEST, [vp]))
+    const verdicts = [brake(BEFORE), vp]
+    const digest = digestStateOf(DIGEST, [vp])
+    // displayed slot judges first: the standing package brake pulls the
+    // shown version to pending — the hold's lift is real but its slot dies
+    // with the hold (R-9). The keyed pass survives…
+    const r = applyMatureVerdicts(mkIndex([e]), verdicts, digest)
     const out = r.index.plugins[0]!
-    expect(out.latestVersion).toBe('2.0.0')                              // slot-specific un-brake released it
-    expect(out.approval).toBe('approved')
+    expect(out.approval).toBe('pending')
+    expect(out.pendingUpdate).toBeUndefined()
+    // …and lifts the SAME package brake when 2.0.0 re-enters as the pending
+    // candidate (npm still latest=2.0.0 → fresh hold → verified → release)
+    const reentered = mkEntry('p', {
+      approval: 'pending', approvalReason: 'malicious package',
+      latestVersion: '2.0.0', verification: { status: 'verified', level: 'load' },
+    })
+    const r2 = applyMatureVerdicts(mkIndex([reentered]), verdicts, digest)
+    expect(r2.index.plugins[0]!.approval).toBe('approved')
+    expect(r2.index.plugins[0]!.latestVersion).toBe('2.0.0')
   })
   it('an OLDER human pass on a slot does not lift the brake', () => {
     const e = mkEntry('p', { pendingUpdate: mkPu('2.0.0') })

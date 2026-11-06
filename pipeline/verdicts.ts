@@ -347,14 +347,68 @@ export function applyMatureVerdicts(
 
   const plugins = index.plugins.map(entry => {
     let e = entry
-    // 1. held-version slot — pendingUpdate releases only via its own keyed
-    //    verdict. Never on a pending entry: its latestVersion IS the
-    //    candidate, so a leftover hold is the B3 inverted state — promoting
-    //    it here would approve the stale hold AND silently drop the pending
-    //    candidate before the R-9 cleanup below ever sees it. The guard makes
-    //    the source invariant airtight (valid inputs never carry pu on
-    //    pending, so this changes nothing for them).
-    if (e.pendingUpdate && e.approval !== 'pending') {
+    // the INPUT approval is load-bearing: a pending entry's pendingUpdate is
+    // always a stale shadow (source invariant "pending 永不带 pu" — the B3
+    // inverted state merge drops). Snapshot it before any release flips
+    // approval so the shadow can't launder into a legitimate hold on the
+    // freshly approved entry, and so the pu-slot guard below refuses to
+    // adjudicate it.
+    const wasPending = e.approval === 'pending'
+    // 1. displayed-version slot FIRST (conservative direction): a concern on
+    //    the currently-displayed version must take effect. Evaluating the
+    //    hold first lets a mature hold-pass promote e.latestVersion past a
+    //    same-batch concern on the old displayed version — after promotion
+    //    this lookup queries the NEW version's key, so the old version's
+    //    concern is never adjudicated: the brake lands nowhere. Braking
+    //    first drops the hold via R-9 instead; the hold's verdict stays
+    //    keyed and the version re-enters as a fresh candidate.
+    const v = verdictFor(e.name, e.latestVersion)
+    // a package-level human pass (name@null) just dissolved a brake — with
+    // no slot verdict to drive the reset the stale concern reason would
+    // linger on a pending entry; clear it to the neutral awaiting state
+    const pkgPass = !v && epochGoverning(latestHuman.get(vkey(e.name, null)), e.name, latestTomb)?.verdict === 'pass'
+    if (v) {
+      if (e.approval === 'pending' || e.approval === 'legacy') {
+        if (v.verdict === 'concern') {
+          const reason = concernOf(v)
+          if (e.approval === 'legacy') {
+            // legacy entries are displayed-but-unreviewed: a concern on the
+            // shown version brakes them into the normal pending flow
+            e = { ...e, approval: 'pending', approvalReason: reason }
+            held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
+          } else if (e.approvalReason !== reason) {
+            e = { ...e, approvalReason: reason }
+            held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
+          }
+        } else {
+          // a newer pass superseded the concern that set approvalReason —
+          // the entry is awaiting maturity/re-verification now, not held by
+          // that stale rationale
+          if (e.approvalReason && e.approvalReason !== 'awaiting-review')
+            e = { ...e, approvalReason: 'awaiting-review' }
+          if (mature(v)
+            && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
+              && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
+            && shaOk(v, shaAnchor(e))
+            && RELEASABLE.has(e.verification.status)) {
+            e = { ...e, approval: 'approved', approvalReason: undefined }
+            releases.push(`${e.name}@${e.latestVersion ?? 'null'}`)
+          }
+        }
+      } else if (v.verdict === 'concern') {
+        e = { ...e, approval: 'pending', approvalReason: concernOf(v) }
+        held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
+      }
+    } else if (pkgPass && (e.approval === 'pending' || e.approval === 'legacy')
+        && e.approvalReason && e.approvalReason !== 'awaiting-review') {
+      e = { ...e, approvalReason: 'awaiting-review' }
+    }
+    // 2. held-version slot — pendingUpdate releases only via its own keyed
+    //    verdict. Never on a pending entry (input OR output): on input the
+    //    pu is the B3 shadow above; on output a displayed-version concern
+    //    just braked the entry — adjudicating the hold after the brake would
+    //    let the held version release over the standing concern.
+    if (e.pendingUpdate && !wasPending && e.approval !== 'pending') {
       const pu = e.pendingUpdate
       const v = verdictFor(e.name, pu.version)
       if (v?.verdict === 'concern') {
@@ -422,54 +476,14 @@ export function applyMatureVerdicts(
         e = { ...e, pendingUpdate: { ...pu, reason: 'awaiting-review' } }
       }
     }
-    // 2. displayed-version slot — pending entries approve here; displayed
-    //    entries get pulled back to pending by a human concern
-    const v = verdictFor(e.name, e.latestVersion)
-    // a package-level human pass (name@null) just dissolved a brake — with
-    // no slot verdict to drive the reset the stale concern reason would
-    // linger on a pending entry; clear it to the neutral awaiting state
-    const pkgPass = !v && epochGoverning(latestHuman.get(vkey(e.name, null)), e.name, latestTomb)?.verdict === 'pass'
-    if (v) {
-      if (e.approval === 'pending' || e.approval === 'legacy') {
-        if (v.verdict === 'concern') {
-          const reason = concernOf(v)
-          if (e.approval === 'legacy') {
-            // legacy entries are displayed-but-unreviewed: a concern on the
-            // shown version brakes them into the normal pending flow
-            e = { ...e, approval: 'pending', approvalReason: reason }
-            held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
-          } else if (e.approvalReason !== reason) {
-            e = { ...e, approvalReason: reason }
-            held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
-          }
-        } else {
-          // a newer pass superseded the concern that set approvalReason —
-          // the entry is awaiting maturity/re-verification now, not held by
-          // that stale rationale
-          if (e.approvalReason && e.approvalReason !== 'awaiting-review')
-            e = { ...e, approvalReason: 'awaiting-review' }
-          if (mature(v)
-            && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
-              && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
-            && shaOk(v, shaAnchor(e))
-            && RELEASABLE.has(e.verification.status)) {
-            e = { ...e, approval: 'approved', approvalReason: undefined }
-            releases.push(`${e.name}@${e.latestVersion ?? 'null'}`)
-          }
-        }
-      } else if (v.verdict === 'concern') {
-        e = { ...e, approval: 'pending', approvalReason: concernOf(v) }
-        held.push(`${e.name}@${e.latestVersion ?? 'null'}`)
-      }
-    } else if (pkgPass && (e.approval === 'pending' || e.approval === 'legacy')
-        && e.approvalReason && e.approvalReason !== 'awaiting-review') {
-      e = { ...e, approvalReason: 'awaiting-review' }
-    }
     // R-9 at the source: a pending entry's latestVersion IS the candidate —
     // a leftover pendingUpdate is always a stale shadow (brake on the shown
-    // version, superseded hold). mergeEntries drops it at publish-merge;
-    // doing it here keeps indexes written by release.ts valid too.
-    if (e.approval === 'pending' && e.pendingUpdate)
+    // version, superseded hold). Drop it when the entry WAS pending (stale
+    // shadow — including a pending→approved release this iteration, where
+    // output approval no longer reads 'pending') or IS pending now (a brake
+    // just pulled it back). mergeEntries drops it at publish-merge; doing
+    // it here keeps indexes written by release.ts valid too.
+    if ((wasPending || e.approval === 'pending') && e.pendingUpdate)
       e = { ...e, pendingUpdate: undefined }
     return e
   })
@@ -555,7 +569,9 @@ export function explainEntry(
     if (!v) return { ...base, outcome: 'none', why: '无裁决 — 等评审' }
     const pre = packageBrake ? '包级刹车（version=null human concern）→ ' : ''
     if (v.verdict === 'concern') {
-      const braking = slot === 'displayed' && e.approval !== 'pending' && e.approval !== 'legacy'
+      // legacy included: applyMatureVerdicts pulls legacy→pending on a
+      // displayed-slot concern too — that IS a brake, not a quiet hold
+      const braking = slot === 'displayed' && e.approval !== 'pending'
       return { ...base, outcome: braking ? 'brake' : 'concern',
         why: `${pre}${braking ? 'concern 命中展示版 → 回 pending（刹车）' : `concern → 保持 hold（${v.reason ?? ''}）`}` }
     }
