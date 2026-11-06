@@ -127,13 +127,18 @@ jobs:
     timeout-minutes: 5
     permissions: { issues: write }
     steps:
+      # gh api only — same egress posture as every other alert job
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "docket workflow failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "docket workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

@@ -159,7 +159,7 @@ jobs:
           # alert instead of spawning an issue per run (same rule as the
           # digest watchdog).
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "site workflow failed" --json number --jq '.[0].number' 2>/dev/null || true)
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "site workflow failed" --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$EXISTING" ]; then
             gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           else

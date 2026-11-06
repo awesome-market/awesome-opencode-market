@@ -380,7 +380,7 @@ jobs:
             # for the digest watchdog's 36h leg (HV-1 is minute-scale by intent)
             echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
             gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-            EX=$(gh issue list -R "$REPO" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+            EX=$(gh issue list -R "$REPO" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
             BODY="site.yml dispatch failed twice — a concern/brake may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [ -n "$EX" ]; then gh issue comment "$EX" -R "$REPO" --body "$BODY" || true
             else gh issue create -R "$REPO" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
