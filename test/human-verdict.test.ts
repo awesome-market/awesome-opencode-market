@@ -124,6 +124,33 @@ describe('comment channel', () => {
     const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern evilpkg@9.9.9' }))
     expect(r.mismatch).toBeDefined()
   })
+  it('bare-word arg on a [concern] form issue is a REASON, not a package — the amend path works', () => {
+    // `it` (form target) exists → spec reading requires @/ shape. Before the
+    // fix `!tt` was always true for [concern] titles, so '/concern new reason'
+    // ate 'new' as a package name → exists=0 "not in catalog" — the documented
+    // reason-amend path was unreachable on form issues.
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern found it exfiltrates tokens' }))
+    expect(r).toMatchObject({ name: 'evilpkg', ver: '2.0.0', verdict: 'concern', reason: 'found it exfiltrates tokens' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('bare /concern on a [concern] form inherits the form reason (no amend-wipe)', () => {
+    // re-firing with no comment reason must not overwrite the recorded
+    // rationale with '' — the form's 理由 field is the fallback
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern' }))
+    expect(r).toMatchObject({ name: 'evilpkg', verdict: 'concern' })
+    expect(r.reason).toContain('sus C# wrapper')
+  })
+  it('explicit spec arg on a [concern] form still retargets + flags mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern other/repo because' }))
+    expect(r).toMatchObject({ name: 'other/repo', ver: '' })
+    expect(r.mismatch).toBeDefined()
+  })
+  it('bare-word arg on a [concern] form with EMPTY package field keeps spec reading', () => {
+    // no resolvable issue target → the exists-check downstream is the
+    // feedback loop, same as a plain untitled issue
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: '### 操作 / Action\n\n拦截', commentBody: '/concern somepkg because' }))
+    expect(r.name).toBe('somepkg')
+  })
   it('bare command on a plain issue → noresolve', () => {
     expect(resolveVerdictEvent(ev({ issueTitle: 'plain issue' })).skip).toBe('noresolve')
   })
@@ -361,6 +388,32 @@ describe('retargetedIssueTarget — form retarget residue (HV-13)', () => {
   it('malformed lines skipped', () => {
     const lines = ['{bad', L({ name: 'x', source: 'human', issue: 'not-a-number' })]
     expect(retargetedIssueTarget(lines, 9, 'newpkg')).toBeNull()
+  })
+})
+
+describe('concern.yml workflow contract (audit #5)', () => {
+  const wf = readFileSync(new URL('../.github/workflows/concern.yml', import.meta.url), 'utf8')
+  it('retest fetches index.json via raw media type — the base64 content field is empty >1MB', () => {
+    // index.json is ~14MB: `contents/...?ref=catalog --jq .content` returns
+    // null → base64 -d → JSON.parse throws under set -e → /retest died with
+    // no user-facing comment. Guard the raw-Accept fetch against regression.
+    const m = wf.match(/contents\/index\.json\?ref=catalog[^\n]*(?:\n\s*[^\n]*){0,3}/)
+    expect(m?.[0]).toContain('application/vnd.github.raw')
+    expect(m?.[0]).not.toContain('--jq .content')
+  })
+  it('comment gate covers space-padded commands — parser accepts ^\\s*/cmd', () => {
+    // submit.yml already fires on ' /a'/' /c'; concern.yml's gate was narrower
+    // than its own parser (^
+    const jobIf = wf.slice(wf.indexOf('jobs:'), wf.indexOf('runs-on: ubuntu-latest'))
+    expect(jobIf).toContain("' /c'")
+    expect(jobIf).toContain("' /a'")
+  })
+  it('nobranch probe distinguishes unreachable remote from absent branch', () => {
+    // ls-remote --exit-code fails for BOTH — without the reachability probe a
+    // transient outage mislabels the issue "data plane not initialized"
+    const i = wf.indexOf('ls-remote --exit-code origin catalog')
+    expect(i).toBeGreaterThan(-1)
+    expect(wf.slice(i, i + 600)).toContain('ls-remote origin')
   })
 })
 

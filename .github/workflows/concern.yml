@@ -42,7 +42,9 @@ jobs:
       || (github.event_name == 'issue_comment' && contains(fromJSON('["created","edited"]'), github.event.action)
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && (startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')
-          || startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A'))))
+          || startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A')
+          || startsWith(github.event.comment.body, ' /c') || startsWith(github.event.comment.body, ' /C')
+          || startsWith(github.event.comment.body, ' /a') || startsWith(github.event.comment.body, ' /A'))))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # NOT catalog-branch: every verdict event must land, so bursts queue
@@ -132,7 +134,10 @@ jobs:
           # not a blocked verdict worth flagging.
           case "$TITLE" in "[review] ("*) echo "sentinel aggregate — no target to resolve"; exit 0 ;; esac
           if [ "$EVENT" = "issue_comment" ]; then
-            printf '%s' "$COMMENT_BODY" | grep -qiE '^/(concern|approve)' \
+            # leading whitespace tolerated — the parser accepts `^\s*/cmd`
+            # and the job gate now fires on ' /cmd' too; a padded typo like
+            # ' /concerned' still deserves the usage hint
+            printf '%s' "$COMMENT_BODY" | grep -qiE '^[[:space:]]*/(concern|approve)' \
               || { echo "not a verdict command — silent skip"; exit 0; }
           fi
           gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
@@ -147,8 +152,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # bootstrap: no catalog branch yet = the data plane isn't initialized.
-          # A generic failure() comment would misreport this as a lost verdict
+          # A generic failure() comment would misreport this as a lost verdict.
+          # ls-remote fails for BOTH "branch absent" and "remote unreachable" —
+          # probe reachability first so a transient outage fails the step (the
+          # write-failure notifier speaks) instead of mislabeling the issue
+          # "not initialized" and slapping verdict:blocked on it.
           if ! git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
+            git ls-remote origin >/dev/null 2>&1 \
+              || { echo "catalog remote unreachable — refusing to judge; retry"; exit 1; }
             echo "exists=nobranch" >> "$GITHUB_OUTPUT"
             gh label create verdict:blocked --color FBCA04 -d "verdict 未落地——目标/参数未解析，改正后可重试" --force 2>/dev/null || true
             gh issue edit "$ISSUE" --add-label verdict:blocked 2>/dev/null || true
@@ -542,7 +553,8 @@ jobs:
       && github.event_name == 'issue_comment' && github.event.action == 'created'
       && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
       && !contains(github.event.issue.labels.*.name, 'submission')
-      && (startsWith(github.event.comment.body, '/retest') || startsWith(github.event.comment.body, '/Retest') || startsWith(github.event.comment.body, '/RETEST'))
+      && (startsWith(github.event.comment.body, '/retest') || startsWith(github.event.comment.body, '/Retest') || startsWith(github.event.comment.body, '/RETEST')
+        || startsWith(github.event.comment.body, ' /retest') || startsWith(github.event.comment.body, ' /Retest') || startsWith(github.event.comment.body, ' /RETEST'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     concurrency: concern-retest-${{ github.event.issue.number }}
@@ -583,9 +595,14 @@ jobs:
             const names = [...new Set(specs.map(s => { const at = s.lastIndexOf("@"); return at > 0 ? s.slice(0, at) : s }))]
             console.log(names.join("\n"))
           ' "$SPEC")
-          gh api "repos/$GH_REPO/contents/index.json?ref=catalog" --jq .content > /tmp/idx.b64 \
+          # raw media type — the contents API's base64 `content` field is
+          # EMPTY for files >1MB (index.json is ~14MB): `--jq .content` +
+          # `base64 -d` produced an empty file, JSON.parse killed the step
+          # under `set -e`, and /retest failed with no user-facing comment
+          # ever since the index outgrew 1MB
+          gh api "repos/$GH_REPO/contents/index.json?ref=catalog" \
+            -H 'Accept: application/vnd.github.raw' > /tmp/index.json \
             || { comment "⚠️ 读取 catalog 索引失败——稍后重试。"; exit 1; }
-          base64 -d /tmp/idx.b64 > /tmp/index.json
           node -e '
             const fs = require("fs")
             const idx = JSON.parse(fs.readFileSync("/tmp/index.json", "utf8"))

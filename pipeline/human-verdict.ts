@@ -129,13 +129,18 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
             return fn ? { name: fn, ver: formField(map, '版本（可留空）', '版本') } : null })()
         : null)
       // Spec shape = '@' or '/' in the first token (pkg@ver, owner/repo,
-      // @scope/p). On a TITLED issue a bare charset word is far more likely
-      // the start of a reason (`/concern steals data`) than a cross-target
-      // retarget — those need the explicit spec shape. On an untitled issue
-      // a charset/lone word keeps its spec reading (the exists-check is the
-      // feedback loop when it guesses wrong).
+      // @scope/p). Whenever the issue HAS a resolvable target — a [review]
+      // title OR a [concern] form's package field — a bare charset word is
+      // far more likely the start of a reason (`/concern steals data`, or
+      // the amend path `/concern new reason` on a form issue) than a
+      // cross-target retarget; those need the explicit spec shape. Only a
+      // truly target-less issue keeps the spec reading for a lone word (the
+      // exists-check is the feedback loop when it guesses wrong). Keying on
+      // `it` not `tt`: [concern] titles never yield tt, so `!tt` used to let
+      // `/concern some reason` on a form issue eat 'some' as a package name —
+      // blocked as "not in catalog" instead of amending the form's target.
       const specShape = /@|\//.test(sp[0]!)
-      if (specShape || (!tt && (!rest.includes(' ') || /^[a-z0-9@_./-]+$/i.test(sp[0]!)))) {
+      if (specShape || (!it && (!rest.includes(' ') || /^[a-z0-9@_./-]+$/i.test(sp[0]!)))) {
         // sanitize the arg version BEFORE comparing: a garbage version
         // (`pkg@$(id)`) degrades to "unspecified" → title/index target, not
         // a divergence worth flagging. `*` is the explicit package-scope
@@ -160,7 +165,10 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
         const map = sections(e.issueBody)
         name = formField(map, 'npm 包名或 owner/repo', '包名')
         ver = ver || formField(map, '版本（可留空）', '版本')
-        reason = reason || rest
+        // bare /concern re-fire inherits the form's submitted reason —
+        // writing '' would amend-overwrite the recorded rationale with
+        // nothing (same verdict + different reason = amend, latest wins)
+        reason = reason || rest || formField(map, '理由 / Reason', '理由')
       }
     }
   } else if (e.event === 'issues' && (e.action === 'opened' || e.action === 'edited')) {
