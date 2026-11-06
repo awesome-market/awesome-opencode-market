@@ -202,6 +202,51 @@ export function isDupVerdict(lines: string[], name: string, version: string | nu
   return false
 }
 
+/** Override detection (HV-12): the latest HUMAN line for this key carries a
+ *  DIFFERENT verdict — this write reverses a human decision, not an AI one.
+ *  That is a materially bigger deal: a [concern] form edit that re-fires a
+ *  stale "拦截" can silently re-brake over a pass that landed in between, and
+ *  the maintainer editing a typo never sees the flip. The workflow echoes
+ *  the overridden decision in the ack so the reversal is at least visible.
+ *  Returns the prior human {verdict, at} when the new verdict overrides it,
+ *  else null (same verdict → dup/amend territory; no human line; AI on top —
+ *  overriding the robot is the channel's routine purpose, not noteworthy). */
+export function overriddenHuman(lines: string[], name: string, version: string | null, verdict: string): { verdict: string; at: string } | null {
+  // newest HUMAN line for the key — an AI line on top doesn't change which
+  // human decision is being reversed (stickiness already shadows it)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.trim()
+    if (!l) continue
+    try {
+      const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; source?: string; at?: string }
+      if (v.source !== 'human' || v.name !== name || (v.version ?? null) !== version) continue
+      if (typeof v.verdict === 'string' && v.verdict !== verdict && typeof v.at === 'string')
+        return { verdict: v.verdict, at: v.at }
+      return null
+    } catch { continue }
+  }
+  return null
+}
+
+/** Retarget detection (HV-13): the latest human line traced to THIS issue
+ *  points at a DIFFERENT package. A [concern] form edit that changes the
+ *  package field lands a verdict on the new target while the old target's
+ *  verdict — possibly a live brake — keeps standing invisibly. Arg-spec
+ *  comments that legitimately judged another package from the same issue
+ *  produce the same signal; surfacing it is informative either way. */
+export function retargetedIssueTarget(lines: string[], issue: number, name: string): { name: string; version: string | null } | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.trim()
+    if (!l) continue
+    try {
+      const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number }
+      if (v.source !== 'human' || v.issue !== issue || v.name === name) continue
+      return { name: v.name!, version: v.version ?? null }
+    } catch { continue }
+  }
+  return null
+}
+
 /** Reason-only amendment (HV-2 counterpart): the latest human line for this
  *  key carries the SAME verdict but a DIFFERENT reason — a typo fix or a
  *  late "/concern pkg new reason". Appending with a fresh `at` would mint a
@@ -228,20 +273,30 @@ export function amendAt(lines: string[], name: string, version: string | null, v
   return null
 }
 
-/* v8 ignore next 14 — thin env→stdout adapter */
+/* v8 ignore next 24 — thin env→stdout adapter */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason>`
+  // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason> [issue]`
   // → prints dup=1|0 plus amend=<at>| (empty) — amend is the prior human
   // line's timestamp to reuse when this is a reason-only correction, so the
-  // workflow can stamp the record without resetting digest maturity
+  // workflow can stamp the record without resetting digest maturity;
+  // prev=<verdict>@<at> = the human decision this write overrides (HV-12);
+  // previssue=<name>[@ver] = a stale verdict this issue left on another
+  // target (HV-13 form retarget) — both feed ack warnings
   if (process.argv[2] === 'dedupe') {
     const { readFileSync } = await import('node:fs')
-    const [, , , file, name, ver, verdict, reason] = process.argv
+    const [, , , file, name, ver, verdict, reason, issue] = process.argv
     const lines = readFileSync(file!, 'utf8').split('\n')
     const ver_ = ver || null
     const dup = isDupVerdict(lines, name!, ver_, verdict!, reason ?? '')
     console.log(`dup=${dup ? 1 : 0}`)
     console.log(`amend=${dup ? '' : amendAt(lines, name!, ver_, verdict!, reason ?? '') ?? ''}`)
+    // prev = the human decision this write would override (different verdict);
+    // previssue = a stale verdict this issue left on a DIFFERENT target (form
+    // retarget). Both feed ack warnings — nothing is silently reversed.
+    const prev = dup ? null : overriddenHuman(lines, name!, ver_, verdict!)
+    console.log(`prev=${prev ? `${prev.verdict}@${prev.at}` : ''}`)
+    const re = issue ? retargetedIssueTarget(lines, Number(issue), name!) : null
+    console.log(`previssue=${re ? `${re.name}${re.version ? `@${re.version}` : ''}` : ''}`)
     process.exit(0)
   }
   const p = process.env

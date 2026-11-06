@@ -132,10 +132,10 @@ describe('unreviewedTargets — 48h verify-wait measures the CANDIDATE version a
   it('freshly-scanned pending candidate defers even on an ancient entry', () => {
     // firstSeenAt is entry-level and never bumps — the old clock would have
     // expired the verify-wait instantly for every re-scanned candidate.
-    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), new Map(), null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(0)
+    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), [], null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(0)
   })
   it('candidate scanned long ago → defer expired, degraded review proceeds', () => {
-    expect(unreviewedTargets(idx('2026-02-01T00:00:00Z'), new Map(), null, { now: '2026-02-10T00:00:00Z' })).toHaveLength(1)
+    expect(unreviewedTargets(idx('2026-02-01T00:00:00Z'), [], null, { now: '2026-02-10T00:00:00Z' })).toHaveLength(1)
   })
 })
 
@@ -157,9 +157,10 @@ describe('nextDigestState — announced bounded by the latest verdict per key', 
 })
 
 describe('docket flag targets — identity sec redFlags on visible entries', () => {
-  const flagged = () => mkEntry('p', {
+  const flagged = (flaggedAt?: string) => mkEntry('p', {
     approval: 'approved',
-    capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['sec:repo-recreated'] },
+    capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['sec:repo-recreated'],
+      ...(flaggedAt ? { flaggedAt } : {}) },
   })
   it('opens a flag target on the displayed key', () => {
     const t = docketTargets(mkIndex([flagged()]), [])
@@ -167,8 +168,18 @@ describe('docket flag targets — identity sec redFlags on visible entries', () 
     expect(t[0]).toMatchObject({ name: 'p', version: '1.0.0', verdict: 'flag' })
     expect(t[0]!.reason).toContain('sec:repo-recreated')
   })
-  it('any human verdict on the displayed key = decided → no standing issue', () => {
-    expect(docketTargets(mkIndex([flagged()]), [mkVerdict('p', '1.0.0', 'pass', BEFORE, 'human')])).toHaveLength(0)
+  it('a human verdict POSTDATING the flag = decided → no standing issue', () => {
+    // flaggedAt 2026-01-01 < verdict BEFORE — the verdict saw the flag
+    expect(docketTargets(mkIndex([flagged('2026-01-01')]), [mkVerdict('p', '1.0.0', 'pass', BEFORE, 'human')])).toHaveLength(0)
+  })
+  it('a human verdict PREDATING the flag did not decide it → flag still surfaces', () => {
+    // the repojack signal arrived after the release decision — an older pass
+    // on the same version cannot retire a signal it never saw (R-14 hole)
+    expect(docketTargets(mkIndex([flagged('2026-02-02')]), [mkVerdict('p', '1.0.0', 'pass', BEFORE, 'human')])
+      .some(t => t.verdict === 'flag')).toBe(true)
+    // flaggedAt absent (pre-field data): can't prove the verdict saw it → surface
+    expect(docketTargets(mkIndex([flagged()]), [mkVerdict('p', '1.0.0', 'pass', BEFORE, 'human')])
+      .some(t => t.verdict === 'flag')).toBe(true)
   })
   it('an old ai verdict on the key does not suppress the flag', () => {
     // the flag is NEW information that postdates the release decision
@@ -310,5 +321,45 @@ describe('run — pinned hold re-scans the held version on ruleset change', () =
     expect(e.pendingUpdate?.version).toBe('1.1.0')
     expect(e.pendingUpdate?.capabilities.rulesetVersion).toBe('old-rules') // untouched
     expect(e.pendingUpdate?.verification.status).toBe('verified')
+  })
+})
+
+describe('mergeEntries flaggedAt — the identity-flag clock docket suppresses against', () => {
+  const NOW = '2026-02-02T00:00:00Z'
+  const flaggedPrev = (flaggedAt?: string) => mkEntry('p', {
+    capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused'],
+      ...(flaggedAt ? { flaggedAt } : {}) },
+  })
+  it('an unchanged identity-flag set keeps the previous stamp', () => {
+    const prev = flaggedPrev('2026-01-01')
+    const fresh = mkEntry('p', {
+      capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused'] },
+    })
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    expect(out!.capabilities.flaggedAt).toBe('2026-01-01')
+  })
+  it('a CHANGED flag set restamps now — a new signal is a new observation', () => {
+    const prev = flaggedPrev('2026-01-01')
+    const fresh = mkEntry('p', {
+      capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused', 'sec:repo-recreated'] },
+    })
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    expect(out!.capabilities.flaggedAt).toBe(NOW)
+  })
+  it('legacy flags without a stamp get stamped now (first observation under the field)', () => {
+    const prev = flaggedPrev()            // flags exist but no flaggedAt
+    const fresh = mkEntry('p', {
+      capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused'] },
+    })
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    expect(out!.capabilities.flaggedAt).toBe(NOW)
+  })
+  it('no identity flags → no stamp; sec-delta:* never counts as identity', () => {
+    const prev = mkEntry('p')
+    const fresh = mkEntry('p', {
+      capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec-delta:lifecycle-script'] },
+    })
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    expect(out!.capabilities.flaggedAt).toBeUndefined()
   })
 })

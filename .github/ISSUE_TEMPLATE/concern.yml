@@ -1,12 +1,12 @@
 name: 对目录条目提 concern / Report a concern
-description: 手机可操作——拦截或放行某个 catalog 条目版本（仅 maintainer 有效）
+description: 手机可操作——拦截或放行某个 catalog 条目版本（仅仓库协作者有效）
 title: "[concern] "
 labels: [concern]
 body:
   - type: markdown
     attributes:
       value: |
-        对目录中已有条目提出人工 verdict。**只有仓库 maintainer 提交的 issue 会生效**——其他人提交会被关闭。
+        对目录中已有条目提出人工 verdict。**只有仓库协作者提交的 issue 会生效**——其他人提交会被关闭。
         - **拦截 (concern)**：该版本立即锁死，不会上架/更新；已上架的会被拉回 pending
         - **放行 (pass)**：覆盖 AI concern，日报公示后进入上架流程
         所有记录写入 catalog 分支 `ai-verdicts.jsonl`，可审计。
@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: 版本（可留空）
-      description: 留空 = 提交时的 npm 最新版；GitHub 条目无版本概念可留空；填 `*` = 整个包（所有版本一起拦/放）
+      description: 留空 = 当前在押更新（无在押则取目录展示版本）；GitHub 条目无版本概念可留空；填 `*` = 整个包（所有版本一起拦/放）
       placeholder: "1.2.3"
     validations: { required: false }
   - type: dropdown

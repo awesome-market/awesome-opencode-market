@@ -3,48 +3,105 @@
  *  submission is in the pipeline. Edited in place each catalog run — authors
  *  no longer have to guess from scattered bot comments.
  *
- *  Usage: GH_TOKEN=… GH_REPO=owner/repo npx tsx pipeline/submission-status.ts <index.json> <submissions.txt>
+ *  Usage: GH_TOKEN=… GH_REPO=owner/repo npx tsx pipeline/submission-status.ts <index.json> <submissions.txt> [verdicts.jsonl]
  *  Without GH_TOKEN/GH_REPO it only prints the computed rows (dry run / tests).
  *
  *  Phases (author-facing, plain language — AGENTS.md):
- *    queued   — seed ingested, no catalog entry yet (waiting for the next run,
- *               or silently filtered by an admission gate)
+ *    queued   — seed ingested, no catalog entry yet (waiting for the next run)
  *    review   — entry exists but approval=pending (awaiting AI/human verdict
- *               and digest maturity)
- *    published— visible in the catalog (issue is being closed by notify)
+ *               and digest maturity); an AI concern on the target annotates
+ *               the detail (flagged, awaiting maintainer confirmation)
+ *    blocked  — a HUMAN concern verdict covers the submitted package (slot
+ *               or package-level brake): the issue is told the submission is
+ *               stopped + how to appeal, instead of showing "评审中" for
+ *               weeks while a decided brake stands
+ *    rejected — the admission gate refused the package; the detail says why
+ *               and what to do next (run.ts → seed-outcome.ts stamps the code)
  *  Terminal seeds (notified/dead) and issues without seeds are skipped — the
- *  review report / notify / dead-close comments already cover them. */
+ *  review report / notify / dead-close comments already cover them. A landed
+ *  seed is always notified by the same run, so no 'published' phase exists
+ *  here — the notify comment IS the published signal. */
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { CatalogIndex } from '../src/schema.ts'
+import { CatalogIndex, type AiVerdict, type PluginEntry } from '../src/schema.ts'
+import { latestVerdicts, latestHumanVerdicts, effectiveVerdict, vkey, atCmp, loadVerdicts } from './verdicts.ts'
 
 export interface StatusRow {
   issue: number
   key: string
-  phase: 'queued' | 'review' | 'published'
+  phase: 'queued' | 'review' | 'blocked' | 'rejected'
   phaseLabel: string
   detail: string
 }
 
 const MARKER = '<!-- submission-status -->'
 
+/** run.ts seed-outcome codes → 发生了啥→为啥→咋办 (AGENTS.md error contract) */
+export const REJECT_REASONS: Record<string, string> = {
+  'pkg-not-found': 'npm 上找不到这个包——包名可能拼写有误，或包尚未发布/已被下架。确认包名后回复本 issue 即可重新审查。',
+  'fetch-error': 'npm registry 暂时不可用，收录端没能取到包信息——下一轮目录构建会自动重试，无需操作。',
+  'no-plugin-evidence': '包内缺少 opencode 插件信号（keywords、main 入口或 README 安装说明都未命中收录规则）。修好 package.json 后回复本 issue 重新审查。',
+  'blocklisted': '该包在收录黑名单中，目录不会收录。如认为误封请联系 maintainer。',
+  'template-spam': '同一 owner 下的投稿批量模板痕迹过重，被反垃圾规则拦截。如为误伤请联系 maintainer。',
+  'archived-or-fork': '仓库已归档或为 fork——目录只收录仍在维护的主仓库。',
+  'archived': '仓库已归档——目录只收录仍在维护的仓库。',
+  'repo-not-found': 'GitHub 仓库不存在或不可访问（404）。确认仓库地址后回复本 issue 重新审查。',
+  'no-opencode-evidence': '仓库缺少 opencode 专属信号（`.opencode/` 目录、`opencode.json` 或 `opencode-*` topic）。补齐后回复本 issue 重新审查。',
+}
+
+/** One-line bounded reason for the status comment — reviewer text rendered
+ *  into an issue the SUBMITTER reads; keep it single-line and short. */
+const clip = (s: string, max = 200) => s.replace(/\s+/g, ' ').trim().slice(0, max)
+
+/** Which verdict currently governs the submitted package — mirrors
+ *  applyMatureVerdicts' verdictFor (package brake overrides a slot unless a
+ *  NEWER human pass exists on that exact slot key). Returns the winning
+ *  concern verdict, or null when nothing blocks the package. */
+export function concernOn(
+  name: string, version: string | null,
+  latest: Map<string, AiVerdict>, human: Map<string, AiVerdict>,
+): AiVerdict | null {
+  const brakeH = version === null ? undefined : human.get(vkey(name, null))
+  const brake = brakeH?.verdict === 'concern' ? brakeH : undefined
+  let v = effectiveVerdict(latest.get(vkey(name, version)), human)
+  if (brake) {
+    const slotHuman = human.get(vkey(name, version))
+    if (!(slotHuman?.verdict === 'pass' && atCmp(slotHuman.at, brake.at) > 0)) v = brake
+  }
+  return v?.verdict === 'concern' ? v : null
+}
+
+/** Candidate version a verdict would land on for this entry — same rule as
+ *  docketTargets/unreviewedTargets (held slot, else pending display slot). */
+const candidateOf = (e: PluginEntry): string | null =>
+  e.pendingUpdate ? e.pendingUpdate.version : e.approval === 'pending' ? e.latestVersion : null
+
 export function submissionStatuses(
   index: CatalogIndex,
   lines: string[],
+  verdicts: AiVerdict[] = [],
 ): StatusRow[] {
   const byName = new Map(index.plugins.map(e => [e.name, e]))
+  const latest = latestVerdicts(verdicts)
+  const human = latestHumanVerdicts(verdicts)
   // one row per issue — the newest seed line wins (same-issue replace keeps
   // this true going forward; last-match also covers legacy duplicate rows)
-  const perIssue = new Map<number, { key: string; name?: string; repo?: string }>()
+  const perIssue = new Map<number, { key: string; name?: string; repo?: string; rejected?: string; version?: string }>()
   for (const l of lines) {
     const t = l.trim()
     if (!t.startsWith('{')) continue
     try {
-      const s = JSON.parse(t) as { name?: string; repo?: string; issue?: number; notified?: boolean; dead?: boolean }
+      const s = JSON.parse(t) as { name?: string; repo?: string; issue?: number; notified?: boolean; dead?: boolean; rejected?: string; version?: string }
       if (!s.issue || s.notified || s.dead) continue
       const key = s.name ?? s.repo
       if (!key) continue
-      perIssue.set(s.issue, { key, ...(s.name ? { name: s.name } : {}), ...(s.repo ? { repo: s.repo } : {}) })
+      perIssue.set(s.issue, {
+        key,
+        ...(s.name ? { name: s.name } : {}),
+        ...(s.repo ? { repo: s.repo } : {}),
+        ...(s.rejected ? { rejected: s.rejected } : {}),
+        ...(s.version ? { version: s.version } : {}),
+      })
     } catch { /* skip unreadable */ }
   }
   const rows: StatusRow[] = []
@@ -55,22 +112,41 @@ export function submissionStatuses(
           p.name.toLowerCase() === s.repo!.toLowerCase())
       : undefined
     if (e && e.approval !== 'pending') {
+      continue   // landed — markNotified in the same run already notified+closed
+    }
+    // a concern verdict can land through ANY channel (submit verdict job,
+    // [concern] form, [review] labels) — the seed's issue should say the
+    // submission is stopped rather than read "评审中" while a decided brake
+    // stands. For queued seeds the ghost keys (name@null brake / reviewed
+    // version) are checked too — the brake applies the moment the entry lands.
+    const name = s.name ?? s.repo
+    const ver = e ? candidateOf(e) : (s.repo ? null : (s.version ?? null))
+    const c = name ? concernOn(name, ver, latest, human) : null
+    if (c?.source === 'human') {
       rows.push({
-        issue, key: s.key, phase: 'published',
-        phaseLabel: '已上架',
-        detail: `**${s.key}** 已进入插件目录并对所有用户可见。`,
+        issue, key: s.key, phase: 'blocked',
+        phaseLabel: '已被拦截',
+        detail: `**${s.key}** 被 maintainer 标记为 concern——该版本不会上架。${c.reason ? `理由：${clip(c.reason)}。` : ''}如认为是误判或已修复，请在本 issue 说明，maintainer 会复核。`,
       })
     } else if (e) {
       rows.push({
         issue, key: s.key, phase: 'review',
         phaseLabel: '评审中',
-        detail: `**${s.key}** 已进入目录收录流程，当前处于待审状态——等待评审结论与公示期。通过后自动上架，本 issue 会收到通知。`,
+        detail: `**${s.key}** 已进入目录收录流程，当前处于待审状态——${c ? `评审已标记 concern（${c.reason ? clip(c.reason) : '未附理由'}），等待 maintainer 复核；如认为误判可在本 issue 说明。` : '等待评审结论与公示期。通过后自动上架，本 issue 会收到通知。'}`,
+      })
+    } else if (s.rejected) {
+      rows.push({
+        issue, key: s.key, phase: 'rejected',
+        phaseLabel: '未通过收录规则',
+        detail: `**${s.key}** 未通过目录收录规则：${REJECT_REASONS[s.rejected] ?? `原因代码 \`${s.rejected}\`——修复后回复本 issue 重新审查。`}`,
       })
     } else {
       rows.push({
-        issue, key: s.key, phase: 'queued',
-        phaseLabel: '排队中',
-        detail: `**${s.key}** 已通过机器初审并进入收录队列，等待下一次目录构建处理。若较长时间停留在此阶段，可能被收录规则拦截——届时会在本 issue 说明原因。`,
+        issue, key: s.key, phase: c ? 'review' : 'queued',
+        phaseLabel: c ? '评审中' : '排队中',
+        detail: c
+          ? `**${s.key}** 已通过机器初审并进入收录队列，但评审已标记 concern（${c.reason ? clip(c.reason) : '未附理由'}）——如维持拦截则不会上架；如认为误判可在本 issue 说明。`
+          : `**${s.key}** 已通过机器初审并进入收录队列，等待下一次目录构建处理。若较长时间停留在此阶段，可能被收录规则拦截——届时会在本 issue 说明原因。`,
       })
     }
   }
@@ -105,7 +181,7 @@ export function main(argv: string[] = process.argv): void {
   const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2]!, 'utf8')))
   const path = argv[3]!
   const lines = readFileSync(path, 'utf8').split('\n')
-  const rows = submissionStatuses(index, lines)
+  const rows = submissionStatuses(index, lines, argv[4] ? loadVerdicts(argv[4]) : [])
   const repo = process.env.GH_REPO
   const runId = process.env.GITHUB_RUN_ID ?? 'local'
   if (!repo || !process.env.GH_TOKEN) {

@@ -38,6 +38,10 @@ export const Capabilities = z.looseObject({
   rulesetVersion: z.string().optional(),
   findings: z.array(z.string()),
   redFlags: z.array(z.string()),
+  /** when the CURRENT identity-level flag set (sec:* redFlags) was first observed
+   *  on this slot — stamped by merge, cleared when the set empties. Docket uses
+   *  it to tell "a human verdict decided this flag" from "verdict predates it". */
+  flaggedAt: z.string().optional(),
 })
 
 export const Verification = z.looseObject({
@@ -47,6 +51,11 @@ export const Verification = z.looseObject({
   verifiedAt: z.string().optional(),
   runUrl: z.string().optional(),
   logExcerpt: z.string().max(2048).optional(),
+  /** SRI (npm) or commit sha (github-kind) of the bytes the verify run actually
+   *  measured — the anchor content-addressed reuse + drift checks key on. A
+   *  slot's pinned integrity (entry.integrity / pendingUpdate.integrity /
+   *  github source.version) may describe different bytes after a re-tag. */
+  integrity: z.string().optional(),
   /** consecutive failed verify attempts recorded by verify merge — cleared on
    *  any non-failed result. plan re-queues recent failures while retries < 3 (V-3). */
   retries: z.number().int().optional(),

@@ -69,13 +69,22 @@ jobs:
             require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i))'
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
+      # node_modules itself is cacheable — npm ci's relink work costs ~20s per
+      # shard job; the lockfile hash in the key keeps the cache honest
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      # verdicts feed the plan's condemned-slot filter — a concern-marked
+      # version shouldn't burn a shard re-measuring a judged verdict
+      - run: git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || true
       - id: shards
         env: { VERIFY_CAP: "${{ inputs.cap }}" }
         run: |
           # targeted dispatch → retest mode: failed/verified slots become eligible
           # again (recent failed slots also auto-retry up to 3 attempts — V-3)
-          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ (inputs.targets != '' || inputs.retest) && '--retest' || '' }} > /tmp/plan.out
+          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp /tmp/ai-verdicts.jsonl ${{ (inputs.targets != '' || inputs.retest) && '--retest' || '' }} > /tmp/plan.out
           cat /tmp/plan.out
           # plan writes the matrix list itself — no stdout tail-scraping
           echo "list=$(cat /tmp/plan-matrix.json)" >> "$GITHUB_OUTPUT"
@@ -93,11 +102,13 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 35                 # 8 targets serial ≈ 30min worst-case (V-4 widened the load window — the old 18min/12-target math was stale)
+    timeout-minutes: 35                 # 12 targets ÷ 2 intra-shard lanes ≈ 22min worst-case; margin kept for slow tail targets
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
       # registries it needs to install. Covers install AND activation phases.
+      # codeload serves the github-kind tarballs (`plugin add owner/repo#sha`
+      # and the repo-skill structure check) — github.com alone doesn't carry it.
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: block
@@ -106,12 +117,17 @@ jobs:
             api.npmjs.org:443
             api.github.com:443
             github.com:443
+            codeload.github.com:443
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
       # pinned in lockstep with OPENCODE_VERSION in pipeline/publish/merge.ts —
       # verification results are keyed name@version+host (DEV §4)
       - run: npm i -g @opencode/cli@2.2.5 && opencode --version
@@ -154,9 +170,34 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
       - uses: actions/download-artifact@v4
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
+      # cancelled-merge recovery: when the catalog-branch concurrency lock
+      # evicts a PENDING merge (another writer queued in), its verify shards'
+      # results-* artifacts sit unmerged on that run. Sweep the previous
+      # run's leftovers — merge.ts's verifiedAt freshness guard makes replay
+      # idempotent, so recovered rows land once and never clobber newer data.
+      - id: prev
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          # GITHUB_RUN_ID is numeric — jq compares .id (number) to it UNQUOTED
+          RID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?per_page=4" \
+            --jq '[.workflow_runs[] | select(.status == "completed" and .id != '${GITHUB_RUN_ID}')][0].id // empty' || true)
+          echo "rid=$RID" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        if: steps.prev.outputs.rid != ''
+        continue-on-error: true                    # artifacts may have expired — optional sweep
+        with:
+          pattern: results-*
+          path: /tmp/results-prev
+          merge-multiple: true
+          run-id: ${{ steps.prev.outputs.rid }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: "merge results + commit to catalog (rebase-retry: re-merge against fresh head each attempt, WF-2)"
         id: merge
         env:
@@ -167,6 +208,12 @@ jobs:
           # download-artifact only creates the dir when artifacts exist — a
           # fully-empty shard set must not ENOENT the merge
           mkdir -p /tmp/results
+          # cancelled-merge recovery: fold the previous run's stranded results
+          # in beside this run's. `cp -n` keeps the CURRENT run's row when a
+          # shard number collides — newer evidence always wins.
+          if [ -d /tmp/results-prev ]; then
+            cp -n /tmp/results-prev/results-*.json /tmp/results/ 2>/dev/null || true
+          fi
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
           git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
@@ -234,11 +281,26 @@ jobs:
         if: steps.merge.outputs.pushed == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run site.yml || echo "site dispatch failed — the next catalog run will refresh"
+        run: |
+          # Retry once, then escalate to a deduped pipeline-alert — a silent
+          # double-fail leaves verify results off the public site for ~12h
+          # (the digest watchdog's 36h leg is the backstop, not the detector).
+          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || {
+            echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number' 2>/dev/null || true)
+            BODY="site.yml dispatch failed twice — published verification results may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          }; }
 
   alert:
     needs: [plan, verify, merge]
-    if: failure()
+    # cancelled() included: the catalog-branch concurrency lock can evict a
+    # PENDING merge — silently dropping a whole shard set's results. The
+    # leftover sweep above recovers them next run, but only if someone knows
+    # it happened; an evicted merge must page like a failure.
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:

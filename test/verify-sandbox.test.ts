@@ -1,7 +1,7 @@
 /** V-1 sandbox tests: uid-separated execution of untrusted plugin code,
  *  the /api/plugin server-response canary, and shard-level sudo probing. */
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apiLoaded, apiFailed, apiPluginState, verifyPackage, verifyShard, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
@@ -103,12 +103,20 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       execFn: fakeOs(calls), spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     // uh handed to the sandbox uid via chown (nobody can't create inside a
-    // 0711 runner-owned home); chmod + pkill sweep happened
+    // 0711 runner-owned home); chmod + process sweep happened
     expect(calls.some(c => c.cmd === 'sudo' && c.args[0] === '-n' && c.args[1] === 'chown'
       && c.args[2] === 'nobody' && c.args[3] === join(home, 'u'))).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args.slice(0, 3).join(' ') === '-n -u nobody')).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args[1] === 'chmod')).toBe(true)
-    expect(calls.some(c => c.cmd === 'sudo' && c.args.includes('pkill'))).toBe(true)
+    // process sweep is platform-dual: Linux uses a scoped /proc/*/environ
+    // marker scan (parallel-lane safe — a blanket pkill -u would murder a
+    // sibling lane's serve); non-/proc platforms fall back to pkill -f.
+    if (existsSync('/proc')) {
+      expect(calls.some(c => c.cmd === 'sudo' && c.args.slice(0, 3).join(' ') === '-n -u nobody'
+        && c.args.includes('sh') && c.args.some(a => a.includes('/proc/[0-9]*/environ')))).toBe(true)
+    } else {
+      expect(calls.some(c => c.cmd === 'sudo' && c.args.includes('pkill'))).toBe(true)
+    }
     // serve spawned through the wrapper with the binary restored as argv[0]
     expect(calls.some(c => c.cmd.endsWith('sb.sh') && c.args[0] === 'opencode' && c.args[1] === 'serve')).toBe(true)
     // plugin-executing commands (opencode/sh/env/npx/tsx) went through <home>/sb.sh;
@@ -281,11 +289,46 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       calls.push({ cmd, args })
       return { stdout: 'x', stderr: '' }
     }) as unknown as ExecFn
-    // serve emits nothing → no port → no curl → no snapshot → honest failure
+    // serve boots (listening line) but /api/plugin never lists the package —
+    // no curl writes plugins.json → absent from api → honest package failure
     const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake,
-      spawnFn: serveSpawn(calls, ''), bootWaitMs: 20 })
+      spawnFn: serveSpawn(calls), bootWaitMs: 20, apiWaitMs: 30 })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('absent from /api/plugin')
+  })
+
+  it('install failure under sandbox names the egress allowlist as a possible cause', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'sb-'))
+    const calls: Rec[] = []
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args })
+      if (cmd.endsWith('sb.sh') && args.includes('add')) throw new Error('fetch failed')
+      return { stdout: '', stderr: '' }
+    }) as unknown as ExecFn
+    const r = await verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake, spawnFn: serveSpawn(calls) })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('install')
+    expect(r.logExcerpt).toContain('egress')
+  })
+
+  it('serve that never announces a listener throws → shard records harness, not package fail', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'sb-'))
+    const calls: Rec[] = []
+    const fake = (async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args })
+      return { stdout: 'x', stderr: '' }
+    }) as unknown as ExecFn
+    // boot silence can only be a runner/harness fault — plugin code is loaded
+    // lazily AFTER serve announces its listener, so the package never even ran
+    await expect(verifyPackage('pkg', { home, sandboxUser: 'nobody', execFn: fake,
+      spawnFn: serveSpawn(calls, ''), bootWaitMs: 20 }))
+      .rejects.toThrow('serve did not announce a listener')
+    const results = await verifyShard(['pkg'], join(home, 'r.json'), { execFn: fake,
+      spawnFn: serveSpawn(calls, ''), bootWaitMs: 20 })
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ name: 'pkg', status: 'failed', harness: true })
+    expect(results[0]!.logExcerpt).toContain('harness error')
   })
 })
 
@@ -354,7 +397,8 @@ describe('shard-level hoists and boundaries', () => {
       calls.push(args)
       return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
     }) as unknown as ExecFn
-    const results = await verifyShard(['a', 'b', 'c'], join(home, 'r.json'), { execFn: fake, spawnFn: deadSpawn })
+    const spawnCalls: Rec[] = []
+    const results = await verifyShard(['a', 'b', 'c'], join(home, 'r.json'), { execFn: fake, spawnFn: serveSpawn(spawnCalls), apiWaitMs: 30 })
     expect(results).toHaveLength(3)
     expect(calls.filter(a => a[0] === '--version')).toHaveLength(1)
     expect(results.every(r => r.opencodeVersion === '2.2.5')).toBe(true)

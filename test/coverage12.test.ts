@@ -85,8 +85,8 @@ describe('notify-published markNotified row arms', () => {
 describe('submission-status row arms', () => {
   it('repo-only row matches by repo; neither → skipped; GH env absent → prints rows', async () => {
     const idx = mkIdx([
-      mkEntry('pkg-a'),
-      mkEntry('o/r', { source: { kind: 'github', id: 'o/r', repo: 'o/r' } as never }),
+      mkEntry('pkg-a', { approval: 'pending' }),             // pending → still tracked (landed entries are skipped now)
+      mkEntry('o/r', { approval: 'pending', source: { kind: 'github', id: 'o/r', repo: 'o/r' } as never }),
     ])
     const lines = [
       '{"name":"pkg-a","issue":11}',
@@ -128,7 +128,7 @@ describe('submission-status row arms', () => {
     env.GH_REPO = 'o/r'; env.GH_TOKEN = 't'; env.GITHUB_RUN_ID = 'run9'
     const dir = mkdtempSync(join(tmpdir(), 'ss12b-'))
     const ip = join(dir, 'i.json'), sp = join(dir, 's.txt')
-    writeFileSync(ip, JSON.stringify(mkIdx([mkEntry('p1')])))
+    writeFileSync(ip, JSON.stringify(mkIdx([mkEntry('p1', { approval: 'pending' })])))   // pending → row produced → upsertStatusComment reached
     writeFileSync(sp, '{"name":"p1","issue":5,"notified":false}\n')
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try { mod.main(['node', 'x', ip, sp]) } finally {
@@ -187,6 +187,12 @@ describe('verdicts human-ordering + held ?? null + pkgPass awaiting-review', () 
     const dg3 = { lastDigestAt: 't', announced: [akey(pkgPass)], day: 'd', dayAnnounced: [akey(pkgPass)] } as DigestState
     const r3 = applyMatureVerdicts(mkIdx([already]), [pkgPass], dg3)
     expect(r3.index.plugins[0]!.approvalReason).toBe('awaiting-review')
+    // approval 'legacy' + real reason + pkgPass → also reset (298 'legacy' arm)
+    const leg2 = mkEntry('lg2', { approval: 'legacy', approvalReason: 'predates AI review' })
+    const pkgPass2 = verdict({ name: 'lg2', version: null, verdict: 'pass', source: 'human', at: '2026-01-05T00:00:00Z' })
+    const dg4 = { lastDigestAt: 't', announced: [akey(pkgPass2)], day: 'd', dayAnnounced: [akey(pkgPass2)] } as DigestState
+    const r4 = applyMatureVerdicts(mkIdx([leg2]), [pkgPass2], dg4)
+    expect(r4.index.plugins[0]!.approvalReason).toBe('awaiting-review')
   })
 })
 

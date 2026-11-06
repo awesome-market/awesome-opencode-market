@@ -117,11 +117,33 @@ export function dedupeSlugs(entries: PluginEntry[]): PluginEntry[] {
   })
 }
 
+/** Identity-level red flags (`sec:*`) — the standing-review signals, distinct
+ *  from version-level `sec-delta:*` scan flags. Key used for flag-set diffing. */
+const identKey = (caps: { redFlags: string[] } | undefined): string =>
+  (caps?.redFlags ?? []).filter(f => f.startsWith('sec:')).sort().join(' ')
+
+/** Stamp flaggedAt = "when the current identity-flag set was first observed on
+ *  this slot": set changes (or a missing/legacy stamp) → now; identical set →
+ *  keep the previous stamp; empty set → clear. A human verdict can only be said
+ *  to have decided a flag if it postdates the flag's flaggedAt. */
+const stampFlaggedAt = (
+  caps: PluginEntry['capabilities'],
+  prevCaps: PluginEntry['capabilities'] | undefined,
+  now: string,
+): PluginEntry['capabilities'] => {
+  const ident = identKey(caps)
+  const flaggedAt = ident === ''
+    ? undefined
+    : ident === identKey(prevCaps) && prevCaps?.flaggedAt ? prevCaps.flaggedAt : now
+  return caps.flaggedAt === flaggedAt ? caps : { ...caps, flaggedAt }
+}
+
 export function mergeEntries(
   fresh: PluginEntry[],
   old: CatalogIndex | null,
   opencodeVersion: string,
   rulesetVersion?: string,
+  now = new Date().toISOString(),
 ): PluginEntry[] {
   const oldByKey = new Map<string, PluginEntry>()
   const oldByName = new Map<string, PluginEntry>()
@@ -270,9 +292,12 @@ export function mergeEntries(
     // ("有高危信号没跑"), not 'unverified' ("还没验"). 'failed' results keep
     // their real outcome. Applies to both layers — trust flags can add
     // redFlags after scan time produced 'unverified'.
+    // Evidence survives the downgrade: verifiedAt/runUrl/integrity stay so
+    // the detail page keeps the audit trail of what WAS measured before the
+    // flags appeared — and plan can re-enter a cleared slot honestly.
     const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
       flagged && (v.status === 'verified' || v.status === 'unverified')
-        ? { status: 'skipped', level: v.level ?? 'install' }
+        ? { ...v, status: 'skipped', level: v.level ?? 'install' }
         : v
     out.verification = skipIfFlagged(out.verification, out.capabilities.redFlags.length > 0)
     if (out.pendingUpdate) {
@@ -280,6 +305,16 @@ export function mergeEntries(
         ...out.pendingUpdate,
         verification: skipIfFlagged(out.pendingUpdate.verification, out.pendingUpdate.capabilities.redFlags.length > 0),
       }
+    }
+    // flag-set clock (R-14 follow-up): runs LAST so every flag writer upstream
+    // (trustFlags, remote caps restore, drift/tombstone rescan) is covered. The
+    // held slot compares against the remote's SAME held version — a different
+    // held version is a new slot whose flags are observed now.
+    out.capabilities = stampFlaggedAt(out.capabilities, prev?.capabilities, now)
+    if (out.pendingUpdate) {
+      const puPrev = prev?.pendingUpdate?.version === out.pendingUpdate.version
+        ? prev?.pendingUpdate?.capabilities : undefined
+      out.pendingUpdate = { ...out.pendingUpdate, capabilities: stampFlaggedAt(out.pendingUpdate.capabilities, puPrev, now) }
     }
     return out
   })
@@ -312,7 +347,7 @@ export function buildIndex(
   },
 ): { index: CatalogIndex; gate: ReturnType<typeof corruptionGate> } {
   const now = opts.now ?? new Date().toISOString()
-  const merged = mergeEntries(fresh, old, opts.opencodeVersion, opts.rulesetVersion)
+  const merged = mergeEntries(fresh, old, opts.opencodeVersion, opts.rulesetVersion, now)
   const gate = corruptionGate(merged, old)
   const aliveNames = new Set(merged.map(e => e.name))
   const cutoff = Date.parse(now) - REMOVED_RETENTION_MS
