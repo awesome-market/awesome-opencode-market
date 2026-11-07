@@ -19,7 +19,7 @@ const Market = Ipc.define({
   methods: {
     index: { input: Schema.Unknown, output: Schema.Unknown },
     refreshIndex: { input: Schema.Unknown, output: Schema.Unknown },
-    indexOutcome: { output: Schema.String },
+    indexOutcome: { input: Schema.Unknown, output: Schema.String },
     installed: { output: Schema.Unknown },
     install: { input: Schema.Unknown, output: Schema.String },
     update: { input: Schema.Unknown, output: Schema.String },
@@ -42,7 +42,7 @@ const Market = Ipc.define({
 type Api = {
   index(p?: { url?: string }): Promise<MarketIndex>
   refreshIndex(p?: { url?: string }): Promise<MarketIndex>
-  indexOutcome(): Promise<string>
+  indexOutcome(p?: { url?: string }): Promise<string>
   installed(p?: { names?: string[] | undefined }): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined>; degraded?: boolean }>
   install(p: { name: string; spec?: string }): Promise<string>
   update(p: { name: string; spec?: string }): Promise<string>
@@ -731,8 +731,11 @@ export default Plugin.define({
         if (!jobs.length) { updAll.textContent = t('allLatest'); setTimeout(() => { setUpdBusy(false); updAll.textContent = t('updateAll') }, 3000); return }
         updAll.disabled = true; setUpdBusy(true)
         const total = jobs.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
-        let done = 0, ok = 0, fail = 0
+        let done = 0, ok = 0, fail = 0, cancelled = 0
         const bump = () => { updAll.textContent = tf('updatingN', { n: ++done, total }) }
+        // a user-cancelled half is not a failure — counting it as one made a
+        // deliberate 'cancel' read as 'N failed' in the sweep summary
+        const wasCancelled = (x: unknown) => x instanceof Error && x.message === 'cancelled'
         // two serial lanes — plugin adds rewrite opencode.json (must serialize
         // against each other), skill installs write the skills root (serialize
         // for lift-collision checks). The lanes overlap: tarball downloads no
@@ -740,7 +743,7 @@ export default Plugin.define({
         const pluginLane = (async () => {
           for (const j of jobs) if (j.sync.plugin) {
             bump()
-            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++ } catch { fail++ }
+            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++ } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
           }
         })()
         const skillLane = (async () => {
@@ -750,7 +753,7 @@ export default Plugin.define({
             try {
               if (!canSkill) throw new Error('host missing writeSkill')
               await installSkillNet(j.e); markSkillInstalled(j.e); ok++
-            } catch { fail++ }
+            } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
           }
         })()
         await Promise.all([pluginLane, skillLane])
@@ -758,7 +761,9 @@ export default Plugin.define({
         const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
         if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
         updAll.disabled = false; setUpdBusy(false)
-        updAll.textContent = fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })
+        updAll.textContent = cancelled
+          ? (fail ? tf('sweepCancelFail', { ok, fail, c: cancelled }) : tf('sweepCancel', { ok, c: cancelled }))
+          : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })
         setTimeout(() => { updAll.textContent = t('updateAll') }, 4000)
       }
       // same webview quirk as the refresh button — dispatch on the parent
@@ -1058,7 +1063,7 @@ export default Plugin.define({
           // 'stale'/'mismatch' mean the host SERVED THE OLD SNAPSHOT (fetch
           // failed / sha disagreement), not that data was refreshed — the
           // old code labeled them refreshed anyway
-          const oc = await safe.indexOutcome?.().catch(() => '') as string
+          const oc = await safe.indexOutcome?.({ url: INDEX_URL }).catch(() => '') as string
           const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           const time = new Date().toLocaleTimeString()
@@ -1258,7 +1263,7 @@ export default Plugin.define({
     m.provide(Market, {
         index: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl) as Promise<MarketIndex> },
         refreshIndex: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl, true) as Promise<MarketIndex> },
-        indexOutcome: () => fetchOutcome(),
+        indexOutcome: (p?: { url?: unknown }) => fetchOutcome(urlOrDefault(p?.url)),
         installed: async (p?: { names?: unknown }) => {
           const { execFile } = require('node:child_process') as typeof import('node:child_process')
           const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs')
@@ -1362,45 +1367,63 @@ export default Plugin.define({
           // cheap recheck: a moved manifest sha forces a real re-pull.
           try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
           catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
-          // NO withConfigLock here — the lock guards config read-modify-write
-          // sections, and `plugin add` does its own config write in the CLI
-          // process (outside our lock either way). Holding it across the
-          // spawn froze every other config op — uninstall, skillSource,
-          // skillPermission, other updates' dedupe — for up to 90s per call.
-          return new Promise<string>((resolve, reject) => {
-            // claim released here — the spawned child becomes the
-            // cancellable (jobs). delete+abort-check inside the executor is
-            // atomic vs any interleaved cancelInstall
-            pendingInstall.delete(p.name)
-            if (pac.signal.aborted) { reject(new Error('cancelled')); return }
+          const clean = cleanSpec(spec)
+          const push = (line: string) => m.emit?.('progress', { name: p.name, line })
+          const done = (ok: boolean, wasCancelled = false) => m.emit?.('progress', { name: p.name, line: '', done: true, ok, ...(wasCancelled ? { cancelled: true } : {}) })
+          const isCancelled = (x: unknown) => x instanceof Error && x.message === 'cancelled'
+          // NO withConfigLock around the spawn — the lock guards config
+          // read-modify-write sections, and `plugin add` writes config in the
+          // CLI process outside our lock either way. Holding it across a
+          // 90s spawn queued every other config op behind the sweep. The
+          // claim stays through spawn AND the dedupe below: the close→dedupe
+          // gap used to release both jobs and pendingInstall, letting a
+          // second op (or uninstall) slip between `plugin add` and the
+          // config rewrite.
+          try {
+            if (pac.signal.aborted) throw new Error('cancelled')
+            push(`install ${spec}`)
             cancelled.delete(p.name)   // clear a stale mark from a prior op
-            const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
-            jobs.set(p.name, child)
-            const push = (line: string) => m.emit?.('progress', { name: p.name, line })
-            child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-            child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-            let timedOut = false
-            let spawnFailed = false
-            const kill = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 90_000)
-            child.on('close', (code, signal) => {
-              clearTimeout(kill); jobs.delete(p.name)
-              // spawn-failed children also emit 'close' — without this the
-              // error path's rejection and this handler's done-emit both run
-              if (spawnFailed) return
-              // user-cancel and watchdog-timeout are not failures — report
-              // them as such instead of 'exit null' (a killed child arrives
-              // with code=null, indistinguishable from a crash without this)
-              if (cancelled.has(p.name)) {
-                cancelled.delete(p.name)
-                m.emit?.('progress', { name: p.name, line: '', done: true, ok: false, cancelled: true })
-                reject(new Error('cancelled')); return
-              }
-              m.emit?.('progress', { name: p.name, line: '', done: true, ok: code === 0 })
-              if (timedOut) { reject(new Error('timeout 90s')); return }
-              code === 0 ? resolve('installed') : reject(new Error(`exit ${code ?? signal ?? '?'}`))
+            await new Promise<void>((res, rej) => {
+              const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
+              jobs.set(p.name, child)
+              child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+              child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+              let timedOut = false
+              let spawnFailed = false
+              const kill = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 90_000)
+              child.on('close', (code, signal) => {
+                clearTimeout(kill); jobs.delete(p.name)
+                // spawn-failed children also emit 'close' — without this the
+                // error path's rejection and this handler's resolution both run
+                if (spawnFailed) return
+                // user-cancel and watchdog-timeout are not failures — report
+                // them as such instead of 'exit null' (a killed child arrives
+                // with code=null, indistinguishable from a crash without this)
+                if (cancelled.has(p.name)) { cancelled.delete(p.name); rej(new Error('cancelled')); return }
+                if (timedOut) { rej(new Error('timeout 90s')); return }
+                code === 0 ? res() : rej(new Error(`exit ${code ?? signal ?? '?'}`))
+              })
+              child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); spawnFailed = true; rej(e) })
             })
-            child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); spawnFailed = true; reject(e) })
-          })
+            // `plugin add` APPENDS rather than dedupes — a same-name spec in
+            // another form (installed() lag, manual edits, prior failed
+            // dedupe) would linger forever. Same rewrite update() runs,
+            // under the lock that exists for exactly this RMW.
+            await withConfigLock(async () => {
+              const cfg = await cfgPath()
+              const d = await readJson(cfg)
+              const list = strArrayField(d, 'plugins')
+              const before = list.filter(s => cleanSpec(s) === clean)
+              d.plugins = dedupeToSpec(list, spec)
+              await writeJsonAtomic(cfg, d)
+              if (before.length !== 1 || before[0] !== spec) { push(`config deduped ${before.join(',')} → ${spec}`); lg(`install ${p.name}: config rewritten (${before.length} specs → ${spec})`) }
+            })
+            lg(`install ${p.name}: ok`); done(true); return 'installed'
+          } catch (x) {
+            push(`install ${isCancelled(x) ? 'cancelled' : `failed: ${String(x)}`}`)
+            lg(`install ${p.name}: ${isCancelled(x) ? 'cancelled' : `FAILED ${String(x)}`}`)
+            done(false, isCancelled(x)); throw x
+          } finally { pendingInstall.delete(p.name) }
         },
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
@@ -1421,14 +1444,17 @@ export default Plugin.define({
           const done = (ok: boolean, wasCancelled = false) => m.emit?.('progress', { name: p.name, line: '', done: true, ok, ...(wasCancelled ? { cancelled: true } : {}) })
           const isCancelled = (x: unknown) => x instanceof Error && x.message === 'cancelled'
           // claim released + abort checked BEFORE the spawn — the same
-          // atomic hand-off install() uses. The spawn itself must NOT sit
-          // inside withConfigLock: the mutex exists for config RMW sections,
-          // and holding it across a 90s `plugin add` queued every other
-          // config op (uninstall, skillSource, skillPermission, other
-          // updates' dedupe) behind the sweep. Only the dedupe below locks.
-          pendingInstall.delete(p.name)
-          if (pac.signal.aborted) { done(false, true); throw new Error('cancelled') }
+          // atomic hand-off install() uses, except the claim is NOT released
+          // here: it stays through spawn AND the dedupe RMW (finally below),
+          // closing the close→dedupe window where a second op could start
+          // while this one's config rewrite was still pending. The spawn
+          // itself must NOT sit inside withConfigLock: the mutex exists for
+          // config RMW sections, and holding it across a 90s `plugin add`
+          // queued every other config op (uninstall, skillSource,
+          // skillPermission, other updates' dedupe) behind the sweep. Only
+          // the dedupe below locks.
           try {
+            if (pac.signal.aborted) throw new Error('cancelled')
             // pinned update: `plugin add` does NOT dedupe — a second spec for the
             // same package appends. Install the pinned spec first, then rewrite
             // config down to exactly that spec. Never plugin.update — it resolves
@@ -1470,7 +1496,7 @@ export default Plugin.define({
             push(`update ${isCancelled(x) ? 'cancelled' : `failed: ${String(x)}`}`)
             lg(`update ${p.name}: ${isCancelled(x) ? 'cancelled' : `FAILED ${String(x)}`}`)
             done(false, isCancelled(x)); throw x
-          }
+          } finally { pendingInstall.delete(p.name) }
         },
         cancelInstall: async (name: string) => {
           // mark BEFORE killing — the child's close handler reads this to

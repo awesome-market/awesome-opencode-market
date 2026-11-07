@@ -169,8 +169,9 @@ describe('catalog helpers', () => {
     expect(a.plugins.length).toBeGreaterThan(0)
     expect(store['opencode-market.index.v1']).toBeTruthy()
     s.close()
-    // second call hits TTL cache (no error even if offline now)
-    const b = await fetchIndexCached('http://127.0.0.1:9/dead')
+    // second call hits TTL cache — the server is now DOWN, so a real fetch
+    // would throw; the cache is also URL-keyed, so the same url is required
+    const b = await fetchIndexCached(s.url)
     expect(b.plugins.length).toBe(a.plugins.length)
     delete (globalThis as Record<string, unknown>).localStorage
   }, 20000)
@@ -189,14 +190,15 @@ describe('catalog helpers', () => {
       setItem: (k: string, v: string) => { store[k] = v },
       removeItem: (k: string) => { delete store[k] },
     } as unknown as Storage
-    // seed an EXPIRED cache entry
-    store['opencode-market.index.v1'] = JSON.stringify({ at: 1, index: { version: 'old', generatedAt: '', plugins: [] } })
     const s = await serveIndex()
+    // seed an EXPIRED cache entry — url-keyed, so it must name the catalog
+    // it belongs to or readIdxCache treats it as foreign (a cache miss)
+    store['opencode-market.index.v1'] = JSON.stringify({ at: 1, url: s.url, index: { version: 'old', generatedAt: '', plugins: [] } })
     const idx = await fetchIndexCached(s.url)   // must refetch, not serve stale
     s.close()
     expect(idx.plugins.length).toBeGreaterThan(0)
     // poison network + valid cache → fallback serves cached
-    store['opencode-market.index.v1'] = JSON.stringify({ at: Date.now() - 7200_000, index: { version: 'snap', generatedAt: '', plugins: [{ name: 'snap-pkg' }] } })
+    store['opencode-market.index.v1'] = JSON.stringify({ at: Date.now() - 7200_000, url: 'http://127.0.0.1:9/dead', index: { version: 'snap', generatedAt: '', plugins: [{ name: 'snap-pkg' }] } })
     const snap = await fetchIndexCached('http://127.0.0.1:9/dead')
     expect(snap.version).toBe('snap')
     // poison + no cache → throws

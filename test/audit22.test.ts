@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-// minimal tar builder — same convention as skill-install.test.ts
+// minimal tar builder — same convention as skill-install.test.ts, with a
+// real ustar checksum (installSkillTar verifies it)
 function tarEntry(name: string, content: string | null, type = '0'): Buffer {
   const h = Buffer.alloc(512)
   h.write(name, 0, 100)
@@ -15,6 +16,9 @@ function tarEntry(name: string, content: string | null, type = '0'): Buffer {
   const size = content === null ? 0 : Buffer.byteLength(content)
   h.write(size.toString(8).padStart(11, '0'), 124)
   h.write(type, 156)
+  h.fill(0x20, 148, 156)
+  let sum = 0; for (const b of h) sum += b
+  h.write(sum.toString(8).padStart(6, '0') + '\0 ', 148)
   if (content === null) return h
   const body = Buffer.from(content)
   const pad = Buffer.alloc(Math.ceil(size / 512) * 512 - size)

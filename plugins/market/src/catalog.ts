@@ -386,7 +386,7 @@ export function saveState(s: LocalState): void {
 const LS_IDX = 'opencode-market.index.v1'
 const TTL_MS = 3600_000
 
-interface CachedIndex { at: number; index: MarketIndex; sha?: string }
+interface CachedIndex { at: number; index: MarketIndex; sha?: string; url?: string }
 
 /** Storage backend — localStorage in the webview; a module-level slot on
  *  Node (TUI/main have no localStorage, so without this every dialog open
@@ -403,8 +403,14 @@ let memIdx: CachedIndex | null = null
 // Serving it unconditionally would let a stale in-memory copy mask a newer
 // localStorage write (and leak index state across storage lifetimes)
 let lsQuotaFailed = false
-const readIdxCache = (): CachedIndex | null => {
-  if (lsQuotaFailed) return memIdx
+const readIdxCache = (url: string): CachedIndex | null => {
+  // the cache slot is global but catalogs are per-URL — a snapshot fetched
+  // for index A must NEVER be served as index B's data (URL switches within
+  // TTL used to get the previous catalog's entries). Blobs written before
+  // url was recorded fail the check → one honest refetch, then self-heal.
+  const usable = (c: CachedIndex | null): CachedIndex | null =>
+    c && c.url === url && typeof c === 'object' && c.index && typeof c.index === 'object' && Array.isArray(c.index.plugins) ? c : null
+  if (lsQuotaFailed) return usable(memIdx)
   try {
     const l = lsIdx()
     const c = l ? JSON.parse(l.getItem(LS_IDX) ?? 'null') as CachedIndex | null : memIdx
@@ -412,7 +418,7 @@ const readIdxCache = (): CachedIndex | null => {
     // .plugins) is TRUTHY but unusable: the health-match and stale-fallback
     // paths deref cached.index.categories (TypeError) and the TTL path would
     // serve `undefined` as the catalog. Absent = fetch fresh.
-    return c && typeof c === 'object' && c.index && typeof c.index === 'object' && Array.isArray(c.index.plugins) ? c : null
+    return usable(c)
   } catch { return null }
 }
 const writeIdxCache = (c: CachedIndex) => {
@@ -426,11 +432,22 @@ const writeIdxCache = (c: CachedIndex) => {
   memIdx = c
 }
 
-/** What the last fetchIndexCached call did — UIs can say "already latest"
- *  instead of pretending a refresh happened. */
+/** What each catalog URL's last fetchIndexCached call did — UIs can say
+ *  "already latest" instead of pretending a refresh happened. Keyed BY URL:
+ *  the process can hold calls for a custom indexUrl AND the default at once,
+ *  and a single global let let whichever fetch finished LAST answer for
+ *  every URL (a slow refresh of catalog A reported catalog B's outcome). */
 export type FetchOutcome = 'first' | 'updated' | 'fresh' | 'stale' | 'mismatch'
-let lastOutcome: FetchOutcome = 'first'
-export const fetchOutcome = (): FetchOutcome => lastOutcome
+const lastOutcomes = new Map<string, FetchOutcome>()
+let lastOutcomeUrl: string | null = null
+const markOutcome = (url: string, o: FetchOutcome) => { lastOutcomes.set(url, o); lastOutcomeUrl = url }
+/** url omitted → the most recently fetched catalog's outcome (legacy
+ *  single-catalog callers); pass the URL you actually fetched for an exact
+ *  answer when several catalogs share the process. */
+export const fetchOutcome = (url?: string): FetchOutcome => {
+  const u = url ?? lastOutcomeUrl
+  return (u && lastOutcomes.get(u)) || 'first'
+}
 
 /** Manifest-first cached fetch: the tiny health.json carries the published
  *  index's sha256 — an unchanged catalog costs ~100 bytes, not a multi-MB
@@ -499,12 +516,12 @@ export function fetchIndexCached(url = DEFAULT_INDEX_URL, force = false): Promis
 }
 
 async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketIndex> {
-  const cached = readIdxCache()
+  const cached = readIdxCache(url)
   // offline fast-path — a known-down network shouldn't stall the UI behind
   // two fetch timeouts when a usable snapshot already exists
   if (cached && typeof navigator !== 'undefined' && navigator.onLine === false) {
     setCatDict(cached.index.categories)
-    lastOutcome = 'stale'
+    markOutcome(url, 'stale')
     return cached.index
   }
   let healthSha: string | null = null
@@ -522,7 +539,7 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
   }
   if (healthSha && cached?.sha === healthSha) {
     writeIdxCache({ ...cached, at: Date.now() })
-    lastOutcome = 'fresh'
+    markOutcome(url, 'fresh')
     setCatDict(cached.index.categories)   // warm-start: dict must track the
     return cached.index                   // served copy, not just new downloads
   }
@@ -530,7 +547,7 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
   // the TTL heuristic, so only hash-stable or manifest-less caches skip on TTL
   const moved = !!(healthSha && cached?.sha && cached.sha !== healthSha)
   if (!force && !moved && cached && Date.now() - cached.at < TTL_MS) {
-    lastOutcome = 'fresh'
+    markOutcome(url, 'fresh')
     setCatDict(cached.index.categories)
     return cached.index
   }
@@ -545,7 +562,7 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
       if (got && got !== healthSha) {
         // the edge node served bytes older/newer than the announced manifest —
         // refuse to cache a pair we can't prove belongs together
-        lastOutcome = 'mismatch'
+        markOutcome(url, 'mismatch')
         if (cached) { setCatDict(cached.index.categories); return cached.index }
         throw new Error('catalog hash mismatch — published manifest and index disagree; retry shortly')
       }
@@ -555,11 +572,11 @@ async function fetchIndexCachedRun(url: string, force: boolean): Promise<MarketI
     const idx = sanitizeIndex(JSON.parse(new TextDecoder().decode(bytes)) as MarketIndex)
     const out = { ...idx, plugins: idx.plugins.filter(isVisible) }
     setCatDict(out.categories)
-    writeIdxCache({ at: Date.now(), index: out, ...(sha ? { sha } : {}) })
-    lastOutcome = cached ? 'updated' : 'first'
+    writeIdxCache({ at: Date.now(), index: out, url, ...(sha ? { sha } : {}) })
+    markOutcome(url, cached ? 'updated' : 'first')
     return out
   } catch (e) {
-    if (lastOutcome !== 'mismatch') lastOutcome = cached ? 'stale' : lastOutcome
+    if (lastOutcomes.get(url) !== 'mismatch') markOutcome(url, cached ? 'stale' : lastOutcomes.get(url) ?? 'first')
     if (cached) { setCatDict(cached.index.categories); return cached.index }   // snapshot fallback beats failure
     throw e
   }
@@ -600,6 +617,30 @@ export function enginesSatisfied(host: string, expr: string): boolean | null {
     }
     return 0
   }
+  // caret/tilde desugar to >=ver <upper per npm semantics — the old code
+  // approximated with "same major" (^0.2.3 passed host 0.5.0 though npm
+  // caps it at <0.3.0) and "same major+minor" (~1 passed only 1.0.x though
+  // npm allows <2.0.0). ^ bumps the left-most NON-ZERO part (^1.2.3→<2.0.0,
+  // ^0.2.3→<0.3.0, ^0.0.3→<0.0.4); all-zero bumps the last specified part
+  // (^0→<1.0.0, ^0.0→<0.1.0, ^0.0.0→<0.0.1). ~ bumps minor when pinned
+  // (~1.2.3→<1.3.0) else major (~1→<2.0.0).
+  const upperFor = (op: string, ver: string): number[] | null => {
+    const p = ver.split(/[-+]/)[0]!.split('.').map(s => parseInt(s, 10))
+    if (p.some(isNaN)) return null
+    if (op === '~') return p.length <= 1 ? [p[0]! + 1] : [p[0]!, p[1]! + 1]
+    const nz = p.findIndex(x => x > 0)
+    if (nz < 0) { const u = p.slice(); u[u.length - 1]!++; return u }
+    const u = p.slice(0, nz + 1); u[nz]!++
+    for (let i = nz + 1; i < p.length; i++) u[i] = 0
+    return u
+  }
+  const ltUpper = (hv: number[], up: number[]): boolean => {
+    for (let i = 0; i < Math.max(hv.length, up.length); i++) {
+      const d = (hv[i] ?? 0) - (up[i] ?? 0)
+      if (d) return d < 0
+    }
+    return false   // host == upper bound → NOT below it
+  }
   // one AND-able range expression → true / false / null (unparseable)
   const evalCond = (cond: string): boolean | null => {
     if (!cond) return null
@@ -627,9 +668,18 @@ export function enginesSatisfied(host: string, expr: string): boolean | null {
           case '<=': ok = c <= 0; break
           case '>': ok = c > 0; break
           case '<': ok = c < 0; break
-          case '^': ok = c >= 0 && parts(h)[0] === parts(ver)[0]; break
-          case '~': ok = c >= 0 && parts(h)[0] === parts(ver)[0] && parts(h)[1] === parts(ver)[1]; break
-          default: ok = c === 0
+          case '^': case '~': {
+            const up = upperFor(op, ver)
+            // unparseable bound → unknown, not a confident verdict; the
+            // >=ver half still uses the shared comparator
+            ok = up !== null && c >= 0 && ltUpper(parts(h), up)
+            if (up === null) sawUnknown = true
+            break
+          }
+          case '=': ok = c === 0; break
+          // an operator outside the recognized set ('~>', '=>', …) is not
+          // ours to guess at — the old default read it as exact match
+          default: ok = false; sawUnknown = true; break
         }
         if (!ok) break
       }
@@ -684,7 +734,7 @@ export type I18nKey =
   'cat'|'keysHint'|'menuSettings'|'exportBackupTui'|'restoreTui'|'restorePrompt'|'clearDataTui'|'confirmClearTui'|'clearConfirm'|'devlogTui'|'devlogOn'|'devlogOff'|'viewLogs'|'devlogMenu'|'useHttpCatalog'|'retryKey'|'updateN'|'confirmEnter'|
   'all'|'expand'|'installingN'|'updatedN'|'removedN'|'installFailN'|'uninstallFail'|'uninstallPartial'|'updateFail'|'exportFail'|'restoreFail'|'catalogFail'|'catalogAlready'|'catalogEnabled'|'cancelled'|'heldReview'|'dataFresh'|'integrityFail'|
   'deprecated'|'replacedBy'|'legacy'|'removedFrom'|'reasonNpm404'|'reasonRepo404'|'reasonFiltered'|'reasonCapped'|'reasonManual'|'reasonUnknown'|'viewOnSite'|'compat'|'heldReason'|'verifyLevel'|'verifyLog'|'verifyRun'|'permTitle'|'permAllow'|'permAsk'|'permDeny'|'permOff'|'disable'|'revertTo'|'featFilter'|'installRunning'|'catalogDisabled'|
-  'scannedClean'|'catalogMoved'|'compatWarn'|'invDown'|'keysHintGui'|'heldAtLabel'|'refreshStale'|'refreshMismatch'
+  'scannedClean'|'catalogMoved'|'compatWarn'|'invDown'|'keysHintGui'|'heldAtLabel'|'refreshStale'|'refreshMismatch'|'sweepCancel'|'sweepCancelFail'
 const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English',
   partsHint: '{k} parts (multi-select)', installing: 'installing…', installFailed: 'install failed', failedRetry: 'failed — retry', verifying: 'verifying…', installedPending: 'installed (verify pending)', skill: 'skill', plugin: 'plugin', uncataloged: 'uncataloged', updateAll: 'update all', needRestartDesk: 'restart desktop required', allLatest: 'all up to date', updatingN: 'updating {n}/{total}…', updatedOk: 'updated {ok}', updatedMix: 'updated {ok}, {fail} failed',
   tabDiscover: 'discover', tabPlugins: 'plugins', tabSkills: 'skills', tabFavorites: 'favorites', tabInstalled: 'my plugins', tabMySkills: 'my skills', tabAdvanced: 'settings', filter: 'filter', sortField: 'sort by', sortDownloads: 'npm downloads (30d)', sortStars: 'stars', sortName: 'name', sortVerified: 'verification', sortDirLabel: 'direction', sortDesc: 'descending', sortAsc: 'ascending', publishRange: 'published', rangeAll: 'all time', range1d: 'last 1 day', range7d: 'last 7 days', range30d: 'last 30 days', range90d: 'last 90 days', range1y: 'last year', allN: 'all({n})',
@@ -692,7 +742,7 @@ const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', sk
   cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · r refresh · U update all · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
   all: 'all', expand: 'expand', installingN: 'installing {name}…', updatedN: '{name} updated', removedN: '{name} removed', installFailN: '{name} install failed{exit} — press {key} to retry', uninstallFail: 'uninstall failed: {err} — press {key} to retry', uninstallPartial: '{name} removed — skill dir kept: {err}', updateFail: 'update failed: {err}', exportFail: 'export failed: {err}', restoreFail: 'restore failed: {err} — check the backup file and retry', catalogFail: 'catalog source failed: {err} — check {cfg} and retry', catalogAlready: 'already enabled', catalogEnabled: 'enabled', cancelled: 'cancelled', heldReview: 'v{v} pending review — not installable yet', dataFresh: 'already up to date', integrityFail: 'downloaded bytes do not match the reviewed artifact — retry, or report if it persists',
   deprecated: 'deprecated', replacedBy: 'use {name} instead', legacy: 'legacy', removedFrom: 'removed from catalog', reasonNpm404: 'gone from npm', reasonRepo404: 'repository gone', reasonFiltered: 'filtered out', reasonCapped: 'over catalog cap', reasonManual: 'removed by maintainer', reasonUnknown: 'reason unknown', viewOnSite: 'view on site', compat: 'requires', heldReason: 'reason', verifyLevel: 'level', verifyLog: 'verify log', verifyRun: 'verify run', permTitle: 'skill permissions', permAllow: 'allow', permAsk: 'ask', permDeny: 'deny', permOff: 'clear', disable: 'disable', revertTo: 'revert to approved', featFilter: 'parts', installRunning: 'install already running', catalogDisabled: 'disabled',
-  scannedClean: 'scanned, no findings — this does not mean safe', catalogMoved: 'catalog updated — refresh data and retry', compatWarn: 'requires opencode {req} — you have {cur}', invDown: 'inventory unavailable — installed state may be stale', keysHintGui: '↑↓←→/hjkl move · enter detail · i install · u uninstall · * fav · / search · esc back', heldAtLabel: 'held', refreshStale: 'fetch failed — showing cached data, retry shortly', refreshMismatch: 'published manifest and index disagree — kept previous data' }
+  scannedClean: 'scanned, no findings — this does not mean safe', catalogMoved: 'catalog updated — refresh data and retry', compatWarn: 'requires opencode {req} — you have {cur}', invDown: 'inventory unavailable — installed state may be stale', keysHintGui: '↑↓←→/hjkl move · enter detail · i install · u uninstall · * fav · / search · esc back', heldAtLabel: 'held', refreshStale: 'fetch failed — showing cached data, retry shortly', refreshMismatch: 'published manifest and index disagree — kept previous data', sweepCancel: '{ok} updated, {c} cancelled', sweepCancelFail: '{ok} updated, {fail} failed, {c} cancelled' }
 // AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
 const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English',
   partsHint: '{k} 部件（可多选）', installing: '安装中…', installFailed: '安装失败', failedRetry: '失败 — 重试', verifying: '验证中…', installedPending: '已安装（等待验证）', skill: '技能', plugin: '插件', uncataloged: '未收录', updateAll: '全部更新', needRestartDesk: '需重启桌面端', allLatest: '全部已是最新', updatingN: '更新中 {n}/{total}…', updatedOk: '已更新 {ok} 个', updatedMix: '更新 {ok} 成功 {fail} 失败',
@@ -701,7 +751,7 @@ const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed:
   cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · r 刷新 · U 全更 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
   all: '全部', expand: '展开', installingN: '{name} 安装中…', updatedN: '{name} 已更新', removedN: '{name} 已卸载', installFailN: '{name} 安装失败{exit} — 按 {key} 重试', uninstallFail: '卸载失败: {err} — 按 {key} 重试', uninstallPartial: '{name} 已卸载——技能目录保留：{err}', updateFail: '更新失败: {err}', exportFail: '导出失败: {err}', restoreFail: '恢复失败: {err} — 检查备份文件后重试', catalogFail: 'catalog 源失败: {err} — 检查 {cfg} 后重试', catalogAlready: '已开启', catalogEnabled: '已启用', cancelled: '已取消', heldReview: 'v{v} 在审——暂不可装', dataFresh: '数据已是最新', integrityFail: '下载的字节与评审过的产物不一致——重试，持续出现请反馈',
   deprecated: '已弃用', replacedBy: '建议改用 {name}', legacy: '门禁前收录', removedFrom: '已从目录移除', reasonNpm404: 'npm 上已消失', reasonRepo404: '仓库已消失', reasonFiltered: '被入场过滤移除', reasonCapped: '超出目录上限', reasonManual: '被人工移除', reasonUnknown: '原因未知', viewOnSite: '站点详情', compat: '要求', heldReason: '原因', verifyLevel: '阶段', verifyLog: '验证日志', verifyRun: '验证记录', permTitle: '技能权限', permAllow: '允许', permAsk: '询问', permDeny: '拒绝', permOff: '清除', disable: '关闭', revertTo: '回退到批准版', featFilter: '部件', installRunning: '安装进行中', catalogDisabled: '已关闭',
-  scannedClean: '扫过了没发现——但这不等于安全', catalogMoved: '目录已更新——先刷新数据再重试', compatWarn: '需要 opencode {req}——当前 {cur}', invDown: '装态清单不可用——已安装状态可能不准', keysHintGui: '↑↓←→/hjkl 移动 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · esc 返回', heldAtLabel: '在押', refreshStale: '拉取失败——展示缓存数据，稍后重试', refreshMismatch: '发布清单与索引不一致——保留旧数据' }
+  scannedClean: '扫过了没发现——但这不等于安全', catalogMoved: '目录已更新——先刷新数据再重试', compatWarn: '需要 opencode {req}——当前 {cur}', invDown: '装态清单不可用——已安装状态可能不准', keysHintGui: '↑↓←→/hjkl 移动 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · esc 返回', heldAtLabel: '在押', refreshStale: '拉取失败——展示缓存数据，稍后重试', refreshMismatch: '发布清单与索引不一致——保留旧数据', sweepCancel: '已更新 {ok} 个，{c} 个已取消', sweepCancelFail: '已更新 {ok} 个，{fail} 个失败，{c} 个已取消' }
 export function t(key: I18nKey): string {
   return (zhNow() ? ZH : EN)[key]
 }
@@ -724,9 +774,10 @@ export function verMarker(e: MarketEntry): string | undefined {
  *  (suffix differences fall back to lexicographic); ISO dates compare
  *  chronologically; unorderable pairs (commit sha vs sha) return 0 — we never
  *  claim a downgrade we can't prove. */
+const ORDERABLE_VER = /^v?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]*)?$/   // same shape versionCmp tests
 export function versionCmp(a: string, b: string): number {
   if (a === b) return 0
-  const sem = /^v?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]*)?$/
+  const sem = ORDERABLE_VER
   if (sem.test(a) && sem.test(b)) {
     // numeric core first; a release outranks its own prereleases
     // (1.0.0 > 1.0.0-beta.1 — the old part-wise compare read '0-beta' as 0
@@ -779,7 +830,15 @@ export function versionCmp(a: string, b: string): number {
 export function hasUpdate(e: MarketEntry, installedVer?: string): boolean {
   if (!installedVer || installedVer === 'local') return false
   const target = verMarker(e)
-  return !!target && target !== installedVer
+  if (!target || target === installedVer) return false
+  // The pair must be ORDERABLE in the same way versionCmp dispatches — both
+  // semver-ish, or both Date.parse-able. versionCmp returns 0 for EQUAL and
+  // for UNORDERABLE alike, so a mixed sem/date pair ('1.0' vs an ISO stamp)
+  // must NOT read as "provably equal" and suppress a real update.
+  const semPair = ORDERABLE_VER.test(target) && ORDERABLE_VER.test(installedVer)
+  const datePair = !semPair && !isNaN(Date.parse(target)) && !isNaN(Date.parse(installedVer))
+  if ((semPair || datePair) && versionCmp(target, installedVer) === 0) return false
+  return true
 }
 
 /** Installed version is NEWER than the approved target — the "update" is

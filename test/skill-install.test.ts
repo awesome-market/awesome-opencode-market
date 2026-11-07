@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { installSkillTar, uninstallSkillDir } from '../plugins/market/src/skill-install.ts'
-import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-// minimal tar builder — 512-byte header + content padded to 512
+// minimal tar builder — 512-byte header + content padded to 512, with a
+// real ustar checksum (installSkillTar verifies it — a zeroed field is
+// 'corrupt tarball', not a lenient pass)
 function tarEntry(name: string, content: string | null, type = '0'): Buffer {
   const h = Buffer.alloc(512)
   h.write(name, 0, 100)
@@ -13,6 +15,9 @@ function tarEntry(name: string, content: string | null, type = '0'): Buffer {
   const size = content === null ? 0 : Buffer.byteLength(content)
   h.write(size.toString(8).padStart(11, '0'), 124)
   h.write(type, 156)
+  h.fill(0x20, 148, 156)                 // chksum field counts as spaces
+  let sum = 0; for (const b of h) sum += b
+  h.write(sum.toString(8).padStart(6, '0') + '\0 ', 148)
   if (content === null) return h
   const body = Buffer.from(content)
   const pad = Buffer.alloc(Math.ceil(size / 512) * 512 - size)
@@ -20,6 +25,13 @@ function tarEntry(name: string, content: string | null, type = '0'): Buffer {
 }
 const makeGz = (...files: [string, string | null, string?][]) =>
   gzipSync(Buffer.concat([...files.map(([n, c, t]) => tarEntry(n, c, t)), Buffer.alloc(1024)]))
+// recompute the header checksum after a test mutates a field — otherwise the
+// checksum gate fires first and the test silently stops covering its target
+const retar = (h: Buffer) => {
+  h.fill(0x20, 148, 156)
+  let sum = 0; for (const b of h) sum += b
+  h.write(sum.toString(8).padStart(6, '0') + '\0 ', 148)
+}
 
 let root: string
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'sk-')) })
@@ -182,6 +194,7 @@ describe('installSkillTar', () => {
   it('a member declaring more bytes than the buffer holds is corrupt, not silently truncated', async () => {
     const e = tarEntry('package/SKILL.md', '# s')
     e.write('00000010000', 124)   // declare 4096 bytes — the buffer holds ~6
+    retar(e)
     const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
     await expect(installSkillTar({ name: 'trunc', gzipped: gz, root }))
       .rejects.toThrow('corrupt tarball')
@@ -190,6 +203,7 @@ describe('installSkillTar', () => {
   it('a base-256 (binary) size field is refused, not misparsed as octal 0', async () => {
     const e = tarEntry('package/SKILL.md', '# s')
     e[124] = 0x80                // high bit = GNU base-256 encoding marker
+    retar(e)
     const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
     await expect(installSkillTar({ name: 'b256', gzipped: gz, root }))
       .rejects.toThrow('corrupt tarball')
@@ -203,6 +217,114 @@ describe('installSkillTar', () => {
       ['package/SKILL.md', '# pkg'])
     await installSkillTar({ name: 'my-pkg', gzipped: gz, root })
     expect(existsSync(join(root, 'my-pkg-shared', 'SKILL.md'))).toBe(true)
+  })
+
+  it('a header checksum mismatch is corrupt tarball, not a silent member', async () => {
+    // flip a name byte AFTER the checksum was written — every downstream
+    // field is untrustworthy once the header fails its own integrity check
+    const e = tarEntry('package/SKILL.md', '# s')
+    e[10] = e[10]! ^ 0xff
+    const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
+    await expect(installSkillTar({ name: 'badck', gzipped: gz, root }))
+      .rejects.toThrow('corrupt tarball')
+  })
+
+  it('an all-zero checksum field is refused, not treated as unsigned', async () => {
+    const e = tarEntry('package/SKILL.md', '# s')
+    e.fill(0, 148, 156)
+    const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
+    await expect(installSkillTar({ name: 'zerock', gzipped: gz, root }))
+      .rejects.toThrow('corrupt tarball')
+  })
+
+  it('GNU sparse members are refused — hole semantics are unsafe for skills', async () => {
+    // 'S' type + pax .sparse.* keywords both promise "mostly zeros" — our
+    // bounds check assumes real bytes; a sparse member would write stale
+    // dest contents it never received
+    const gz1 = makeGz(['package/SKILL.md', '# s'], ['package/big.bin', null, 'S'])
+    await expect(installSkillTar({ name: 'sparse1', gzipped: gz1, root }))
+      .rejects.toThrow('sparse')
+    const pax = '36 GNU.sparse.size=1048576 GNU.sparse.realsize=0\n'
+    const gz2 = makeGz(['package/SKILL.md', '# s'], ['pax_hdr', pax, 'x'])
+    await expect(installSkillTar({ name: 'sparse2', gzipped: gz2, root }))
+      .rejects.toThrow('sparse')
+    expect(existsSync(join(root, 'sparse1'))).toBe(false)
+    expect(existsSync(join(root, 'sparse2'))).toBe(false)
+  })
+
+  it('Windows-reserved names never reach disk', async () => {
+    const gz = makeGz(
+      ['package/SKILL.md', '# s'],
+      ['package/CON.txt', 'x'],
+      ['package/nul.md', 'x'],
+      ['package/com10.md', 'ok'],       // COM10 is NOT reserved
+      ['package/foo./bar.txt', 'x'])    // trailing dot segment
+    await installSkillTar({ name: 'winsafe', gzipped: gz, root })
+    expect(existsSync(join(root, 'winsafe', 'CON.txt'))).toBe(false)
+    expect(existsSync(join(root, 'winsafe', 'nul.md'))).toBe(false)
+    expect(existsSync(join(root, 'winsafe', 'com10.md'))).toBe(true)
+    expect(existsSync(join(root, 'winsafe', 'foo.'))).toBe(false)
+    expect(readFileSync(join(root, 'winsafe', 'SKILL.md'), 'utf8')).toBe('# s')
+  })
+
+  it('reinstall sweeps files the previous version wrote — foreign files survive', async () => {
+    const gz1 = makeGz(
+      ['package/SKILL.md', '# v1'],
+      ['package/old.txt', 'old'],
+      ['package/docs/guide.md', 'guide'])
+    await installSkillTar({ name: 'stale', gzipped: gz1, root })
+    // user drops their own file inside the managed dir — it is NOT ours
+    writeFileSync(join(root, 'stale', 'mine.txt'), 'user')
+    // v2 drops old.txt + docs/, adds new.txt
+    const gz2 = makeGz(['package/SKILL.md', '# v2'], ['package/new.txt', 'new'])
+    const msg = await installSkillTar({ name: 'stale', gzipped: gz2, root })
+    expect(readFileSync(join(root, 'stale', 'SKILL.md'), 'utf8')).toBe('# v2')
+    expect(existsSync(join(root, 'stale', 'old.txt'))).toBe(false)
+    expect(existsSync(join(root, 'stale', 'docs'))).toBe(false)   // emptied dir swept
+    expect(readFileSync(join(root, 'stale', 'new.txt'), 'utf8')).toBe('new')
+    expect(readFileSync(join(root, 'stale', 'mine.txt'), 'utf8')).toBe('user')
+    const m = JSON.parse(readFileSync(join(root, 'stale', '.market-skills.json'), 'utf8')) as { files?: string[] }
+    expect(m.files).toEqual(expect.arrayContaining(['SKILL.md', 'new.txt']))
+    expect(m.files).not.toContain('old.txt')
+    expect(msg).toMatch(/removed 2 stale/)
+  })
+
+  it('a symlinked dir inside dest cannot redirect extraction outside', async () => {
+    const gz1 = makeGz(['package/SKILL.md', '# v1'])
+    await installSkillTar({ name: 'link', gzipped: gz1, root })
+    const outside = mkdtempSync(join(tmpdir(), 'sk-out-'))
+    try {
+      try { symlinkSync(outside, join(root, 'link', 'sub'), 'dir') }
+      catch { rmSync(outside, { recursive: true, force: true }); return }  // no symlink perms
+      const gz2 = makeGz(['package/SKILL.md', '# v2'], ['package/sub/evil.txt', 'escaped'])
+      await installSkillTar({ name: 'link', gzipped: gz2, root })
+      // the write through the link is refused — nothing lands outside
+      expect(existsSync(join(outside, 'evil.txt'))).toBe(false)
+      expect(readFileSync(join(root, 'link', 'SKILL.md'), 'utf8')).toBe('# v2')
+      rmSync(outside, { recursive: true, force: true })
+    } finally { rmSync(outside, { recursive: true, force: true }) }
+  })
+
+  it('lift never follows a planted symlink inside a nest dir', async () => {
+    const gz1 = makeGz(['package/SKILL.md', '# v1'])
+    await installSkillTar({ name: 'lift', gzipped: gz1, root })
+    const outside = mkdtempSync(join(tmpdir(), 'sk-lift-'))
+    try {
+      const nest = join(root, 'lift', '.opencode', 'skills')
+      mkdirSync(nest, { recursive: true })
+      try { symlinkSync(outside, join(nest, 'planted'), 'dir') }
+      catch { rmSync(outside, { recursive: true, force: true }); return }
+      // v2 carries a real nested skill alongside the planted link
+      const gz2 = makeGz(
+        ['package/SKILL.md', '# v2'],
+        ['package/.opencode/skills/real-skill/SKILL.md', '# r'])
+      await installSkillTar({ name: 'lift', gzipped: gz2, root })
+      expect(readFileSync(join(root, 'real-skill', 'SKILL.md'), 'utf8')).toBe('# r')
+      // the link stayed put — its .market-lift marker was never written
+      // through it into `outside`
+      expect(existsSync(join(outside, '.market-lift'))).toBe(false)
+      expect(existsSync(join(nest, 'planted'))).toBe(true)
+    } finally { rmSync(outside, { recursive: true, force: true }) }
   })
 })
 

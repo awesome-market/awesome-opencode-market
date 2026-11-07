@@ -269,11 +269,14 @@ export default Plugin.define({
       // from "an external install already running" (the shared jobs map can't)
       const pluginBusy = new Set<string>()
       const skillBusy = new Set<string>()
-      const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<boolean> => {
+      // per-half result — 'cancelled' is NOT a failure: a sweep the user
+      // stopped must not read as "N failed" in the summary
+      type HalfResult = 'ok' | 'fail' | 'cancelled'
+      const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<HalfResult> => {
         let pin: string
         // pinSpec itself throws on a crafted latestVersion — outside the try
         // it escaped as an unhandled rejection instead of a status line
-        try { pin = pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
+        try { pin = pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return 'fail' }
         // claim BEFORE the awaits — the pin recheck (network) and the dynamic
         // import left jobs empty, so 'C' hit a noop (cancel lied: status said
         // cancelled while the spawn still ran) and a second 'i'/sweep lane
@@ -288,15 +291,15 @@ export default Plugin.define({
         // does the same recheck before its spawn). Cheap when health.json
         // hasn't moved; a real re-pull when it has.
         try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL, true), e.name, pin) }
-        catch { setStatus(t('catalogMoved')); return false }
-        if (userCancel) { setStatus(t('cancelled')); return false }
+        catch { setStatus(t('catalogMoved')); return 'fail' }
+        if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
         const cw = compatWarnOf(e)
         if (cw) setStatus(cw)
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         else setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
-        if (userCancel) { setStatus(t('cancelled')); return false }
-        return await new Promise<boolean>(resolve => {
+        if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
+        return await new Promise<HalfResult>(resolve => {
           child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
           // 90s ceiling — a wedged `plugin add` must not hold the dialog status
           // forever (GUI main already kills at 90s; the TUI had none)
@@ -314,8 +317,8 @@ export default Plugin.define({
             if (spawnFailed) return
             // a user-cancelled child arrives code=null — indistinguishable
             // from a crash without this check ('exit null' was a cancel lie)
-            if (userCancel) { setStatus(t('cancelled')); resolve(false); return }
-            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve(false); return }
+            if (userCancel) { setStatus(t('cancelled')); resolve('cancelled'); return }
+            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve('fail'); return }
             if (code === 0) {
               void (async () => {
                 try {
@@ -328,7 +331,7 @@ export default Plugin.define({
                     d.plugins = dedupeToSpec(list, pin)
                     await writeJsonAtomic(cfg, d)
                   })
-                } catch (x) { setStatus(tf('updateFail', { err: String(x) })); resolve(false); return }
+                } catch (x) { setStatus(tf('updateFail', { err: String(x) })); resolve('fail'); return }
                 void refreshInstalled()
                 // activation probe — GUI parity: an isolated serve sandbox
                 // proves the spec actually loads; 'unknown' is uncertainty,
@@ -338,20 +341,20 @@ export default Plugin.define({
                   setStatus(verdict === 'activated' ? `${e.name} ${t('installed')} · ${t('activated')}`
                     : `${e.name} ${t('installed')} — ${t('restartNeeded')}`)
                 } else setStatus(tf('updatedN', { name: e.name }))
-                resolve(true)
+                resolve('ok')
               })()
             }
-            else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve(false) }
+            else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve('fail') }
           })
-          child.on('error', x => { clearTimeout(kill); spawnFailed = true; setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
+          child.on('error', x => { clearTimeout(kill); spawnFailed = true; setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve('fail') })
         })
         } finally { un(); pluginBusy.delete(e.name) }
       }
       // skill half: tarball fetch + installSkillTar. Tracked in jobs with an
       // AbortController so 'C' can cancel the download (previously the fetch
       // was untracked — double 'i' raced two installs, 'C' couldn't reach it).
-      const installSkill = async (e: MarketEntry, plan: InstallPlan): Promise<boolean> => {
-        if (!plan.skill) return false
+      const installSkill = async (e: MarketEntry, plan: InstallPlan): Promise<HalfResult> => {
+        if (!plan.skill) return 'fail'
         // per-half busy mark — updateAll's skill lane checks THIS (not the
         // shared jobs map) so its plugin lane's registration can't read as
         // "external install in flight" and skip the sibling half
@@ -414,11 +417,11 @@ export default Plugin.define({
           await mutate(d => { d.skillVers ??= {}; d.skillVers[fresh.name] = v })
           setInstalled({ ...installed(), [`__skill_${skillId(fresh.name)}`]: v })
           setStatus(`${fresh.name} ${t('installed')} (${msg})`)
-          return true
+          return 'ok'
         } catch (x) {
-          if (userCancel) { setStatus(t('cancelled')); return false }
-          if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 30s)', key: 'i' })); log(`install fail ${e.name}: timeout`); return false }
-          setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return false
+          if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
+          if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 30s)', key: 'i' })); log(`install fail ${e.name}: timeout`); return 'fail' }
+          setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return 'fail'
         } finally { clearTimeout(timer); un(); skillBusy.delete(e.name) }
       }
       // per-half sync decision shared by the card action and updateAll:
@@ -441,9 +444,9 @@ export default Plugin.define({
           setStatus(tf('installingN', { name: e.name }))
           // halves run concurrently — plugin add mutates opencode.json, skill
           // install writes the skills root; independent surfaces (GUI parity)
-          const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve(true)
-          const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve(true)
-          return (await pJob) && (await sJob)
+          const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve('ok' as HalfResult)
+          const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve('ok' as HalfResult)
+          return (await pJob) === 'ok' && (await sJob) === 'ok'
         } finally { claim() }
       }
       const uninstall = (e: MarketEntry) =>
@@ -718,7 +721,7 @@ export default Plugin.define({
             let done = 0
             const total = items.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
             const bump = () => setStatus(tf('updatingN', { n: ++done, total }))
-            const results = items.map(j => ({ ...j, pOk: undefined as boolean | undefined, sOk: undefined as boolean | undefined }))
+            const results = items.map(j => ({ ...j, pOk: undefined as HalfResult | undefined, sOk: undefined as HalfResult | undefined }))
             const pluginLane = (async () => {
               for (const j of results) if (j.sync.plugin) {
                 bump()
@@ -727,24 +730,31 @@ export default Plugin.define({
                 // half, so a dual entry needing both halves always failed one
                 // side (deterministic updatedMix bug). pluginBusy only flags
                 // a plugin half genuinely in flight (manual 'i' or prior lane)
-                if (pluginBusy.has(j.e.name)) { j.pOk = false; continue }
+                if (pluginBusy.has(j.e.name)) { j.pOk = 'fail'; continue }
                 j.pOk = await installPluginHalf(j.e, true)
               }
             })()
             const skillLane = (async () => {
               for (const j of results) if (j.sync.skill) {
                 bump()
-                if (skillBusy.has(j.e.name)) { j.sOk = false; continue }
+                if (skillBusy.has(j.e.name)) { j.sOk = 'fail'; continue }
                 j.sOk = await installSkill(j.e, installPlan(j.e))
               }
             })()
             await Promise.all([pluginLane, skillLane])
-            let ok = 0, fail = 0
+            // per-ENTRY verdict: any failed half → fail; else any cancelled
+            // half → cancelled (the user stopped it — not a failure); else ok.
+            // An unattempted half counts as ok — it was never in sync scope.
+            let ok = 0, fail = 0, cancelled = 0
             for (const j of results) {
-              const bad = (j.sync.plugin && j.pOk === false) || (j.sync.skill && j.sOk === false)
-              bad ? fail++ : ok++
+              const rs = [j.sync.plugin ? (j.pOk ?? 'fail') : 'ok', j.sync.skill ? (j.sOk ?? 'fail') : 'ok'] as const
+              if (rs.includes('fail')) fail++
+              else if (rs.includes('cancelled')) cancelled++
+              else ok++
             }
-            setStatus(fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
+            setStatus(cancelled
+              ? (fail ? tf('sweepCancelFail', { ok, fail, c: cancelled }) : tf('sweepCancel', { ok, c: cancelled }))
+              : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
             void refreshInstalled()
           // a lane throwing must not wedge 'U' for the rest of the dialog —
           // reset in finally, not just on the happy path
@@ -894,7 +904,7 @@ export default Plugin.define({
         // r = force refresh — TTL must not swallow a user-initiated reload;
         // the outcome label distinguishes "still fresh" from "actually pulled"
         // AND from served-stale/mismatch (old snapshot, not a refresh)
-        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); const oc = fetchOutcome(); setStatus(oc === 'fresh' ? t('dataFresh') : oc === 'mismatch' ? t('refreshMismatch') : oc === 'stale' ? t('refreshStale') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); const oc = fetchOutcome(INDEX_URL); setStatus(oc === 'fresh' ? t('dataFresh') : oc === 'mismatch' ? t('refreshMismatch') : oc === 'stale' ? t('refreshStale') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
         if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
         if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }
