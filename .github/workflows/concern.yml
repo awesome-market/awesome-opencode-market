@@ -252,7 +252,6 @@ jobs:
             // vstatus keyed to the RESOLVED slot (HV-4): a verdict on the
             // displayed version while a hold exists must not report the held
             // slot verification; a dead-slot version has no known status
-            const slot = v && e?.pendingUpdate?.version === v ? e.pendingUpdate : e
             const vstatus = v && e?.pendingUpdate?.version === v
               ? (e?.pendingUpdate?.verification?.status ?? "")
               : (v && e?.latestVersion === v
@@ -261,12 +260,24 @@ jobs:
                   // verdict's target status (H-17 parity: an unverified repo
                   // pass must not promise release either)
                   : (isRepo ? (e?.verification?.status ?? "") : ""))
+            // flags must describe the slot the verdict LANDS on — the old
+            // `slot ?? e` fallback reported the DISPLAY version's redFlags
+            // for a dead-slot verdict (V≠held≠displayed), so the ack could
+            // warn "pass overrides N flags" about bytes that release nothing.
+            // v==='' covers repo + pkg@* package scope → entry-level flags.
+            const flags = v === ""
+              ? (e?.capabilities?.redFlags?.length ?? 0)
+              : e?.pendingUpdate?.version === v
+                ? (e?.pendingUpdate?.capabilities?.redFlags?.length ?? 0)
+                : e?.latestVersion === v
+                  ? (e?.capabilities?.redFlags?.length ?? 0)
+                  : 0
             console.log(JSON.stringify({
               v, heldver: e?.approval === 'pending' ? '' : e?.pendingUpdate?.version ?? "",
               displayed: e?.latestVersion ?? "", vstatus,
               pkgAll: pkgAll ? "1" : "",
               approval: e?.approval ?? "",
-              flags: slot?.capabilities?.redFlags?.length ?? 0,
+              flags,
               // github-kind byte anchor — repo verdicts pin the entry's
               // current commit (source.version): the bytes under review now
               srcver: e?.source?.version ?? "",
