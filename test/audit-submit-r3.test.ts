@@ -171,6 +171,76 @@ describe('submit.yml — edited-skip requires a complete comment history', () =>
   })
 })
 
+/** Push a fresh catalog tip carrying the given files (tests seed their own
+ *  branch state; scripts always fetch origin/catalog fresh in the retry
+ *  loop, so the code clone's stale view doesn't matter). */
+const seedCatalog = (files: Record<string, string>) => {
+  const c = mkdtempSync(join(root, 'cat-'))
+  execFileSync('git', ['clone', '-q', remote, c])
+  try { git(c, 'checkout', '-q', '-b', 'cat', 'origin/catalog') }
+  catch { git(c, 'checkout', '-q', '--orphan', 'cat') }
+  for (const [n, data] of Object.entries(files)) writeFileSync(join(c, n), data)
+  git(c, 'add', '-A')
+  git(c, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed')
+  git(c, 'push', '-q', 'origin', 'HEAD:catalog')
+}
+const pendingEntry = (name: string, repo?: string) => ({
+  name, slug: name.replace('/', '-'), approval: 'pending',
+  source: repo ? { kind: 'github', id: name, repo } : { kind: 'npm', id: name },
+  discoveredVia: ['submission'],
+})
+
+describe('catalog-withdraw.sh — full key set retracts every submission pending entry', () => {
+  it('name+repo seed retracts BOTH the npm twin and the github repo twin', () => {
+    seedCatalog({
+      'submissions.txt': JSON.stringify({ name: 'wd-pkg', repo: 'o/wd-repo', issue: 91, at: 't', notified: false }) + '\n',
+      'index.json': JSON.stringify({ plugins: [pendingEntry('wd-pkg'), pendingEntry('o/wd-repo', 'o/wd-repo')] }),
+    })
+    const r = runScript(WITHDRAW, { ISSUE: '91', MSG: 'withdraw 91' })
+    expect(r.code).toBe(0)
+    const idx = JSON.parse(remoteShow('index.json'))
+    expect(idx.plugins).toHaveLength(0)
+    expect(idx.removed.map((x: { name: string }) => x.name).sort()).toEqual(['o/wd-repo', 'wd-pkg'])
+  })
+
+  it('keys from EVERY removed row are collected, not just the last row', () => {
+    seedCatalog({
+      'submissions.txt': [
+        JSON.stringify({ name: 'wd-a', issue: 92, at: 't', notified: false }),
+        JSON.stringify({ name: 'wd-b', issue: 92, at: 't', notified: false }),
+      ].join('\n') + '\n',
+      'index.json': JSON.stringify({ plugins: [pendingEntry('wd-a'), pendingEntry('wd-b')] }),
+    })
+    const r = runScript(WITHDRAW, { ISSUE: '92', MSG: 'withdraw 92' })
+    expect(r.code).toBe(0)
+    const idx = JSON.parse(remoteShow('index.json'))
+    expect(idx.plugins).toHaveLength(0)
+  })
+
+  it('approved or organically-discovered entries are kept despite key match', () => {
+    const approved = { ...pendingEntry('wd-live'), approval: 'approved' }
+    const organic = { ...pendingEntry('wd-org'), discoveredVia: ['submission', 'search'] }
+    seedCatalog({
+      'submissions.txt': JSON.stringify({ name: 'wd-live', repo: 'wd-org', issue: 93, at: 't', notified: false }) + '\n',
+      'index.json': JSON.stringify({ plugins: [approved, organic] }),
+    })
+    const r = runScript(WITHDRAW, { ISSUE: '93', MSG: 'withdraw 93' })
+    expect(r.code).toBe(0)
+    const idx = JSON.parse(remoteShow('index.json'))
+    expect(idx.plugins.map((e: { name: string }) => e.name).sort()).toEqual(['wd-live', 'wd-org'])
+    expect(remoteShow('submissions.txt')).not.toContain('"issue":93')
+  })
+})
+
+describe('submit.yml — sweep failure is alerted, not silent', () => {
+  it('review-alert waits on sweep and fires for schedule runs', () => {
+    const alertBlock = SUBMIT_YML.slice(SUBMIT_YML.indexOf('review-alert:'))
+    expect(alertBlock).toContain('needs: [review, report, ingest, sweep]')
+    expect(alertBlock).toContain("github.event_name == 'schedule'")
+    expect(alertBlock).toContain('pipeline-alert')
+  })
+})
+
 describe('seed-outcome — repo-twin landing clears the rejected stamp', () => {
   const rejectedSeed = JSON.stringify({ name: 'p', repo: 'o/r', issue: 3, rejected: 'no-plugin-evidence' })
   const ghEntry = { name: 'o/r', source: { repo: 'o/r' } }

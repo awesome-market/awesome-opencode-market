@@ -1245,9 +1245,12 @@ jobs:
   # F-6: review/report/ingest failures were silent — the issue hung forever
   # (sweep only watches verdict labels). Surface the failure on the issue
   # itself; a comment re-triggers review once the infra recovers.
+  # A schedule-run SWEEP failure has no issue to comment on — it escalates
+  # to a deduped pipeline-alert instead of letting abandonment cleanup die
+  # quietly (stale submissions would stop aging out with zero signal).
   review-alert:
-    needs: [review, report, ingest]
-    if: ${{ failure() && github.event.issue.number }}
+    needs: [review, report, ingest, sweep]
+    if: ${{ failure() && (github.event.issue.number || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
@@ -1259,7 +1262,16 @@ jobs:
       - name: report pipeline failure on the issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh issue comment "$ISSUE" --body "⚠️ 投稿处理流程失败——本次审查/入库**可能未完成**（机器审查结果未知，不代表投稿内容有问题）。失败详情：$RUN_URL ——修复后在本 issue 回复任意评论即可重新触发审查。" || true
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --body "⚠️ 投稿处理流程失败——本次审查/入库**可能未完成**（机器审查结果未知，不代表投稿内容有问题）。失败详情：$RUN_URL ——修复后在本 issue 回复任意评论即可重新触发审查。" || true
+          else
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "submission sweep failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            BODY="submission sweep job failed — abandoned-issue cleanup is not running; stale submissions stop aging out. Run: $RUN_URL"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GH_REPO" --body "$BODY" || true
+            else gh issue create -R "$GH_REPO" --title "submission sweep failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          fi

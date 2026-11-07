@@ -3,9 +3,11 @@
 # "issue":N on the catalog branch and push, retrying across remote races.
 # Issue-scoped — a same-package seed from a DIFFERENT issue is untouched.
 #
-#   ISSUE=<n> MSG='<commit msg>' [ENTRY=<name-or-owner/repo>] ./bin/catalog-withdraw.sh
+#   ISSUE=<n> MSG='<commit msg>' [ENTRY='<key> [more keys…]'] ./bin/catalog-withdraw.sh
 #
-# ENTRY (optional, best-effort): the submitted package/repo. When the entry is
+# ENTRY (optional, best-effort): the submitted package/repo — a space-joined
+# key list is accepted; entries match on name OR source.repo so a name+repo
+# submission's repo twin is covered too. When the entry is
 # still approval:'pending' AND every discoveredVia source is 'submission',
 # withdrawal also tombstones the queued catalog entry — a retracted
 # submission should stop consuming scan/verify/AI budget and must not
@@ -37,6 +39,10 @@ for i in 1 2 3; do
   # re-parse of the CURRENT issue body — an author who edited the form after
   # ingest would otherwise tombstone the wrong name (or none at all). Env
   # ENTRY remains the fallback for re-runs where no rows are left.
+  # Keys = EVERY name/repo the removed rows carried (space-joined): a
+  # name+repo seed can own TWO pending entries (the rejected npm name's twin
+  # AND the repo twin's github-kind entry) — the last row's `name ?? repo`
+  # alone can't see the second one.
   DERIVED=$(node -e '
     const fs=require("fs"),f=process.argv[1],issue=Number(process.argv[2])
     const rows=fs.readFileSync(f,"utf8").split("\n").filter(l=>l.trim())
@@ -47,29 +53,37 @@ for i in 1 2 3; do
       if(!drop)keep.push(l)
     }
     fs.writeFileSync(f,keep.length?keep.join("\n")+"\n":"")
-    const last=removed[removed.length-1]
-    if(last)console.log(last.name??last.repo??"")
+    const keys=new Set()
+    for(const s of removed){if(s.name)keys.add(s.name);if(s.repo)keys.add(s.repo)}
+    console.log([...keys].join(" "))
   ' "$WT/submissions.txt" "$ISSUE")
   ENTRY="${DERIVED:-${ENTRY:-}}"
   git -C "$WT" add submissions.txt
   if [ -n "${ENTRY:-}" ] && [ -f "$WT/index.json" ]; then
     node -e '
-      const fs=require("fs"),f=process.argv[1],key=process.argv[2].toLowerCase()
+      const fs=require("fs"),f=process.argv[1]
+      // every derived key (names AND repos) — the pending entry is matched by
+      // name OR source.repo: a github-kind entry named "owner/repo" never
+      // equals the npm name a name+repo seed derived first
+      const keys=new Set(process.argv[2].toLowerCase().split(/\s+/).filter(Boolean))
       const i=JSON.parse(fs.readFileSync(f,"utf8"))
-      const idx=i.plugins.findIndex(p=>p.name.toLowerCase()===key)
-      if(idx<0)process.exit(0)
-      const e=i.plugins[idx]
-      if(e.approval!=="pending"||!(e.discoveredVia??[]).every(v=>v==="submission")){
-        console.log(`entry ${e.name} kept — ${e.approval!=="pending"?"already "+e.approval:"has non-submission sources"} (maintainer call)`)
-        process.exit(0)
+      let wrote=false
+      for(let x=i.plugins.length-1;x>=0;x--){
+        const e=i.plugins[x]
+        if(!keys.has(e.name.toLowerCase())&&!keys.has((e.source?.repo??"").toLowerCase()))continue
+        if(e.approval!=="pending"||!(e.discoveredVia??[]).every(v=>v==="submission")){
+          console.log(`entry ${e.name} kept — ${e.approval!=="pending"?"already "+e.approval:"has non-submission sources"} (maintainer call)`)
+          continue
+        }
+        i.plugins.splice(x,1)
+        i.removed=i.removed??[]
+        i.removed.push({slug:e.slug,name:e.name,lastSource:e.source,
+          ...(e.createdAt?{createdAt:e.createdAt}:{}),
+          disappearedAt:new Date().toISOString(),reason:"manual"})
+        console.log(`retracted pending submission-only entry ${e.name} → tombstone`)
+        wrote=true
       }
-      i.plugins.splice(idx,1)
-      i.removed=i.removed??[]
-      i.removed.push({slug:e.slug,name:e.name,lastSource:e.source,
-        ...(e.createdAt?{createdAt:e.createdAt}:{}),
-        disappearedAt:new Date().toISOString(),reason:"manual"})
-      fs.writeFileSync(f,JSON.stringify(i,null,2)+"\n")
-      console.log(`retracted pending submission-only entry ${e.name} → tombstone`)
+      if(wrote)fs.writeFileSync(f,JSON.stringify(i,null,2)+"\n")
     ' "$WT/index.json" "$ENTRY"
     git -C "$WT" add index.json 2>/dev/null || true
   fi
