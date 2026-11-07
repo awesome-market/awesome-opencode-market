@@ -1,27 +1,31 @@
 /** audit #9 (站点发布流 §9, 第 6 轮) — independent re-audit of site.yml +
- *  build.ts against DATA-FLOWS §9 found the verify-status label lying for
- *  github-kind skill entries, plus a base-path edge:
+ *  build.ts against DATA-FLOWS §9. Round 1 fixed the verify-status label
+ *  keying on latestVersion===null; this round clears every fixable residual:
  *
- *  1. verifyLabel keyed "nothing to install" on latestVersion===null — but
- *     github-kind rows ALWAYS carry latestVersion:null (run.ts) while a
- *     'skill' part + usable repo IS installable (skills catalog / client
- *     codeload installPlan.skill='github') and its verification status is
- *     real (git-sha targets run unverified→verified/failed). A failed
- *     github skill displayed "没有可安装的包" — hiding the failure AND
- *     contradicting installHint's skills-catalog link on the same page.
- *     The label now routes through the same installPlan-parity predicate
- *     as installHint (installPaths/hasInstallPath): path-less rows keep the
- *     muted label, installable rows show their true verify state.
- *  2. siteBasePath derived the repo segment via split('/').pop() — a
- *     trailing-slash remote ('…/r/') yielded '' → project page silently
- *     degraded to base '/' and every absolute 404 link died. repoNameOf
- *     now runs the remote through normalizeRepoUrl (scp/ssh collapse,
- *     .git + trailing-slash strip) first.
- *  3. buildSkillCatalog silently skipped version-less skill rows while
- *     every sibling corrupt-data branch warns — now warns too. */
+ *  1. verifyLabel now surfaces REAL verify outcomes unconditionally —
+ *     verified/failed are measurements, not install-path claims (github
+ *     plugin-only verifies via `plugin add owner/repo#sha`). 'skipped'
+ *     decomposes on CURRENT redFlags (merge.ts skipIfFlagged invariant):
+ *     flagged → 'skipped (high risk)'; unflagged → re-queues as 'unverified'
+ *     when a target exists, else muted 'nothing to install'. 'unverified'
+ *     shows while a verify target exists (hasInstallPath OR hasVerifyTarget:
+ *     plugin|skill parts + npm version or pinned github sha).
+ *  2. removedPage sort uses atCmp-parity Date.parse + lexical tiebreak —
+ *     non-ISO disappearedAt (bare z.string()) can't NaN the comparator.
+ *  3. healthGate floor: negative/NaN → 200 (SITE_FLOOR typo can't silently
+ *     disable the shrink gate); site.yml parse rejects negatives the same.
+ *  4. skills.unpinned counts LANDED github HEAD-fallbacks (planned-but-failed
+ *     fetches no longer inflate the disclosure).
+ *  5. normalizeSiteUrl upgrades http→https + strips trailing slashes — an
+ *     http:// SITE_URL override can't publish a dead skills[] snippet. */
 import { describe, it, expect } from 'vitest'
-import { verifyLabel, installHint, detailPage, repoNameOf } from '../pipeline/site/build.ts'
-import type { PluginEntry } from '../src/schema.ts'
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { verifyLabel, installHint, detailPage, repoNameOf, removedPage,
+  healthGate, normalizeSiteUrl, buildSkillCatalog } from '../pipeline/site/build.ts'
+import type { PluginEntry, CatalogIndex, RemovedEntry } from '../src/schema.ts'
 
 const mk = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'p', slug: 'o/p', aliases: [], type: 'plugin', discoveredVia: [],
@@ -40,51 +44,56 @@ const ghSkill = (ver: PluginEntry['verification'], over: Partial<PluginEntry> = 
     source: { kind: 'github', id: 'o/s', repo: 'o/s', version: 'a'.repeat(40) },
     verification: ver, ...over })
 
-describe('§9 verifyLabel — install-path parity, not version-slot', () => {
-  it('github-kind skill entry shows its REAL verify status (failed)', () => {
-    const e = ghSkill({ status: 'failed', level: 'install' })
-    expect(verifyLabel(e).text).toContain('verification failed')
-    expect(verifyLabel(e).text).not.toBe('nothing to install')
-    expect(verifyLabel(e).cls).toBe('bad')
+const ghPlugin = (ver: PluginEntry['verification'], over: Partial<PluginEntry> = {}) =>
+  mk({ latestVersion: null, contains: ['plugin'],
+    source: { kind: 'github', id: 'o/r', repo: 'o/r' },
+    verification: ver, ...over })
+
+describe('§9 verifyLabel — real outcomes + verify-target awareness', () => {
+  it('recorded verified/failed surface even with NO client install path', () => {
+    // github plugin-only: client can't install, but `plugin add repo#sha`
+    // verify runs are real measurements — AGENTS: failed must say 装不上
+    expect(verifyLabel(ghPlugin({ status: 'verified', level: 'install' })).text).toContain('verified')
+    expect(verifyLabel(ghPlugin({ status: 'failed' })).cls).toBe('bad')
+    // even a path-less npm row with contains:[] shows a recorded outcome
+    expect(verifyLabel(mk({ contains: [], verification: { status: 'failed' } })).cls).toBe('bad')
   })
-  it('github-kind skill entry shows verified / unverified honestly', () => {
+  it('github-kind skill entry shows its REAL verify status', () => {
+    expect(verifyLabel(ghSkill({ status: 'failed', level: 'install' })).text).toContain('verification failed')
     expect(verifyLabel(ghSkill({ status: 'verified', level: 'install' })).text).toContain('verified')
     expect(verifyLabel(ghSkill({ status: 'unverified' })).text).toBe('unverified')
   })
-  it('github-kind skill skipped WITH red flags reports high risk, not "nothing"', () => {
-    // installable payload + flags → 'skipped (high risk)' is the honest state
-    // (was previously masked as "nothing to install", hiding the risk signal)
-    const e = ghSkill({ status: 'skipped' },
-      { capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
-    expect(verifyLabel(e).text).toContain('skipped')
+  it('github plugin-only with pinned sha + unverified → unverified (verify target exists)', () => {
+    const e = ghPlugin({ status: 'unverified' },
+      { source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'b'.repeat(40) } })
+    expect(verifyLabel(e).text).toBe('unverified')
+  })
+  it('github plugin-only WITHOUT sha → nothing to install (no target, no path)', () => {
+    expect(verifyLabel(ghPlugin({ status: 'unverified' })).text).toBe('nothing to install')
+  })
+  it("'skipped' keys on CURRENT redFlags — flagged shows high risk even path-less", () => {
+    const e = mk({ contains: [], verification: { status: 'skipped' },
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
     expect(verifyLabel(e).text).toContain('high risk')
   })
-  it('github-kind skill with malformed repo → nothing to install (client parity)', () => {
-    const e = ghSkill({ status: 'failed' },
-      { source: { kind: 'github', id: 'x', repo: 'not a repo' } })
+  it("unflagged 'skipped' re-queues as unverified when a target exists", () => {
+    // stale skip (parts were empty at write, gained payload since) — plan
+    // re-enters cleared skips, so 'unverified' is the honest current state
+    const e = mk({ contains: ['skill'], latestVersion: '1.0.0',
+      verification: { status: 'skipped' } })
+    expect(verifyLabel(e).text).toBe('unverified')
+  })
+  it("unflagged 'skipped' with no path/target → nothing to install", () => {
+    const e = mk({ latestVersion: null, verification: { status: 'skipped' } })
     expect(verifyLabel(e).text).toBe('nothing to install')
   })
-  it('github-kind plugin-only → nothing to install (client has no route)', () => {
-    const e = mk({ latestVersion: null, contains: ['plugin'],
-      source: { kind: 'github', id: 'o/r', repo: 'o/r' },
-      verification: { status: 'verified', level: 'install' } })
-    expect(verifyLabel(e).text).toBe('nothing to install')
-  })
-  it('npm entry with contains:[] → nothing to install (canInstall=false parity)', () => {
-    // has a version but zero installable parts — client shows noInstallTarget;
-    // the site must not keep claiming "unverified" forever
-    const e = mk({ contains: [], verification: { status: 'unverified' } })
-    expect(verifyLabel(e).text).toBe('nothing to install')
+  it('npm contains:[] + unverified → nothing to install (can never be measured)', () => {
+    expect(verifyLabel(mk({ contains: [], verification: { status: 'unverified' } })).text).toBe('nothing to install')
   })
   it('parts-empty type (mcp) with version → nothing to install', () => {
-    const e = mk({ type: 'mcp', verification: { status: 'unverified' } })
-    expect(verifyLabel(e).text).toBe('nothing to install')
+    expect(verifyLabel(mk({ type: 'mcp' })).text).toBe('nothing to install')
   })
-  it('npm plugin entry still shows verify status (path exists)', () => {
-    expect(verifyLabel(mk({ verification: { status: 'unverified' } })).text).toBe('unverified')
-    expect(verifyLabel(mk({ verification: { status: 'failed' } })).cls).toBe('bad')
-  })
-  it('detailPage: failed github skill no longer contradicts its install hint', () => {
+  it('detailPage: failed github skill shows failure + install hint, no contradiction', () => {
     const html = detailPage(ghSkill({ status: 'failed', level: 'install', runUrl: 'https://x.dev/r' }))
     expect(html).toContain('verification failed')
     expect(html).toContain('skills catalog')
@@ -95,8 +104,6 @@ describe('§9 verifyLabel — install-path parity, not version-slot', () => {
 
 describe('§9 installHint/installPaths — single installPlan-parity rule', () => {
   it('github + latestVersion + malformed repo + skill → browse only (aligned edge)', () => {
-    // previously `(latestVersion || ghRepo)` promised a catalog slot the
-    // client cannot use; installPlan requires a VALID repo for github skills
     const e = mk({ latestVersion: '1.0.0', contains: ['skill'],
       source: { kind: 'github', id: 'x', repo: 'not a repo' } })
     expect(installHint(e)).toContain('browse only')
@@ -108,16 +115,98 @@ describe('§9 installHint/installPaths — single installPlan-parity rule', () =
   })
 })
 
-describe('§9 repoNameOf — Pages base-path segment', () => {
-  it('handles https/.git/scp/ssh/trailing-slash/org-page forms', () => {
+describe('§9 repoNameOf / normalizeSiteUrl — Pages path & snippet hygiene', () => {
+  it('repoNameOf handles https/.git/scp/ssh/trailing-slash/org-page forms', () => {
     expect(repoNameOf('https://github.com/o/r')).toBe('r')
     expect(repoNameOf('https://github.com/o/r.git')).toBe('r')
-    expect(repoNameOf('https://github.com/o/r/')).toBe('r')          // was '' → base '/'
+    expect(repoNameOf('https://github.com/o/r/')).toBe('r')
     expect(repoNameOf('git@github.com:o/r.git')).toBe('r')
     expect(repoNameOf('ssh://git@github.com/o/r.git')).toBe('r')
     expect(repoNameOf('https://github.com/o/r.git/')).toBe('r')
-    expect(repoNameOf('https://gitlab.com/o/r')).toBe('r')           // host-agnostic
+    expect(repoNameOf('https://gitlab.com/o/r')).toBe('r')
     expect(repoNameOf('')).toBe('')
     expect(repoNameOf('not a url')).toBe('')
+  })
+  it('normalizeSiteUrl strips trailing slashes + upgrades http→https', () => {
+    expect(normalizeSiteUrl('https://o.github.io/r/')).toBe('https://o.github.io/r')
+    expect(normalizeSiteUrl('http://o.github.io/r')).toBe('https://o.github.io/r')
+    expect(normalizeSiteUrl('HTTP://O.GITHUB.IO/R//')).toBe('https://O.GITHUB.IO/R')
+    expect(normalizeSiteUrl('https://o.github.io')).toBe('https://o.github.io')
+  })
+})
+
+describe('§9 removedPage — non-ISO disappearedAt cannot NaN the sort', () => {
+  const rem = (name: string, disappearedAt: string): RemovedEntry => ({
+    slug: name, name, disappearedAt, reason: 'manual' })
+  const idx = (removed: RemovedEntry[]): CatalogIndex =>
+    ({ version: '1', generatedAt: 't', categories: {}, plugins: [], removed })
+  it('ISO rows sort newest-first; junk rows sink to bottom in codepoint order', () => {
+    const html = removedPage(idx([
+      rem('old', '2026-01-01T00:00:00Z'),
+      rem('new', '2026-03-01T00:00:00Z'),
+      rem('junk-b', 'not-a-date'),
+      rem('junk-a', '???'),
+    ]))
+    const pos = (s: string) => html.indexOf(`>${s}<`)
+    expect(pos('new')).toBeGreaterThan(-1)
+    expect(pos('new')).toBeLessThan(pos('old'))
+    // unparseable → -Infinity: real dates always outrank junk; among junk,
+    // descending codepoint puts 'not-a-date'(0x6E) before '???'(0x3F)
+    expect(pos('old')).toBeLessThan(pos('junk-b'))
+    expect(pos('junk-b')).toBeLessThan(pos('junk-a'))
+    // and the whole render is deterministic across calls
+    expect(removedPage(idx([
+      rem('old', '2026-01-01T00:00:00Z'), rem('new', '2026-03-01T00:00:00Z'),
+      rem('junk-b', 'not-a-date'), rem('junk-a', '???')]))).toBe(html)
+  })
+})
+
+describe('§9 healthGate — floor sanity', () => {
+  it('negative floor falls back to 200 — a typo cannot disable the gate', () => {
+    expect(healthGate(null, { entries: 50, total: 50 }, -5)).toContain('below floor 200')
+    expect(healthGate(null, { entries: 50, total: 50 }, Number.NaN)).toContain('below floor 200')
+  })
+  it('floor=0 still legitimately disables the floor check', () => {
+    expect(healthGate(null, { entries: 0, total: 0 }, 0)).toBeNull()
+  })
+})
+
+describe('§9 skills.unpinned — landed-count semantics', () => {
+  const mkGhTgz = () => {
+    const src = mkdtempSync(join(tmpdir(), 'tgz-'))
+    mkdirSync(join(src, 'repo-abc123', 'skills', 'demo'), { recursive: true })
+    writeFileSync(join(src, 'repo-abc123', 'skills', 'demo', 'SKILL.md'), '# gh skill')
+    execSync(`cd "${src}" && tar czf s.tgz repo-abc123`)
+    return { src, tgz: join(src, 's.tgz') }
+  }
+  const ghEntry = (over: Partial<PluginEntry> = {}): PluginEntry => mk({
+    name: 'gh-skill', contains: ['skill'], latestVersion: null,
+    source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill' },
+    modifiedAt: '2026-03-01T00:00:00Z', ...over,
+  })
+  it('planned-but-failed HEAD fallback is NOT counted — only landed skills disclose', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      ghEntry({ name: 'g-dead' }),   // no source.version → HEAD fallback planned…
+      ghEntry({ name: 'g-ok', source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill', version: 'abc123def' } }),
+    ], removed: [] }
+    // …but every fetch fails → nothing lands → unpinned must be 0 (plan-time
+    // counting would have reported 1: g-dead's HEAD fallback was only planned)
+    const r = await buildSkillCatalog(idx, out, () => null, undefined, () => null)
+    expect(r.unpinned).toBe(0)
+    expect(r.landed).toBe(0)
+    rmSync(out, { recursive: true, force: true })
+  })
+  it('landed HEAD fallback counts once — pinned sibling does not', async () => {
+    const { src, tgz } = mkGhTgz()
+    const out = mkdtempSync(join(tmpdir(), 'site-'))
+    const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [
+      ghEntry({ name: 'g-old' }),
+      ghEntry({ name: 'g-new', source: { kind: 'github', id: 'o/gh-skill', repo: 'o/gh-skill', version: 'abc123def' } }),
+    ], removed: [] }
+    const r = await buildSkillCatalog(idx, out, () => null, undefined, () => `file://${tgz}`)
+    expect(r.unpinned).toBe(1)
+    expect(r.landed).toBe(2)
+    rmSync(out, { recursive: true, force: true }); rmSync(src, { recursive: true, force: true })
   })
 })

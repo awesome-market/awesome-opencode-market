@@ -1528,7 +1528,7 @@ alert job：失败查重——已有 pipeline-alert open issue 则评论追加�
 pipeline-alert 快报——刹车/索引变更卡在 dispatch 不再等 watchdog 36h 腿
 ```
 
-诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。无客户端安装路径的条目（github 插件-only、无版本 npm、parts 为空的类型）渲染为 `nothing to install`（muted）——与客户端 canInstall 同一 installPlan 判定；github-kind 带 `skill`+有效 repo 的条目实际可装（skills catalog/客户端 codeload），其验证态真实透出（git-sha 目标跑 unverified→verified/failed），不再被版本槽掩盖；红旗跳过的可装条目显示 `skipped (high risk)`。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
+诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。`verified`/`failed` 是实测结论，无条件透出——github 插件-only 无客户端安装路径，但 `plugin add repo#sha` 验证是真实测量。`skipped` 按**当前**红旗分解：旗标在身→`skipped (high risk)`；旗标已清且存在验证目标（可装部件 + npm 版本或 github commit sha 钉）→回落 `unverified`（verifyQueued 会重新入队）；旗标已清且永远无法测量→`nothing to install`。`unverified` 在存在验证目标时透出；安装路径与验证目标皆无的条目（github 插件-only 无 sha、无版本 npm、parts 为空的类型）渲染 `nothing to install`（muted）——安装路径判定与客户端 canInstall 同一 installPlan 规则，github-kind 带 `skill`+有效 repo 的条目实际可装（skills catalog/客户端 codeload）；legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
 
 ---
 

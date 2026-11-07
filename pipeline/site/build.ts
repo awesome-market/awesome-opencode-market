@@ -65,16 +65,25 @@ const verState = (v: Ver): { text: string; cls: string; zh: string } => {
   }
 }
 export function verifyLabel(e: PluginEntry): { text: string; cls: string; zh: string } {
-  // "nothing to install" tracks the CLIENT install path (installPlan parity),
-  // not the version slot: github-kind rows carry latestVersion:null yet a
-  // 'skill' part + usable repo installs via the skills catalog / client
-  // codeload — and their verification status is real (git-sha targets run
-  // unverified→verified/failed). Masking it would hide a failed verify and
-  // contradict installHint on the same page. Path-less rows (github
-  // plugin-only, version-less npm, parts-empty types) keep the muted label —
-  // the client's canInstall reports the same "no target" state.
-  if (!hasInstallPath(e)) return { text: 'nothing to install', cls: 'muted', zh: '没有可安装的包' }
-  return verState(e.verification)
+  const v = e.verification
+  // recorded outcomes are real measurements — surface them even when the
+  // client has no install button (github plugin-only verifies via
+  // `plugin add owner/repo#sha`; AGENTS: failed must say 装不上).
+  if (v.status === 'verified' || v.status === 'failed') return verState(v)
+  // 'skipped' decomposes (run.ts construction + publish/merge skipIfFlagged):
+  // CURRENT red flags → the run was vetoed → high risk; unflagged → the slot
+  // was deliberately not run — honest only as the muted no-target label when
+  // nothing can ever be measured, else it re-queues as 'unverified'
+  // (verifyQueued re-enters cleared skips).
+  if (v.status === 'skipped' && e.capabilities.redFlags.length > 0) return verState(v)
+  // 'unverified' (and unflagged skips): the status is real while a verify
+  // target exists — installable payload parts plus a pinned npm version or
+  // github commit sha. With neither, the slot can never be measured.
+  if (!hasInstallPath(e) && !hasVerifyTarget(e))
+    return { text: 'nothing to install', cls: 'muted', zh: '没有可安装的包' }
+  return v.status === 'skipped'
+    ? { text: 'unverified', cls: 'muted', zh: '还没验' }
+    : verState(v)
 }
 /** approval badge — 'legacy' entries predate the review gate; 'approved' needs no badge. */
 export function approvalBadge(e: PluginEntry): string {
@@ -116,6 +125,18 @@ const installPaths = (e: PluginEntry): { plugin: boolean; skill: boolean } => {
 const hasInstallPath = (e: PluginEntry): boolean => {
   const p = installPaths(e)
   return p.plugin || p.skill
+}
+/** A verify measurement is possible when the slot has BOTH an installable
+ *  payload for the runner (plugin|skill parts — the set verifyPartsOf
+ *  queues) and a pinned target: npm latestVersion or a github commit sha
+ *  (verify/plan refuses unpinned git targets). Display-scoped: the label
+ *  describes e.verification, the displayed slot — pendingUpdate's candidate
+ *  parts live on the hold and are not this label's subject. */
+const hasVerifyTarget = (e: PluginEntry): boolean => {
+  const parts = entryParts(e)
+  if (!parts.includes('plugin') && !parts.includes('skill')) return false
+  return !!e.latestVersion
+    || (e.source?.kind === 'github' && !!e.source.version)
 }
 
 /** Install instruction matching the market client's installPlan rules — a
@@ -211,6 +232,12 @@ function siteBasePath(): string {
   return memoBase
 }
 
+/** SITE_URL env → skills-snippet origin: strip trailing slashes, upgrade
+ *  http→https — Pages is always TLS, so an http:// override would publish a
+ *  dead config snippet (opencode skills[] wants a fetchable URL). */
+export const normalizeSiteUrl = (u: string): string =>
+  u.replace(/\/+$/, '').replace(/^http:\/\//i, 'https://')
+
 /** Absolute site origin for copy-paste config (opencode.json skills[] needs a
  *  URL, not a path). SITE_URL env (set by site.yml to the real Pages origin)
  *  wins; otherwise derive owner.github.io/<repo> from the same remote as
@@ -218,7 +245,7 @@ function siteBasePath(): string {
 let memoSiteUrl: string | null | undefined
 function siteOriginUrl(): string | null {
   if (memoSiteUrl !== undefined) return memoSiteUrl
-  let u = process.env.SITE_URL?.replace(/\/+$/, '') || null
+  let u = process.env.SITE_URL ? normalizeSiteUrl(process.env.SITE_URL) || null : null
   if (!u) {
     const m = /^https:\/\/github\.com\/([^/]+)\/([^/]+)$/.exec(siteRepoUrl())
     // org/user page repos are named <owner>.github.io and serve from the origin
@@ -452,9 +479,9 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
     // catalog here made it ~130KB and growing. skills.html reads the in-memory
     // stats directly, nothing consumes entries via health.json.
     skills: { candidates: skillStats.candidates, landed: skillStats.landed, degraded: skillStats.degraded,
-      // disclosure counters — unpinned = github skills fetched from codeload
-      // HEAD (pre-sha index rows, bytes can drift from the scanned tree);
-      // membersDropped = tar members cut by MAX_SKILL_MEMBERS this build.
+      // disclosure counters — unpinned = LANDED github skills served from
+      // codeload HEAD (pre-sha index rows, bytes can drift from the scanned
+      // tree); membersDropped = tar members cut by MAX_SKILL_MEMBERS this build.
       unpinned: skillStats.unpinned, membersDropped: skillStats.membersDropped },
     generatedAt: index.generatedAt,
     builtAt: new Date().toISOString(),
@@ -495,9 +522,13 @@ export async function buildSite(index: CatalogIndex, outDir: string, cacheDir?: 
 export function healthGate(prev: { entries?: number; total?: number } | null,
   cur: { entries: number; total?: number; skills?: { candidates?: number; landed?: number; degraded?: boolean } },
   floor = 200): string | null {
+  // a negative floor is invalid config, not "no floor" — '0' already means
+  // that legitimately; silently accepting -5 would disable the catastrophic-
+  // shrink gate on a typo'd SITE_FLOOR. Non-finite falls back the same way.
+  const fl = Number.isFinite(floor) && floor >= 0 ? floor : 200
   const curN = cur.total ?? cur.entries
   const prevN = prev ? (prev.total ?? prev.entries) : undefined
-  if (curN < floor) return `entries=${curN} below floor ${floor}`
+  if (curN < fl) return `entries=${curN} below floor ${fl}`
   if (typeof prevN === 'number' && prevN > 0 && curN < prevN * 0.5)
     return `entries ${curN} < 50% of previous deploy ${prevN}`
   const sk = cur.skills
@@ -547,7 +578,17 @@ const REMOVED_REASON: Record<string, { en: string; zh: string }> = {
   unknown: { en: 'no longer seen (cause unknown)', zh: '原因未知' },
 }
 export function removedPage(index: CatalogIndex): string {
-  const rem = [...(index.removed ?? [])].sort((a, b) => b.disappearedAt.localeCompare(a.disappearedAt))
+  // atCmp shape but NaN-safe: disappearedAt is a bare z.string() — an
+  // unparseable value must not NaN the comparator into arbitrary order.
+  // Unparseable rows sink to the bottom (unknown date ≠ newest) and order
+  // lexically among themselves; the tiebreak is codepoint `<`/`>` like
+  // atCmp, not localeCompare (locale collation is environment-dependent).
+  const ts = (s: string) => { const p = Date.parse(s); return Number.isNaN(p) ? Number.NEGATIVE_INFINITY : p }
+  const rem = [...(index.removed ?? [])].sort((a, b) => {
+    const d = ts(b.disappearedAt) - ts(a.disappearedAt)
+    return (Number.isNaN(d) ? 0 : d) ||
+      (b.disappearedAt < a.disappearedAt ? -1 : b.disappearedAt > a.disappearedAt ? 1 : 0)
+  })
   const shown = rem.slice(0, 300)
   const cards = shown.map(r => {
     const src = r.lastSource?.repo ? ` · <a href="https://github.com/${esc(r.lastSource.repo)}">${esc(r.lastSource.repo)}</a>`
@@ -652,8 +693,10 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       return `https://codeload.github.com/${repo}/tar.gz/${sha ?? 'HEAD'}`
     })
   : Promise<{ candidates: number; landed: number; degraded: boolean; entries: SkillEntry[];
-      /** github skills served from codeload HEAD because the index predates
-       *  commit-sha anchoring — disclosed, not silent (see plan loop). */
+      /** github skills actually SERVED from codeload HEAD because the index
+       *  row predates commit-sha anchoring — counted at land time so
+       *  health.json/skills.html disclose what users receive, not what was
+       *  merely planned during a degraded build. */
       unpinned: number;
       /** tar members dropped by MAX_SKILL_MEMBERS — tar order is
        *  attacker-controlled, so truncation is a completeness caveat worth
@@ -712,7 +755,9 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   // the collision suffix can't shuffle between builds; fetch work is pooled.
   interface Cand { s: PluginEntry; id: string; ver: string; dest: string; key: string; ghRepo: string | null }
   const cands: Cand[] = []
-  let unpinned = 0   // github skills whose index row predates commit-sha anchoring → codeload HEAD
+  // counted at LAND time inside work() — a planned HEAD fetch that fails
+  // serves nothing, so it must not inflate the disclosure counter
+  let landedUnpinned = 0
   for (const s of skills) {
     const isGh = s.source?.kind === 'github'
     const ghRepo = isGh ? ghRepoOf(s) : null
@@ -738,8 +783,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     // "served from HEAD" misleads the caveat; corrupt index data gets a warn.
     if (isGh) {
       const sv = s.source?.version
-      if (sv == null || sv === '') unpinned++
-      else if (!/^[0-9a-f]{7,64}$/.test(sv)) {
+      if (sv != null && sv !== '' && !/^[0-9a-f]{7,64}$/.test(sv)) {
         console.warn(`[site] skill ${s.slug}: malformed source.version ${JSON.stringify(sv.slice(0, 64))} — skipped`)
         continue
       }
@@ -761,6 +805,13 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
     // refetch, never a stale hit. github/integrity-less entries fall back to ver.
     const pin = isGh ? ver : (s.integrity ?? ver)
     cands.push({ s, id, ver, dest: join(dir, id), key: cacheKey(id, pin), ghRepo })
+  }
+  /** Land a fetched skill: publish the catalog entry and count github
+   *  HEAD-fallbacks at SERVE time — a planned fetch that failed delivers
+   *  nothing, so it must not inflate the disclosure counter. */
+  const land = (c: Cand, files: string[]): void => {
+    entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug })
+    if (c.ghRepo && (c.s.source?.version == null || c.s.source?.version === '')) landedUnpinned++
   }
   const work = async (c: Cand): Promise<void> => {
     keep.add(c.key)   // preserve the pin-keyed cache even if this fetch fails — same pin = same bytes, a transient outage must not evict a good copy
@@ -787,7 +838,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       // the member cap is a publish rule like the size cap — a cache entry
       // written before MAX_SKILL_MEMBERS existed (or hand-poisoned) must
       // refetch through the capping extractor, not ship over the bound
-      if (files.length && files.length <= MAX_SKILL_MEMBERS && total <= MAX_SKILL_TOTAL_BYTES) { entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug }); return }
+      if (files.length && files.length <= MAX_SKILL_MEMBERS && total <= MAX_SKILL_TOTAL_BYTES) { land(c, files); return }
       rmSync(hit, { recursive: true, force: true })   // poisoned cache → refetch
     } catch { rmSync(hit, { recursive: true, force: true }) }
     const tmp = `${c.dest}.tmp`
@@ -879,7 +930,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       // delete the freshly-extracted dest and drop it from the catalog; the
       // only real cost of a lost cache entry is a refetch next build
       if (hit) try { mkdirSync(cacheDir!, { recursive: true }); rmSync(hit, { recursive: true, force: true }); cpSync(c.dest, hit, { recursive: true }) } catch { /* cache is an optimization */ }
-      entries.push({ name: c.id, version: skillVersion(c), files, slug: c.s.slug })
+      land(c, files)
     } catch (err) {
       bail()
       console.warn(`[site] skill ${c.id} skipped: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`)
@@ -901,7 +952,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   // slug is page-only metadata (detail backlink) — strip it so the published
   // {name,version,files} contract opencode consumes stays unchanged
   writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries.map(({ name, version, files }) => ({ name, version, files })) }))
-  return { candidates: cands.length, landed, degraded, entries, unpinned, membersDropped }
+  return { candidates: cands.length, landed, degraded, entries, unpinned: landedUnpinned, membersDropped }
 }
 
 /* v8 ignore next 7 */

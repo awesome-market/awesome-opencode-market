@@ -125,8 +125,11 @@ jobs:
             try { prev = JSON.parse(readFileSync('/tmp/prev-health.json','utf8')) }
             catch { prev = { entries: null } }   // corrupt live health → degrade to floor-only, like a fetch failure
             // explicit parse — '0' is a valid floor (small curated catalog);
-            // only unset/non-numeric falls back to 200
-            const floor = process.env.SITE_FLOOR && Number.isFinite(Number(process.env.SITE_FLOOR)) ? Number(process.env.SITE_FLOOR) : 200;
+            // only unset/non-numeric/negative falls back to 200 (a typo'd
+            // negative would silently disable the shrink gate; healthGate
+            // clamps the same way for non-workflow callers)
+            const sf = Number(process.env.SITE_FLOOR);
+            const floor = process.env.SITE_FLOOR && Number.isFinite(sf) && sf >= 0 ? sf : 200;
             const msg = healthGate(prev, JSON.parse(readFileSync('/tmp/site/health.json','utf8')), floor);
             if (msg) {
               console.error('deploy gate: '+msg);

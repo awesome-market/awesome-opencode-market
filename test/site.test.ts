@@ -30,7 +30,11 @@ describe('site honest labels', () => {
     expect(verifyLabel(mk()).text).toBe('unverified')
     expect(verifyLabel(mk({ verification: { status: 'verified', level: 'load' } })).text).toBe('verified (load)')
     expect(verifyLabel(mk({ verification: { status: 'failed' } })).cls).toBe('bad')
-    expect(verifyLabel(mk({ verification: { status: 'skipped' } })).text).toContain('skipped')
+    // 'skipped' requires CURRENT redFlags to claim high risk (AGENTS.md) —
+    // an unflagged skip is stale and renders 'unverified' instead
+    expect(verifyLabel(mk({ verification: { status: 'skipped' },
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] } })).text).toContain('skipped')
+    expect(verifyLabel(mk({ verification: { status: 'skipped' } })).text).toBe('unverified')
   })
   it('verifyLabel: github-kind skipped is not "high risk" — nothing to install', () => {
     // github-kind entries are constructed as skipped with zero flags: there is
