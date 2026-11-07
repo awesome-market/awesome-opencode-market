@@ -79,6 +79,29 @@ describe('§③ versionCell — null-key verdicts distinguish slot-vs-package sc
   })
 })
 
+describe('§① fresh rows — same-akey amend renders the corrected reason', () => {
+  it('reason-only amend (reused `at`) shows the LATER line, not the stale one', () => {
+    // amendAt deliberately reuses the prior human line's `at`, so the
+    // corrected verdict shares its akey — first-in-file wins would keep
+    // announcing the reason the maintainer just fixed.
+    const e = mkEntry('pkg-amend')
+    const idx = mkIndex([e])
+    const md = renderDigest({
+      index: idx,
+      verdicts: [
+        v('pkg-amend', '1.0.0', 'pass', T, 'human', 'stale pre-amend reason'),
+        v('pkg-amend', '1.0.0', 'pass', T, 'human', 'corrected reason'),
+      ],
+      prev: digestStateOf('2026-01-31T21:00:00Z', []),
+      now: NOW,
+    })
+    expect(md).toContain('corrected reason')
+    expect(md).not.toContain('stale pre-amend reason')
+    // exactly one row for the akey — dedupe still holds
+    expect(md.match(/pkg-amend/g)?.length).toBeGreaterThan(0)
+  })
+})
+
 describe('digest.ts CLI — usage errors are readable, not TypeError stacks', () => {
   const run = (args: string[]) => {
     try {

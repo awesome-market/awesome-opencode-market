@@ -191,15 +191,16 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     ? candidates.filter(v => notAfterNow(v) && Date.parse(v.at) < cutoff).length
     : 0
   // dedupe by akey — a verdict line pushed twice (a retry that appended the
-  // same line) must not render two identical rows
-  const seenAkey = new Set<string>()
-  const fresh: AiVerdict[] = []
+  // same line) must not render two identical rows. LAST occurrence wins:
+  // amendAt reuses the prior human line's `at` on a reason-only correction,
+  // so the amended line shares the akey — first-wins would keep rendering
+  // the superseded reason the maintainer just corrected.
+  const freshMap = new Map<string, AiVerdict>()
   for (const v of verdicts) {
     const k = akey(v)
-    if (!todayFirst.has(k) || seenAkey.has(k)) continue
-    seenAkey.add(k)
-    fresh.push(v)
+    if (todayFirst.has(k)) freshMap.set(k, v)
   }
+  const fresh = [...freshMap.values()]
   const passes = fresh.filter(v => v.verdict === 'pass')
   const concerns = fresh.filter(v => v.verdict === 'concern')
 
