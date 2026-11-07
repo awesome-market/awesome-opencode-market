@@ -242,7 +242,14 @@ jobs:
             // which applyMatureVerdicts reads as a package-level brake (every
             // slot held until a newer human verdict lifts it). Blank version
             // keeps its old meaning: resolve to the held/displayed slot.
-            const pkgAll = v === "*"
+            // `*` is package scope ONLY for npm entries — on github-kind the
+            // null key IS the slot verdict (brakeFor exempts version===null),
+            // so `o/r@*` is a plain repo verdict: pkgAll=1 would ack "整个包"
+            // and render target `o/r@*` for a single-slot entry. The verdict
+            // record is identical either way — only ack/target semantics
+            // needed the kind check (and the flag warning below relies on
+            // pkgAll meaning npm-package-scope).
+            const pkgAll = v === "*" && !isRepo
             if (isRepo || pkgAll) v = ""
             // mirror candidateVer's slot rule: a PENDING entry's candidate is
             // the entry itself — a residual pendingUpdate is the B3 inverted
@@ -485,9 +492,16 @@ jobs:
               msg += `\n\n当前验证：${process.env.VSTATUS}——该版本还需通过装测验证才会真正上架。`
             // informed override: a human pass on a red-flagged slot is legal
             // (it outranks the AI) but the ack echoes the flag count so the
-            // decision is made knowingly, on the record
+            // decision is made knowingly, on the record. Package scope is
+            // different: a name@null pass only dissolves the package brake —
+            // flagged SLOTS still need their own exact-key human pass
+            // (humanPassCovers is slot-keyed; the ai-pass-on-flags ignore
+            // exists because AI never reviews flagged bytes). Claiming
+            // "压过放行" here would promise releases the gate can't produce.
             if (process.env.V === 'pass' && Number(process.env.FLAGS) > 0)
-              msg += `\n\n⚠️ 该槽位有 ${process.env.FLAGS} 个高危标记——人工 pass 将压过 AI 侧顾虑放行（见详情页标记清单）。`
+              msg += pkgAll
+                ? `\n\n⚠️ 包内槽位共有 ${process.env.FLAGS} 个高危标记——包级 pass 只解除整包刹车；带旗标的版本仍需各自裁决 pass 才会放行。`
+                : `\n\n⚠️ 该槽位有 ${process.env.FLAGS} 个高危标记——人工 pass 将压过 AI 侧顾虑放行（见详情页标记清单）。`
             // redundant pass: the slot is already published with no hold —
             // the line is archived but is never an announcement candidate,
             // so it will not mature; don't imply a digest is coming

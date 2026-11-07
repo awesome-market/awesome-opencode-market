@@ -96,7 +96,14 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
   let name = '', ver = '', verdict: VerdictResolved['verdict'], reason = ''
   let mismatch: string | undefined
 
-  if (e.issueTitle.startsWith('[submit]')) return { skip: 'submit' }
+  // submit.yml's verdict gate owns all three casings ([submit]/[Submit]/
+  // [SUBMIT]) — mirroring only the lowercase form let a case-variant title
+  // WITHOUT the submission label (pre-label window, or label removed) take
+  // verdict writes from BOTH workflows: the exact double-write this defer
+  // exists to prevent, plus a spurious verdict:blocked on submit's turf.
+  // Match the sibling contract exactly — an exotic casing like [sUbMiT] is
+  // a submission to neither workflow, so it falls through to normal handling.
+  if (/^\[(?:submit|Submit|SUBMIT)\]/.test(e.issueTitle)) return { skip: 'submit' }
 
   if (e.event === 'issues' && e.action === 'labeled') {
     const t = titleTarget(e.issueTitle)
