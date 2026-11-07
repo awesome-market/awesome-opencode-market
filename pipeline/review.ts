@@ -187,13 +187,25 @@ export function renderReview(r: Review): string {
 }
 
 export function renderRepoReview(r: RepoReview): string {
-  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.resolvedSha ?? 'null'} -->\n<!-- repoPkg: ${r.pkgName ?? 'null'} -->\n<!-- target: ${r.repo} -->\n<!-- verdict: ${repoVerdict(r)} -->`
+  // pkgName comes from the SUBMITTED repo's own package.json — attacker-
+  // controlled free text. The `repoPkg:` marker is machine-scraped (`[^ ]+`
+  // → seed.pkg → the run.ts repo-pkg-changed drift pin), so it must be a
+  // single bounded safe token: a spaced name would truncate the scrape and
+  // pin a WRONG pkg forever (a permanent false sec:repo-pkg-changed red
+  // flag), markup could break the HTML comment, and an unbounded name could
+  // push the report past GitHub's comment limit. Unsafe → 'null' (no drift
+  // anchor) rather than a wrong one; the display line clips for the same
+  // reason.
+  const pkgTok = typeof r.pkgName === 'string' && /^[A-Za-z0-9@][A-Za-z0-9@._~/-]{0,213}$/.test(r.pkgName)
+    ? r.pkgName : 'null'
+  const pkgShow = typeof r.pkgName === 'string' ? r.pkgName.slice(0, 200) : null
+  const markers = `\n\n<!-- createdAt: ${r.createdAt ?? 'null'} -->\n<!-- repoSha: ${r.resolvedSha ?? 'null'} -->\n<!-- repoPkg: ${pkgTok} -->\n<!-- target: ${r.repo} -->\n<!-- verdict: ${repoVerdict(r)} -->`
   const apiDown = r.status === 'error' || r.status === 'rate-limited' || r.treeStatus === 'error' || r.treeStatus === 'rate-limited'
   if (apiDown)
     return `**${r.repo}** — 审查失败：GitHub API 暂时不可用（${r.status === 'ok' ? r.treeStatus : r.status}）。这不是投稿内容的问题——请稍后在本 issue 回复任意评论即可重新审查。${markers}`
   if (!r.exists) return `**${r.repo}** — repository not found on GitHub.${markers}`
   const lines = [
-    `**${r.repo}** — GitHub 仓库${r.stars != null ? ` (${r.stars}★)` : ''}${r.pkgName ? `, package.json: \`${r.pkgName}\`` : ''}`,
+    `**${r.repo}** — GitHub 仓库${r.stars != null ? ` (${r.stars}★)` : ''}${pkgShow ? `, package.json: \`${pkgShow}\`` : ''}`,
     `Scanned commit: \`${r.resolvedSha ?? 'unknown'}\`${r.truncated ? ' (tree listing truncated — 深层路径可能漏检)' : ''}`,
     scanLine(r.scanned, r.scanError, r.findings.length, r.redFlags.length),
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,

@@ -14,14 +14,19 @@
 #
 # Default dedupe: skip when the exact LINE already exists anywhere in FILE —
 # a push that succeeded but reported failure must not duplicate it.
-# ISSUE mode (submissions.txt): a seed line already carrying "issue":N is the
-# SAME submission being re-reviewed — replace it in place so re-reviews update
-# reviewedVersion/`at` instead of stacking duplicate rows (F-5). A second
-# issue submitting the SAME package gets its own row on purpose: every
+# ISSUE mode (submissions.txt ONLY): a seed line already carrying "issue":N is
+# the SAME submission being re-reviewed — replace it in place so re-reviews
+# update reviewedVersion/`at` instead of stacking duplicate rows (F-5). A
+# second issue submitting the SAME package gets its own row on purpose: every
 # submission issue needs a tracked seed, otherwise it or silently drops
 # with no status comment, no notify, and no dead-seed lifecycle. Duplicate
 # package rows are cheap — run.ts keys seedMeta by name (last wins) and
 # markNotified comments on every issue that matches the landed entry.
+# The gate is FILE-scoped on purpose: ai-verdicts.jsonl rows ALSO carry an
+# `issue` field, but a verdict is an append-only judgment — replacing same-
+# issue rows would erase earlier brakes/passes from the audit log AND from
+# applyMatureVerdicts' only source of truth (submit.yml once leaked ISSUE
+# into the verdict append this way). Verdict dedupe stays exact-line.
 # APPLY_INDEX=1: run pipeline/release.ts to fold verdicts into index.json in
 # the same commit — a human brake lands in minutes instead of at the next
 # scheduled catalog generate. Apply failure degrades to verdict-line-only:
@@ -69,7 +74,11 @@ for i in 1 2 3 4; do
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
   if [ "${APPLY_ONLY:-}" != 1 ]; then
     touch "$WT/$FILE"
-    if [ -n "${ISSUE:-}" ]; then
+    # ISSUE replacement is meaningful only for submissions.txt seed rows —
+    # see the header note. Any other FILE (ai-verdicts.jsonl et al.) gets
+    # exact-line dedupe even when ISSUE is set, so a stray env can never
+    # delete same-issue history.
+    if [ -n "${ISSUE:-}" ] && [ "${FILE##*/}" = "submissions.txt" ]; then
       # ISSUE mode: drop stale seed row(s) for this issue, append the fresh
       # line — one row per issue, newest review wins. JSON.parse detection, not
       # a comma-anchored grep (F-5). A row from a DIFFERENT issue is kept: that

@@ -830,8 +830,12 @@ jobs:
           STATUS_FILE: /tmp/apply-status
           LATEINGEST: ${{ steps.v.outputs.lateingest }}
           LATELINE: ${{ steps.v.outputs.lateline }}
-          ISSUE: ${{ github.event.issue.number }}
         run: |
+          # ISSUE belongs ONLY to the late-ingest submissions.txt call below —
+          # it must never reach the ai-verdicts.jsonl append: catalog-append's
+          # ISSUE mode replaces same-issue rows, which would erase earlier
+          # verdicts for this issue from the append-only audit log.
+          ISSUE="${{ github.event.issue.number }}"
           # a flagged-override pass first lands the recovered seed — the
           # verdict below is useless without a queued target. Failure is
           # non-fatal: the audit record still lands and re-triggering the
