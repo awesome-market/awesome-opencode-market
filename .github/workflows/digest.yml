@@ -310,9 +310,11 @@ jobs:
                 # pushed=spooled 与通道降级不同义——判词写出来了但 catalog 推送
                 # 重试全败、滞留本机 spool 等下轮重放。戳滞后一个 run（发布先于
                 # 本轮推送结果），单次 spooled 可能已自愈；持续=remote/凭据坏。
+                # 单列第七腿而非复用 6：LEGS 指纹按腿号去重，降级消退+spooled
+                # 新发同为"6"会被判同腿静默吞掉新告警。
                 if [ "$H_PUSHED" = "spooled" ]; then
                   REASONS="${REASONS}${REASONS:+$'\n\n'}本机 ai-diagnose 判词推送失败（pushed=spooled）——新判词滞留本机 pending-verdicts.jsonl 待下轮重放，catalog 暂时收不到。若持续出现检查本机 git remote/凭据与 catalog 分支状态；详见 diagnose-health.json。"
-                  LEGS="${LEGS}6"
+                  LEGS="${LEGS}7"
                 fi
               fi
             fi
