@@ -1528,7 +1528,7 @@ alert job：失败查重——已有 pipeline-alert open issue 则评论追加�
 pipeline-alert 快报——刹车/索引变更卡在 dispatch 不再等 watchdog 36h 腿
 ```
 
-诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。version-less（github-kind）条目渲染为 `nothing to install`（muted）——skipped 主要是"没有可装的东西"；经 codeload 静态扫描后带 redFlags 时兼有"高危没跑"含义。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
+诚实状态文案（AGENTS 规约）：verified=已实测可装可用 / failed=装不上或加载失败 / skipped=有高危信号没跑 / unverified=还没验。无客户端安装路径的条目（github 插件-only、无版本 npm、parts 为空的类型）渲染为 `nothing to install`（muted）——与客户端 canInstall 同一 installPlan 判定；github-kind 带 `skill`+有效 repo 的条目实际可装（skills catalog/客户端 codeload），其验证态真实透出（git-sha 目标跑 unverified→verified/failed），不再被版本槽掩盖；红旗跳过的可装条目显示 `skipped (high risk)`。legacy 徽标 = 门禁前老条目；"没扫到"必带"不等于安全"。
 
 ---
 

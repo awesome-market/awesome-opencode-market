@@ -65,10 +65,15 @@ const verState = (v: Ver): { text: string; cls: string; zh: string } => {
   }
 }
 export function verifyLabel(e: PluginEntry): { text: string; cls: string; zh: string } {
-  // version-less entries (github-kind) are constructed as 'skipped' — there is
-  // no npm artifact to run, not a high-risk short-circuit. Rendering them
-  // "skipped (high risk)" would be a lie (AGENTS.md honest-label rule).
-  if (e.latestVersion === null) return { text: 'nothing to install', cls: 'muted', zh: '没有可安装的包' }
+  // "nothing to install" tracks the CLIENT install path (installPlan parity),
+  // not the version slot: github-kind rows carry latestVersion:null yet a
+  // 'skill' part + usable repo installs via the skills catalog / client
+  // codeload — and their verification status is real (git-sha targets run
+  // unverified→verified/failed). Masking it would hide a failed verify and
+  // contradict installHint on the same page. Path-less rows (github
+  // plugin-only, version-less npm, parts-empty types) keep the muted label —
+  // the client's canInstall reports the same "no target" state.
+  if (!hasInstallPath(e)) return { text: 'nothing to install', cls: 'muted', zh: '没有可安装的包' }
   return verState(e.verification)
 }
 /** approval badge — 'legacy' entries predate the review gate; 'approved' needs no badge. */
@@ -95,23 +100,39 @@ const ghRepoOf = (e: Pick<PluginEntry, 'source'>): string | null =>
   e.source?.kind === 'github' && /^[\w.-]+\/[\w.-]+$/.test(e.source?.repo ?? '')
     ? e.source!.repo! : null
 
+/** The two install-path halves, mirroring the market client's installPlan
+ *  exactly: 'plugin' needs an npm spec (github plugins have no client route —
+ *  the client itself refuses them); 'skill' resolves npm-tarball or
+ *  github-codeload. installHint and verifyLabel both route through this so
+ *  the label and the hint on the same page can never disagree. */
+const installPaths = (e: PluginEntry): { plugin: boolean; skill: boolean } => {
+  const gh = e.source?.kind === 'github'
+  const parts = entryParts(e)
+  return {
+    plugin: parts.includes('plugin') && !gh && !!e.latestVersion,
+    skill: parts.includes('skill') && (gh ? ghRepoOf(e) !== null : !!e.latestVersion),
+  }
+}
+const hasInstallPath = (e: PluginEntry): boolean => {
+  const p = installPaths(e)
+  return p.plugin || p.skill
+}
+
 /** Install instruction matching the market client's installPlan rules — a
  *  github plugin has no install path (the client itself refuses), so the
  *  detail page must not print a `plugin add` line that cannot work. Skills
  *  point at the site's own skills catalog; npm plugins pin the approved ver.
  *  `up` is the relative prefix back to site root (depth of the detail page). */
 export function installHint(e: PluginEntry, up = '../', landed?: Set<string>): string {
-  const gh = e.source?.kind === 'github'
-  const ghRepo = ghRepoOf(e)
-  const parts = entryParts(e)
+  const paths = installPaths(e)
   const bits: string[] = []
-  if (parts.includes('plugin') && !gh && e.latestVersion)
-    bits.push(`${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion)}</code>`)
+  if (paths.plugin)
+    bits.push(`${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion!)}</code>`)
   // landed = slugs whose skill files actually shipped this build — a fetch
   // failure or skip_skills run must not link an empty catalog slot. The npm/
   // codeload install path in the market client is unaffected, so degrade to
   // a note rather than promise a catalog entry that isn't there.
-  if (parts.includes('skill') && (e.latestVersion || ghRepo))
+  if (paths.skill)
     bits.push(landed && !landed.has(e.slug)
       ? bi('skill: not yet in this site\'s catalog — the market client still installs it from the pinned source', '技能：尚未进入本站目录——市场客户端仍可从钉定来源安装')
       : `${bi('skill:', '技能：')} <a href="${up}skills.html">${bi('skills catalog', '技能目录')}</a>`)
@@ -166,6 +187,12 @@ function siteRepoUrl(): string {
   return memoRepo
 }
 
+/** Repo-name segment for the Pages base path. normalizeRepoUrl first: it
+ *  collapses scp/ssh forms, strips .git AND trailing slashes — the old
+ *  split('/').pop() returned '' on a trailing-slash remote, silently
+ *  degrading a project page to base '/' (every absolute 404 link dead). */
+export const repoNameOf = (u: string): string => normalizeRepoUrl(u)?.split('/').pop() ?? ''
+
 /** Absolute base path for the deployed site ("/<repo>/" on project Pages,
  *  "/" on a user/org page or custom domain). Only 404.html needs absolute
  *  links: Pages serves it at the REQUESTED path, so relative links resolve
@@ -178,7 +205,7 @@ function siteBasePath(): string {
   let name = ''
   try {
     const u = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
-    name = u.replace(/\.git$/, '').split('/').pop() ?? ''
+    name = repoNameOf(u)
   } catch { /* no remote */ }
   memoBase = name && !name.endsWith('.github.io') ? `/${name}/` : '/'
   return memoBase
@@ -699,7 +726,9 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
       console.warn(`[site] skill skipped — github entry without a usable repo id: ${JSON.stringify(s.source?.repo).slice(0, 120)}`)
       continue
     }
-    if (!ver) continue                                // npm entry without a version — nothing to serve
+    // same observability rule as the sibling skips — a version-less skill row
+    // is corrupt-ish index data worth a warn, not a silent catalog absence
+    if (!ver) { console.warn(`[site] skill skipped — no version marker: ${JSON.stringify(s.name).slice(0, 120)}`); continue }
     // pre-sha rows fetch codeload HEAD — a moving target, so the served tree
     // can drift from what the (older) scan saw. Dropping them would cut ~30%
     // of github skills from the catalog for a marginal integrity gain; keep
