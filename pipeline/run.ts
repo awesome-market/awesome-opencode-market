@@ -294,6 +294,12 @@ export async function run(opts: RunOptions = {}) {
   }
   const spamOwners = new Set([...byOwner.entries()].filter(([, ns]) => looksLikeTemplateSpam(ns)).map(([o]) => o))
   const rejectedNpm = new Set<string>()
+  // entries dropped this run because their FRESH identity is blocklisted — a
+  // packument whose repository field repoints to a banned repo has a stored
+  // name/slug that predates the repoint, so gone-check's stored-field probe
+  // can't see the reason; without this set the tombstone pass would probe the
+  // (still-live) packument and keep the banned entry forever
+  const blockedFresh = new Set<string>()
   const admitted = npmList.filter(c => {
     const owner = normalizeRepoUrl(c.repoUrl)?.split('/')[0]?.toLowerCase() ?? c.name.split('/')[0]!
     if (spamOwners.has(owner)) {
@@ -556,7 +562,15 @@ export async function run(opts: RunOptions = {}) {
         // Same for held slots whose hold predates pendingUpdate.integrity.
         const needsIntegrity = (!prev.integrity && !!prev.latestVersion)
           || (prevSlot !== null && !prevSlot.integrity)
-        entries.push(stale || needsIntegrity ? await refreshMeta(prev) : prev)
+        const next = stale || needsIntegrity ? await refreshMeta(prev) : prev
+        // refreshMeta re-resolves packument.repository — a repoint onto a
+        // blocklisted repo must not keep publishing just because the stored
+        // name/slug aren't on the list. Lowercase: slugs/list rows are lc.
+        if (isBlockedAnyCase(next.name, next.source.repo?.toLowerCase() ?? next.slug)) {
+          blockedFresh.add(next.name.toLowerCase())
+          return
+        }
+        entries.push(next)
         reusedNames.add(cand.name)
         return
       }
@@ -583,9 +597,15 @@ export async function run(opts: RunOptions = {}) {
       // regression as a finding, and drop a hold pinned to the regressed
       // version so merge re-evaluates instead of releasing evidence-less code.
       if (!ev.ok) {
+        // fresh-identity check first: a repointed repository field can land
+        // the entry on a blocklisted repo even though the stored name/slug
+        // aren't listed — that removal is 'manual', not the generic
+        // evidence-filter tombstone, and it beats the approved-slot keep
+        const freshSlug = slugOf({ repo: normalizeRepoUrl(pk.repository) ?? undefined, npmName: cand.name })
+        if (isBlocked(cand.name, freshSlug)) blockedFresh.add(cand.name.toLowerCase())
         // only an APPROVED slot is worth protecting — a still-pending entry
         // that loses its evidence tombstones normally (nothing displayed)
-        if (prev && prev.approval !== 'pending' && !isBlocked(prev.name, prev.slug)) {
+        else if (prev && prev.approval !== 'pending' && !isBlocked(prev.name, prev.slug)) {
           const base = prev.pendingUpdate?.version === pk.latest
             ? (() => { const { pendingUpdate: _pu, ...r } = prev; return r })()
             : prev
@@ -610,6 +630,9 @@ export async function run(opts: RunOptions = {}) {
       const repo = normalizeRepoUrl(pk.repository) ?? declaredRepo
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
       if (isBlocked(cand.name, slug)) {
+        // the stored identity may not show the block (repointed repo) — tell
+        // gone-check so it tombstones 'manual' instead of keeping the entry
+        blockedFresh.add(cand.name.toLowerCase())
         if (seedNames.has(cand.name)) seedOutcomes.set(cand.name, 'blocklisted')
         return
       }
@@ -1467,7 +1490,7 @@ export async function run(opts: RunOptions = {}) {
     const lower = e.name.toLowerCase()
     let reason: RemovedEntry['reason'] = 'unknown'
     if (cappedOut.has(lower)) reason = 'capped'
-    else if (isBlockedAnyCase(e.name, e.slug)) reason = 'manual'
+    else if (isBlockedAnyCase(e.name, e.slug) || blockedFresh.has(lower)) reason = 'manual'
     else if (e.source.kind === 'npm') {
       // abbreviated packument — the probe only needs existence + dist.tarball
       const { pk, status } = await fetchPackument(e.name, { fetchFn: f, abbreviated: true })
