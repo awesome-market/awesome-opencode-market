@@ -4,13 +4,13 @@ import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
-import { fetchPackument, fetchTarball, fetchDownloads30d, compatStrings } from './fetch/npm.ts'
+import { fetchPackument, fetchTarball, fetchDownloads30d, compatStrings, type PackumentResult } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
 import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs, candidateSlot } from './verdicts.ts'
-import { retryable } from './verify/plan.ts'
+import { retryable, verifyPartsOf } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry, type RemovedEntry, type AiVerdict } from '../src/schema.ts'
@@ -414,7 +414,14 @@ export async function run(opts: RunOptions = {}) {
     // own package.json name drift between version bumps, so the reuse path
     // refreshes them too, same as the pin path (O-8's twin). Both probes hit
     // raw.githubusercontent (CDN, no API quota).
-    const pkResP = fetchPackument(e.name, { fetchFn: f })
+    // npm probes only for npm-kind entries: a github-kind 'owner/repo' name
+    // can never resolve a packument ('/' isn't a valid unscoped npm name) —
+    // both calls would be guaranteed 404s, and pk null collapses repo
+    // resolution onto the stored source.repo (the correct anchor for gh).
+    const isNpm = e.source.kind === 'npm'
+    const pkResP: Promise<PackumentResult> = isNpm
+      ? fetchPackument(e.name, { fetchFn: f })
+      : Promise.resolve({ pk: null, status: 'not-found' })
     // the packument's repository field is authoritative — resolve the repo
     // anchor from the FRESH packument, falling back to the stored source.repo
     // only when the field is absent or unusable. A repointed repository field
@@ -426,7 +433,7 @@ export async function run(opts: RunOptions = {}) {
     const [pkRes, repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
       pkResP,
       repoP.then(r => r ? fetchRepoMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
-      fetchDownloads30d(e.name, { fetchFn: f }),
+      isNpm ? fetchDownloads30d(e.name, { fetchFn: f }) : Promise.resolve(null),
       repoP.then(r => r ? fetchMarketMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
       repoP.then(repo => pkResP.then(({ pk }) => repo && pk?.repositoryDir
         ? fetchRepoPackageName(repo, { dir: pk.repositoryDir, fetchFn: f })
@@ -474,6 +481,18 @@ export async function run(opts: RunOptions = {}) {
         caps = addFinding(caps, `sec:repo-declared-mismatch:${clip(declaredRepo)}`)
     }
     const sub = seedMeta.get(e.name)
+    // evidence-regression re-derives on the refresh cadence too — the pin path
+    // strips+re-checks it (the worker evidence gate already ran upstream), but
+    // a reuse-path entry only ever sees this function: a keyword/entrypoint
+    // regression on the pinned latest, or its restoration, must not wait for
+    // the next version bump to show up. Same gate as the worker (packument
+    // metadata only); pending entries skip — the full path decides them
+    // (reject → 'filtered' tombstone)
+    if (pk && pk.latest !== null && e.approval !== 'pending') {
+      caps = { ...caps, findings: caps.findings.filter(x => !x.startsWith('sec:evidence-regressed')) }
+      const evOk = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined }).ok
+      if (!evOk) caps = addFinding(caps, `sec:evidence-regressed@${pk.latest}`)
+    }
     const claimedCats = (marketMeta?.category ?? sub?.category ?? [])
       .map(catId).filter(cc => CAT_NAMES[cc] !== undefined)
     return {
@@ -1467,6 +1486,12 @@ export async function run(opts: RunOptions = {}) {
       // fields (verifiedAt/runUrl/integrity) stay as the audit trail of what
       // WAS measured; merge's skipIfFlagged still downgrades if redFlags stand.
       const moved = !!(tree.sha && e.source.version && tree.sha !== e.source.version)
+      // reset only for slots plan can actually re-queue — a no-payload entry
+      // (contains:[], or only command/agent/mcp parts) flipped to 'unverified'
+      // sits "还没验" forever: verifyQueued requires plugin/skill parts, so
+      // its prior status was the honest one
+      const ghParts = verifyPartsOf(e)
+      const reverify = moved && (ghParts.includes('plugin') || ghParts.includes('skill'))
       return {
         ...e,
         capabilities: {
@@ -1486,7 +1511,7 @@ export async function run(opts: RunOptions = {}) {
           // values are deliberately NOT kept
           redFlags: [...new Set([...redFlags, ...keepFlags(e.capabilities)])],
         },
-        ...(moved ? { verification: { ...e.verification, status: 'unverified' as const } } : {}),
+        ...(reverify ? { verification: { ...e.verification, status: 'unverified' as const } } : {}),
         ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),
       }
     } catch { return e }

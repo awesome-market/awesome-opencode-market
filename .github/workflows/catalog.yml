@@ -161,7 +161,7 @@ jobs:
             # HEAD:catalog push + refetch-after-move all work under depth=1).
             # Full history would be ~14MB × every index commit, per run.
             git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
-            git worktree add /tmp/cat origin/catalog
+            git worktree add --detach /tmp/cat origin/catalog
             ;;
             2)
             # first run ever: no catalog branch — create it as an ORPHAN so the
@@ -199,7 +199,10 @@ jobs:
             # mid-run stays a brake, our own mature release still releases).
             # stderr carries the released/held line — keep the LAST attempt's
             # output for the step summary below (each retry truncates it)
-            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log; then
+            # an exit-0-with-empty-output is the same failure mode as the
+            # remerge guard above — never mv an empty file over the merged index
+            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log \
+                && [ -s /tmp/index.released.json ]; then
               mv /tmp/index.released.json /tmp/index.json
               RELEASE_FAILED=0
             else
