@@ -217,6 +217,18 @@ export function restrictedEnv(over: Record<string, string> = {}): Record<string,
   return { ...out, ...over }
 }
 
+/** The `loading plugin` canary matcher — same family as pipeline/verify's
+ *  loadedSignal: the quoted msg form `loading plugin" id=` AND the bare
+ *  `loading plugin id=` variant both count as activation evidence (the old
+ *  `plugin."?\s+id=` needed whitespace after an optional quote, so the
+ *  unquoted form never matched → false 'not-loaded' verdicts). Exported
+ *  for tests — the name is regex-escaped. */
+export function pluginLoadRe(name: string): RegExp {
+  // trailing boundary: 'id=my-plugin-extra' must not satisfy a probe for
+  // 'my-plugin' — the id field ends at whitespace/EOL in logfmt output
+  return new RegExp(`loading plugin"?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|\\s)`)
+}
+
 /** Activation probe: spawn `opencode serve` against a throwaway HOME whose
  *  opencode.json lists ONLY the installed spec, create a session (2.2.5
  *  loads plugins lazily on session CREATE — a bare serve never triggers
@@ -261,7 +273,9 @@ export function probeActivation(name: string, spec: string): Promise<'activated'
         // serve never wrote a log) — callers must not dress uncertainty up
         // as a confident not-loaded diagnosis
         if (err || !existsSync(log)) return finish('unknown')
-        const ok = new RegExp(`loading plugin."?\\s+id=${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(readFileSync(log, 'utf8'))
+        // same canary family as pipeline/verify's loadedSignal — see
+        // pluginLoadRe for the quoted/unquoted variants it must match
+        const ok = pluginLoadRe(name).test(readFileSync(log, 'utf8'))
         finish(ok ? 'activated' : 'not-loaded')
       })
     })().catch(() => resolve('unknown'))

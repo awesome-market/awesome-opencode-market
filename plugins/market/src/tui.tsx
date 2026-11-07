@@ -264,37 +264,59 @@ export default Plugin.define({
       // edits) — so dedupe runs after EVERY successful add, not just updates.
       // Resolves when the spawn + config rewrite fully settled — updateAll's
       // serial lane awaits it so config writes can't race.
+      // plugin-half in-flight domain — installPluginHalf/installSkill each
+      // own one so updateAll's lanes can tell "sibling half of MY sweep" apart
+      // from "an external install already running" (the shared jobs map can't)
+      const pluginBusy = new Set<string>()
+      const skillBusy = new Set<string>()
       const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<boolean> => {
         let pin: string
         // pinSpec itself throws on a crafted latestVersion — outside the try
         // it escaped as an unhandled rejection instead of a status line
         try { pin = pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return false }
+        // claim BEFORE the awaits — the pin recheck (network) and the dynamic
+        // import left jobs empty, so 'C' hit a noop (cancel lied: status said
+        // cancelled while the spawn still ran) and a second 'i'/sweep lane
+        // could double-start. busy marks this half for updateAll's lanes.
+        pluginBusy.add(e.name)
+        let child: import('node:child_process').ChildProcess | null = null
+        let userCancel = false
+        const un = jobTrack(e.name, () => { userCancel = true; child?.kill('SIGTERM') })
+        try {
         // the render-time entry can lag the publication by up to TTL — a
         // version concern'd inside that window must NOT install (GUI host
         // does the same recheck before its spawn). Cheap when health.json
         // hasn't moved; a real re-pull when it has.
         try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL, true), e.name, pin) }
         catch { setStatus(t('catalogMoved')); return false }
+        if (userCancel) { setStatus(t('cancelled')); return false }
         const cw = compatWarnOf(e)
         if (cw) setStatus(cw)
         if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         else setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
-        return new Promise<boolean>(resolve => {
-          const p = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
-          const un = jobTrack(e.name, () => p.kill('SIGTERM'))
+        if (userCancel) { setStatus(t('cancelled')); return false }
+        return await new Promise<boolean>(resolve => {
+          child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
           // 90s ceiling — a wedged `plugin add` must not hold the dialog status
           // forever (GUI main already kills at 90s; the TUI had none)
           let timedOut = false
-          const kill = setTimeout(() => { timedOut = true; p.kill('SIGTERM') }, 90_000)
+          let spawnFailed = false
+          const kill = setTimeout(() => { timedOut = true; child?.kill('SIGTERM') }, 90_000)
           // child output is untrusted terminal text — strip control sequences
           // before it can reach the status line (custom-index ANSI injection)
           const push = (d: Buffer) => setStatus(sanitize(String(d).trim()).split('\n').filter(Boolean).pop() ?? '')
-          p.stdout?.on('data', push); p.stderr?.on('data', push)
-          p.on('close', code => {
-            clearTimeout(kill); un()
-            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve(false) }
-            else if (code === 0) {
+          child.stdout?.on('data', push); child.stderr?.on('data', push)
+          child.on('close', code => {
+            clearTimeout(kill)
+            // spawn-failed children also emit 'close' — without this the
+            // real error gets overwritten by a bogus 'exit null' status
+            if (spawnFailed) return
+            // a user-cancelled child arrives code=null — indistinguishable
+            // from a crash without this check ('exit null' was a cancel lie)
+            if (userCancel) { setStatus(t('cancelled')); resolve(false); return }
+            if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 90s)', key: 'i' })); log(`install fail ${e.name}: timeout`); resolve(false); return }
+            if (code === 0) {
               void (async () => {
                 try {
                   // config dedupe shares the process-wide lock — an uninstall
@@ -321,18 +343,26 @@ export default Plugin.define({
             }
             else { setStatus(tf('installFailN', { name: e.name, exit: ` (exit ${code})`, key: 'i' })); log(`install fail ${e.name}: exit ${code}`); resolve(false) }
           })
-          p.on('error', x => { clearTimeout(kill); un(); setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
+          child.on('error', x => { clearTimeout(kill); spawnFailed = true; setStatus(tf('installFailN', { name: e.name, exit: `: ${x.message}`, key: 'i' })); log(`install throw ${e.name}: ${x}`); resolve(false) })
         })
+        } finally { un(); pluginBusy.delete(e.name) }
       }
       // skill half: tarball fetch + installSkillTar. Tracked in jobs with an
       // AbortController so 'C' can cancel the download (previously the fetch
       // was untracked — double 'i' raced two installs, 'C' couldn't reach it).
       const installSkill = async (e: MarketEntry, plan: InstallPlan): Promise<boolean> => {
         if (!plan.skill) return false
+        // per-half busy mark — updateAll's skill lane checks THIS (not the
+        // shared jobs map) so its plugin lane's registration can't read as
+        // "external install in flight" and skip the sibling half
+        skillBusy.add(e.name)
         const ac = new AbortController()
         let userCancel = false
+        // the 30s abort used to surface as a generic AbortError — a timeout
+        // is not a user cancel and deserves its own honest label
+        let timedOut = false
         const un = jobTrack(e.name, () => { userCancel = true; ac.abort() })
-        const timer = setTimeout(() => ac.abort(), 30_000)
+        const timer = setTimeout(() => { timedOut = true; ac.abort() }, 30_000)
         try {
           setStatus(tf('installingN', { name: e.name }))
           // the render-time entry can lag the publication — resolve the
@@ -387,8 +417,9 @@ export default Plugin.define({
           return true
         } catch (x) {
           if (userCancel) { setStatus(t('cancelled')); return false }
+          if (timedOut) { setStatus(tf('installFailN', { name: e.name, exit: ' (timeout 30s)', key: 'i' })); log(`install fail ${e.name}: timeout`); return false }
           setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' })); log(`install fail ${e.name}: ${String(x)}`); return false
-        } finally { clearTimeout(timer); un() }
+        } finally { clearTimeout(timer); un(); skillBusy.delete(e.name) }
       }
       // per-half sync decision shared by the card action and updateAll:
       // fresh install → every deliverable half; otherwise only halves that
@@ -421,6 +452,11 @@ export default Plugin.define({
           { label: t('cancel'), run: noop },
         ])
       const doUninstall = async (e: MarketEntry) => {
+        // in-flight guard — an install/update spawn's config dedupe must not
+        // interleave with this spec removal (the dedupe rewrite would
+        // resurrect the spec we just deleted). jobs holds every live op for
+        // the entry: spawn kills, fetch aborts, pre-spawn claims
+        if (jobs.has(e.name)) { setStatus(t('installRunning')); return }
         log(`uninstall ${e.name}`)
         // uninstall what is actually installed — a dual-nature entry can own
         // both a plugin spec and skill dirs. Check __skill_ keys directly:
@@ -571,8 +607,14 @@ export default Plugin.define({
             // field-shape validation — a crafted backup file must not corrupt state
             const d = sanitizeState(JSON.parse(readFileSync(v.replace(/^~/, homedir()), 'utf8')) as unknown) as MarketState
             // same restore scope as the GUI — favorites + version bookkeeping
-            // + devlog + language, not just the two storage blobs
-            void mutate(x => { Object.assign(x, { favorites: d.favorites, skillVers: d.skillVers, devlog: d.devlog, lang: d.lang }) })
+            // + devlog + language, not just the two storage blobs. devlog/lang
+            // are only written when the backup actually carries them —
+            // Object.assign used to stamp `undefined` over a live setting
+            void mutate(x => {
+              x.favorites = d.favorites; x.skillVers = d.skillVers
+              if (d.devlog !== undefined) x.devlog = d.devlog
+              if (d.lang !== undefined) x.lang = d.lang
+            })
             setStatus(t('restored'))
           } catch (x) { setStatus(tf('restoreFail', { err: String(x) })) }
         }) },
@@ -680,17 +722,19 @@ export default Plugin.define({
             const pluginLane = (async () => {
               for (const j of results) if (j.sync.plugin) {
                 bump()
-                // an install already in flight for this entry (manual 'i' or a
-                // prior lane) must not be double-started — count it honestly
-                // as not-updated rather than racing a second spawn
-                if (jobs.has(j.e.name)) { j.pOk = false; continue }
+                // per-HALF busy check — the old jobs.has() read the SIBLING
+                // lane's registration as "external install" and skipped this
+                // half, so a dual entry needing both halves always failed one
+                // side (deterministic updatedMix bug). pluginBusy only flags
+                // a plugin half genuinely in flight (manual 'i' or prior lane)
+                if (pluginBusy.has(j.e.name)) { j.pOk = false; continue }
                 j.pOk = await installPluginHalf(j.e, true)
               }
             })()
             const skillLane = (async () => {
               for (const j of results) if (j.sync.skill) {
                 bump()
-                if (jobs.has(j.e.name)) { j.sOk = false; continue }
+                if (skillBusy.has(j.e.name)) { j.sOk = false; continue }
                 j.sOk = await installSkill(j.e, installPlan(j.e))
               }
             })()
@@ -849,7 +893,8 @@ export default Plugin.define({
         }
         // r = force refresh — TTL must not swallow a user-initiated reload;
         // the outcome label distinguishes "still fresh" from "actually pulled"
-        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); setStatus(fetchOutcome() === 'fresh' ? t('dataFresh') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        // AND from served-stale/mismatch (old snapshot, not a refresh)
+        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); const oc = fetchOutcome(); setStatus(oc === 'fresh' ? t('dataFresh') : oc === 'mismatch' ? t('refreshMismatch') : oc === 'stale' ? t('refreshStale') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
         if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
         if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }

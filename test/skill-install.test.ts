@@ -134,16 +134,65 @@ describe('installSkillTar', () => {
 
   it('control-char filenames are skipped, not written to the skills dir', async () => {
     const gz = makeGz(
+      ['package/SKILL.md', '# s'],
       ['package/ok.txt', 'fine'],
       ['package/bad\x07name.txt', 'evil'],
       ['package/sub/bad\x01f.txt', 'evil2'],
       ['package/esc\x1b[31m.txt', 'evil3'])
     await installSkillTar({ name: 'ctrl', gzipped: gz, root })
+    expect(readFileSync(join(root, 'ctrl', 'SKILL.md'), 'utf8')).toBe('# s')
     expect(readFileSync(join(root, 'ctrl', 'ok.txt'), 'utf8')).toBe('fine')
     const names = readdirSync(join(root, 'ctrl'))
     expect(names).toContain('ok.txt')
     expect(names.filter(n => /[\x00-\x1f\x7f-\x9f]/.test(n))).toEqual([])
     expect(existsSync(join(root, 'ctrl', 'sub'))).toBe(false)  // nested bad name never materializes its dir either
+  })
+
+  it('tar metadata members (pax global / GNU longlink / volume) do not break wrapper detection', async () => {
+    // 'g'/'K'/'V' headers carry fixed placeholder names — they used to land
+    // in `items`, break the shared-first-segment rule, and strand every
+    // skill one level deep ('wrote N, lifted 0' silent dead install)
+    const gz = makeGz(
+      ['pax_global_header', '27 comment=packed by test\n', 'g'],
+      ['@LongLink', 'a-very-long-link-target-name', 'K'],
+      ['myrepo-abc1234/', null, 'V'],
+      ['myrepo-abc1234/README.md', 'hi'],
+      ['myrepo-abc1234/.opencode/skills/alpha/SKILL.md', '# a'],
+    )
+    const msg = await installSkillTar({ name: 'o/myrepo', gzipped: gz, root })
+    expect(msg).toMatch(/lifted 1/)
+    expect(readFileSync(join(root, 'alpha', 'SKILL.md'), 'utf8')).toBe('# a')
+    expect(readFileSync(join(root, 'myrepo', 'README.md'), 'utf8')).toBe('hi')
+    expect(existsSync(join(root, 'myrepo', 'pax_global_header'))).toBe(false)
+    expect(existsSync(join(root, 'myrepo', '@LongLink'))).toBe(false)
+    expect(existsSync(join(root, 'myrepo', 'myrepo-abc1234'))).toBe(false)
+  })
+
+  it('a tarball with files but nothing loadable fails honestly — no dead "installed"', async () => {
+    // docs/license-only package: extraction succeeds but no SKILL.md exists
+    // at any discoverable level — reporting success would badge a package
+    // opencode can never load
+    const gz = makeGz(['package/README.md', 'docs'], ['package/LICENSE', 'mit'])
+    await expect(installSkillTar({ name: 'docsonly', gzipped: gz, root }))
+      .rejects.toThrow('no loadable skill')
+    // fresh-install cleanup: no manifest-less wedge for the retry path
+    expect(existsSync(join(root, 'docsonly'))).toBe(false)
+  })
+
+  it('a member declaring more bytes than the buffer holds is corrupt, not silently truncated', async () => {
+    const e = tarEntry('package/SKILL.md', '# s')
+    e.write('00000010000', 124)   // declare 4096 bytes — the buffer holds ~6
+    const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
+    await expect(installSkillTar({ name: 'trunc', gzipped: gz, root }))
+      .rejects.toThrow('corrupt tarball')
+  })
+
+  it('a base-256 (binary) size field is refused, not misparsed as octal 0', async () => {
+    const e = tarEntry('package/SKILL.md', '# s')
+    e[124] = 0x80                // high bit = GNU base-256 encoding marker
+    const gz = gzipSync(Buffer.concat([e, Buffer.alloc(1024)]))
+    await expect(installSkillTar({ name: 'b256', gzipped: gz, root }))
+      .rejects.toThrow('corrupt tarball')
   })
 
   it('foreign collision prefixes with <id>-', async () => {

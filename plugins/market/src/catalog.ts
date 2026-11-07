@@ -589,10 +589,6 @@ export async function assertApprovedPin(getIndex: () => Promise<MarketIndex | nu
  *  range must not produce a confident "incompatible" warning. */
 export function enginesSatisfied(host: string, expr: string): boolean | null {
   const clauses = expr.split(';').map(s => s.trim()).filter(Boolean)
-  let cond = clauses.find(s => /^opencode\b/i.test(s))
-  if (cond) cond = cond.replace(/^opencode\s*/i, '')
-  else if (clauses.length === 1 && cond === undefined && clauses[0] !== undefined && !/^[a-zA-Z]+\s/.test(clauses[0])) cond = clauses[0]
-  if (!cond) return null
   const h = host.trim().replace(/^v/, '')
   if (!/^\d+(\.\d+)*([-+].*)?$/.test(h)) return null
   const parts = (v: string) => v.trim().replace(/^v/, '').replace(/[-+].*$/, '').split('.').map(s => parseInt(s, 10) || 0)
@@ -604,39 +600,61 @@ export function enginesSatisfied(host: string, expr: string): boolean | null {
     }
     return 0
   }
-  let sawUnknown = false
-  for (const alt of cond.split('||')) {
-    let ok = true
-    for (const c0 of alt.trim().split(/\s+/).filter(Boolean)) {
-      const m = /^([><=^~]*)(.+)$/.exec(c0)
-      if (!m?.[2]) { ok = false; sawUnknown = true; break }
-      const op = m[1] || '='
-      const ver = m[2]
-      if (ver === '*' || ver === 'x') continue
-      const wild = /^(\d+(?:\.\d+)*)\.[x*]$/.exec(ver)
-      if (wild) {
-        if (op !== '=' && op !== '~' && op !== '^') { ok = false; sawUnknown = true; break }
-        const pre = `${wild[1]}.`
-        if (!h.startsWith(pre) && h !== wild[1]) ok = false
+  // one AND-able range expression → true / false / null (unparseable)
+  const evalCond = (cond: string): boolean | null => {
+    if (!cond) return null
+    let sawUnknown = false
+    for (const alt of cond.split('||')) {
+      let ok = true
+      for (const c0 of alt.trim().split(/\s+/).filter(Boolean)) {
+        const m = /^([><=^~]*)(.+)$/.exec(c0)
+        if (!m?.[2]) { ok = false; sawUnknown = true; break }
+        const op = m[1] || '='
+        const ver = m[2]
+        if (ver === '*' || ver === 'x') continue
+        const wild = /^(\d+(?:\.\d+)*)\.[x*]$/.exec(ver)
+        if (wild) {
+          if (op !== '=' && op !== '~' && op !== '^') { ok = false; sawUnknown = true; break }
+          const pre = `${wild[1]}.`
+          if (!h.startsWith(pre) && h !== wild[1]) ok = false
+          if (!ok) break
+          continue
+        }
+        if (!/^\d+(\.\d+)*([-+].*)?$/.test(ver)) { ok = false; sawUnknown = true; break }
+        const c = cmp(h, ver)
+        switch (op) {
+          case '>=': ok = c >= 0; break
+          case '<=': ok = c <= 0; break
+          case '>': ok = c > 0; break
+          case '<': ok = c < 0; break
+          case '^': ok = c >= 0 && parts(h)[0] === parts(ver)[0]; break
+          case '~': ok = c >= 0 && parts(h)[0] === parts(ver)[0] && parts(h)[1] === parts(ver)[1]; break
+          default: ok = c === 0
+        }
         if (!ok) break
-        continue
       }
-      if (!/^\d+(\.\d+)*([-+].*)?$/.test(ver)) { ok = false; sawUnknown = true; break }
-      const c = cmp(h, ver)
-      switch (op) {
-        case '>=': ok = c >= 0; break
-        case '<=': ok = c <= 0; break
-        case '>': ok = c > 0; break
-        case '<': ok = c < 0; break
-        case '^': ok = c >= 0 && parts(h)[0] === parts(ver)[0]; break
-        case '~': ok = c >= 0 && parts(h)[0] === parts(ver)[0] && parts(h)[1] === parts(ver)[1]; break
-        default: ok = c === 0
-      }
-      if (!ok) break
+      if (ok) return true
     }
-    if (ok) return true
+    return sawUnknown ? null : false
   }
-  return sawUnknown ? null : false
+  // EVERY opencode clause must hold — engines serializes "name range; name
+  // range" and a second opencode clause ('opencode >=2; opencode <3') used
+  // to be silently dropped, passing hosts the range actually excludes.
+  // The boundary lookahead keeps 'opencode-beta' (a different package) out.
+  const oc = clauses.filter(s => /^opencode(?![\w-])/i.test(s))
+  if (oc.length) {
+    let unknown = false
+    for (const c of oc) {
+      const r = evalCond(c.replace(/^opencode\s*/i, ''))
+      if (r === false) return false
+      if (r === null) unknown = true
+    }
+    return unknown ? null : true
+  }
+  // lone bare range ('>=2') reads as opencode's; a named clause for another
+  // package isn't ours to judge
+  if (clauses.length === 1 && !/^[a-zA-Z]+\s/.test(clauses[0]!)) return evalCond(clauses[0]!)
+  return null
 }
 
 /** Freshness label for the UI header — "data from N min ago". */
@@ -666,7 +684,7 @@ export type I18nKey =
   'cat'|'keysHint'|'menuSettings'|'exportBackupTui'|'restoreTui'|'restorePrompt'|'clearDataTui'|'confirmClearTui'|'clearConfirm'|'devlogTui'|'devlogOn'|'devlogOff'|'viewLogs'|'devlogMenu'|'useHttpCatalog'|'retryKey'|'updateN'|'confirmEnter'|
   'all'|'expand'|'installingN'|'updatedN'|'removedN'|'installFailN'|'uninstallFail'|'uninstallPartial'|'updateFail'|'exportFail'|'restoreFail'|'catalogFail'|'catalogAlready'|'catalogEnabled'|'cancelled'|'heldReview'|'dataFresh'|'integrityFail'|
   'deprecated'|'replacedBy'|'legacy'|'removedFrom'|'reasonNpm404'|'reasonRepo404'|'reasonFiltered'|'reasonCapped'|'reasonManual'|'reasonUnknown'|'viewOnSite'|'compat'|'heldReason'|'verifyLevel'|'verifyLog'|'verifyRun'|'permTitle'|'permAllow'|'permAsk'|'permDeny'|'permOff'|'disable'|'revertTo'|'featFilter'|'installRunning'|'catalogDisabled'|
-  'scannedClean'|'catalogMoved'|'compatWarn'|'invDown'|'keysHintGui'|'heldAtLabel'
+  'scannedClean'|'catalogMoved'|'compatWarn'|'invDown'|'keysHintGui'|'heldAtLabel'|'refreshStale'|'refreshMismatch'
 const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English',
   partsHint: '{k} parts (multi-select)', installing: 'installing…', installFailed: 'install failed', failedRetry: 'failed — retry', verifying: 'verifying…', installedPending: 'installed (verify pending)', skill: 'skill', plugin: 'plugin', uncataloged: 'uncataloged', updateAll: 'update all', needRestartDesk: 'restart desktop required', allLatest: 'all up to date', updatingN: 'updating {n}/{total}…', updatedOk: 'updated {ok}', updatedMix: 'updated {ok}, {fail} failed',
   tabDiscover: 'discover', tabPlugins: 'plugins', tabSkills: 'skills', tabFavorites: 'favorites', tabInstalled: 'my plugins', tabMySkills: 'my skills', tabAdvanced: 'settings', filter: 'filter', sortField: 'sort by', sortDownloads: 'npm downloads (30d)', sortStars: 'stars', sortName: 'name', sortVerified: 'verification', sortDirLabel: 'direction', sortDesc: 'descending', sortAsc: 'ascending', publishRange: 'published', rangeAll: 'all time', range1d: 'last 1 day', range7d: 'last 7 days', range30d: 'last 30 days', range90d: 'last 90 days', range1y: 'last year', allN: 'all({n})',
@@ -674,7 +692,7 @@ const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', sk
   cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · r refresh · U update all · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
   all: 'all', expand: 'expand', installingN: 'installing {name}…', updatedN: '{name} updated', removedN: '{name} removed', installFailN: '{name} install failed{exit} — press {key} to retry', uninstallFail: 'uninstall failed: {err} — press {key} to retry', uninstallPartial: '{name} removed — skill dir kept: {err}', updateFail: 'update failed: {err}', exportFail: 'export failed: {err}', restoreFail: 'restore failed: {err} — check the backup file and retry', catalogFail: 'catalog source failed: {err} — check {cfg} and retry', catalogAlready: 'already enabled', catalogEnabled: 'enabled', cancelled: 'cancelled', heldReview: 'v{v} pending review — not installable yet', dataFresh: 'already up to date', integrityFail: 'downloaded bytes do not match the reviewed artifact — retry, or report if it persists',
   deprecated: 'deprecated', replacedBy: 'use {name} instead', legacy: 'legacy', removedFrom: 'removed from catalog', reasonNpm404: 'gone from npm', reasonRepo404: 'repository gone', reasonFiltered: 'filtered out', reasonCapped: 'over catalog cap', reasonManual: 'removed by maintainer', reasonUnknown: 'reason unknown', viewOnSite: 'view on site', compat: 'requires', heldReason: 'reason', verifyLevel: 'level', verifyLog: 'verify log', verifyRun: 'verify run', permTitle: 'skill permissions', permAllow: 'allow', permAsk: 'ask', permDeny: 'deny', permOff: 'clear', disable: 'disable', revertTo: 'revert to approved', featFilter: 'parts', installRunning: 'install already running', catalogDisabled: 'disabled',
-  scannedClean: 'scanned, no findings — this does not mean safe', catalogMoved: 'catalog updated — refresh data and retry', compatWarn: 'requires opencode {req} — you have {cur}', invDown: 'inventory unavailable — installed state may be stale', keysHintGui: '↑↓←→/hjkl move · enter detail · i install · u uninstall · * fav · / search · esc back', heldAtLabel: 'held' }
+  scannedClean: 'scanned, no findings — this does not mean safe', catalogMoved: 'catalog updated — refresh data and retry', compatWarn: 'requires opencode {req} — you have {cur}', invDown: 'inventory unavailable — installed state may be stale', keysHintGui: '↑↓←→/hjkl move · enter detail · i install · u uninstall · * fav · / search · esc back', heldAtLabel: 'held', refreshStale: 'fetch failed — showing cached data, retry shortly', refreshMismatch: 'published manifest and index disagree — kept previous data' }
 // AGENTS.md 检验规则：状态文案必须用规约原话，不能自造弱化版
 const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English',
   partsHint: '{k} 部件（可多选）', installing: '安装中…', installFailed: '安装失败', failedRetry: '失败 — 重试', verifying: '验证中…', installedPending: '已安装（等待验证）', skill: '技能', plugin: '插件', uncataloged: '未收录', updateAll: '全部更新', needRestartDesk: '需重启桌面端', allLatest: '全部已是最新', updatingN: '更新中 {n}/{total}…', updatedOk: '已更新 {ok} 个', updatedMix: '更新 {ok} 成功 {fail} 失败',
@@ -683,7 +701,7 @@ const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed:
   cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · r 刷新 · U 全更 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
   all: '全部', expand: '展开', installingN: '{name} 安装中…', updatedN: '{name} 已更新', removedN: '{name} 已卸载', installFailN: '{name} 安装失败{exit} — 按 {key} 重试', uninstallFail: '卸载失败: {err} — 按 {key} 重试', uninstallPartial: '{name} 已卸载——技能目录保留：{err}', updateFail: '更新失败: {err}', exportFail: '导出失败: {err}', restoreFail: '恢复失败: {err} — 检查备份文件后重试', catalogFail: 'catalog 源失败: {err} — 检查 {cfg} 后重试', catalogAlready: '已开启', catalogEnabled: '已启用', cancelled: '已取消', heldReview: 'v{v} 在审——暂不可装', dataFresh: '数据已是最新', integrityFail: '下载的字节与评审过的产物不一致——重试，持续出现请反馈',
   deprecated: '已弃用', replacedBy: '建议改用 {name}', legacy: '门禁前收录', removedFrom: '已从目录移除', reasonNpm404: 'npm 上已消失', reasonRepo404: '仓库已消失', reasonFiltered: '被入场过滤移除', reasonCapped: '超出目录上限', reasonManual: '被人工移除', reasonUnknown: '原因未知', viewOnSite: '站点详情', compat: '要求', heldReason: '原因', verifyLevel: '阶段', verifyLog: '验证日志', verifyRun: '验证记录', permTitle: '技能权限', permAllow: '允许', permAsk: '询问', permDeny: '拒绝', permOff: '清除', disable: '关闭', revertTo: '回退到批准版', featFilter: '部件', installRunning: '安装进行中', catalogDisabled: '已关闭',
-  scannedClean: '扫过了没发现——但这不等于安全', catalogMoved: '目录已更新——先刷新数据再重试', compatWarn: '需要 opencode {req}——当前 {cur}', invDown: '装态清单不可用——已安装状态可能不准', keysHintGui: '↑↓←→/hjkl 移动 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · esc 返回', heldAtLabel: '在押' }
+  scannedClean: '扫过了没发现——但这不等于安全', catalogMoved: '目录已更新——先刷新数据再重试', compatWarn: '需要 opencode {req}——当前 {cur}', invDown: '装态清单不可用——已安装状态可能不准', keysHintGui: '↑↓←→/hjkl 移动 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · esc 返回', heldAtLabel: '在押', refreshStale: '拉取失败——展示缓存数据，稍后重试', refreshMismatch: '发布清单与索引不一致——保留旧数据' }
 export function t(key: I18nKey): string {
   return (zhNow() ? ZH : EN)[key]
 }
@@ -737,7 +755,14 @@ export function versionCmp(a: string, b: string): number {
       if (y === undefined) return 1
       if (x === y) continue
       const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y)
-      if (nx && ny) return Number(x) - Number(y) < 0 ? -1 : 1
+      if (nx && ny) {
+        // semver compares numeric ids by VALUE — '01' and '1' are equal and
+        // comparison continues to the next id (the old code returned 1,
+        // ranking a lexically-different-but-equal id as newer)
+        const nd = Number(x) - Number(y)
+        if (nd !== 0) return nd < 0 ? -1 : 1
+        continue
+      }
       if (nx) return -1
       if (ny) return 1
       return x < y ? -1 : 1
@@ -1013,7 +1038,9 @@ export function allCategories(entries: MarketEntry[]): string[] {
  *  Unknown/custom categories pass through untouched. */
 export function catLabel(c: string): string {
   const d = catDict[c] ?? CAT_NAMES[c] ?? CAT_NAMES[ZH_TO_ID[c] ?? '']
-  return d ? ((zhNow() ? d.zh ?? d.en : d.en) ?? c) : c
+  // cross-language fallback before the raw id — a zh-only dict entry used
+  // to render as the bare category id for en users
+  return d ? ((zhNow() ? d.zh ?? d.en : d.en ?? d.zh) ?? c) : c
 }
 
 /** Entries touched within N days. npm: publishedAt; github-kind: pushedAt

@@ -36,7 +36,7 @@ const Market = Ipc.define({
     clearDevlog: { output: Schema.String },
   },
   events: {
-    progress: Schema.Unknown,   // { name, line, done, ok }
+    progress: Schema.Unknown,   // { name, line, done, ok, cancelled }
   },
 })
 type Api = {
@@ -57,7 +57,7 @@ type Api = {
   setDevlog(on: boolean): Promise<string>
   readDevlog(): Promise<string>
   clearDevlog(): Promise<string>
-  on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean }) => void): () => void
+  on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean; cancelled?: boolean }) => void): () => void
 }
 
 type View = { kind: 'list' } | { kind: 'detail'; e: MarketEntry }
@@ -138,7 +138,7 @@ export default Plugin.define({
     const [filterOpen, setFilterOpen] = createSignal(false)
     const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
     const [rangeDays, setRangeDays] = createSignal(0)
-    const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean }>>({})
+    const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean; cancelled?: boolean }>>({})
     try { const ls = loadState(); setState(ls); setLangMode(ls.lang ?? 'auto') } catch { /* storage unavailable */ }
     const devlog = () => !!state().devlog
     const log = (msg: string) => { if (devlog()) { appendLog(msg); void safe.devlog?.(msg).catch(() => {}) } }
@@ -159,7 +159,7 @@ export default Plugin.define({
       safe.on?.('progress', (d) => {
         const cur = prog()[d.name] ?? { lines: [] }
         setProg({ ...prog(), [d.name]: d.done
-          ? { ...cur, done: true, ...(d.ok !== undefined ? { ok: d.ok } : {}) }
+          ? { ...cur, done: true, ...(d.ok !== undefined ? { ok: d.ok } : {}), ...(d.cancelled ? { cancelled: true } : {}) }
           : { lines: [...cur.lines, d.line].slice(-20) } })
       })
     } catch { /* older host: no events */ }
@@ -361,7 +361,9 @@ export default Plugin.define({
         b.appendChild(el('span', 'width:10px;height:10px;border:2px solid rgba(128,128,128,.35);border-top-color:currentColor;border-radius:50%;display:inline-block;animation:oc-mk-spin .7s linear infinite'))
         return b
       }
-      if (pr?.done && !pr.ok) {
+      // a user-cancelled op is done but NOT a failure — it must not render
+      // the failedRetry affordance or the red error box (AGENTS: honest state)
+      if (pr?.done && !pr.ok && !pr.cancelled) {
         // inert-looking failure button — clicking opens the detail view where
         // the error context + export-log affordance live (AGENTS: 报错必须有下一步)
         const fb = el('button', 'font-size:12px;cursor:pointer;color:#c66;background:transparent;border:1px solid rgba(200,80,80,.5);border-radius:6px;padding:2px 14px;white-space:nowrap;flex-shrink:0', `${t('failedRetry')}?`) as HTMLButtonElement
@@ -393,8 +395,13 @@ export default Plugin.define({
         const cw = compatWarnOf(e)
         setProg({ ...prog(), [e.name]: { lines: [...(cw ? [cw] : []), 'installing…'], done: false, ok: false } })
         const failOut = (x: unknown) => {
-          b.disabled = false; b.textContent = t('failedRetry'); b.title = String(x); b.style.color = '#c66'
-          setProg({ ...prog(), [e.name]: { lines: [String(x)], done: true, ok: false } })
+          // a cancel is not a failure — restore the actionable label and mark
+          // the prog entry cancelled so the card doesn't render failedRetry
+          const wasCancelled = x instanceof Error ? x.message === 'cancelled' : String(x) === 'cancelled'
+          b.disabled = false
+          b.textContent = wasCancelled ? label : t('failedRetry')
+          b.title = String(x); b.style.color = wasCancelled ? '' : '#c66'
+          setProg({ ...prog(), [e.name]: { lines: [wasCancelled ? t('cancelled') : String(x)], done: true, ok: false, ...(wasCancelled ? { cancelled: true } : {}) } })
         }
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
         log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
@@ -631,7 +638,7 @@ export default Plugin.define({
         bar.appendChild(cx)
         d.appendChild(bar)
       }
-      if (p?.done && p.ok === false) {
+      if (p?.done && p.ok === false && !p.cancelled) {
         const errBox = el('div', 'font-size:11px;color:#c66')
         errBox.textContent = keyLines(p.lines.join('\n')).join(' · ').slice(0, 200) || t('installFailed')
         const ex = el('button', 'margin-left:6px;font-size:10px;cursor:pointer', t('exportLog'))
@@ -996,8 +1003,10 @@ export default Plugin.define({
       root.appendChild(btn)
       // detail page keeps an uninstall affordance even on non-manage tabs,
       // where the primary element is just a '✓ installed' span — but never
-      // render a second uninstall next to a real uninstall button
-      if (btn.tagName !== 'BUTTON') {
+      // render a second uninstall next to a real uninstall button, and never
+      // offer it on an entry with nothing installed (a noInstallTarget card
+      // used to get one → click → 'not found' error for no reason)
+      if (btn.tagName !== 'BUTTON' && installedVer(e)) {
         const un = uninstallBtn(e); un.style.marginLeft = '8px'
         root.appendChild(un)
       }
@@ -1045,15 +1054,18 @@ export default Plugin.define({
         try {
           const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
           if (idx) setDataWrap(idx)
-          // honest refresh result — a manifest-same hit isn't "refreshed N".
-          // read BEFORE installed(): that call refetches the index and would
-          // stamp 'fresh' over this refresh's real outcome
+          // honest refresh result — only a real pull counts as "refreshed N".
+          // 'stale'/'mismatch' mean the host SERVED THE OLD SNAPSHOT (fetch
+          // failed / sha disagreement), not that data was refreshed — the
+          // old code labeled them refreshed anyway
           const oc = await safe.indexOutcome?.().catch(() => '') as string
           const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
-          setRefText(oc === 'fresh'
-            ? `${t('dataFresh')}，${new Date().toLocaleTimeString()}`
-            : `${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${new Date().toLocaleTimeString()}`)
+          const time = new Date().toLocaleTimeString()
+          setRefText(oc === 'fresh' ? `${t('dataFresh')}，${time}`
+            : oc === 'mismatch' ? t('refreshMismatch')
+            : oc === 'stale' ? t('refreshStale')
+            : `${tf('refreshedN', { n: idx?.plugins?.length ?? '?' })}，${time}`)
         } catch (x) { setRefText(tf('refreshFailed', { err: String(x) })) } finally {
           refBtn.disabled = false; refBtn.textContent = t('refreshData')
         }
@@ -1219,6 +1231,11 @@ export default Plugin.define({
     // same window for skill installs — the index re-pull + packument fetch
     // sit between entry and skillJobs.set
     const pendingSkill = new Map<string, AbortController>()
+    // names whose child was killed BY cancelInstall — the close event can't
+    // tell a user-cancel from a crash (both arrive as code=null), so the
+    // cancel path marks the name and the close handler reads it back.
+    // Entries are consumed on close and cleared at each op's start.
+    const cancelled = new Set<string>()
       const specByName: Record<string, string> = {}
       const idByName: Record<string, string> = {}
       const featByName: Record<string, Record<string, true> | undefined> = {}
@@ -1345,25 +1362,45 @@ export default Plugin.define({
           // cheap recheck: a moved manifest sha forces a real re-pull.
           try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
           catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
-          return withConfigLock(() => new Promise<string>((resolve, reject) => {
+          // NO withConfigLock here — the lock guards config read-modify-write
+          // sections, and `plugin add` does its own config write in the CLI
+          // process (outside our lock either way). Holding it across the
+          // spawn froze every other config op — uninstall, skillSource,
+          // skillPermission, other updates' dedupe — for up to 90s per call.
+          return new Promise<string>((resolve, reject) => {
             // claim released here — the spawned child becomes the
             // cancellable (jobs). delete+abort-check inside the executor is
             // atomic vs any interleaved cancelInstall
             pendingInstall.delete(p.name)
             if (pac.signal.aborted) { reject(new Error('cancelled')); return }
+            cancelled.delete(p.name)   // clear a stale mark from a prior op
             const child = spawn('opencode', ['plugin', 'add', spec], { env: restrictedEnv() })
             jobs.set(p.name, child)
             const push = (line: string) => m.emit?.('progress', { name: p.name, line })
             child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
             child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-            const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
-            child.on('close', code => {
+            let timedOut = false
+            let spawnFailed = false
+            const kill = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 90_000)
+            child.on('close', (code, signal) => {
               clearTimeout(kill); jobs.delete(p.name)
+              // spawn-failed children also emit 'close' — without this the
+              // error path's rejection and this handler's done-emit both run
+              if (spawnFailed) return
+              // user-cancel and watchdog-timeout are not failures — report
+              // them as such instead of 'exit null' (a killed child arrives
+              // with code=null, indistinguishable from a crash without this)
+              if (cancelled.has(p.name)) {
+                cancelled.delete(p.name)
+                m.emit?.('progress', { name: p.name, line: '', done: true, ok: false, cancelled: true })
+                reject(new Error('cancelled')); return
+              }
               m.emit?.('progress', { name: p.name, line: '', done: true, ok: code === 0 })
-              code === 0 ? resolve('installed') : reject(new Error(`exit ${code}`))
+              if (timedOut) { reject(new Error('timeout 90s')); return }
+              code === 0 ? resolve('installed') : reject(new Error(`exit ${code ?? signal ?? '?'}`))
             })
-            child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); reject(e) })
-          }))
+            child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); spawnFailed = true; reject(e) })
+          })
         },
         update: async (p: { name: string; spec?: string }) => {
           assertSpecForName(p.name, p.spec)
@@ -1381,40 +1418,64 @@ export default Plugin.define({
           catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
           lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
-          const done = (ok: boolean) => m.emit?.('progress', { name: p.name, line: '', done: true, ok })
-          return withConfigLock(async () => {
-            pendingInstall.delete(p.name)
-            if (pac.signal.aborted) { done(false); throw new Error('cancelled') }
-            try {
-              // pinned update: `plugin add` does NOT dedupe — a second spec for the
-              // same package appends. Install the pinned spec first, then rewrite
-              // config down to exactly that spec. Never plugin.update — it resolves
-              // npm latest, which would bypass the approved-version gate.
-              push(`install ${pin}`)
-              await new Promise<void>((res, rej) => {
-                const { spawn } = require('node:child_process') as typeof import('node:child_process')
-                const child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
-                jobs.set(p.name, child)
-                child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
-                child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
-                const kill = setTimeout(() => child.kill('SIGTERM'), 90_000)
-                child.on('close', code => { clearTimeout(kill); jobs.delete(p.name); code === 0 ? res() : rej(new Error(`plugin add exit ${code}`)) })
-                child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
+          const done = (ok: boolean, wasCancelled = false) => m.emit?.('progress', { name: p.name, line: '', done: true, ok, ...(wasCancelled ? { cancelled: true } : {}) })
+          const isCancelled = (x: unknown) => x instanceof Error && x.message === 'cancelled'
+          // claim released + abort checked BEFORE the spawn — the same
+          // atomic hand-off install() uses. The spawn itself must NOT sit
+          // inside withConfigLock: the mutex exists for config RMW sections,
+          // and holding it across a 90s `plugin add` queued every other
+          // config op (uninstall, skillSource, skillPermission, other
+          // updates' dedupe) behind the sweep. Only the dedupe below locks.
+          pendingInstall.delete(p.name)
+          if (pac.signal.aborted) { done(false, true); throw new Error('cancelled') }
+          try {
+            // pinned update: `plugin add` does NOT dedupe — a second spec for the
+            // same package appends. Install the pinned spec first, then rewrite
+            // config down to exactly that spec. Never plugin.update — it resolves
+            // npm latest, which would bypass the approved-version gate.
+            push(`install ${pin}`)
+            cancelled.delete(p.name)   // clear a stale mark from a prior op
+            await new Promise<void>((res, rej) => {
+              const { spawn } = require('node:child_process') as typeof import('node:child_process')
+              const child = spawn('opencode', ['plugin', 'add', pin], { env: restrictedEnv() })
+              jobs.set(p.name, child)
+              child.stdout?.on('data', (d: Buffer) => push(String(d).trim()))
+              child.stderr?.on('data', (d: Buffer) => push(String(d).trim()))
+              let timedOut = false
+              const kill = setTimeout(() => { timedOut = true; child.kill('SIGTERM') }, 90_000)
+              child.on('close', (code, signal) => {
+                clearTimeout(kill); jobs.delete(p.name)
+                // cancelled/timeout surface through the catch below, which
+                // emits the done event exactly once (cancelled flag included)
+                if (cancelled.has(p.name)) { cancelled.delete(p.name); rej(new Error('cancelled')); return }
+                if (timedOut) { rej(new Error('timeout 90s')); return }
+                code === 0 ? res() : rej(new Error(`plugin add exit ${code ?? signal ?? '?'}`))
               })
-              {
-                const cfg = await cfgPath()
-                const d = await readJson(cfg)
-                const list = strArrayField(d, 'plugins')
-                const before = list.filter(s => cleanSpec(s) === clean)
-                d.plugins = dedupeToSpec(list, pin)
-                await writeJsonAtomic(cfg, d)
-                if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`update ${p.name}: config rewritten (${before.length} specs → ${pin})`) }
-              }
-              lg(`update ${p.name}: pinned update ok`); done(true); return 'updated'
-            } catch (x) { push(`update failed: ${String(x)}`); lg(`update ${p.name}: FAILED ${String(x)}`); done(false); throw x }
-          })
+              child.on('error', (e: Error) => { clearTimeout(kill); jobs.delete(p.name); rej(e) })
+            })
+            // config dedupe is the ONLY section that needs the lock — it is a
+            // fast read-modify-write, and serializing it against other config
+            // writers is what the mutex is for
+            await withConfigLock(async () => {
+              const cfg = await cfgPath()
+              const d = await readJson(cfg)
+              const list = strArrayField(d, 'plugins')
+              const before = list.filter(s => cleanSpec(s) === clean)
+              d.plugins = dedupeToSpec(list, pin)
+              await writeJsonAtomic(cfg, d)
+              if (before.length !== 1 || before[0] !== pin) { push(`config deduped ${before.join(',')} → ${pin}`); lg(`update ${p.name}: config rewritten (${before.length} specs → ${pin})`) }
+            })
+            lg(`update ${p.name}: pinned update ok`); done(true); return 'updated'
+          } catch (x) {
+            push(`update ${isCancelled(x) ? 'cancelled' : `failed: ${String(x)}`}`)
+            lg(`update ${p.name}: ${isCancelled(x) ? 'cancelled' : `FAILED ${String(x)}`}`)
+            done(false, isCancelled(x)); throw x
+          }
         },
         cancelInstall: async (name: string) => {
+          // mark BEFORE killing — the child's close handler reads this to
+          // tell a user-cancel (code=null too) apart from a real failure
+          if (jobs.has(name)) cancelled.add(name)
           jobs.get(name)?.kill('SIGTERM'); jobs.delete(name)
           // a skill-half download owns an AbortController instead of a child —
           // 'cancel' must reach it too (was spawn-only: skill fetches ran on)
@@ -1432,6 +1493,12 @@ export default Plugin.define({
           // only string-compares, so any well-formed spec ref is safe here
           // (assertPkgName rejected every git install → GUI couldn't remove it)
           assertUninstallRef(name)
+          // in-flight guard — an install/update spawn rewriting opencode.json
+          // must not interleave with this RMW (spec resurrect / lost update).
+          // jobs/pending* key on the catalog name; cleanSpec normalizes a
+          // spec-shaped ref to the same key
+          const ref = cleanSpec(name)
+          if (jobs.has(ref) || pendingInstall.has(ref) || pendingSkill.has(ref)) throw new Error(t('installRunning'))
           lg(`uninstall ${name}: called`)
           // remove the config spec(s) — daemon rescan unloads; CLI `plugin remove`
           // takes a spec, not the catalog name, and silently misses pinned specs
@@ -1487,13 +1554,22 @@ export default Plugin.define({
           skillJobs.set(p.name, ac)
           let bytes: Uint8Array
           try {
-            const res = await fetch(url, { signal: AbortSignal.any([ac.signal, AbortSignal.timeout(30_000)]) })
-            if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
-            // redirects must not downgrade past the https-pinned tarball URL
-            assertFetchFinalUrl(res, 'skill tarball')
-            // stream-bounded read — a lying/absent content-length can't push
-            // the whole tarball through memory before the size check runs
-            bytes = await readBodyBounded(res, MAX_SKILL_TGZ, 'skill tarball')
+            try {
+              const res = await fetch(url, { signal: AbortSignal.any([ac.signal, AbortSignal.timeout(30_000)]) })
+              if (!res.ok) throw new Error(`skill fetch failed: ${res.status}`)
+              // redirects must not downgrade past the https-pinned tarball URL
+              assertFetchFinalUrl(res, 'skill tarball')
+              // stream-bounded read — a lying/absent content-length can't push
+              // the whole tarball through memory before the size check runs
+              bytes = await readBodyBounded(res, MAX_SKILL_TGZ, 'skill tarball')
+            } catch (x) {
+              // a user-cancel abort must surface as 'cancelled', not a raw
+              // AbortError the renderer would dress up as a failure — the
+              // 30s timeout abort leaves pac un-aborted and keeps its own
+              // honest error
+              if (pac.signal.aborted) throw new Error('cancelled')
+              throw x
+            }
           } finally { skillJobs.delete(p.name) }
           // fail closed on a KNOWN mismatch; null = unverifiable (no SRI /
           // no subtle crypto) and proceeds — github repo tarballs carry none
@@ -1554,10 +1630,15 @@ export default Plugin.define({
           return 'ok'
         },
         setDevlog: async (on: boolean) => { devlogOn = !!on; return 'ok' },
-        uninstallSkill: (name: string) =>
-          skillsRoot()
-            .then(root => { assertSkillId(name); return uninstallSkillDir(name, root) })
-            .catch(e => { throw e instanceof Error ? e : new Error(String(e)) }),
+        uninstallSkill: async (name: string) => {
+          try {
+            assertSkillId(name)
+            // same in-flight guard as uninstall — a skill install mid-flight
+            // owns this dest dir; deleting under it would orphan its manifest
+            if (pendingSkill.has(name) || skillJobs.has(name)) throw new Error(t('installRunning'))
+            return await uninstallSkillDir(name, await skillsRoot())
+          } catch (e) { throw e instanceof Error ? e : new Error(String(e)) }
+        },
         // self-confirm: isolated serve + API hit → real "did it load" verdict.
         // input is the pinned spec (name@approvedVersion) — a bare name would
         // resolve dist-tags.latest and test a version the user never got.

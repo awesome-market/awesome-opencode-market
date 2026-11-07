@@ -111,12 +111,27 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
       let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
       if (!f) break
       const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
+      // GNU base-256 size fields set the high bit of byte 124 — parseInt(…,8)
+      // would read them as 0 and desync every following header. >8GB members
+      // can't exist under the decompressed ceiling anyway: refuse honestly.
+      if (tar[off + 124]! & 0x80) throw new Error('corrupt tarball: binary size field')
       const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
       const type = tar.toString('utf8', off + 156, off + 157)
       const body = off + 512
+      // a member whose declared body runs past the buffer is truncated or
+      // crafted — tar.subarray would silently clamp and write a corrupt file
+      if (body + size > tar.length) throw new Error('corrupt tarball: truncated member')
       const next = body + Math.ceil(size / 512) * 512
-      if (type === 'L') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
+      if (type === 'L' || type === 'N') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
       if (type === 'x') { pendingLong = paxPath(tar.toString('utf8', body, body + size)) ?? pendingLong; off = next; continue }
+      // pax 'g' global headers, GNU longlink 'K', volume 'V', dump 'D',
+      // multivol 'M', sparse 'S' are metadata, not members — their header
+      // name fields are fixed placeholders ('pax_global_header', '@LongLink')
+      // that would enter `items`, break the shared-first-segment wrapper
+      // detection, and strand every skill one level too deep (silent
+      // 'wrote N, lifted 0'). Skip them WITHOUT consuming pendingLong —
+      // a pending file name still belongs to the next real header.
+      if (type === 'K' || type === 'g' || type === 'V' || type === 'D' || type === 'M' || type === 'S') { off = next; continue }
       if (pendingLong) { f = pendingLong; pendingLong = null }
       else if (prefix) f = `${prefix}/${f}`
       const rel = safeTarRel(f)
@@ -177,6 +192,14 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
       // prefixed name variants collided) must survive, not be silently deleted
       try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
     }
+    // honesty gate — BEFORE the owned-path sweep so a failure keeps the
+    // previous version fully intact (lifts + manifest). An install that
+    // yields nothing opencode can load must not report success: 'wrote N,
+    // lifted 0' with no SKILL.md at the package root means the tarball is
+    // mis-packaged or its nests weren't recognized — a dead 'installed'
+    // badge is worse than an honest error (AGENTS: 报错三件套).
+    if (!paths.length && !existsSync(join(dest, 'SKILL.md')))
+      throw new Error('no loadable skill in tarball (no SKILL.md found)')
     // lifts the previous version shipped but this one doesn't must go — left
     // behind they'd become manifest-less foreign dirs the user can never
     // uninstall (and the skill would keep silently loading)
