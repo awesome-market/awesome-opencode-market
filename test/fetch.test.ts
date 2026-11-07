@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fetchPackument, fetchTarball, fetchDownloads30d } from '../pipeline/fetch/npm.ts'
-import { fetchRepoMeta, fetchRepoPackageName } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchRepoPackageName, fetchRepoTree } from '../pipeline/fetch/github.ts'
 
 const mkRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
@@ -93,5 +93,51 @@ describe('fetch/github', () => {
   it('fetchRepoPackageName: 404 → not-found, non-json name → null', async () => {
     expect((await fetchRepoPackageName('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
     expect((await fetchRepoPackageName('o/r', { fetchFn: (async () => mkRes({ name: 42 })) as typeof fetch })).pkgName).toBeNull()
+  })
+  it('audit#4-residual: malformed repo-meta bodies degrade, never reject or type-lie', async () => {
+    // non-object body → error status (was: b.id TypeError → rejected promise)
+    for (const body of [null, [1], 'x']) {
+      const r = await fetchRepoMeta('o/r', { fetchFn: (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch })
+      expect(r.status).toBe('error')
+      expect(r.meta).toBeNull()
+    }
+    // field-level lies coerce: topics non-array → [], license non-object → null,
+    // archived/fork strict-bool, strings stay strings (was: [...topics] crash
+    // in run.ts classify args → per-candidate run-error)
+    const d = { id: 'notnum', stargazers_count: 'many', archived: 'yes', fork: 1,
+      pushed_at: 42, created_at: null, license: { spdx_id: 7 }, topics: 'not-array',
+      default_branch: {}, full_name: ['x'] }
+    const { meta, status } = await fetchRepoMeta('o/r', { fetchFn: (async () => mkRes(d)) as typeof fetch })
+    expect(status).toBe('ok')
+    expect(meta).toMatchObject({ id: null, stars: 0, archived: false, fork: false,
+      pushedAt: null, createdAt: null, license: null, topics: [], defaultBranch: null, fullName: null })
+  })
+  it('audit#4-residual: fetchRepoTree guards non-object body and non-array tree', async () => {
+    // non-object bodies → error (null crashed before; array/scalar silently
+    // looked like an empty tree)
+    for (const body of [null, [1], 'x']) {
+      const r = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes(body)) as typeof fetch })
+      expect(r.status).toBe('error')
+      expect(r.paths).toBeNull()
+    }
+    // a PRESENT non-array tree was a `.map` TypeError → reject; now honest error
+    const bad = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes({ tree: 'not-array' })) as typeof fetch })
+    expect(bad.status).toBe('error')
+    expect(bad.paths).toBeNull()
+    // absent/null tree keeps the pinned "empty tree" contract (coverage6:
+    // tree missing → empty set, status ok)
+    for (const body of [{}, { tree: null }]) {
+      const r = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes(body)) as typeof fetch })
+      expect(r.status).toBe('ok')
+      expect(r.paths!.size).toBe(0)
+    }
+    // array tree: only string paths survive
+    const ok = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes({ tree: [1, 'x', { path: 5 }, { path: 'ok/f' }, null] })) as typeof fetch })
+    expect(ok.status).toBe('ok')
+    expect([...(ok.paths ?? [])]).toEqual(['ok/f'])
+    // truncated/sha coerce: non-bool truncated → false, non-string sha → null
+    const r2 = await fetchRepoTree('o/r', 'HEAD', { fetchFn: (async () => mkRes({ tree: [], truncated: 'yes', sha: 9 })) as typeof fetch })
+    expect(r2.truncated).toBe(false)
+    expect(r2.sha).toBeNull()
   })
 })

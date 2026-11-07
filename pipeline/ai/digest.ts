@@ -41,7 +41,7 @@ export interface DigestInput {
    *  l05/omlx state. Only meaningful while `at` is fresh (<48h): a stale
    *  stamp means the worker is dead, which §⑤'s verdict-heartbeat already
    *  covers. Degraded-but-alive is the gap this closes. */
-  health?: { at?: string | undefined; l05?: string | undefined; omlx?: string | undefined } | null
+  health?: { at?: string | undefined; l05?: string | undefined; omlx?: string | undefined; pushed?: string | undefined } | null
   /** malformed jsonl lines dropped at load (loadVerdicts sink) — surfaced in
    *  the header so a truncated/merge-artifact line is visible to the reader,
    *  not only in a CI warn log nobody watches */
@@ -330,6 +330,14 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   const healthNote = degraded.length
     ? ` / ⚠️ 本机诊断降级运行中（${degraded.join('、')}）——裁决仍在产出但通道受损，检查本机 L0.5 模型缓存与 omlx 服务`
     : ''
+  // pushed=spooled is NOT channel degradation — the run wrote verdicts but
+  // the catalog push failed after retries, so they sit in the local spool
+  // awaiting next run's replay. The published stamp lags one run (publish
+  // happens before this run's own push resolves), so a lone 'spooled' may
+  // already be recovered; persistent spooled = remote/credentials broken.
+  const pushNote = healthFresh && !paused && health?.pushed === 'spooled'
+    ? ` / ⚠️ 最近一次判词推送 catalog 失败、滞留本机 spool 待重放——若持续出现检查本机 git remote/凭据；详见 diagnose-health.json pushed 字段`
+    : ''
 
   // §⑥ live-entry trust alarms — identity-level sec:* redFlags on a VISIBLE
   // entry (repojack / name-reuse / version-rollback). §②'s held filter
@@ -506,7 +514,7 @@ ${concerns.length || resolved.length ? table([...concerns, ...resolved]) : '_无
 
 ## ⑤ 评审积压（pending review — ${pendingReview.length}）
 
-- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${paused ? ' ⏸️ 本地诊断已声明暂停（catalog 分支 `diagnose.paused`，恢复：`bin/ai-diagnose.sh resume`）' : pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}${healthNote}
+- 待评审 ${pendingReview.length}（与 diagnose/watchdog 同口径，含 48h 验证等待递延）/ 近 24h 新判 ${freshDay} / 最老待审 ${oldestReview ? oldestReview.slice(0, 10) : '—'} / 最新 AI 裁决 ${latestAiAt ? new Date(latestAiAt).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : '—'}${paused ? ' ⏸️ 本地诊断已声明暂停（catalog 分支 `diagnose.paused`，恢复：`bin/ai-diagnose.sh resume`）' : pendingReview.length > 0 && latestAiAt > 0 && now.getTime() - latestAiAt > 48 * 3_600_000 ? ' ⚠️ 超 48h 未出新判词——本机 ai-diagnose 疑似停摆' : ''}${healthNote}${pushNote}
 
 ## ⑥ 已上架条目信任信号（identity-level sec flags — ${liveAlarms.length}）
 
@@ -560,7 +568,7 @@ export async function main(args: string[] = process.argv): Promise<void> {
   let health: DigestInput['health'] = null
   try {
     const h = JSON.parse(readFileSync(join(outDir, 'diagnose-health.json'), 'utf8')) as Record<string, unknown>
-    health = { at: typeof h.at === 'string' ? h.at : undefined, l05: typeof h.l05 === 'string' ? h.l05 : undefined, omlx: typeof h.omlx === 'string' ? h.omlx : undefined }
+    health = { at: typeof h.at === 'string' ? h.at : undefined, l05: typeof h.l05 === 'string' ? h.l05 : undefined, omlx: typeof h.omlx === 'string' ? h.omlx : undefined, pushed: typeof h.pushed === 'string' ? h.pushed : undefined }
   } catch { /* no stamp yet — fine */ }
 
   // state LOSS ≠ bootstrap: prev=null with digests already published means

@@ -185,15 +185,31 @@ if ! mkdir "$LOCK" 2>/dev/null; then
         # ai-diagnose.sh from an unrelated process the OS recycled the pid
         # onto; the latter would pin this stale lock forever (every run sees
         # "owner alive" and skips → only the 48h watchdog is the backstop).
-        # Args still naming the script count as a live owner; empty args
-        # (ps failure) stay conservative — treat as alive rather than risk
-        # stealing a genuinely running diagnose's lock.
+        # Args still naming the script count as a live owner — but only when
+        # the process is actually a SHELL executing it: `vim ai-diagnose.sh`,
+        # `tail -f ai-diagnose.log`-adjacent commands, or `git diff
+        # ai-diagnose.sh` all carry the string in args without being the
+        # owner, and would pin the stale lock until the editor closes.
+        # comm is the executable basename ('bash' for shebang/explicit runs);
+        # every POSIX-ish shell ends in 'sh'. Empty args/comm (ps failure)
+        # stay conservative — treat as alive rather than risk stealing a
+        # genuinely running diagnose's lock.
         OWNER_ARGS=$(ps -p "$OLD_PID" -o args= 2>/dev/null || true)
-        case $OWNER_ARGS in
-          *ai-diagnose.sh*) : ;;
-          '') : ;;
-          *) OWNER_DEAD=1 ;;
-        esac
+        # tr strips ps column padding — a trailing space would defeat the
+        # *sh suffix match and read a live shell owner as dead (lock theft)
+        OWNER_COMM=$(ps -p "$OLD_PID" -o comm= 2>/dev/null | tr -d '[:space:]' || true)
+        if [ -z "$OWNER_ARGS" ] || [ -z "$OWNER_COMM" ]; then
+          : # ps failed → conservative: treat as alive
+        else
+          case $OWNER_ARGS in
+            *ai-diagnose.sh*)
+              case $OWNER_COMM in
+                *sh) : ;;
+                *) OWNER_DEAD=1 ;;
+              esac ;;
+            *) OWNER_DEAD=1 ;;
+          esac
+        fi
       else
         OWNER_DEAD=1
       fi

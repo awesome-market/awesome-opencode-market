@@ -372,6 +372,26 @@ describe('audit: content material (§5/§6 package contents reach the reviewer)'
   })
 })
 
+describe('audit#4-residual: pushed=spooled surfaces in the digest health line', () => {
+  const base = {
+    index: idx([]),
+    verdicts: [] as AiVerdict[],
+    prev: { lastDigestAt: '2026-05-31T21:00:00Z', announced: [], dayAnnounced: [] },
+    now: new Date('2026-06-01T21:00:00Z'),
+  }
+  it('fresh spooled stamp → push-failure note; ok/absent/stale/paused → silent', () => {
+    const fresh = new Date('2026-06-01T20:00:00Z').toISOString()   // 1h old < 48h
+    const spooled = renderDigest({ ...base, health: { at: fresh, l05: 'ok', omlx: 'up', pushed: 'spooled' } })
+    expect(spooled).toContain('推送 catalog 失败')
+    expect(spooled).toContain('pushed')
+    // recovered / never-failed / stale / paused stamps stay silent
+    expect(renderDigest({ ...base, health: { at: fresh, l05: 'ok', omlx: 'up', pushed: 'ok' } })).not.toContain('推送 catalog 失败')
+    expect(renderDigest({ ...base, health: { at: fresh, l05: 'ok', omlx: 'up' } })).not.toContain('推送 catalog 失败')
+    expect(renderDigest({ ...base, health: { at: '2026-05-20T00:00:00Z', l05: 'ok', omlx: 'up', pushed: 'spooled' } })).not.toContain('推送 catalog 失败')
+    expect(renderDigest({ ...base, paused: true, health: { at: fresh, l05: 'ok', omlx: 'up', pushed: 'spooled' } })).not.toContain('推送 catalog 失败')
+  })
+})
+
 describe('audit#4: health stamp merges — shell-stamped fields survive', () => {
   it('foreign keys (pushed) are preserved while owned keys refresh', async () => {
     const d = mkdtempSync(join(tmpdir(), 'dops-health-'))

@@ -275,8 +275,9 @@ export async function fetchDownloads30d(
   try {
     const res = await f(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`)
     if (!res.ok) return null
-    const body = await readJsonCapped<{ downloads?: number }>(res, 1024 * 1024)
-    return body.downloads ?? null
+    const body = await readJsonCapped<{ downloads?: unknown } | null>(res, 1024 * 1024)
+    const d = body?.downloads
+    return typeof d === 'number' && Number.isFinite(d) ? d : null
   } catch {
     return null
   }

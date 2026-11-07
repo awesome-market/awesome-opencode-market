@@ -97,24 +97,23 @@ describe('A1-2 a crashed seed gets a run-error outcome instead of silent queuein
     const seed = join(d, 'seed.txt')
     const outcomesPath = join(d, 'outcomes.json')
     writeFileSync(seed, JSON.stringify({ name: 'crash-pkg', issue: 3 }) + '\n')
-    const f = baseFetch(tgz, url => {
+    const inner = baseFetch(tgz)
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      // a broken fetch impl (custom proxy returning null instead of a
+      // Response) throws inside fetchPackument's res.status check — an
+      // UNEXPECTED error, exactly the class run-error exists for. Malformed
+      // doc FIELDS no longer crash: fetchPackument/fetchRepoMeta coerce them.
+      if (url.includes('registry.npmjs.org/crash-pkg')) return null as unknown as Response
+      // good-pkg keeps the index non-empty so the publish gate lets run() finish
       if (url.includes('/-/v1/search')) {
         return mkRes({ objects: [
           { package: { name: 'good-pkg', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } },
         ] })
       }
       if (url.includes('registry.npmjs.org/good-pkg')) return new Response(packument('good-pkg'))
-      if (url.includes('registry.npmjs.org/crash-pkg')) {
-        // needs a declared repo so the repoMeta probe runs; the GitHub
-        // response below then hands the worker a non-iterable topics —
-        // run.ts spreads it into classify args → TypeError → run-error.
-        // (Was: keywords-as-string crashed hasPluginEvidence; fetchPackument
-        // now coerces packument fields instead of letting them throw.)
-        return new Response(packument('crash-pkg', { repository: 'https://github.com/x/y' }))
-      }
-      if (url.includes('api.github.com/repos/')) return mkRes({ topics: {} })
-      return null
-    })
+      return inner(input)
+    }) as typeof fetch
     await run({ outPath: join(d, 'i.json'), fetchFn: f, now: 't', seedPath: seed, seedOutcomesPath: outcomesPath })
     const outcomes = JSON.parse(readFileSync(outcomesPath, 'utf8')) as Record<string, string>
     expect(outcomes['crash-pkg']).toBe('run-error')

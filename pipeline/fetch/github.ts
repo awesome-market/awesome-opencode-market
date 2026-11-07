@@ -45,28 +45,37 @@ export async function fetchRepoMeta(
   if (rateLimited(res)) return { meta: null, status: 'rate-limited' }
   if (!res.ok) return { meta: null, status: 'error' }
   let b: {
-    id?: number
-    stargazers_count?: number; archived?: boolean; fork?: boolean; pushed_at?: string; created_at?: string
-    license?: { spdx_id?: string }; topics?: string[]; default_branch?: string
-    full_name?: string
+    id?: unknown
+    stargazers_count?: unknown; archived?: unknown; fork?: unknown
+    pushed_at?: unknown; created_at?: unknown
+    license?: unknown; topics?: unknown; default_branch?: unknown
+    full_name?: unknown
   }
   try {
     b = await readJsonCapped<typeof b>(res, 4 * 1024 * 1024)
   } catch {
     return { meta: null, status: 'error' }
   }
+  // same malformed-doc contract as fetchPackument: a non-object body degrades
+  // instead of rejecting, and `??` only covers null/undefined — a string/
+  // number/object field is a type lie that crashes downstream ([...topics]
+  // in run.ts classify args threw TypeError → per-candidate run-error)
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return { meta: null, status: 'error' }
+  const strOr = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+  const spdx = b.license && typeof b.license === 'object' && !Array.isArray(b.license)
+    ? strOr((b.license as { spdx_id?: unknown }).spdx_id) : null
   return {
     meta: {
-      id: b.id ?? null,
-      stars: b.stargazers_count ?? 0,
-      topics: b.topics ?? [],
-      archived: b.archived ?? false,
-      fork: b.fork ?? false,
-      pushedAt: b.pushed_at ?? null,
-      createdAt: b.created_at ?? null,
-      license: b.license?.spdx_id && b.license.spdx_id !== 'NOASSERTION' ? b.license.spdx_id : null,
-      defaultBranch: b.default_branch ?? null,
-      fullName: b.full_name ?? null,
+      id: typeof b.id === 'number' && Number.isFinite(b.id) ? b.id : null,
+      stars: typeof b.stargazers_count === 'number' && Number.isFinite(b.stargazers_count) ? b.stargazers_count : 0,
+      topics: Array.isArray(b.topics) ? b.topics.filter((x): x is string => typeof x === 'string') : [],
+      archived: b.archived === true,
+      fork: b.fork === true,
+      pushedAt: strOr(b.pushed_at),
+      createdAt: strOr(b.created_at),
+      license: spdx && spdx !== 'NOASSERTION' ? spdx : null,
+      defaultBranch: strOr(b.default_branch),
+      fullName: strOr(b.full_name),
     },
     status: 'ok',
   }
@@ -91,12 +100,22 @@ export async function fetchRepoTree(
   if (res.status === 404 || res.status === 409) return { paths: null, status: 'not-found', truncated: false }
   if (rateLimited(res)) return { paths: null, status: 'rate-limited', truncated: false }
   if (!res.ok) return { paths: null, status: 'error', truncated: false }
-  let b: { tree?: Array<{ path?: string }>; truncated?: boolean; sha?: string }
+  let b: { tree?: unknown; truncated?: unknown; sha?: unknown }
   try {
     // GitHub truncates huge trees server-side (~7MB + truncated flag); the
     // cap is a second wall, not the primary bound
     b = await readJsonCapped<typeof b>(res, 16 * 1024 * 1024)
   } catch {
+    return { paths: null, status: 'error', truncated: false }
+  }
+  // same malformed-doc contract as fetchPackument/fetchRepoMeta — non-object
+  // body degrades. tree absent/null keeps the pinned "empty tree" semantics
+  // (`?? []`); a PRESENT non-array tree was a `.map` TypeError → reject, now
+  // an honest error status instead of a crash or a silent empty repo
+  if (!b || typeof b !== 'object' || Array.isArray(b)) {
+    return { paths: null, status: 'error', truncated: false }
+  }
+  if (b.tree != null && !Array.isArray(b.tree)) {
     return { paths: null, status: 'error', truncated: false }
   }
   // truncated responses still contain the front of the tree — usable for root
@@ -108,7 +127,12 @@ export async function fetchRepoTree(
   // doubles as the codeload pin (tar.gz/<sha>) — commits are immutable so
   // installed bytes = scanned bytes (archives aren't byte-deterministic, so
   // no SRI re-check exists).
-  return { paths: new Set((b.tree ?? []).map(t => t.path).filter((p): p is string => !!p)), status: 'ok', truncated: b.truncated ?? false, sha: b.sha ?? null }
+  const tree = Array.isArray(b.tree) ? b.tree : []
+  const paths = new Set(
+    tree
+      .map(t => (t && typeof t === 'object' ? (t as { path?: unknown }).path : undefined))
+      .filter((p): p is string => typeof p === 'string' && p.length > 0))
+  return { paths, status: 'ok', truncated: b.truncated === true, sha: typeof b.sha === 'string' ? b.sha : null }
 }
 
 /** repository.directory is attacker-controlled and lands RAW in a

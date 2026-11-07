@@ -160,22 +160,24 @@ describe('ai-diagnose.sh — single-instance lock', () => {
         writeFileSync(join(lockDir, 'pid'), `${pid}\n`)
         execFileSync('touch', ['-t', stamp, lockDir])
       }
-      // live owner whose args still name ai-diagnose.sh → NOT reclaimed:
+      // live owner: a SHELL whose args name ai-diagnose.sh → NOT reclaimed.
       // kill -0 alone can't distinguish it from a recycled pid, and stealing
-      // a live run's lock lets its EXIT trap rmdir the new owner's lock
-      const decoy = join(root, 'ai-diagnose.sh')
-      writeFileSync(decoy, '')
-      const owner = spawn('tail', ['-f', decoy])
+      // a live run's lock lets its EXIT trap rmdir the new owner's lock.
+      // `bash -c 'loop' ai-diagnose.sh` puts the name in argv ($0) with
+      // comm='bash' — the same ps shape a real `bash bin/ai-diagnose.sh` has.
+      const owner = spawn('bash', ['-c', 'while :; do sleep 1; done', 'ai-diagnose.sh'])
       try {
         setup(owner.pid!)
         const skip = runScript()
         expect(skip.out).toContain('another run in progress')
         expect(existsSync(lockDir)).toBe(true)   // lock preserved for the live owner
       } finally { owner.kill('SIGKILL') }
-      // live pid that is NOT diagnose — the OS recycled the dead owner's pid
-      // onto an unrelated process; kill -0 alone would pin the stale lock
-      // forever, so the args check must reclaim it
-      const other = spawn('sleep', ['300'])
+      // recycled pid onto an UNRELATED process whose args still mention the
+      // filename (vim/tail/git-diff shape) — args match alone must NOT count
+      // as owner; comm='tail' proves the pid isn't a shell running the script
+      const decoy = join(root, 'ai-diagnose.sh')
+      writeFileSync(decoy, '')
+      const other = spawn('tail', ['-f', decoy])
       try {
         setup(other.pid!)
         const run = runScript()
