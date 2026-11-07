@@ -1447,8 +1447,16 @@ export async function run(opts: RunOptions = {}) {
       ...(pu && puChanged ? { pendingUpdate: { ...pu, capabilities: puCaps!, integrity: puIntegrity } } : {}),
     }
   }
-  const rescanStaleGh = async (e: PluginEntry): Promise<PluginEntry> => {
-    if (rescanBudget <= 0 || !staleCaps(e.capabilities)) return e
+  const rescanStaleGh = async (e: PluginEntry, pushedAt: string | null): Promise<PluginEntry> => {
+    // two triggers share the budget: a ruleset bump owes every kept entry a
+    // re-scan, and an upstream push owes it fresh drift flags + a re-anchored
+    // pin. Without the pushedAt arm a fallen-out-of-discovery repo could move
+    // forever while its entry kept the last scanned commit and yesterday's
+    // flags — npm kept-entries get the same drift check free every run via
+    // the abbreviated packument's integrityOf, and discovered gh entries
+    // re-derive on every pushedAt hit in ghWorker.
+    const upstreamMoved = pushedAt !== null && e.modifiedAt !== pushedAt
+    if (rescanBudget <= 0 || (!staleCaps(e.capabilities) && !upstreamMoved)) return e
     rescanBudget--
     try {
       const repo = e.source.repo ?? e.name
@@ -1513,6 +1521,9 @@ export async function run(opts: RunOptions = {}) {
         },
         ...(reverify ? { verification: { ...e.verification, status: 'unverified' as const } } : {}),
         ...(tree.sha ? { source: { ...e.source, version: tree.sha } } : {}),
+        // modifiedAt IS last-seen pushedAt for github-kind entries — record
+        // the observed value so the moved-trigger doesn't refire every run
+        ...(pushedAt !== null ? { modifiedAt: pushedAt } : {}),
       }
     } catch { return e }
   }
@@ -1539,13 +1550,13 @@ export async function run(opts: RunOptions = {}) {
     // missing entry needs a live re-probe before the tombstone (same fail-closed
     // posture as the npm side)
     else if (e.source.kind === 'github') {
-      const { status } = await fetchRepoMeta(e.source.repo ?? e.name, { token: opts.ghToken, fetchFn: f })
+      const { status, meta } = await fetchRepoMeta(e.source.repo ?? e.name, { token: opts.ghToken, fetchFn: f })
       if (status === 'rate-limited') rateLimitedCalls++
       if (status === 'error' || status === 'rate-limited') {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedGh.has(lower)) { entries.push(await rescanStaleGh(e)); return }
+      if (status === 'ok' && !rejectedGh.has(lower)) { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }
     removedNow.push({
