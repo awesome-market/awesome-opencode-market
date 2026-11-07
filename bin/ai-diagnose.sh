@@ -80,10 +80,14 @@ PY
 import json,sys,datetime
 try:
     h=json.load(open(sys.argv[1]))
+    # sig normalizes wrote to "did this run write verdicts" — the PUBLISHED
+    # stamp stores the raw count though, so normalize that side too: without
+    # it `7 == True` is always False and every writing run republishes
+    # instead of respecting the transition/24h gate.
     sig={'l05':h.get('l05'),'omlx':h.get('omlx'),'pushed':h.get('pushed'),'wrote':int(h.get('wrote',0))>0}
     try:
         p=json.load(open(sys.argv[2]))
-        same=all(p.get(k)==v for k,v in sig.items())
+        same=all(( (p.get(k,0) or 0) > 0 ) == v if k=='wrote' else p.get(k)==v for k,v in sig.items())
         age=(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(str(p.get('publishedAt','')).replace('Z','+00:00'))).total_seconds()
         print(0 if (same and age<86400) else 1)
     except Exception:

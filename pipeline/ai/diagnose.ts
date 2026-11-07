@@ -780,17 +780,32 @@ export async function main(
       if (cBenign === undefined || cHostile === undefined || cBenign >= L05_THRESHOLD || cHostile < L05_THRESHOLD) {
         l05State = 'untrusted'
         console.error(`[diagnose] L0.5 CANARY FAILED (benign=${cBenign?.toFixed(3) ?? '?'} hostile=${cHostile?.toFixed(3) ?? '?'}) — classifier output untrusted; ALL scores dropped, review continues LLM-only`)
-      } else for (const w of reviewWorks) {
-        let top: { score: number; block: string } | null = null
-        for (const m of w.material) {
-          if (L05_SKIP_IDS.has(m.id)) continue
-          const s = scores.get(`${w.e.name}\0${m.id}`)
-          if (s !== undefined && (top === null || s > top.score)) top = { score: s, block: m.id }
+      } else {
+        let unscored = 0
+        for (const w of reviewWorks) {
+          let top: { score: number; block: string } | null = null
+          for (const m of w.material) {
+            if (L05_SKIP_IDS.has(m.id)) continue
+            const s = scores.get(`${w.e.name}\0${m.id}`)
+            if (s !== undefined && (top === null || s > top.score)) top = { score: s, block: m.id }
+          }
+          if (top) {
+            l05Top.set(w, top)
+            console.log(`[diagnose] ${w.e.name}@${w.ver} L0.5 max=${top.score.toFixed(3)} (${top.block})`)
+          }
+          // a non-empty block with NO score isn't benign — the global window
+          // budget can exhaust before reaching tail material (a backlog of
+          // content-rich candidates is exactly the shape that starves it).
+          // Empty files legitimately produce zero windows; the rest deserve
+          // a visible gap line, same "fail visibly" posture as the canary.
+          for (const m of w.material) {
+            if (L05_SKIP_IDS.has(m.id) || !m.text.trim()) continue
+            if (!scores.has(`${w.e.name}\0${m.id}`)) unscored++
+          }
         }
-        if (top) {
-          l05Top.set(w, top)
-          console.log(`[diagnose] ${w.e.name}@${w.ver} L0.5 max=${top.score.toFixed(3)} (${top.block})`)
-        }
+        if (unscored)
+          console.warn(`[diagnose] L0.5 coverage gap: ${unscored} non-empty block(s) got no score ` +
+            `(global window budget exhausted) — tail material reached no classifier this run`)
       }
     } catch (x) { l05State = 'failed'; console.error(`[diagnose] L0.5 batch failed — LLM review still runs: ${x}`) }
   }

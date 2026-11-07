@@ -309,6 +309,39 @@ describe('audit: drift sweep throttled by --sweep-state', () => {
   })
 })
 
+describe('audit: L0.5 coverage gap is disclosed, not silently benign', () => {
+  it('non-empty blocks missing from the score map produce a visible warn', async () => {
+    const { vi } = await import('vitest')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // budget-starved classifier: canary answers honestly, ONE material
+      // block gets a score, the rest return nothing — the gap case. The
+      // flagged fixture carries non-skip blocks (manifest + flag ids), so a
+      // score map that only knows the manifest leaves real gaps.
+      const starvedL05 = () => new Map<string, number>([
+        [L05_CANARY_BENIGN.id, 0.1], [L05_CANARY_HOSTILE.id, 0.9], ['bad\0manifest', 0.1],
+      ])
+      const { argv, op } = files([flaggedHeld])
+      await diagnoseMain(argv, { l05: starvedL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+      expect(warn.mock.calls.flat().join(' ')).toContain('L0.5 coverage gap')
+      // the verdict still lands — disclosure is advisory, not a block
+      expect(outLines(op).length).toBeGreaterThan(0)
+    } finally { warn.mockRestore() }
+  })
+  it('fully-scored material produces no gap warn', async () => {
+    const { vi } = await import('vitest')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // every block scored: l05 answers for ANY id in the batch
+      const fullL05 = (mats: { id: string }[]) => new Map<string, number>(
+        mats.map(m => [m.id, 0.1]))
+      const { argv } = files([flaggedHeld])
+      await diagnoseMain(argv, { l05: fullL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+      expect(warn.mock.calls.flat().join(' ')).not.toContain('L0.5 coverage gap')
+    } finally { warn.mockRestore() }
+  })
+})
+
 describe('audit: content material (§5/§6 package contents reach the reviewer)', () => {
   it('extracts package.json + markdown; skips binaries and non-content files', async () => {
     const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')

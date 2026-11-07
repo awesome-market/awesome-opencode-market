@@ -367,3 +367,12 @@ describe('audit #4 re-do — append normalization, arg passthrough, shallow sync
     })
   }, 240_000)
 })
+
+describe('audit #4 r6 — publish_health wrote compares bool-to-bool', () => {
+  it('the published stamp\'s raw wrote count normalizes to >0 like the live signal', () => {
+    // published stores wrote:7 (int), the live sig writes wrote>0 (bool) —
+    // `7 == True` is False in python, so every writing run republished.
+    const src = readFileSync(join(REPO, 'bin', 'ai-diagnose.sh'), 'utf8')
+    expect(src).toContain("( (p.get(k,0) or 0) > 0 ) == v if k=='wrote'")
+  })
+})
