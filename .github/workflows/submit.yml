@@ -154,15 +154,22 @@ jobs:
             # beyond the cut, silently un-flagging it. Only a complete comment
             # history may power the skip; truncated → real scan, never skip.
             PRIOR_FULL=1
+            # marker scrape is scoped to Automated-review comments ONLY — the
+            # markers are per-pattern tail -1 across the whole thread, so any
+            # NEWER bot comment carrying marker-shaped text (a status comment
+            # quoting a verdict reason, a crafted ack) would hijack the skip's
+            # verdict and donate its pins. Only the report job emits the
+            # '## Automated review' header; every other bot comment is noise
+            # here by definition.
             if ! gh api "repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
-                --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/prior.txt 2>/dev/null; then
+                --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Automated review"))) | .body' > /tmp/prior.txt 2>/dev/null; then
               : > /tmp/prior.txt
               PRIOR_FULL=""
               for p in $(seq 1 20); do
                 page=$(curl -sf "https://api.github.com/repos/$GH_REPO/issues/$ISSUE_NUM/comments?per_page=100&page=$p&sort=created&direction=asc" 2>/dev/null) || break
                 n=$(printf '%s' "$page" | jq 'length' 2>/dev/null) || break
                 [ "${n:-0}" -eq 0 ] && { PRIOR_FULL=1; break; }
-                printf '%s' "$page" | jq -r '.[] | select(.user.login == "github-actions[bot]") | .body' >> /tmp/prior.txt
+                printf '%s' "$page" | jq -r '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Automated review"))) | .body' >> /tmp/prior.txt
                 [ "$n" -lt 100 ] && { PRIOR_FULL=1; break; }
               done
             fi
@@ -259,6 +266,9 @@ jobs:
           path: /tmp/review.md
           retention-days: 1
           if-no-files-found: error
+          # v4 artifacts are immutable per run — a "Re-run all jobs" attempt
+          # would 409 on the same name and wedge the review until expiry
+          overwrite: true
 
   # privileged half of the review: holds issues:write but only reads the
   # artifact the zero-permission `review` job produced — it never parses the
@@ -268,6 +278,7 @@ jobs:
   report:
     needs: review
     runs-on: ubuntu-latest
+    timeout-minutes: 10               # artifact download + comment + label edits — minutes-scale
     permissions: { issues: write }
     steps:
       - uses: actions/download-artifact@v4
@@ -342,6 +353,7 @@ jobs:
     # "queued" with no seed row and no lifecycle (HV-8 class). catalog-append's
     # fetch→reset→push retry loop absorbs the cross-issue races instead.
     concurrency: submit-ingest-${{ github.event.issue.number }}
+    timeout-minutes: 15               # gh api count + catalog-append fetch/push retry loop — a hung git op must not burn 6h
     permissions: { contents: write, issues: write }
     steps:
       # gh api/issue calls + git fetch/push to the catalog branch only
@@ -638,8 +650,10 @@ jobs:
             # github-actions[bot] ONLY — endswith('[bot]') would let any
             # third-party app bot plant a fake 'verdict:/reviewedVersion:'
             # marker that a later late-ingest then trusts as the pin
+            # same review-comment scoping as the edited-skip scrape — a newer
+            # non-review bot comment must never donate verdict/pin markers
             gh api "repos/$REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/rvc.txt 2>/dev/null || touch /tmp/rvc.txt
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("## Automated review"))) | .body' > /tmp/rvc.txt 2>/dev/null || touch /tmp/rvc.txt
             RV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
             RVVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
             RVSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
@@ -820,6 +834,12 @@ jobs:
           echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "target=$ENTRY${VER:+@$VER}" >> "$GITHUB_OUTPUT"
           echo "entry=$ENTRY" >> "$GITHUB_OUTPUT"
+          # env-fallback key set for conseed — name AND repo so a name+repo
+          # submission's repo-twin pending entry is retracted too; catalog-
+          # withdraw accepts a space-joined key list (DERIVED covers the
+          # rows-present case, this is the zero-rows fallback)
+          EKEYS=$(node -e 'const n=process.argv[1]||"",r=process.argv[2]||"";console.log([n,r].filter(Boolean).join(" "))' "$NAME" "$SUBREPO")
+          echo "entrykeys=$EKEYS" >> "$GITHUB_OUTPUT"
           echo "ver=$VER" >> "$GITHUB_OUTPUT"
       - name: append verdict + apply to index.json on catalog branch
         if: steps.gate.outputs.allowed != '0' && steps.perm.outputs.allowed != '0' && steps.v.outputs.skip != '1' && steps.v.outputs.dup != '1' && steps.v.outputs.noseed != '1' && steps.v.outputs.nosha != '1'
@@ -900,7 +920,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
-          ENTRY: ${{ steps.v.outputs.entry }}
+          ENTRY: ${{ steps.v.outputs.entrykeys || steps.v.outputs.entry }}
         run: |
           ISSUE="$ISSUE" MSG="concern verdict — submission seed retired (issue #$ISSUE)" ENTRY="$ENTRY" \
             ./bin/catalog-withdraw.sh \
@@ -1049,6 +1069,7 @@ jobs:
   sweep:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 60               # bulk close work is serial gh calls — bound well under the 6h default, far above any realistic backlog
     permissions: { issues: write }
     steps:
       # gh api calls + one anonymous git clone of the catalog branch (the
@@ -1162,6 +1183,7 @@ jobs:
     # shared lock can drop the pending withdraw and the issue would close
     # with its seed still live (HV-8 class). Script retries absorb races.
     concurrency: submit-withdraw-${{ github.event.issue.number }}
+    timeout-minutes: 15               # npm ci + catalog-withdraw push retry loop — same bound as ingest
     permissions: { contents: write, issues: write }
     steps:
       # npm ci + git fetch/push (catalog) + gh api — nothing else
@@ -1207,7 +1229,11 @@ jobs:
           # otherwise a withdrawn submission keeps consuming scan/verify/AI
           # budget and can still be released by a later verdict
           npx tsx pipeline/submission.ts > /tmp/sub.json
-          ENTRY=$(node -e "const s=require('/tmp/sub.json');console.log(s.name??s.repo??'')")
+          # space-joined name+repo keys — catalog-withdraw matches pending
+          # entries on EITHER identity, so a name+repo submission's repo twin
+          # is retracted too (DERIVED covers the rows-present case; this is
+          # the env fallback for re-runs where no seed rows remain)
+          ENTRY=$(node -e "const s=require('/tmp/sub.json');console.log([s.name,s.repo].filter(Boolean).join(' '))")
           if ISSUE="$ISSUE" MSG="submission withdrawn (issue #$ISSUE)" ENTRY="$ENTRY" ./bin/catalog-withdraw.sh | tee /tmp/wd.log; then
             MSG="↩️ 已撤回投稿——收录队列中本单的种子已移除，不会再进入目录。"
             grep -q "retracted pending" /tmp/wd.log && MSG="${MSG}目录中的待审条目也已一并撤下。"
@@ -1236,6 +1262,7 @@ jobs:
       && !(github.event.comment.user.login == github.event.issue.user.login
           || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
+    timeout-minutes: 5                # one comment call
     permissions: { issues: write }
     steps:
       # gh issue comment only — the narrowest allowlist
@@ -1266,6 +1293,7 @@ jobs:
     needs: [review, report, ingest, sweep]
     if: ${{ failure() && (github.event.issue.number || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5                # one comment or one deduped alert issue
     permissions: { issues: write }
     steps:
       # gh api calls only — the narrowest allowlist
