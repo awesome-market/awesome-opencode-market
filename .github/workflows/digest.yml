@@ -324,7 +324,7 @@ jobs:
               if [ -z "$LAST_BODY" ]; then
                 LAST_BODY=$(gh issue view "$EXISTING" -R "$GH_REPO" --json body --jq '.body' 2>/dev/null || true)
               fi
-              LAST_LEGS=$(printf '%s' "$LAST_BODY" | grep -o 'watchdog-legs:[0-9]*' | tail -1 | cut -d: -f2)
+              LAST_LEGS=$(printf '%s' "$LAST_BODY" | grep -o 'watchdog-legs:[0-9]*' | tail -1 | cut -d: -f2 || true)
               if [ "$LAST_LEGS" = "$LEGS" ]; then
                 echo "watchdog: same legs ($LEGS) already alerted on #$EXISTING — no repeat comment"
               else

@@ -165,17 +165,17 @@ jobs:
                 [ "$n" -lt 100 ] && { PRIOR_FULL=1; break; }
               done
             fi
-            PV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            PVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            PSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            PPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
-            PCRE=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
+            PVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
+            PSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
+            PPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
+            PCRE=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
             # cross-target guard: the LAST 'target:' marker must name the
             # CURRENT parse — after an A→B→A edit ping-pong the most recent
             # clean review can belong to B while the seed row still anchors A;
             # copying B's markers onto A would pin a version/sha A never had.
             # No marker (pre-marker comments) → can't prove same-target → scan.
-            PTGT=$(grep -oE 'target: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}')
+            PTGT=$(grep -oE 'target: [^ ]+' /tmp/prior.txt | tail -1 | awk '{print $2}' || true)
             if [ -n "$PRIOR_FULL" ] && [ "$PV" = "clean" ] && [ "${PTGT,,}" = "${PKG,,}" ] && SEEDROW="$SEEDROW" PNAME="$PNAME" PREPO="$PREPO" node -e '
               const s = JSON.parse(process.env.SEEDROW)
               const n = (process.env.PNAME || "").toLowerCase(), r = (process.env.PREPO || "").toLowerCase()
@@ -193,14 +193,14 @@ jobs:
             SEED_PKG="$PPKG"
           elif [ "$KIND" = npm ]; then
             npx tsx pipeline/review.ts "$PKG" > /tmp/review.md
-            SEED_VERSION=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            SEED_VERSION=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}' || true)
             if [ "$SEED_VERSION" = "null" ]; then SEED_VERSION=""; fi
           elif [ "$KIND" = repo ]; then
             # repo-only submission: existence + tree evidence gate + codeload
             # scan — same machinery the catalog's github-kind admission runs
             npx tsx pipeline/review.ts --repo "$PKG" > /tmp/review.md
-            SEED_VERSION=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/review.md | tail -1 | awk '{print $2}')
-            SEED_PKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            SEED_VERSION=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/review.md | tail -1 | awk '{print $2}' || true)
+            SEED_PKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/review.md | tail -1 | awk '{print $2}' || true)
             if [ "$SEED_PKG" = "null" ]; then SEED_PKG=""; fi
           else
             printf '未能识别包名或仓库地址——请确认表单已填写（issue 编辑后会自动重新审查）。\n\n<!-- verdict: invalid -->\n' > /tmp/review.md
@@ -221,7 +221,7 @@ jobs:
           if [ "${{ github.event_name }}" = issue_comment ] && [ "$COMMENTER" != "$ISSUE_AUTHOR" ] \
             && ! echo " $COMMENT_ASSOC " | grep -qE ' (OWNER|MEMBER|COLLABORATOR) '; then
             SEED_AT=$(SEEDROW="${SEEDROW:-}" node -e 'try{console.log(JSON.parse(process.env.SEEDROW).at??"")}catch{console.log("")}')
-            PCN=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            PCN=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}' || true)
             # ISO strings compare lexicographically — createdAt strictly AFTER
             # the seed's `at` proves the artifact is not what the seed anchored
             if [ -z "$SEED_AT" ] || [ -z "$PCN" ] || [ "$PCN" \> "$SEED_AT" ]; then
@@ -236,7 +236,7 @@ jobs:
           # the issue is far more likely the author's own delayed publish, so
           # slow publishers are not trapped in a permanent flagged loop (F-4).
           if [ "$KIND" != "none" ]; then
-            PC=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}')
+            PC=$(grep -oE 'createdAt: [0-9T:.Z-]+' /tmp/review.md | tail -1 | awk '{print $2}' || true)
             if [ -n "$PC" ] && [ "$PC" != "null" ] && PC="$PC" ISSUE_CREATED="$ISSUE_CREATED" node -e "
               const gap = Date.parse(process.env.PC) - Date.parse(process.env.ISSUE_CREATED)
               const age = Date.now() - Date.parse(process.env.ISSUE_CREATED)
@@ -249,7 +249,7 @@ jobs:
           # verdict = LAST 'verdict:' occurrence — report body contains
           # package-controlled text (repo url, filenames, matched code) that can
           # inject a fake 'verdict: clean' earlier in the file.
-          V=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/review.md | tail -1 | awk '{print $2}')
+          V=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/review.md | tail -1 | awk '{print $2}' || true)
           echo "v=${V:-invalid}" >> "$GITHUB_OUTPUT"
       - name: hand report to the privileged comment job
         uses: actions/upload-artifact@v4
@@ -585,7 +585,8 @@ jobs:
           # distinguishes causes: 2 = the ref is genuinely absent (fresh
           # repo); anything else = connectivity — a network blip must not
           # masquerade as "branch not initialized" (wrong guidance either way)
-          git ls-remote --exit-code origin catalog >/dev/null 2>&1; LSRC=$?
+          LSRC=0
+          git ls-remote --exit-code origin catalog >/dev/null 2>&1 || LSRC=$?
           if [ "$LSRC" = 2 ]; then
             gh issue comment "$ISSUE_NUM" -R "$REPO" --body "⚠️ catalog 数据面（catalog 分支）尚未初始化——裁决未写入。待首轮目录构建完成后再重新触发。" || true
             echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
@@ -636,11 +637,11 @@ jobs:
             # marker that a later late-ingest then trusts as the pin
             gh api "repos/$REPO/issues/$ISSUE_NUM/comments?per_page=100" --paginate \
               --jq '.[] | select(.user.login == "github-actions[bot]") | .body' > /tmp/rvc.txt 2>/dev/null || touch /tmp/rvc.txt
-            RV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/rvc.txt | tail -1 | awk '{print $2}')
-            RVVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
-            RVSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
-            RVPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
-            RVTGT=$(grep -oE 'target: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}')
+            RV=$(grep -oE 'verdict: (clean|flagged|invalid|error)' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
+            RVVER=$(grep -oE 'reviewedVersion: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
+            RVSHA=$(grep -oE 'repoSha: [0-9a-f]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
+            RVPKG=$(grep -oE 'repoPkg: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
+            RVTGT=$(grep -oE 'target: [^ ]+' /tmp/rvc.txt | tail -1 | awk '{print $2}' || true)
             [ "$RVVER" = "null" ] && RVVER=""; [ "$RVPKG" = "null" ] && RVPKG=""
             # cross-target guard — the SAME A→B→A hole the edited-skip guard
             # closes (57d4e2a): the last review's markers only pin THIS
