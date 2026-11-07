@@ -377,7 +377,9 @@ describe('notify-published.main', () => {
 describe('verify/checkTui', () => {
   const run = (behaviour: Record<string, 'ok' | 'fail' | string>) =>
     (async (_c: string, args: string[]) => {
-      const key = args[0]!
+      // new-session carries a leading `-f /dev/null` (config-sourcing guard) —
+      // the subcommand sits at index 2 there, index 0 for the rest
+      const key = args[0] === '-f' ? args[2]! : args[0]!
       const b = behaviour[key]
       if (b === 'fail' || b === undefined) throw new Error(`${key} failed`)
       return { stdout: b === 'ok' ? '' : b, stderr: '' }
@@ -392,7 +394,7 @@ describe('verify/checkTui', () => {
     const calls: string[] = []
     const f = (async (_c: string, args: string[]) => {
       calls.push(args[0]!)
-      if (args[0] === 'new-session') return { stdout: '', stderr: '' }
+      if (args.includes('new-session')) return { stdout: '', stderr: '' }
       throw new Error('no session')
     }) as never
     const r = await checkTui(env, f, { settleMs: 1 })

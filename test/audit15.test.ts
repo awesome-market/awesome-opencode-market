@@ -101,7 +101,7 @@ describe('findGuiBundle export resolution', () => {
 describe('checkTui harness classification', () => {
   it('new-session failure → harness:true (no package evidence ever existed)', async () => {
     const fake = (async (_c: string, args: string[]) => {
-      if (args[0] === 'new-session') throw new Error('duplicate session')
+      if (args.includes('new-session')) throw new Error('duplicate session')
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
     const r = await checkTui({}, fake, { settleMs: 1 })
@@ -111,7 +111,7 @@ describe('checkTui harness classification', () => {
   it('concurrent lanes mint distinct session names', async () => {
     const names: string[] = []
     const fake = (async (_c: string, args: string[]) => {
-      if (args[0] === 'new-session') names.push(args[args.indexOf('-s') + 1]!)
+      if (args.includes('new-session')) names.push(args[args.indexOf('-s') + 1]!)
       if (args[0] === 'has-session') throw new Error('dead')
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
@@ -136,7 +136,7 @@ describe('verifyPackage tui harness propagation', () => {
   it('tmux spawn failure throws (harness) instead of a package failed', async () => {
     const home = mkdtempSync(join(tmpdir(), 'vt15-'))
     const fake = (async (cmd: string, args: string[]) => {
-      if (cmd === 'tmux' && args[0] === 'new-session') throw new Error('tmux server gone')
+      if (cmd === 'tmux' && args.includes('new-session')) throw new Error('tmux server gone')
       if (cmd === 'curl') {
         const o = args.indexOf('-o')
         if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, api('pkg'))
@@ -152,7 +152,7 @@ describe('verifyPackage tui harness propagation', () => {
     const home = mkdtempSync(join(tmpdir(), 'vs15-'))
     const out = join(home, 'r.json')
     const fake = (async (cmd: string, args: string[]) => {
-      if (cmd === 'tmux' && args[0] === 'new-session') throw new Error('tmux server gone')
+      if (cmd === 'tmux' && args.includes('new-session')) throw new Error('tmux server gone')
       if (cmd === 'curl') {
         const o = args.indexOf('-o')
         if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, api('pkg'))

@@ -540,7 +540,7 @@ describe('checkTui settleMs default + submission sections + misc', () => {
   it('checkTui without settleMs uses 8s default (tmux mocked)', async () => {
     vi.useFakeTimers()
     const run = (async (_c: string, args: string[]) => {
-      if (args[0] === 'new-session') return { stdout: '', stderr: '' }
+      if (args.includes('new-session')) return { stdout: '', stderr: '' }
       if (args[0] === 'has-session') return { stdout: '', stderr: '' }
       if (args[0] === 'capture-pane') return { stdout: 'opencode v1 ' + 'x'.repeat(30), stderr: '' }
       return { stdout: '', stderr: '' }

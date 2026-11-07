@@ -482,7 +482,7 @@ describe('verify/tui + merge + plan residuals', () => {
     const cmds: string[][] = []
     const run = (async (cmd: string, args: string[]) => {
       cmds.push([cmd, ...args])
-      if (args[0] === 'new-session') return { stdout: '', stderr: '' }
+      if (args.includes('new-session')) return { stdout: '', stderr: '' }
       if (args[0] === 'has-session') return { stdout: '', stderr: '' }
       if (args[0] === 'capture-pane') return { stdout: 'opencode ready', stderr: '' }
       return { stdout: '', stderr: '' }

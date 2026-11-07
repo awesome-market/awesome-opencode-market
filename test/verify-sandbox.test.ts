@@ -278,7 +278,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
-    const sess = calls.find(c => c.cmd === 'tmux' && c.args[0] === 'new-session')!
+    const sess = calls.find(c => c.cmd === 'tmux' && c.args.includes('new-session'))!
     expect(sess.args.at(-1)).toBe(`${join(home, 'sb.sh')} opencode`)
   })
 
@@ -444,7 +444,7 @@ describe('checkTui command opt', () => {
     }) as unknown as ExecFn
     const r = await checkTui({}, fake, { settleMs: 1, command: '/tmp/sb.sh opencode' })
     expect(r.ok).toBe(true)
-    const sess = calls.find(a => a[0] === 'new-session')!
+    const sess = calls.find(a => a.includes('new-session'))!
     expect(sess.at(-1)).toBe('/tmp/sb.sh opencode')
     void home
   })

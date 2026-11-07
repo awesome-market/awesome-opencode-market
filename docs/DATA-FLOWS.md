@@ -655,7 +655,15 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
                      macOS/本地 dev 反正不跑并行 CI lane）；feature
                      检查段（L2/L3a/dual）结束再来一次同规清扫——
                      tmux kill-session 失败的残留不漏到下一目标
-        L2 interactive: features 含 tui → tmux 冒烟（checkTui）
+        L2 interactive: features 含 tui → tmux 冒烟（checkTui）——
+          `tmux -f /dev/null new-session` + 每次调用私有 TMUX_TMPDIR：
+          server 以 runner uid 拉起会 source 用户配置，而 env=xdgEnv(uh)
+          让 HOME/XDG_CONFIG_HOME 落在插件可写目录——植入的
+          .tmux.conf/tmux.conf 的 run-shell 会以 runner 身份执行、伪造
+          results-*.json 击穿 V-1；-f /dev/null 只对会拉起 server 的
+          new-session 生效（has-session/capture-pane/kill-session 连不上
+          server 不会新起），私有 socket 目录同时隔离自托管 runner 上的
+          残留 server
         L3a render: features 含 gui → findGuiBundle + checkGuiBundle（jsdom+vm 真渲染；
           沙箱模式下移到 `npx tsx gui.ts` nobody 子进程——vm 逃逸只拿 nobody；
           git spec 安装落 `git-<slug>-<sha256(spec):12>` 缓存目录，包目录
