@@ -474,13 +474,15 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   } else if (t.verdict === 'flag') {
     L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${clean(t.reason ?? 'sec:*')}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
-    // a human verdict that PREDATES the flag is evidence about the bytes,
-    // not this signal — show it as context with the ordering made explicit
+    // with flaggedAt set, a shown verdict provably predates the flag (a
+    // postdating one would have decided it) — evidence about the bytes,
+    // not this signal; render the ordering explicitly, or admit it's
+    // unknowable when the stamp is missing, so it can't read as decided
     if (t.humanVerdict) {
       L.push(`- 此前人工裁决：**${t.humanVerdict.verdict}**（${(t.humanVerdict.at ?? '').slice(0, 10)}${t.humanVerdict.reason ? ` — ${clean(t.humanVerdict.reason)}` : ''}）——` +
         (t.flaggedAt
           ? `信号首次观察 ${t.flaggedAt.slice(0, 10)}，裁决早于信号——判的是字节，不是该信号`
-          : '判词早于信号记录时点，需就该信号再判一次'))
+          : '信号首次观察时点无记录（flaggedAt 缺失）——无法确认该判词是否覆盖此信号，需就该信号再判一次'))
     }
   } else {
     L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
@@ -817,8 +819,10 @@ export async function main(
     const still = wantedByName.get(t.name)
     if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
     // per-entry issue superseded by an aggregate — say so instead of the
-    // generic verdicted reason (the entry is still pending!)
-    if (e.approval === 'pending' && e.latestVersion === null) return '并入 repo-only 积压总单'
+    // generic verdicted reason (the entry is still pending!). `!latestVersion`
+    // mirrors docketTargets' repo-only test: a malformed '' reads as
+    // version-less there, so it must read as version-less here too
+    if (e.approval === 'pending' && !e.latestVersion) return '并入 repo-only 积压总单'
     if (!(e.approval === 'pending' || e.pendingUpdate)) return '该版本已放行'
     return '评审目标已离开队列（版本位移或在押时钟重置），该版本尚无裁决——如需先行人工裁决请在本单评论'
   }

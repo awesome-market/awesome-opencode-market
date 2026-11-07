@@ -1391,6 +1391,10 @@ catalog 文件读取区分「不存在」与「读失败」：index.json 同口�
 判定，`--depth=1` 只取 tip）；verdicts/digest-state 缺失
 →空文件（首轮合法态），存在但 `git show` 失败→整轮 defer——瞬断降级成
 空文件会剥全部 ai:* 标签并把 announced pass 的相位回退一整个 tick；
+diagnose.paused 同样先 `cat-file -e` 探存在再落盘——**存在性本身就是
+信号**，裸 `git show > file || true` 会让失败重定向留下的空文件被
+existsSync 误读成「已声明暂停」（ai-diagnose.sh 的 stray-flag 同类
+陷阱），缺席=正常队列、存在但读失败=整轮 defer；
 docket job 配 harden-runner egress 白名单（npm/git/gh 三域）；
 alert 收 failure()||cancelled()——10min 超时杀 job 报 cancelled，
 而被取消的同步正是「静默陈旧」场景本身

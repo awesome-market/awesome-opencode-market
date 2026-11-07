@@ -110,8 +110,18 @@ jobs:
           # index file; absent = normal queue. Without this fetch the paused
           # surface never reaches the workflow and every aged hold still
           # reads as "queue looks dead".
+          # Existence IS the signal here, so the bare `git show > file || true`
+          # is a trap: the redirect creates /tmp/diagnose.paused even when the
+          # path is absent on the branch → existsSync reads a phantom pause
+          # forever (every aged hold aggregates + bodies claim 声明暂停). Same
+          # stray-file hazard ai-diagnose.sh's cat-file -e probe documents —
+          # gate on existence first, and defer like the aux files when the
+          # blob exists but won't read.
           rm -f /tmp/diagnose.paused
-          git show origin/catalog:diagnose.paused > /tmp/diagnose.paused 2>/dev/null || true
+          if git cat-file -e origin/catalog:diagnose.paused 2>/dev/null; then
+            git show origin/catalog:diagnose.paused > /tmp/diagnose.paused 2>/dev/null \
+              || { echo "diagnose.paused exists on origin/catalog but git show failed — defer to next tick"; exit 0; }
+          fi
           # inputs.* is TYPED for workflow_dispatch (boolean → real bool);
           # github.event.inputs.* is always a string, so `== true` coerces
           # 'true'→NaN vs 1 and NEVER matched — a dry-run dispatch would
