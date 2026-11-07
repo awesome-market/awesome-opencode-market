@@ -117,11 +117,18 @@ export function verifyPartsOf(e: PluginEntry): NonNullable<PluginEntry['contains
 
 /** Slots whose recorded verify ran on a different host version — the bounded
  *  re-verification backlog. Same filters as the queue (installable parts,
- *  unflagged, versioned) but orthogonal membership: these are 'verified'
- *  results invalidated by an opencode upgrade. */
-export function hostStaleVerify(e: PluginEntry): boolean {
+ *  unflagged, versioned, not concern-condemned) but orthogonal membership:
+ *  these are 'verified' results invalidated by an opencode upgrade. */
+export function hostStaleVerify(
+  e: PluginEntry,
+  latest?: Map<string, AiVerdict>, latestHuman?: Map<string, AiVerdict>,
+  tomb?: Map<string, string>,
+): boolean {
   const t = verifyTargetOf(e)
   if ((!t.version && !t.git) || t.flagged || !t.hostStale) return false
+  // a condemned slot is out of the re-verify backlog too — the queue predicate
+  // drops it, so counting it here would over-report the staleHost tier
+  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb)?.verdict === 'concern') return false
   const parts = verifyPartsOf(e)
   return parts.includes('plugin') || parts.includes('skill')
 }

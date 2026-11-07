@@ -272,7 +272,7 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   const qSubs = queue.filter(e => e.discoveredVia?.includes('submission')).length
   // host-version drift backlog (P1-6): verified results recorded under a
   // different opencodeVersion re-enter the verify queue ahead of normal work
-  const hostStale = index.plugins.filter(e => hostStaleVerify(e)).length
+  const hostStale = index.plugins.filter(e => hostStaleVerify(e, latest, latestHuman, tomb)).length
   const weekAgo = now.getTime() - 7 * 86_400_000
   const verOf = (e: PluginEntry) => candidateSlot(e)?.verification ?? e.verification
   const recentFailed = index.plugins.filter(e => {
