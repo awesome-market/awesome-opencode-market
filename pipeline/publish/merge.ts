@@ -124,23 +124,36 @@ export function versionCmp(a: string | null, b: string | null): number {
 }
 
 /** Slug collision healing: npm name is the stable identity — collided entries get
- *  re-slugged to their name, old slug preserved in aliases (I-1). */
+ *  re-slugged to their name, old slug preserved in aliases (I-1).
+ *  Loser slugs are assigned in GLOBAL name order, not encounter order: `entries`
+ *  arrives in pool-completion order which varies run to run, and two losers can
+ *  contest the same fallback (one's --N suffix is another's name-slug) — an
+ *  unstable order would flap slugs (and therefore detail-page URLs) between
+ *  publishes of identical data. */
 export function dedupeSlugs(entries: PluginEntry[]): PluginEntry[] {
   const bySlug = new Map<string, PluginEntry[]>()
   for (const e of entries) bySlug.set(e.slug, [...(bySlug.get(e.slug) ?? []), e])
   const taken = new Set(bySlug.keys())
-  return entries.map(e => {
-    const group = bySlug.get(e.slug)!
-    if (group.length === 1) return e
+  const losers: PluginEntry[] = []
+  for (const group of bySlug.values()) {
+    if (group.length === 1) continue
     // canonical survivor: entry whose slug already equals its name; else name-asc first
     const canonical = group.find(g => g.slug === g.name.toLowerCase())
       ?? [...group].sort((a, b) => a.name.localeCompare(b.name))[0]!
-    if (e === canonical) return e
+    for (const g of group) if (g !== canonical) losers.push(g)
+  }
+  losers.sort((a, b) => a.name.localeCompare(b.name))
+  const assigned = new Map<PluginEntry, string>()
+  for (const e of losers) {
     let slug = e.name.toLowerCase()
     let i = 2
     while (taken.has(slug)) slug = `${e.name.toLowerCase()}--${i++}`
     taken.add(slug)
-    return { ...e, slug, aliases: [...new Set([...e.aliases, e.slug])] }
+    assigned.set(e, slug)
+  }
+  return entries.map(e => {
+    const slug = assigned.get(e)
+    return slug ? { ...e, slug, aliases: [...new Set([...e.aliases, e.slug])] } : e
   })
 }
 
@@ -240,9 +253,21 @@ export function mergeEntries(
           // slot (a verify-merge may have written into it after ours was
           // built); remote also fills byte-anchor/parts fields ours lacks
           // (a drift-rescan could have re-anchored it between runs)
+          const pinA = e.pendingUpdate.integrity ?? prev.pendingUpdate.integrity ?? null
+          const rv = prev.pendingUpdate.verification
+          const measA = rv.integrity ?? null
+          // the restored slot claims "these bytes were measured" — but a
+          // re-tag since then means our pinned anchor describes DIFFERENT
+          // bytes. Same rule as samePinnedBytes on the display slot: a
+          // proven mismatch must not inherit the old measurement (the pin
+          // path's puDrift only covers holds that stayed pinned; a hold
+          // rebuilt via the full path re-anchors to current registry
+          // bytes). Missing anchors can't disprove sameness → keep legacy.
+          // Evidence fields stay for audit; verify plan re-queues the slot.
+          const measuredElsewhere = pinA !== null && measA !== null && pinA !== measA
           out.pendingUpdate = {
             ...e.pendingUpdate,
-            verification: prev.pendingUpdate.verification,
+            verification: measuredElsewhere ? { ...rv, status: 'unverified' } : rv,
             integrity: e.pendingUpdate.integrity ?? prev.pendingUpdate.integrity,
             contains: e.pendingUpdate.contains ?? prev.pendingUpdate.contains,
           }

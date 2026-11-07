@@ -37,6 +37,12 @@ const MAX_FINDINGS = 500
 /** Member-count ceiling — a tarball of millions of zero-byte files stays under
  *  the byte cap but would still OOM the files[] bookkeeping (F-1). */
 const MAX_FILES = 200_000
+/** Per-file text ceiling: bufCap was Infinity for text, so one ~500MB
+ *  minified bundle would be buffered whole AND utf8-decoded (×pool workers
+ *  ≈ several GB on a 16GB runner). Scan the head and disclose the truncation
+ *  as a finding instead — rules still cover the part that matters (package
+ *  manifests, entry modules), and the signal is honest rather than silent. */
+const MAX_TEXT_SCAN = 32 * 1024 * 1024
 
 export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<ScanResult> {
   const findings: ScanFinding[] = []
@@ -68,9 +74,13 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
         const path = entry.path
         // Buffer only what the checks need: media assets are binary-by-design
         // and exempt from the blob rule (never buffered at all); non-text
-        // files only need isBinary's 8KB window; text needs the whole file.
+        // files only need isBinary's 8KB window; text needs the whole file —
+        // up to MAX_TEXT_SCAN, beyond which the head is scanned and the
+        // truncation disclosed (see MAX_TEXT_SCAN).
         const skipBody = MEDIA_EXT.test(path)
-        const bufCap = TEXT_EXT.test(path) || isPkgJson(path) ? Infinity : 8192
+        const isText = TEXT_EXT.test(path) || isPkgJson(path)
+        const oversizeText = isText && entry.size > MAX_TEXT_SCAN
+        const bufCap = oversizeText ? MAX_TEXT_SCAN : isText ? Infinity : 8192
         const chunks: Buffer[] = []
         let buffered = 0
         entry.on('data', (c: Buffer) => {
@@ -83,6 +93,12 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
         })
         entry.on('end', () => {
           if (skipBody) return
+          if (oversizeText) {
+            pushFinding({
+              rule: 'text-truncated', severity: 'medium', file: path,
+              detail: `text file exceeds ${MAX_TEXT_SCAN}-byte scan cap — rules ran on the first ${MAX_TEXT_SCAN} bytes only`,
+            })
+          }
           const buf = Buffer.concat(chunks)
           if (isBinary(buf)) {
             const known = KNOWN_BIN_EXT.test(path)
@@ -92,7 +108,7 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
             })
             return
           }
-          const text = TEXT_EXT.test(path) || isPkgJson(path) ? buf.toString('utf8') : null
+          const text = isText ? buf.toString('utf8') : null
           for (const r of RULES) {
             const detail = r.test(path, text)
             if (detail) pushFinding({ rule: r.id, severity: r.sev, file: path, detail })
