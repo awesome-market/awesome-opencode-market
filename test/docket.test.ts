@@ -1193,9 +1193,10 @@ describe('docket audit — round 3 regressions', () => {
       calls.push(args)
       if (args.includes('list'))
         return JSON.stringify([{ number: 7, title: '[review] gone@1.0.0', labels: [] }])
-      // last comment is already the close note — a previous tick posted it,
-      // then the close call itself failed; re-posting is noise
-      if (args.includes('view')) return '该版本的审核单已自动关闭：该版本/条目已不在 catalog 索引中。'
+      // the close-note jq scans every comment for the prefix — 'true' means
+      // a previous tick already posted it (then the close call itself
+      // failed); re-posting is noise
+      if (args.includes('view')) return 'true'
       return ''
     }
     const saved = process.env.GH_REPO

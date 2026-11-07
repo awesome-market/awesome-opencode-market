@@ -205,13 +205,18 @@ export function docketTargets(
     // flag predates the field or was never stamped → treat as fresh (surface).
     if (e.approval !== 'pending') {
       const flags = e.capabilities.redFlags.filter(f => f.startsWith('sec:'))
-      const hv = human.get(vkey(e.name, e.latestVersion))
+      // epochGoverning like every other human-verdict read in this file —
+      // flaggedAt freshness already rejects pre-tombstone verdicts in the
+      // normal case, but a recycled name whose flag stamp predates a stale
+      // pass's timestamp would otherwise let dead-incarnation bytes count
+      // as the decision (the shared gate makes "decided" drift-proof)
+      const hv = epochGoverning(human.get(vkey(e.name, e.latestVersion)), e.name, tomb)
       // a PACKAGE-level human verdict (name\0null — `pkg@*` concern/pass) also
       // retires the flag: it is a ruling on the whole entry, and a maintainer
       // answering with pkg@* must not leave an immortal review issue behind.
       // For github-kind latestVersion is null so this is the same lookup as
       // the slot key above — only npm entries gain a second key here.
-      const hvPkg = e.latestVersion === null ? hv : human.get(vkey(e.name, null))
+      const hvPkg = e.latestVersion === null ? hv : epochGoverning(human.get(vkey(e.name, null)), e.name, tomb)
       const flag = e.capabilities.flaggedAt
       const postdates = (v: AiVerdict | undefined) =>
         v !== undefined && flag !== undefined && atCmp(v.at, flag) > 0
@@ -307,8 +312,13 @@ export function docketTargets(
   // explicitly against the aggregate's own key.
   if (opts.paused || noneVer.length > NONE_ISSUE_CAP) {
     if (noneVer.length) {
+      // heldAt only reaches the row when it parsed — a missing stamp means
+      // the whole clock chain was garbage, which candidateHeldAt already
+      // treats as AGED (fail-visible). `|| 0` puts those rows FIRST instead
+      // of degrading the comparator to NaN→insertion-order: unknown-age
+      // reads as most-suspect, and the order stays deterministic
       const rows = noneVer
-        .sort((a, b) => Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
+        .sort((a, b) => (Date.parse(a.heldAt ?? '') || 0) - (Date.parse(b.heldAt ?? '') || 0))
         .map(t => ({
           name: t.name, version: t.version,
           ...(t.heldAt ? { heldAt: t.heldAt } : {}),
@@ -323,7 +333,10 @@ export function docketTargets(
     out.push(...noneVer)
   }
   if (repoOnly.length) {
-    repoOnly.sort((a, b) => Date.parse(a.heldAt ?? '') - Date.parse(b.heldAt ?? ''))
+    // same clock rule as the versioned aggregate: missing heldAt = broken
+    // stamp chain = sort first (unknown age reads as most-suspect), never
+    // NaN-degenerate insertion order
+    repoOnly.sort((a, b) => (Date.parse(a.heldAt ?? '') || 0) - (Date.parse(b.heldAt ?? '') || 0))
     out.push({ name: REPO_BACKLOG, version: null, verdict: 'none', backlog: repoOnly })
   }
   const rank = { pass: 0, none: 1, concern: 2, flag: 3 } as const
@@ -385,10 +398,15 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // reason/scan text is model- or plugin-influenced content rendered into
   // the maintainer's highest-trust surface — escape markdown/HTML the same
   // way digest.ts does (links, code spans, fake headings all stay inert),
-  // collapse whitespace, bound length (prompt-injection / formatting defense)
+  // collapse whitespace (kills block-level markers: #, -, lists), bound
+  // length (prompt-injection / formatting defense). The punctuation set
+  // goes past digest's escMd: `* _ ~ ` | @` would otherwise let a crafted
+  // reason fake emphasis/code-spans, break a table pipe, or ping a
+  // collaborator with an @mention — all render literally after the escape.
+  // (Bare URLs still autolink — GitHub lexical behavior, no escape exists.)
   const clean = (s: string, max = 300) => s
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/([\\[\]])/g, '\\$1')
+    .replace(/([\\[\]`*_|~@])/g, '\\$1')
     .replace(/\s+/g, ' ').trim().slice(0, max)
   if (t.backlog) {
     const versioned = t.backlog.some(r => r.version != null)
@@ -472,7 +490,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       ? '- 当前 AI 判定：**无**（repo-only 条目无可装 npm 包，AI 不审——只能人工裁决）'
       : '- 当前 AI 判定：**无**（评审积压或诊断已停摆——可人工先行裁决，或等 AI 判词；判词落地后本单自动更新）')
   } else if (t.verdict === 'flag') {
-    L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${clean(t.reason ?? 'sec:*')}\``, '',
+    // flag names are scanner-generated [a-z0-9:-] — clean() escapes would
+    // render LITERALLY inside this code span; the constant fallback bypasses
+    // it ('sec:*' is ours, not external text) so it doesn't degrade to sec:\*
+    const flagReason = clean(t.reason ?? '') || 'sec:*'
+    L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${flagReason}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
     // with flaggedAt set, a shown verdict provably predates the flag (a
     // postdating one would have decided it) — evidence about the bytes,
@@ -571,7 +593,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   }
   if (opts.stuckLabel) {
     L.push('',
-      `> ⚠️ 本单已贴 \`${opts.stuckLabel}\` 但裁决未写盘（写盘 job 可能失败）——标签事件不会重发：请摘除标签重贴，或评论 \`/approve\` / \`/concern 理由\`。`)
+      `> ⚠️ 本单已贴 \`${opts.stuckLabel}\` 但裁决未写盘（写盘失败或目标未解析——verdict:blocked 即解析失败标记）——标签事件不会重发：请摘除标签重贴（重新触发裁决），或评论 \`/approve\` / \`/concern 理由\` 显式下达。`)
   }
   const phoneLabels =
     t.verdict === 'flag' ? [
@@ -640,12 +662,21 @@ export async function main(
   // ones, and the body says "declared pause" rather than "looks dead"
   const paused = existsSync(join(dirname(idxPath), 'diagnose.paused'))
   const targets = docketTargets(index, verdicts, digest, { paused })
+  // last-write-wins per title: targets arrive in rank order pass→none→
+  // concern→flag, so on a same-title collision (reachable when an approved
+  // entry's pendingUpdate.version === latestVersion — flag target and held
+  // target share name@ver) the FLAG target, the most urgent surface, owns
+  // the issue body. First-wins would let a routine hold shadow a live
+  // sec:* signal — wrong direction for the highest-trust surface.
   const wanted = new Map(targets.map(t => [issueTitle(t), t]))
-  // first-write-wins: targets arrive severity-sorted, so the surviving per-name
-  // entry is the most urgent pending surface (a flag target must not shadow
-  // the held-version issue when naming "what's current" in close reasons)
+  // first-write-wins by NAME for closeReason's "当前：" pointer — deliberately
+  // NOT the same winner as `wanted`: naming the routine held-version target
+  // is more informative there than naming the flag twin (and for true
+  // same-name@ver collisions issueTitle() renders identically either way).
+  // Keys lowercase — a hand-drifted title's casing must still find the live
+  // target (vkey already canonicalizes verdict identity the same way)
   const wantedByName = new Map<string, DocketTarget>()
-  for (const t of targets) if (!wantedByName.has(t.name)) wantedByName.set(t.name, t)
+  for (const t of targets) { const k = t.name.toLowerCase(); if (!wantedByName.has(k)) wantedByName.set(k, t) }
   const pagesBase = env.MARKET_PAGES_URL
     ?? `https://${repo.split('/')[0]}.github.io/${repo.split('/')[1]}`
 
@@ -737,7 +768,14 @@ export async function main(
     const wantAi = t.verdict === 'pass' || t.verdict === 'concern' ? `ai:${t.verdict}` : null
     const staleAi = [...curLabels].filter(l => l.startsWith('ai:') && l !== wantAi)
     const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
-    const stuck = [...curLabels].find(l => l === 'verdict:pass' || l === 'verdict:concern') ?? null
+    // EVERY stuck verdict:* label folds into the body, not just the first —
+    // verdict:blocked counts too: it means the last label attempt failed to
+    // resolve (concern.yml already commented once, but the standing body is
+    // where a returning maintainer looks). Sorted for a deterministic render.
+    const stuckList = [...curLabels]
+      .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
+      .sort()
+    const stuck = stuckList.length ? stuckList.join('`, `') : null
     const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
@@ -776,14 +814,17 @@ export async function main(
     }
   }
 
-  const byName = new Map(index.plugins.map(e => [e.name, e]))
+  // lowercase keys like vkey: a hand-drifted title's casing must still find
+  // the entry for an honest close reason (npm names are lowercase; github
+  // owner/repo casing is cosmetic to GitHub itself)
+  const byName = new Map(index.plugins.map(e => [e.name.toLowerCase(), e]))
   // slots folded into the unreviewed aggregate this tick — an individual
   // 'none' issue closing because its target joined the standing issue must
   // say so, not claim a verdict happened (name\0ver keys: same package may
   // re-enter the queue at a newer version, where it is NOT the same row)
   const aggregated = new Set(
     (wanted.get(issueTitle({ name: NONE_BACKLOG, version: null }))?.backlog ?? [])
-      .map(r => `${r.name}\0${r.version ?? ''}`),
+      .map(r => `${r.name.toLowerCase()}\0${r.version ?? ''}`),
   )
   /** why an open [review] issue is out of the wanted set — the close comment
    *  must say WHICH, since "tombstoned" and "released" read very differently */
@@ -793,8 +834,8 @@ export async function main(
     const t = titleTarget(i.title)
     // the aggregate check precedes same-name: a row inside the standing
     // issue is the precise reason, "target changed" only when it isn't one
-    if (t && aggregated.has(`${t.name}\0${t.ver}`)) return '并入未评审积压总单'
-    const e = t ? byName.get(t.name) : undefined
+    if (t && aggregated.has(`${t.name.toLowerCase()}\0${t.ver}`)) return '并入未评审积压总单'
+    const e = t ? byName.get(t.name.toLowerCase()) : undefined
     if (!t || !e) return '该版本/条目已不在 catalog 索引中'
     // "verdict 已决议" must be TRUE — read the ISSUE's own key, so a
     // candidate-key move (npm bump, ruleset rescan refreshing the hold
@@ -816,7 +857,7 @@ export async function main(
         return '该版本已放行'
       return 'verdict 已决议（见 catalog 分支 ai-verdicts.jsonl）'
     }
-    const still = wantedByName.get(t.name)
+    const still = wantedByName.get(t.name.toLowerCase())
     if (still) return `评审目标已变更（当前：${issueTitle(still)}）`
     // per-entry issue superseded by an aggregate — say so instead of the
     // generic verdicted reason (the entry is still pending!). `!latestVersion`
@@ -846,11 +887,14 @@ export async function main(
       for (const l of cur) if (l.startsWith('verdict:')) largs.push('--remove-label', l)
       if (largs.length) await ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
       // idempotent under retry: a close that died mid-op last tick (labels
-      // and comment posted, close call failed) reruns the whole op — without
-      // peeking at the latest comment the same note re-posts every retry
-      const last = String(await ghFn(['issue', 'view', '-R', repo, String(i.number),
-        '--json', 'comments', '--jq', '.comments[-1].body // ""'])).trim()
-      if (!last.startsWith('该版本的审核单已自动关闭')) {
+      // and comment posted, close call failed) reruns the whole op. Scan
+      // EVERY comment for the note prefix, not just the last — a human
+      // follow-up after our note used to make the check miss it and
+      // re-post the same close comment each retry
+      const noted = String(await ghFn(['issue', 'view', '-R', repo, String(i.number),
+        '--json', 'comments', '--jq',
+        '[.comments[]? | (.body // "") | select(startswith("该版本的审核单已自动关闭"))] | length > 0'])).trim()
+      if (noted !== 'true') {
         await ghFn(['issue', 'comment', '-R', repo, String(i.number),
           '--body', `该版本的审核单已自动关闭：${why}。`])
       }
