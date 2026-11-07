@@ -20,6 +20,7 @@
  *  Usage: EVENT ACTION ISSUE_TITLE ISSUE_BODY ISSUE_NUMBER COMMENT_BODY LABEL
  *         ACTOR are read from env; `npx tsx pipeline/human-verdict.ts` */
 import { sections, NO_RESPONSE } from './submission.ts'
+import { rankable } from './verdicts.ts'
 import { isMain } from './main-guard.ts'
 
 export interface VerdictEvent {
@@ -214,6 +215,19 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
   return out
 }
 
+/** The dedupe/prev/amend/retarget scans must see the same "latest" the
+ *  release gate does: latestVerdicts/latestHumanVerdicts exclude far-future
+ *  stamps via rankable() (>10min clock-skew grace). A raw JSON.parse scan
+ *  that skips that guard treats an inert future-dated line as the standing
+ *  judgment — a same-verdict re-fire then dedupe-skips a write that would
+ *  never govern (a brake silently not landing), amend/prev report against
+ *  a phantom, and amendAt can even stamp the phantom's future `at` onto a
+ *  NEW verdict (minting a permanently-inert judgment). Lines without a
+ *  string `at` stay eligible: every real writer emits one (schema-required),
+ *  so only hand-built fixtures hit that branch. */
+const governing = (v: { at?: unknown }, now: number): boolean =>
+  typeof v.at !== 'string' || rankable(v.at, now)
+
 /** True when the LATEST line for vkey(name,version) is already a human verdict
  *  with identical verdict+reason. An edited-issue re-run is semantically a
  *  no-op — writing a fresh line would give a pass verdict a new `at`, hence a
@@ -221,12 +235,14 @@ export function resolveVerdictEvent(e: VerdictEvent): VerdictResolved {
  *  typo fix (HV-2). Source matters: an AI verdict on top must NOT dedupe a
  *  human write — the human source itself is the R-4 stickiness signal. */
 export function isDupVerdict(lines: string[], name: string, version: string | null, verdict: string, reason: string): boolean {
+  const now = Date.now()
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!.trim()
     if (!l) continue
     try {
-      const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string }
+      const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string; at?: string }
       if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
+      if (!governing(v, now)) continue
       // normalize BOTH sides — a writer that stored a multi-line reason vs a
       // caller passing the raw comment text must still dedupe correctly
       return v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') === oneLine(reason)
@@ -245,6 +261,7 @@ export function isDupVerdict(lines: string[], name: string, version: string | nu
  *  else null (same verdict → dup/amend territory; no human line; AI on top —
  *  overriding the robot is the channel's routine purpose, not noteworthy). */
 export function overriddenHuman(lines: string[], name: string, version: string | null, verdict: string): { verdict: string; at: string } | null {
+  const now = Date.now()
   // newest HUMAN line for the key — an AI line on top doesn't change which
   // human decision is being reversed (stickiness already shadows it)
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -253,6 +270,7 @@ export function overriddenHuman(lines: string[], name: string, version: string |
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; source?: string; at?: string }
       if (v.source !== 'human' || v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
+      if (!governing(v, now)) continue
       if (typeof v.verdict === 'string' && v.verdict !== verdict && typeof v.at === 'string')
         return { verdict: v.verdict, at: v.at }
       return null
@@ -270,12 +288,14 @@ export function overriddenHuman(lines: string[], name: string, version: string |
  *  that legitimately judged another target from the same issue produce the
  *  same signal; surfacing it is informative either way. */
 export function retargetedIssueTarget(lines: string[], issue: number, name: string, version: string | null): { name: string; version: string | null } | null {
+  const now = Date.now()
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!.trim()
     if (!l) continue
     try {
-      const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number }
+      const v = JSON.parse(l) as { name?: string; version?: string | null; source?: string; issue?: number; at?: string }
       if (v.source !== 'human' || v.issue !== issue || typeof v.name !== 'string') continue
+      if (!governing(v, now)) continue
       if (v.name.toLowerCase() === name.toLowerCase() && (v.version ?? null) === version) continue
       return { name: v.name, version: v.version ?? null }
     } catch { continue }
@@ -294,12 +314,14 @@ export function retargetedIssueTarget(lines: string[], issue: number, name: stri
  *  is the matching human verdict — an AI line or a verdict flip on top means
  *  this is a new decision, not an edit. */
 export function amendAt(lines: string[], name: string, version: string | null, verdict: string, reason: string): string | null {
+  const now = Date.now()
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!.trim()
     if (!l) continue
     try {
       const v = JSON.parse(l) as { name?: string; version?: string | null; verdict?: string; reason?: string; source?: string; at?: string }
       if (v.name?.toLowerCase() !== name.toLowerCase() || (v.version ?? null) !== version) continue
+      if (!governing(v, now)) continue
       if (v.source === 'human' && v.verdict === verdict && oneLine(v.reason ?? '') !== oneLine(reason)
           && typeof v.at === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v.at))
         return v.at
