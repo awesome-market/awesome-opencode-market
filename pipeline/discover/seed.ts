@@ -25,9 +25,14 @@ export async function filterByStars(
   for (const repo of repos) {
     const res = await f(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(opts.token) })
     if (!res.ok) continue
-    const b = await readJsonCapped<{ stargazers_count?: number; archived?: boolean; default_branch?: string }>(res, 4 * 1024 * 1024)
-    if (!b.archived && (b.stargazers_count ?? 0) >= minStars)
-      out.push({ repo, stars: b.stargazers_count!, branch: b.default_branch ?? null })
+    // same malformed-doc contract — a non-object body skips the repo rather
+    // than TypeError-ing the whole star-filter pass (no per-repo catch here)
+    const b = await readJsonCapped<unknown>(res, 4 * 1024 * 1024)
+    if (!b || typeof b !== 'object' || Array.isArray(b)) continue
+    const m = b as Record<string, unknown>
+    const stars = typeof m.stargazers_count === 'number' && Number.isFinite(m.stargazers_count) ? m.stargazers_count : 0
+    if (m.archived !== true && stars >= minStars)
+      out.push({ repo, stars, branch: typeof m.default_branch === 'string' ? m.default_branch : null })
   }
   return out.sort((a, b) => b.stars - a.stars)
 }
@@ -42,8 +47,12 @@ export async function repoToNpm(
     const res = await f(`https://raw.githubusercontent.com/${repo}/${br}/package.json`)
     if (!res.ok) continue
     try {
-      const pkg = await readJsonCapped<{ name?: string }>(res, 2 * 1024 * 1024)
-      if (pkg.name) return pkg.name
+      const pkg = await readJsonCapped<unknown>(res, 2 * 1024 * 1024)
+      // name must be a string — a truthy non-string (42, {}) used to be
+      // returned verbatim as the "npm name" and land in the seed list
+      const nm = pkg && typeof pkg === 'object' && !Array.isArray(pkg)
+        ? (pkg as { name?: unknown }).name : null
+      if (typeof nm === 'string' && nm) return nm
     } catch { /* not json */ }
   }
   return null

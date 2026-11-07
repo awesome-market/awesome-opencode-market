@@ -19,17 +19,6 @@ export interface NpmSearchResult {
   publishedAt: string | null
 }
 
-interface NpmSearchObject {
-  package: {
-    name: string
-    version: string
-    description?: string
-    keywords?: string[]
-    links?: { repository?: string; npm?: string }
-    date?: string
-  }
-}
-
 export async function searchByKeyword(
   keyword: string,
   opts: { size?: number; maxPages?: number; fetchFn?: typeof fetch } = {},
@@ -41,21 +30,43 @@ export async function searchByKeyword(
   let hitPageCap = false
   for (let page = 0; page < maxPages; page++) {
     const url = `${NPM_SEARCH_URL}?text=keywords:${encodeURIComponent(keyword)}&size=${size}&from=${page * size}`
-    const res = await f(url)
-    // a mid-pagination failure must be loud — the candidate tail silently
-    // vanished otherwise (truncation telemetry)
-    if (!res.ok) { console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`); break }
-    const body = await readJsonCapped<{ objects?: NpmSearchObject[]; total?: number }>(res, 8 * 1024 * 1024)
-    const objects = body.objects ?? []
+    let body: unknown
+    try {
+      const res = await f(url)
+      // a mid-pagination failure must be loud — the candidate tail silently
+      // vanished otherwise (truncation telemetry). fetch throws and JSON
+      // parse/oversize errors take the same path: run.ts awaits discovery
+      // bare, so an uncaught rejection here kills the whole catalog run
+      if (!res.ok) { console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`); break }
+      body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
+    } catch (e) {
+      console.warn(`[discover:npm] '${keyword}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+      break
+    }
+    // same malformed-doc contract as fetchPackument: non-object body or a
+    // non-array `objects` degrades to an empty page. Each hit needs a string
+    // package.name — it is the dedupe key (`map.set(r.name)` in discoverNpm
+    // and `c.name.split` in run.ts), so a missing/wrong-typed name was a
+    // run-killer, not a bad row
+    const raw = body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as { objects?: unknown }).objects : undefined
+    const objects = Array.isArray(raw) ? raw : []
     for (const o of objects) {
-      const p = o.package
+      const p = o && typeof o === 'object' && !Array.isArray(o)
+        ? (o as { package?: unknown }).package : undefined
+      if (!p || typeof p !== 'object' || Array.isArray(p)) continue
+      const pkg = p as Record<string, unknown>
+      const name = typeof pkg.name === 'string' ? pkg.name : null
+      if (!name) continue
+      const links = pkg.links && typeof pkg.links === 'object' && !Array.isArray(pkg.links)
+        ? pkg.links as Record<string, unknown> : null
       out.push({
-        name: p.name,
-        version: p.version,
-        description: p.description ?? '',
-        keywords: p.keywords ?? [],
-        repoUrl: p.links?.repository ?? null,
-        publishedAt: p.date ?? null,
+        name,
+        version: typeof pkg.version === 'string' ? pkg.version : '',
+        description: typeof pkg.description === 'string' ? pkg.description : '',
+        keywords: Array.isArray(pkg.keywords) ? pkg.keywords.filter((k): k is string => typeof k === 'string') : [],
+        repoUrl: links && typeof links.repository === 'string' ? links.repository : null,
+        publishedAt: typeof pkg.date === 'string' ? pkg.date : null,
       })
     }
     if (objects.length < size) break
