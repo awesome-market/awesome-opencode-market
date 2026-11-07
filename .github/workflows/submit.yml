@@ -1081,7 +1081,11 @@ jobs:
                 }
               } catch {}
             ' | sort -un > /tmp/live-seeds.txt
-          elif grep -qi 'not found' /tmp/csw.err; then
+          elif grep -qiE 'remote branch .* not found|not found in upstream' /tmp/csw.err; then
+            # "Remote branch catalog not found in upstream origin" is the ONLY
+            # legitimate-empty answer — a bare 'not found' also matches
+            # "Repository not found" (private/inaccessible remote), where an
+            # empty live-seed set would unwatch every queued seed
             LIVE_OK=1
             echo "catalog branch absent — live-seed set is legitimately empty"
           else

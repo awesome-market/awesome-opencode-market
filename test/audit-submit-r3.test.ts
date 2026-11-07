@@ -265,3 +265,19 @@ describe('seed-outcome — repo-twin landing clears the rejected stamp', () => {
     expect(JSON.parse(out[0]!).rejected).toBe('blocklisted')
   })
 })
+
+describe('submit.yml — sweep live-seed probe distinguishes missing-branch from repo-unreachable', () => {
+  it('only a BRANCH-level not-found counts as legitimate empty; repository-level failures skip the arm', () => {
+    // "Repository not found" (private/dead remote) used to match bare
+    // 'not found' → LIVE_OK=1 with an empty live-seed set → the
+    // approved-stalled arm closed issues whose seeds were still queued.
+    expect(SUBMIT_YML).toContain('remote branch .* not found|not found in upstream')
+    expect(SUBMIT_YML).not.toContain("grep -qi 'not found'")
+    // the distinguishing error strings behave as intended
+    expect('fatal: Remote branch catalog not found in upstream origin')
+      .toMatch(/remote branch .* not found|not found in upstream/i)
+    expect('fatal: repository \'https://github.com/o/r\' not found')
+      .not.toMatch(/remote branch .* not found|not found in upstream/i)
+    expect('fatal: Authentication failed').not.toMatch(/remote branch .* not found|not found in upstream/i)
+  })
+})
