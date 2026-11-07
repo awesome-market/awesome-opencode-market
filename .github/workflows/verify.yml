@@ -315,7 +315,11 @@ jobs:
             # commit instead of waiting for the next catalog generate (~12h).
             # Non-fatal: the verify results still land; the next catalog run
             # re-derives the same verdict state.
-            if npx tsx pipeline/release.ts /tmp/index.new.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json; then
+            # [ -s ] guard — same failure shape as catalog.yml's release fold
+            # and catalog-append.sh's apply: an exit-0 empty emit must not
+            # truncate index.new.json into a published empty catalog
+            if npx tsx pipeline/release.ts /tmp/index.new.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json \
+                && [ -s /tmp/index.released.json ]; then
               mv /tmp/index.released.json /tmp/index.new.json
               RELEASE_FAILED=0
             else
