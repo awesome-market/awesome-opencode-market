@@ -385,7 +385,14 @@ export function materialPrompt(material: Material[]): string {
     const body = m.id.startsWith('content:') && m.text.length > CONTENT_PROMPT_HEAD + CONTENT_PROMPT_TAIL + 200
       ? `${m.text.slice(0, CONTENT_PROMPT_HEAD)}\n…[中间省略]…\n${m.text.slice(-CONTENT_PROMPT_TAIL)}`
       : m.text.slice(0, 4000)
-    const block = `[${m.id}]\n${body}`
+    // ids are OUR structural markup, not payload — content:/finding:/flag:
+    // ids embed package-controlled text (tarball member paths, scanner
+    // prefixes) and a newline in one forges extra "[scan]"/"[verify]"
+    // headers, fabricating clean-scan or verified evidence the reviewer
+    // then weighs as machine truth. Bodies stay untrusted data by design;
+    // headers must remain single machine-clean lines.
+    const bid = m.id.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, ' ')
+    const block = `[${bid}]\n${body}`
     if (used + block.length > MATERIAL_BUDGET) break
     blocks.push(block)
     used += block.length
