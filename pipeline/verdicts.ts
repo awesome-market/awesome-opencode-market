@@ -603,17 +603,28 @@ export function explainEntry(
     return { ...base, outcome: 'release',
       why: `${pre}pass 成熟 + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
   }
+  const displayed = slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length,
+    e.capabilities.scannedAt === null, e.verification.status,
+    e.source?.kind === 'github' ? e.source.version : e.integrity)
   const out: SlotExplain[] = []
   // pending + pendingUpdate is the B3 inverted state applyMatureVerdicts
   // refuses to adjudicate (pu dropped via the R-9 cleanup) — reporting a
   // chain for a slot the gate discards would mislead ops
   if (e.pendingUpdate && e.approval !== 'pending') {
-    out.push(slotOf('pendingUpdate', e.pendingUpdate.version,
+    const pu = slotOf('pendingUpdate', e.pendingUpdate.version,
       e.pendingUpdate.capabilities.redFlags.length, e.pendingUpdate.capabilities.scannedAt === null,
-      e.pendingUpdate.verification.status, e.pendingUpdate.integrity))
+      e.pendingUpdate.verification.status, e.pendingUpdate.integrity)
+    // applyMatureVerdicts adjudicates the DISPLAYED slot first: a brake there
+    // pulls the entry back to pending and the R-9 source invariant drops the
+    // hold before the held slot's own verdicts are ever consulted — its raw
+    // chain ('release' above all) would promise a promotion the gate cannot
+    // perform. Report the preemption; the slot's own chain stays appended
+    // for context and the keyed verdicts survive for re-entry.
+    out.push(displayed.outcome === 'brake'
+      ? { ...pu, outcome: 'wait',
+          why: `展示版刹车先生效 → 条目回 pending、在押槽被 R-9 归一丢弃，本槽位判定不落地（判词仍键存，版本重入为新候选）；槽位自身链：${pu.why}` }
+      : pu)
   }
-  out.push(slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length,
-    e.capabilities.scannedAt === null, e.verification.status,
-    e.source?.kind === 'github' ? e.source.version : e.integrity))
+  out.push(displayed)
   return out
 }

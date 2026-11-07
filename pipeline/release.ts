@@ -25,6 +25,14 @@ if (isMain(import.meta.url)) {
   // guard nameAt>-1: nameAt=-1 makes nameAt+1=0, which would eat argv[0]
   const args = argv.filter((a, i) =>
     a !== '--explain' && a !== '--name' && (nameAt === -1 || i !== nameAt + 1))
+  // usage guard like every sibling CLI: a bare run (or a flag swallowing a
+  // positional, e.g. `--name` with no value) used to die inside
+  // readFileSync(undefined) with a bare TypeError — and args[1] missing
+  // silently degraded to "no verdicts", writing a normalized-but-wrong index
+  if (args.length < 2) {
+    console.error('usage: release.ts <index.json> <verdicts.jsonl> [digest-state.json] [--explain [--name <pkg>]]')
+    process.exit(2)
+  }
   const index = CatalogIndex.parse(JSON.parse(readFileSync(args[0]!, 'utf8')))
   const verdicts = loadVerdicts(args[1])
   const digest = loadDigestState(args[2])
