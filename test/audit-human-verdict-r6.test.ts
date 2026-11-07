@@ -129,3 +129,24 @@ describe('concern.yml workflow contract (audit #5 fresh pass)', () => {
     expect(i).toBeGreaterThan(-1)
   })
 })
+
+describe('concern.yml — package-scope verdict counts flags across ALL slots', () => {
+  const wf = readFileSync(new URL('../.github/workflows/concern.yml', import.meta.url), 'utf8')
+  it('v===\'\' unions display + pendingUpdate redFlags — pkg@*/repo verdicts govern every slot', () => {
+    // upstream e6e99d1 keyed flags to the resolved slot but left v===''
+    // reading only display caps — a pkg@* verdict on an entry whose HOLD is
+    // flagged then ack'd "0 flags" and a pass lifted the brake uninformed
+    const i = wf.indexOf('const flags =')
+    expect(i).toBeGreaterThan(-1)
+    const body = wf.slice(i, i + 700)
+    expect(body).toContain('new Set(')
+    expect(body).toContain('e?.capabilities?.redFlags ?? []')
+    expect(body).toContain('e?.pendingUpdate?.capabilities?.redFlags ?? []')
+  })
+  it('dead-slot explicit version still counts 0 (not display flags)', () => {
+    const i = wf.indexOf('const flags =')
+    const body = wf.slice(i, i + 900)
+    expect(body).toContain(': 0')
+    expect(body).toContain('e?.latestVersion === v')
+  })
+})

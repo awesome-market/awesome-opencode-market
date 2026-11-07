@@ -266,7 +266,11 @@ jobs:
             // warn "pass overrides N flags" about bytes that release nothing.
             // v==='' covers repo + pkg@* package scope → entry-level flags.
             const flags = v === ""
-              ? (e?.capabilities?.redFlags?.length ?? 0)
+              // a package-scope / repo verdict governs ALL slots — the ack
+              // must union display+hold flags, else a pkg@* verdict on an
+              // entry whose hold is flagged reports "0 flags"
+              ? new Set([...(e?.capabilities?.redFlags ?? []),
+                         ...(e?.pendingUpdate?.capabilities?.redFlags ?? [])]).size
               : e?.pendingUpdate?.version === v
                 ? (e?.pendingUpdate?.capabilities?.redFlags?.length ?? 0)
                 : e?.latestVersion === v
