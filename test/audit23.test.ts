@@ -53,7 +53,7 @@ describe('audit residuals — fixable risks (lock reclaim / gates / future at)',
 
   it('concern.yml retest job stays anchored but covers deeper padding', () => {
     const src = readFileSync(join(__dirname, '..', '.github', 'workflows', 'concern.yml'), 'utf8')
-    const retest = src.match(/retest:\n\s+if: >-([\s\S]*?)runs-on:/)!
+    const retest = src.match(/retest:\n(?:\s*#[^\n]*\n|\s*\n)*\s+if: >-([\s\S]*?)runs-on:/)!
     expect(retest).toBeTruthy()
     const gate = retest[1]!
     // mid-text '/retest' can dispatch real work — contains() must NOT appear

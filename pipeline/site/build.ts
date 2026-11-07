@@ -533,20 +533,6 @@ export function removedPage(index: CatalogIndex): string {
   return page('removed', `<h1>${bi('removed entries', '已移除条目')}</h1><p class=meta>${bi(`${rem.length} total`, `共 ${rem.length} 条`)} · ${bi('latest 300 shown', '显示最新 300 条')}${note} · <a href="index.html" data-en="← all plugins" data-zh="← 全部插件">← all plugins</a></p>${cards || `<p class=muted>${bi('none', '无')}</p>`}`)
 }
 
-/* v8 ignore next 7 */
-if (import.meta.url === `file://${process.argv[1]}`) {
-  // no top-level await here — the deploy gate imports this module for
-  // healthGate() via `tsx -e`, which require()s it as CJS; a TLA module
-  // crashes that load with ERR_REQUIRE_ASYNC_MODULE
-  void (async () => {
-    // zod-validate: a malformed index should die here with a readable error,
-    // not halfway through a build (S-13)
-    const idx = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8')))
-    await buildSite(idx, process.argv[3] ?? 'dist-site', process.env.SKILL_CACHE, process.argv[4])
-    console.log('site built')
-  })()
-}
-
 /** HTTP skill catalog (opencode docs/skills): site/skills/index.json + per-skill files
  *  pulled from npm tarballs / codeload, so `skills: ["<site>/skills/"]` makes the
  *  whole catalog's skills loadable — files update whenever version bumps.
@@ -886,4 +872,23 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
   // {name,version,files} contract opencode consumes stays unchanged
   writeFileSync(join(dir, 'index.json'), JSON.stringify({ skills: entries.map(({ name, version, files }) => ({ name, version, files })) }))
   return { candidates: cands.length, landed, degraded, entries, unpinned, membersDropped }
+}
+
+/* v8 ignore next 7 */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // the entry guard must come AFTER every const declaration — the void-IIFE
+  // runs buildSkillCatalog synchronously up to its first await, and any
+  // module-level const the guard preceded is still in TDZ at that point
+  // (SAFE_MEMBER crashed the deploy exactly this way; tests import the
+  // module after full evaluation so they never saw it).
+  // no top-level await here — the deploy gate imports this module for
+  // healthGate() via `tsx -e`, which require()s it as CJS; a TLA module
+  // crashes that load with ERR_REQUIRE_ASYNC_MODULE
+  void (async () => {
+    // zod-validate: a malformed index should die here with a readable error,
+    // not halfway through a build (S-13)
+    const idx = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2] ?? 'index.json', 'utf8')))
+    await buildSite(idx, process.argv[3] ?? 'dist-site', process.env.SKILL_CACHE, process.argv[4])
+    console.log('site built')
+  })()
 }

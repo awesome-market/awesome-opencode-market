@@ -57,12 +57,20 @@ beforeAll(() => {
   mkdirSync(join(home, '.config', 'opencode-market'), { recursive: true })
   writeFileSync(join(home, '.config', 'opencode-market', 'ai.env'), 'AI_BASE_URL=http://localhost:1/v1\n')
 
-  // bare "origin": main = committed HEAD of this repo; catalog = data branch
+  // bare "origin": main = committed HEAD content of this repo. `git archive`
+  // + commit inside seed — the checkout may be SHALLOW (actions/checkout
+  // fetch-depth:1) which can't push history at all (remote rejects 'shallow
+  // update not allowed'); archive only needs the HEAD tree, which a shallow
+  // clone still has complete.
   execFileSync('git', ['init', '--bare', '-q', remote])
   execFileSync('git', ['-C', remote, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
-  execFileSync('git', ['-C', REPO, 'push', '-q', remote, 'HEAD:refs/heads/main'])
   const seed = join(root, 'seed')
   execFileSync('git', ['clone', '-q', remote, seed])
+  execFileSync('git', ['-C', seed, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  execFileSync('bash', ['-c', `git -C "${REPO}" archive HEAD | tar -x -C "${seed}"`])
+  git(seed, 'add', '-A')
+  git(seed, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed main')
+  git(seed, 'push', '-q', 'origin', 'main')
   execFileSync('git', ['-C', seed, 'checkout', '-q', '--orphan', 'catalog'])
   execFileSync('git', ['-C', seed, 'rm', '-rfq', '.'])
   writeFileSync(join(seed, 'index.json'), '{}\n')
