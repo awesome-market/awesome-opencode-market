@@ -15,6 +15,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeSync } from 'node
 import { join } from 'node:path'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
+import { isMain } from '../main-guard.ts'
 
 export interface GuiCheck {
   ok: boolean
@@ -346,7 +347,7 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
 }
 
 /* v8 ignore next 14 — subprocess entry: sandboxed gui eval prints one JSON line */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   // The parent takes the LAST stdout line as the verdict. Untrusted bundle
   // code shares this process's console/setTimeout (HOST_GLOBALS) — a pending
   // timer could print a forged '{"ok":true}' AFTER our result and win the

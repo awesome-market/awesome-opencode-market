@@ -7,6 +7,7 @@ import { CatalogIndex } from '../src/schema.ts'
 import { CAT_NAMES, catId } from '../src/categories.ts'
 import { mergeEntries, OPENCODE_VERSION } from './publish/merge.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
+import { isMain } from './main-guard.ts'
 
 /** Same id normalization + whitelist buildIndex applies (I-3): remote's
  *  categories dict and entry.category values may predate the english-id
@@ -48,7 +49,7 @@ export function remerge(ours: CatalogIndex, remote: CatalogIndex | null): Catalo
 }
 
 /* v8 ignore next 10 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const ours = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2]!, 'utf8')))
   let remote: CatalogIndex | null = null
   try {

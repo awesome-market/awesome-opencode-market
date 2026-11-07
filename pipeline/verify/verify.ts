@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { isMain } from '../main-guard.ts'
 
 const exec = promisify(execFile)
 export type ExecFn = typeof exec
@@ -804,7 +805,7 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
 }
 
 /* v8 ignore next 11 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const namesFile = process.argv[2]!
   const out = process.argv[3]!
   const names: (VerifyTarget | string)[] = JSON.parse(readFileSync(namesFile, 'utf8'))

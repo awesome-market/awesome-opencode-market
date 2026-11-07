@@ -16,6 +16,7 @@ import { slugOf } from './publish/slug.ts'
 import { CatalogIndex, type PluginEntry, type RemovedEntry, type AiVerdict } from '../src/schema.ts'
 import { classify, catId, CAT_NAMES } from '../src/categories.ts'
 import { detectFeatures } from '../src/features.ts'
+import { isMain } from './main-guard.ts'
 
 export interface RunOptions {
   seedPath?: string | undefined
@@ -1108,6 +1109,10 @@ export async function run(opts: RunOptions = {}) {
         // transient failure ≠ junk — keep the old entry rather than dropping it
         // into gone-check on a network hiccup
         ghStats.treeTransient++
+        // stamp the outcome like the meta-probe failure above does — a seed
+        // repo whose tree keeps erroring must not sit 'queued' unexplained
+        // until the 30-day dead cutoff
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-fetch-error')
         return ghPrev ?? null
       }
       if (!treeRes.paths || treeRes.paths.size === 0) {
@@ -1527,7 +1532,7 @@ export async function run(opts: RunOptions = {}) {
 
 // CLI entry (untestable in vitest — excluded from coverage)
 /* v8 ignore next 16 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const arg = (k: string) => { const i = process.argv.indexOf(k); return i > -1 ? process.argv[i + 1] : undefined }
   const max = arg('--max') !== undefined ? Number(arg('--max')) : undefined
   if (max !== undefined && (!Number.isFinite(max) || max <= 0)) {

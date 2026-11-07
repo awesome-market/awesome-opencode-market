@@ -11,9 +11,10 @@
 import { readFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
 import { loadVerdicts, loadDigestState, applyMatureVerdicts, explainEntry } from './verdicts.ts'
+import { isMain } from './main-guard.ts'
 
 /* v8 ignore next 24 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const argv = process.argv.slice(2)
   const explain = argv.includes('--explain')
   const nameAt = argv.indexOf('--name')

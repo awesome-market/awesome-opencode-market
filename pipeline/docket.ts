@@ -37,6 +37,7 @@ import type { PluginEntry } from '../src/schema.ts'
 import { vkey, akey, atCmp, candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
+import { isMain } from './main-guard.ts'
 
 export interface DocketTarget {
   name: string
@@ -891,6 +892,6 @@ export async function main(
 }
 
 /* v8 ignore next 4 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch(x => { console.error(x); exit(1) })
 }

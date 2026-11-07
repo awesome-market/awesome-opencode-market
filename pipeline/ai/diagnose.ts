@@ -53,6 +53,7 @@ import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
+import { isMain } from '../main-guard.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
@@ -968,6 +969,6 @@ export async function main(
 }
 
 /* v8 ignore next 4 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch(x => { console.error(x); exit(1) })
 }

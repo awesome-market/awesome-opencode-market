@@ -6,6 +6,7 @@
  *  staleWarned once at staleDays, dead:true past deadDays). */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
+import { isMain } from './main-guard.ts'
 
 export function markNotified(
   index: CatalogIndex,
@@ -92,8 +93,12 @@ export function markNotified(
 }
 
 export function main(argv: string[] = process.argv): void {
-  const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2]!, 'utf8')))
-  const path = argv[3]!
+  if (!argv[2] || !argv[3]) {
+    console.error('usage: notify-published.ts <index.json> <submissions.txt> [stale-out] [dead-out]')
+    process.exit(1)
+  }
+  const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2], 'utf8')))
+  const path = argv[3]
   const lines = readFileSync(path, 'utf8').split('\n')
   const { lines: out, issues, stale, dead, slugs } = markNotified(index, lines)
   writeFileSync(path, out.join('\n'))
@@ -104,6 +109,6 @@ export function main(argv: string[] = process.argv): void {
   if (argv[5]) writeFileSync(argv[5], dead.join('\n'))
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main()
 }

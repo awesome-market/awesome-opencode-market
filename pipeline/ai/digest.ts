@@ -25,6 +25,7 @@ import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
   tombEpochs, epochGoverning, humanPassCovers, candidateSlot } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
+import { isMain } from '../main-guard.ts'
 
 export interface DigestInput {
   index: CatalogIndex
@@ -609,6 +610,6 @@ export async function main(args: string[] = process.argv): Promise<void> {
 }
 
 /* v8 ignore next 4 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main().catch(x => { console.error(x); exit(1) })
 }

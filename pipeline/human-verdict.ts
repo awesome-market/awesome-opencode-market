@@ -20,6 +20,7 @@
  *  Usage: EVENT ACTION ISSUE_TITLE ISSUE_BODY ISSUE_NUMBER COMMENT_BODY LABEL
  *         ACTOR are read from env; `npx tsx pipeline/human-verdict.ts` */
 import { sections, NO_RESPONSE } from './submission.ts'
+import { isMain } from './main-guard.ts'
 
 export interface VerdictEvent {
   event: string        // 'issues' | 'issue_comment'
@@ -350,7 +351,7 @@ export function dedupeReport(
 }
 
 /* v8 ignore next 17 — thin env→stdout adapter */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   // dedupe mode: `human-verdict.ts dedupe <verdicts.jsonl> <name> <ver> <verdict> <reason> [issue]`
   // → prints dup=1|0 plus amend=<at>| (empty) — amend is the prior human
   // line's timestamp to reuse when this is a reason-only correction, so the

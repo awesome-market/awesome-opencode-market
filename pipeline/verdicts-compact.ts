@@ -22,6 +22,7 @@
 import { readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { AiVerdict } from '../src/schema.ts'
 import { vkey, atCmp, rankable } from './verdicts.ts'
+import { isMain } from './main-guard.ts'
 
 interface Row { raw: string; v: AiVerdict | null }
 
@@ -75,7 +76,7 @@ export function compactLines(lines: string[], opts: { days?: number; now?: numbe
 }
 
 /* v8 ignore next 24 — thin CLI adapter */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const args = process.argv.slice(2)
   const path = args.find(a => !a.startsWith('--'))
   const daysIdx = args.indexOf('--days')

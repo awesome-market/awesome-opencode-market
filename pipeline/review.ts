@@ -3,6 +3,7 @@ import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackage, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { hasPluginEvidence, hasRepoEvidence } from './discover/filter.ts'
+import { isMain } from './main-guard.ts'
 
 /** Fetch outcome — 'error'/'rate-limited' are TRANSIENT (registry/API hiccup),
  *  never a verdict on the submission itself. Collapsing them into not-found
@@ -212,7 +213,7 @@ export function renderRepoReview(r: RepoReview): string {
 }
 
 /* v8 ignore next 6 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const argv = process.argv
   if (argv[2] === '--repo') console.log(renderRepoReview(await reviewRepo(argv[3]!, { token: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN })))
   else console.log(renderReview(await reviewPackage(argv[2]!)))

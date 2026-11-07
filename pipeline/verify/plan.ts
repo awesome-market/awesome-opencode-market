@@ -9,6 +9,7 @@ import { candidateHeldAt } from '../ai/diagnose.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
 import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, tombEpochs, candidateSlot } from '../verdicts.ts'
 import type { VerifyTarget } from './verify.ts'
+import { isMain } from '../main-guard.ts'
 
 /** The version a verify run should exercise, and the metadata describing it. */
 export function verifyTargetOf(e: PluginEntry): { version: string | null; git?: { repo: string; sha?: string }; unverified: boolean; flagged: boolean; features: string[]; hostStale: boolean; verification: PluginEntry['verification'] } {
@@ -195,7 +196,7 @@ export const targetWeight = (t: VerifyTarget): number =>
     + (t.parts?.includes('plugin') && t.parts?.includes('skill') ? 1 : 0)
 
 /* v8 ignore next 20 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [indexPath, outDir, verdictsPath] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
   // a negative/zero cap would slice(0,-N) — verify nearly the whole queue

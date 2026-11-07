@@ -1,6 +1,7 @@
 /** Seed ingestion: awesome-list README → high-star repos → npm-candidate list → import into pipeline. */
 import { ghHeaders, normalizeRepoUrl } from './github.ts'
 import { withTimeout, readJsonCapped } from '../fetch/npm.ts'
+import { isMain } from '../main-guard.ts'
 
 export const AWESOME_URL = 'https://raw.githubusercontent.com/awesome-opencode/awesome-opencode/main/README.md'
 
@@ -66,7 +67,7 @@ export async function buildSeedList(
 }
 
 /* v8 ignore next 6 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const minStars = Number(process.argv[3] ?? 50)
   const list = await buildSeedList({ token: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN, minStars, ...(process.argv[2] ? { url: process.argv[2] } : {}) })
   console.log(list.join('\n'))

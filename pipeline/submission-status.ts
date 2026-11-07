@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { CatalogIndex, type AiVerdict } from '../src/schema.ts'
 import { latestVerdicts, latestHumanVerdicts, slotVerdict, candidateVer, tombEpochs, loadVerdicts } from './verdicts.ts'
+import { isMain } from './main-guard.ts'
 
 export interface StatusRow {
   issue: number
@@ -199,8 +200,12 @@ export function upsertStatusComment(repo: string, row: StatusRow, runId: string)
 }
 
 export function main(argv: string[] = process.argv): void {
-  const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2]!, 'utf8')))
-  const path = argv[3]!
+  if (!argv[2] || !argv[3]) {
+    console.error('usage: submission-status.ts <index.json> <submissions.txt> [verdicts.jsonl]')
+    process.exit(1)
+  }
+  const index = CatalogIndex.parse(JSON.parse(readFileSync(argv[2], 'utf8')))
+  const path = argv[3]
   const lines = readFileSync(path, 'utf8').split('\n')
   const rows = submissionStatuses(index, lines, argv[4] ? loadVerdicts(argv[4]) : [])
   const repo = process.env.GH_REPO
@@ -213,6 +218,6 @@ export function main(argv: string[] = process.argv): void {
 }
 
 /* v8 ignore next 3 -- CLI entry guard, only reachable via `node submission-status.ts` */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main()
 }

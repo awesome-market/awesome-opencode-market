@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
 import type { VerifyResult } from './verify.ts'
+import { isMain } from '../main-guard.ts'
 
 /** Shard-artifact boundary check — results files are JSON.parse'd, but nothing
  *  upstream guarantees their shape. A malformed `status` would land verbatim
@@ -219,7 +220,7 @@ function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
 }
 
 /* v8 ignore next 11 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const [indexPath, resultsDir, outPath] = process.argv.slice(2)
   const index = CatalogIndex.parse(JSON.parse(readFileSync(indexPath!, 'utf8')))
   const results: VerifyResult[] = []

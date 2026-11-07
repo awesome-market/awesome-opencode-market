@@ -11,6 +11,7 @@
  *  Rewrites submissions.txt in place. A missing/unparseable outcomes file
  *  means "no rejections this run" — never fail the publish loop on it. */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { isMain } from './main-guard.ts'
 
 export interface SeedOutcomeIndex {
   plugins: { name: string; source?: { repo?: string | undefined } | undefined }[]
@@ -74,6 +75,6 @@ export function main(argv: string[] = process.argv): void {
 }
 
 /* v8 ignore next 3 -- CLI entry guard */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   main()
 }

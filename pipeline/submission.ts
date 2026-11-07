@@ -1,4 +1,5 @@
 import { normalizeRepoUrl } from './discover/github.ts'
+import { isMain } from './main-guard.ts'
 
 /** Parse a submission issue body → structured fields.
  *  Issue forms render `### <label>\n\n<value>` sections; freeform issues fall
@@ -148,7 +149,7 @@ export function seedLine(s: Submission, issue: number, extra: { version?: string
 //      ISSUE_BODY=<body> SEED_VERSION=<v> SEED_PKG=<p> SEED_AUTHOR=<a>
 //        npx tsx pipeline/submission.ts --seedline <issue#> → JSONL
 /* v8 ignore next 5 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const s = parseSubmission(process.env.ISSUE_BODY ?? '', process.env.ISSUE_TITLE)
   const i = process.argv.indexOf('--seedline')
   console.log(i > 0

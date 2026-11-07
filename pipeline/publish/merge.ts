@@ -272,9 +272,14 @@ export function mergeEntries(
             contains: e.pendingUpdate.contains ?? prev.pendingUpdate.contains,
           }
         }
-      } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion) {
+      } else if (prev?.pendingUpdate && prev.pendingUpdate.version !== out.latestVersion
+          && !e.capabilities.findings.includes(`sec:evidence-regressed@${prev.pendingUpdate.version}`)) {
         // remote holds a version we never saw → keep the hold (unless ours just
-        // released that exact version — then the hold is resolved, don't resurrect)
+        // released that exact version — then the hold is resolved, don't resurrect).
+        // Exception: the worker deliberately UNBOUND a hold pinned to a version
+        // whose plugin evidence regressed (spec §1 — "解绑交回 merge 重估") and
+        // stamped sec:evidence-regressed@<version>; resurrecting it here would
+        // re-pin evidence-less code on the release path, defeating the unbind.
         out.pendingUpdate = prev.pendingUpdate
       }
     } else if (out.pendingUpdate) {

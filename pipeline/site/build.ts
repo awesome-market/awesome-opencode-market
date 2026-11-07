@@ -8,6 +8,7 @@ import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import type { PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, atCmp } from '../verdicts.ts'
 import { readJsonCapped } from '../fetch/npm.ts'
+import { isMain } from '../main-guard.ts'
 
 type Caps = PluginEntry['capabilities']
 type Ver = PluginEntry['verification']
@@ -875,7 +876,7 @@ export async function buildSkillCatalog(index: CatalogIndex, outDir: string,
 }
 
 /* v8 ignore next 7 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   // the entry guard must come AFTER every const declaration — the void-IIFE
   // runs buildSkillCatalog synchronously up to its first await, and any
   // module-level const the guard preceded is still in TDZ at that point
