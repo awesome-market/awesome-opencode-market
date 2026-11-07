@@ -731,8 +731,14 @@ export async function run(opts: RunOptions = {}) {
             ? anchorIntegrity(heldPrev.capabilities, heldPrev.integrity, pk.integrityOf[heldPrev.latestVersion] ?? null)
             : { integrity: heldPrev.integrity ?? null, capabilities: heldPrev.capabilities }
           // repo-evidence findings ride the displayed slot's caps — same
-          // checks the fresh-entry path runs (identity-level, not scan-level)
-          let dispCaps = dispA.capabilities
+          // checks the fresh-entry path runs (identity-level, not scan-level).
+          // Re-derivable findings are dropped first (same set refreshMeta
+          // filters, plus the version-anchored evidence-regressed marker):
+          // a fixed repo name or moved-on regression must not linger as a
+          // stale signal while the hold pins the display slot.
+          let dispCaps = { ...dispA.capabilities, findings: dispA.capabilities.findings.filter(x =>
+            !x.startsWith('sec:repo-mismatch') && x !== 'sec:repo-dir-traversal' &&
+            !x.startsWith('sec:repo-declared-mismatch') && !x.startsWith('sec:evidence-regressed')) }
           if (dirTraversal) dispCaps = addFinding(dispCaps, 'sec:repo-dir-traversal')
           else if (repoPkg.status === 'ok' && repoPkg.pkgName && repoPkg.pkgName !== cand.name && repoPkg.pkgName !== cand.name.split('/').pop()) {
             dispCaps = addFinding(dispCaps, `sec:repo-mismatch:${clip(repoPkg.pkgName)}`)

@@ -306,9 +306,17 @@ export function mergeEntries(
         // remote caps are authoritative for the slot — but findings/redFlags
         // the fresh entry computed THIS run (evidence-regression markers,
         // carried-forward extras) must union in: they're additive signals,
-        // never a reason to drop either side
+        // never a reason to drop either side.
+        // sec:*/sec-delta:* findings are the exception on the PREV side: every
+        // one is re-derived each run (worker probes, trustFlags deltas, or the
+        // rescan keepFindings carry on the fresh entry's own caps). Unioning
+        // the stored copy would make a resolved signal — fixed repo name,
+        // restored evidence, moved-on delta — immortal on the detail page.
+        // Byte-stable scan findings (rule:file) still union normally.
         ...prevVer.capabilities,
-        findings: [...new Set([...prevVer.capabilities.findings, ...e.capabilities.findings])],
+        findings: [...new Set([
+          ...prevVer.capabilities.findings.filter(f => !f.startsWith('sec:') && !f.startsWith('sec-delta:')),
+          ...e.capabilities.findings])],
         redFlags: [...new Set([...prevVer.capabilities.redFlags, ...e.capabilities.redFlags])],
       }
       out.verification = prevVer.verification
