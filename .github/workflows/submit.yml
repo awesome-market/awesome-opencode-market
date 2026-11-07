@@ -21,7 +21,10 @@ jobs:
     if: >-
       github.event.issue.state == 'open'
       && !github.event.issue.pull_request
-      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (contains(github.event.issue.labels.*.name, 'submission')
+          || startsWith(github.event.issue.title, '[submit]')
+          || startsWith(github.event.issue.title, '[Submit]')
+          || startsWith(github.event.issue.title, '[SUBMIT]'))
       && (github.event_name == 'issues'
           && (github.event.action != 'labeled'
           || (github.event.label.name == 'submission' && github.actor != 'github-actions[bot]'))
@@ -418,7 +421,10 @@ jobs:
     if: >-
       github.event.issue.state == 'open'
       && !github.event.issue.pull_request
-      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (contains(github.event.issue.labels.*.name, 'submission')
+          || startsWith(github.event.issue.title, '[submit]')
+          || startsWith(github.event.issue.title, '[Submit]')
+          || startsWith(github.event.issue.title, '[SUBMIT]'))
       && (
         (github.event_name == 'issues' && github.event.action == 'labeled'
           && github.event.label.name == 'submission:approved'
@@ -1172,7 +1178,10 @@ jobs:
       && contains(fromJSON('["created","edited"]'), github.event.action)
       && github.event.issue.state == 'open'
       && !github.event.issue.pull_request
-      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (contains(github.event.issue.labels.*.name, 'submission')
+          || startsWith(github.event.issue.title, '[submit]')
+          || startsWith(github.event.issue.title, '[Submit]')
+          || startsWith(github.event.issue.title, '[SUBMIT]'))
       && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
           || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W')
           || startsWith(github.event.comment.body, '  /w') || startsWith(github.event.comment.body, '  /W'))
@@ -1254,7 +1263,10 @@ jobs:
       && contains(fromJSON('["created","edited"]'), github.event.action)
       && github.event.issue.state == 'open'
       && !github.event.issue.pull_request
-      && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
+      && (contains(github.event.issue.labels.*.name, 'submission')
+          || startsWith(github.event.issue.title, '[submit]')
+          || startsWith(github.event.issue.title, '[Submit]')
+          || startsWith(github.event.issue.title, '[SUBMIT]'))
       && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
           || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W')
           || startsWith(github.event.comment.body, '  /w') || startsWith(github.event.comment.body, '  /W'))

@@ -118,6 +118,23 @@ describe('submit.yml — withdraw/conseed pass the full name+repo key set', () =
   })
 })
 
+describe('submit.yml — [submit] title fallback covers the canonical case variants', () => {
+  // GitHub expressions have no case-insensitive startsWith — the gates
+  // enumerate '[submit]'/'[Submit]'/'[SUBMIT]' (the form always labels, this
+  // fallback exists for freeform issues). The in-step parser is already
+  // /i-flagged; every job gate must agree or a case-variant title issue
+  // without the label is a silent orphan.
+  it('all four label-or-title gates accept all three variants', () => {
+    const gates = SUBMIT_YML.match(/contains\(github\.event\.issue\.labels\.\*\.name, 'submission'\)[\s\S]*?\[SUBMIT\]'\)\)/g) ?? []
+    expect(gates.length).toBe(4)
+    for (const g of gates) {
+      expect(g).toContain("'[submit]'")
+      expect(g).toContain("'[Submit]'")
+      expect(g).toContain("'[SUBMIT]'")
+    }
+  })
+})
+
 describe('catalog-withdraw.sh — env ENTRY accepts a space-joined key list', () => {
   it('zero-seed fallback retracts pending entries matched by name OR source.repo', () => {
     const idx = JSON.parse(remoteShow('index.json'))
