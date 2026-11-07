@@ -132,9 +132,9 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     // plugin add spec travelled via: env … opencode plugin add pkg@1.0.0
     const add = calls.find(c => c.args.includes('add'))
     expect(add!.args.join(' ')).toContain('opencode plugin add pkg@1.0.0')
-    // wrapper script itself: sudo -n -u nobody env 'K=V'… "$@"
+    // wrapper script itself: sudo -n -u <shq'd user> env 'K=V'… "$@"
     const wrapper = readFileSync(join(home, 'sb.sh'), 'utf8')
-    expect(wrapper).toContain('sudo -n -u nobody env')
+    expect(wrapper).toContain(`sudo -n -u 'nobody' env`)
     expect(wrapper).toContain(`'HOME=${join(home, 'u')}'`)
   })
 
@@ -357,7 +357,12 @@ describe('verifyShard sandbox probing', () => {
     expect(results[0]).toMatchObject({ name: 'p', version: '1.2.3', status: 'failed' })
   })
 
-  it('sudo probe failure → degrades to unconfined with a warning', async () => {
+  it('sudo probe failure → shard refuses, never degrades to unconfined untrusted exec', async () => {
+    // a requested sandbox that can't be established must FAIL CLOSED: plugin
+    // code running as the runner uid could write results-*.json itself and
+    // forge every 'verified' in it (V-1). The job's own step-level gate is a
+    // separate check minutes earlier — a transient sudo flake between them
+    // must not silently trade the whole shard's confinement for a warning.
     const home = mkdtempSync(join(tmpdir(), 'vsp-'))
     const out = join(home, 'r.json')
     const calls: string[] = []
@@ -366,11 +371,11 @@ describe('verifyShard sandbox probing', () => {
       if (cmd === 'sudo') throw new Error('sudo: a password is required')
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
-    const results = await verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn })
-    expect(results).toHaveLength(1)
-    // degraded: raw commands, no sb.sh wrapper anywhere
+    await expect(verifyShard(['p'], out, { home, sandboxUser: 'nobody', execFn: fake, spawnFn: deadSpawn }))
+      .rejects.toThrow(/refusing to verify untrusted packages unconfined/)
+    // nothing ran beyond the probe — no target touched opencode at all
     expect(calls.some(c => c.endsWith('sb.sh'))).toBe(false)
-    expect(calls).toContain('opencode')
+    expect(calls).not.toContain('opencode')
   })
 
   it('deep probe: sudo ok but chown/write chain broken → shard fails loudly (2025-11-04 regression)', async () => {

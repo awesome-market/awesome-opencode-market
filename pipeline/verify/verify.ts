@@ -234,7 +234,7 @@ async function setupSandbox(home: string, user: string, run: ExecFn): Promise<Sa
   const env = xdgEnv(uh)
   const kvs = Object.entries(env).map(([k, v]) => shq(`${k}=${v ?? ''}`)).join(' ')
   const wrapper = join(home, 'sb.sh')
-  writeFileSync(wrapper, `#!/bin/sh\nexec sudo -n -u ${user} env ${kvs} "$@"\n`, { mode: 0o755 })
+  writeFileSync(wrapper, `#!/bin/sh\nexec sudo -n -u ${shq(user)} env ${kvs} "$@"\n`, { mode: 0o755 })
   return { user, wrapper, uh }
 }
 
@@ -685,17 +685,21 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
   opts: { execFn?: ExecFn; home?: string; timeoutMs?: number; sandboxUser?: string;
     spawnFn?: SpawnFn; opencodeVersion?: string; bootWaitMs?: number; apiWaitMs?: number;
     tuiOpts?: { settleMs?: number; cols?: number; rows?: number } } = {}): Promise<VerifyResult[]> {
-  // one sudo probe per shard — if `sudo -n` is unavailable (local dev), degrade
-  // to in-process verification rather than failing every target. verify.yml
-  // hard-gates on the probe before this runs, so CI never hits the fallback.
+  // one sudo probe per shard. A REQUESTED sandbox that can't be established
+  // must fail the shard, never degrade: running untrusted plugin code as the
+  // runner uid puts results-*.json within the plugin's own reach (V-1 — it
+  // could forge every 'verified' in the file). verify.yml hard-gates on the
+  // same probe as a step, so this only trips on a transient sudo flake —
+  // a red job + alert beats a green shard full of forgeable verdicts. Local
+  // callers wanting in-process verification simply don't pass sandboxUser.
   let sandboxUser = opts.sandboxUser
   if (sandboxUser) {
     const probe = opts.execFn ?? exec
     const ok = await probe('sudo', ['-n', '-u', sandboxUser, 'true'], { timeout: 10_000 })
       .then(() => true).catch(() => false)
     if (!ok) {
-      console.warn(`sandbox user '${sandboxUser}' unavailable — running unconfined`)
-      sandboxUser = undefined
+      throw new Error(`sandbox user '${sandboxUser}' probe failed (sudo -n -u ${sandboxUser} true) — ` +
+        `refusing to verify untrusted packages unconfined`)
     } else {
       // deep probe: `sudo -u nobody true` succeeding does NOT prove the
       // chown/mkdir/write chain works — the 2025-11-04 incident was exactly
