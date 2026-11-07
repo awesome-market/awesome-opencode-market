@@ -200,9 +200,12 @@ jobs:
             # stderr carries the released/held line — keep the LAST attempt's
             # output for the step summary below (each retry truncates it)
             # an exit-0-with-empty-output is the same failure mode as the
-            # remerge guard above — never mv an empty file over the merged index
+            # remerge guard above — never mv an empty file over the merged index.
+            # The JSON.parse check additionally rejects a truncated-but-nonempty
+            # emit (killed mid-write) that -s alone would pass through.
             if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log \
-                && [ -s /tmp/index.released.json ]; then
+                && [ -s /tmp/index.released.json ] \
+                && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' /tmp/index.released.json; then
               mv /tmp/index.released.json /tmp/index.json
               RELEASE_FAILED=0
             else

@@ -42,4 +42,32 @@ describe('release.ts emit sites — every mv is non-empty guarded', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  it('every guarded mv also JSON-validates the emit (truncated-but-nonempty writes)', () => {
+    // `-s` only proves non-emptiness — a release.ts killed mid-write leaves a
+    // nonempty PREFIX of valid JSON that still fails JSON.parse. Every fold
+    // site must therefore chain a `node -e 'JSON.parse(…)' <out>` check into
+    // the same if-condition, on the same line as the captured output path.
+    const offenders: string[] = []
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8')
+      const lines = src.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i]!.match(/release\.ts\b[^>]*>\s*(\S+)/)
+        if (!m) continue
+        const out = m[1]!
+        for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+          if (new RegExp(`mv\\s+${out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(lines[j]!)) {
+            const window = lines.slice(i, j + 1).join('\n')
+            const esc = out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            if (!new RegExp(`JSON\\.parse[^\\n]*${esc}`).test(window))
+              offenders.push(`${f}:${i + 1}`)
+            break
+          }
+          if (/;\s*then|fi\b/.test(lines[j]!)) break
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
 })

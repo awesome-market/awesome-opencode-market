@@ -699,9 +699,15 @@ jobs:
             comment "没有可重验的目标：${WARN:-未解析到包名}。用法：\`/retest <pkg>[@ver]\`。"
             exit 0
           fi
+          # stamp BEFORE dispatching — the run lookup below must not grab a
+          # concurrent verify run (scheduled ticks or another retest) that
+          # happens to be newest; createdAt >= SINCE + event=workflow_dispatch
+          # pins the link to a run this dispatch could have produced
+          SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           gh workflow run verify.yml -R "$GH_REPO" -f targets="$TARGETS" -f retest=true \
             || { comment "⚠️ 派发 verify.yml 失败——重验未启动，稍后重试 \`/retest\` 或手动 \`gh workflow run verify.yml -f targets='$TARGETS'\`。"; exit 1; }
-          RUN_URL=$(sleep 8; gh run list --workflow=verify.yml -R "$GH_REPO" --limit 1 --json url --jq '.[0].url' 2>/dev/null || true)
+          RUN_URL=$(sleep 8; gh run list --workflow=verify.yml -R "$GH_REPO" --limit 10 --json url,event,createdAt \
+            --jq "[.[] | select(.event == \"workflow_dispatch\" and .createdAt >= \"$SINCE\")][0].url // empty" 2>/dev/null || true)
           MSG="🔁 已派发重验：\`$TARGETS\`（retest 模式，绕过自动重试上限）——结果稍后合入 index，failed 终态也会重新实测。"
           if [ -n "$WARN" ]; then MSG="$MSG"$'\n\n'"注意：$WARN"; fi
           if [ -n "$RUN_URL" ]; then MSG="$MSG"$'\n\n'"Run: $RUN_URL"; fi

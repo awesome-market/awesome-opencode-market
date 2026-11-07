@@ -100,9 +100,14 @@ for i in 1 2 3 4; do
   if [ "$APPLY_WANT" = 1 ] && [ -f "$WT/index.json" ]; then
     # [ -s ] guard: release.ts exiting 0 with EMPTY stdout would otherwise
     # truncate index.json and push the empty catalog (same failure shape the
-    # catalog.yml release fold guards against)
+    # catalog.yml release fold guards against). The JSON.parse check catches
+    # the narrower corruption a -s test misses: a truncated-but-nonempty emit
+    # (process killed mid-write) would still pass -s and mv garbage over the
+    # index — release.ts stringifies an already-parsed CatalogIndex, so any
+    # schema drift is impossible; only write corruption needs ruling out.
     if npx tsx pipeline/release.ts "$WT/index.json" "$WT/ai-verdicts.jsonl" "$WT/digest-state.json" > "$WT/index.new.json" \
-       && [ -s "$WT/index.new.json" ]; then
+       && [ -s "$WT/index.new.json" ] \
+       && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$WT/index.new.json"; then
       mv "$WT/index.new.json" "$WT/index.json"
       git -C "$WT" add index.json
       APPLY_RES=ok

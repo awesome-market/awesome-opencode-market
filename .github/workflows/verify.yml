@@ -317,9 +317,11 @@ jobs:
             # re-derives the same verdict state.
             # [ -s ] guard — same failure shape as catalog.yml's release fold
             # and catalog-append.sh's apply: an exit-0 empty emit must not
-            # truncate index.new.json into a published empty catalog
+            # truncate index.new.json into a published empty catalog. The
+            # JSON.parse check also rejects a truncated-but-nonempty emit.
             if npx tsx pipeline/release.ts /tmp/index.new.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json \
-                && [ -s /tmp/index.released.json ]; then
+                && [ -s /tmp/index.released.json ] \
+                && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' /tmp/index.released.json; then
               mv /tmp/index.released.json /tmp/index.new.json
               RELEASE_FAILED=0
             else
