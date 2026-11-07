@@ -91,7 +91,7 @@ describe('A1-1 declared-mismatch reads the SUBMITTED repo, not the search hit', 
 })
 
 describe('A1-2 a crashed seed gets a run-error outcome instead of silent queueing', () => {
-  it('malformed packument crashes the worker → seedOutcome run-error', async () => {
+  it('worker crash → seedOutcome run-error', async () => {
     const tgz = mkTgz()
     const d = tmp('a24-')
     const seed = join(d, 'seed.txt')
@@ -105,9 +105,14 @@ describe('A1-2 a crashed seed gets a run-error outcome instead of silent queuein
       }
       if (url.includes('registry.npmjs.org/good-pkg')) return new Response(packument('good-pkg'))
       if (url.includes('registry.npmjs.org/crash-pkg')) {
-        // keywords as a STRING — hasPluginEvidence maps over it → worker throws
-        return new Response(packument('crash-pkg', { keywords: 'not-an-array' }))
+        // needs a declared repo so the repoMeta probe runs; the GitHub
+        // response below then hands the worker a non-iterable topics —
+        // run.ts spreads it into classify args → TypeError → run-error.
+        // (Was: keywords-as-string crashed hasPluginEvidence; fetchPackument
+        // now coerces packument fields instead of letting them throw.)
+        return new Response(packument('crash-pkg', { repository: 'https://github.com/x/y' }))
       }
+      if (url.includes('api.github.com/repos/')) return mkRes({ topics: {} })
       return null
     })
     await run({ outPath: join(d, 'i.json'), fetchFn: f, now: 't', seedPath: seed, seedOutcomesPath: outcomesPath })

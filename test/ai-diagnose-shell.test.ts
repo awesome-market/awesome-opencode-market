@@ -10,7 +10,7 @@
  *  `tsx -e` schema gate — to the genuine tsx. .deps-stamp is pre-seeded so
  *  npm ci is skipped. Nothing touches the real repo or network. */
 import { describe, it, expect, beforeAll } from 'vitest'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, symlinkSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -149,24 +149,41 @@ describe('ai-diagnose.sh — single-instance lock', () => {
     })
   }, 120_000)
 
-  it('audit#4: stale lock with a LIVE owner pid is NOT reclaimed; dead pid is', () => {
+  it('audit#4: stale lock — live diagnose owner kept, recycled pid reclaimed, dead pid reclaimed', () => {
     withCanned({ CANNED_VERDICTS: `${VERDICT_A}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
       const lockDir = join(stated, 'diagnose.lock')
       const old = new Date(Date.now() - 3 * 3600 * 1000)
       const stamp = old.toISOString().replace(/[-:T]/g, '').slice(0, 12)
-      // live owner: this vitest process — kill -0 succeeds → age alone must
-      // not steal the lock (its late EXIT trap would rmdir the new owner's)
-      mkdirSync(lockDir, { recursive: true })
-      writeFileSync(join(lockDir, 'pid'), `${process.pid}\n`)
-      execFileSync('touch', ['-t', stamp, lockDir])
-      const skip = runScript()
-      expect(skip.out).toContain('another run in progress')
-      expect(existsSync(lockDir)).toBe(true)   // lock preserved for the live owner
-      rmSync(lockDir, { recursive: true, force: true })
+      const setup = (pid: number) => {
+        rmSync(lockDir, { recursive: true, force: true })
+        mkdirSync(lockDir)
+        writeFileSync(join(lockDir, 'pid'), `${pid}\n`)
+        execFileSync('touch', ['-t', stamp, lockDir])
+      }
+      // live owner whose args still name ai-diagnose.sh → NOT reclaimed:
+      // kill -0 alone can't distinguish it from a recycled pid, and stealing
+      // a live run's lock lets its EXIT trap rmdir the new owner's lock
+      const decoy = join(root, 'ai-diagnose.sh')
+      writeFileSync(decoy, '')
+      const owner = spawn('tail', ['-f', decoy])
+      try {
+        setup(owner.pid!)
+        const skip = runScript()
+        expect(skip.out).toContain('another run in progress')
+        expect(existsSync(lockDir)).toBe(true)   // lock preserved for the live owner
+      } finally { owner.kill('SIGKILL') }
+      // live pid that is NOT diagnose — the OS recycled the dead owner's pid
+      // onto an unrelated process; kill -0 alone would pin the stale lock
+      // forever, so the args check must reclaim it
+      const other = spawn('sleep', ['300'])
+      try {
+        setup(other.pid!)
+        const run = runScript()
+        expect(run.out).not.toContain('another run in progress')
+        expect(existsSync(lockDir)).toBe(false)
+      } finally { other.kill('SIGKILL') }
       // dead owner: pid above pid_max can never exist → reclaim proceeds
-      mkdirSync(lockDir)
-      writeFileSync(join(lockDir, 'pid'), '99999999\n')
-      execFileSync('touch', ['-t', stamp, lockDir])
+      setup(99999999)
       const run = runScript()
       expect(run.out).not.toContain('another run in progress')
       expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-a')

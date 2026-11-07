@@ -371,3 +371,36 @@ describe('audit: content material (§5/§6 package contents reach the reviewer)'
     expect(await contentMaterial('p', '1.0.0', null)).toEqual([])
   })
 })
+
+describe('audit#4: health stamp merges — shell-stamped fields survive', () => {
+  it('foreign keys (pushed) are preserved while owned keys refresh', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'dops-health-'))
+    const hp = join(d, 'diagnose-health.json')
+    // the launchd wrapper stamps `pushed` AFTER diagnose exits — a wholesale
+    // rewrite here used to erase it before publish_health ever read it, so
+    // the documented {at,wrote,l05,omlx,pushed} stamp never carried pushed
+    writeFileSync(hp, JSON.stringify({ at: '2020-01-01T00:00:00Z', wrote: 9, l05: 'failed', omlx: 'down', pushed: 'spooled' }))
+    const { argv } = files([held])
+    argv.push('--health', hp)
+    await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+    const h = JSON.parse(readFileSync(hp, 'utf8'))
+    expect(h.pushed).toBe('spooled')                    // foreign key preserved
+    expect(h.l05).toBe('ok')                            // owned keys refreshed
+    expect(h.omlx).toBe('up')
+    expect(h.wrote).toBe(1)
+    expect(h.at).not.toBe('2020-01-01T00:00:00Z')
+  })
+  it('corrupt or non-object health file still writes a fresh stamp', async () => {
+    for (const body of ['not json{{{', '"str"', '[1,2]', '42']) {
+      const d = mkdtempSync(join(tmpdir(), 'dops-health2-'))
+      const hp = join(d, 'h.json')
+      writeFileSync(hp, body)
+      const { argv } = files([held])
+      argv.push('--health', hp)
+      await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+      const h = JSON.parse(readFileSync(hp, 'utf8'))
+      expect(h.l05).toBe('ok')
+      expect(h.pushed).toBeUndefined()
+    }
+  })
+})

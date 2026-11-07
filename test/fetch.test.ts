@@ -36,6 +36,28 @@ describe('fetch/npm', () => {
     const { pk: p } = await fetchPackument('x', { fetchFn: (async () => mkRes(d)) as typeof fetch })
     expect(p!.license).toBe('Apache-2.0')
   })
+  it('audit#4: non-object packument body degrades to error — never rejects', async () => {
+    // a 200 with literal `null`/array/scalar body used to escape as a rejected
+    // promise (doc['dist-tags'] TypeError) — diagnose's pkOf→shaFor→mapPool
+    // dies whole-run on one bad registry response; the contract is degrade
+    for (const body of [null, [1, 2], 'str', 42]) {
+      const r = await fetchPackument('x', {
+        fetchFn: (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch,
+      })
+      expect(r.status).toBe('error')
+      expect(r.pk).toBeNull()
+    }
+  })
+  it('audit#4: non-array maintainers/keywords degrade to empty, not a crash', async () => {
+    const d = { 'dist-tags': { latest: '1' },
+      versions: { '1': { dist: { tarball: 't', integrity: 'sha512-A=' }, keywords: 'notalist', engines: 'node>=18' } },
+      maintainers: 'not-an-array', time: {} }
+    const { pk: p, status } = await fetchPackument('x', { fetchFn: (async () => mkRes(d)) as typeof fetch })
+    expect(status).toBe('ok')
+    expect(p!.maintainers).toEqual([])
+    expect(p!.keywords).toEqual([])
+    expect(p!.compatOf['1']!.engines).toBe('node>=18')   // good fields still parse
+  })
   it('fetchTarball returns buffer, throws on failure', async () => {
     const ok = async () => new Response(new Uint8Array([1, 2, 3]))
     expect((await fetchTarball('https://x/t', { fetchFn: ok as typeof fetch })).length).toBe(3)

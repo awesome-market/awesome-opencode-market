@@ -981,7 +981,19 @@ export async function main(
   const healthPath = arg('--health')
   if (healthPath) {
     try {
+      // merge, don't replace: the launchd wrapper stamps `pushed` into this
+      // file AFTER diagnose exits — a fresh object here erases it before the
+      // next run's publish_health ever reads it, so the documented
+      // {at,wrote,l05,omlx,pushed} stamp never carries pushed and the publish
+      // signature's pushed arm compares None==None forever. Owned keys
+      // (at/wrote/l05/omlx) always overwrite; foreign keys survive.
+      let prev: Record<string, unknown> = {}
+      try {
+        const p: unknown = JSON.parse(readFileSync(healthPath, 'utf8'))
+        if (p && typeof p === 'object' && !Array.isArray(p)) prev = p as Record<string, unknown>
+      } catch { /* first run or corrupt stamp — start clean */ }
       writeFileSync(healthPath, JSON.stringify({
+        ...prev,
         at: new Date().toISOString(), wrote: out.length,
         l05: l05State,
         omlx: !llmUp && consecErr >= CIRCUIT_MAX ? 'died-mid-run' : omlxState,

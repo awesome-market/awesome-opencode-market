@@ -137,29 +137,48 @@ export async function fetchPackument(
   } catch {
     return { pk: null, status: 'error' }
   }
-  const distTags = (doc['dist-tags'] ?? {}) as Record<string, string>
-  const latest = distTags.latest ?? null
+  // a 200 with a non-object body (literal `null`, array, scalar) must degrade
+  // like every other fetch failure — the contract is PackumentResult, not a
+  // rejected promise. Uncaught, `doc['dist-tags']` TypeErrors and the caller
+  // (diagnose's pkOf→shaFor→mapPool, run.ts workers, review.ts) dies whole-run
+  // on one bad registry response instead of skipping the package.
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return { pk: null, status: 'error' }
+  // same family one level down: `?? []` only covers null/undefined — a
+  // string/number/object maintainers or keywords slips through and crashes
+  // `.map` here or a downstream `.includes`/iteration later
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  const distTags = Object.fromEntries(
+    Object.entries(
+      doc['dist-tags'] && typeof doc['dist-tags'] === 'object' && !Array.isArray(doc['dist-tags'])
+        ? doc['dist-tags'] as Record<string, unknown>
+        : {})
+      .filter((e): e is [string, string] => typeof e[1] === 'string'))
+  const strOr = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+  const latest = strOr(distTags.latest)
   const v = latest ? doc.versions?.[latest] : undefined
   const repo = v?.repository
-  const repoUrl = typeof repo === 'string' ? repo : repo?.url ?? null
+  const repoUrl = typeof repo === 'string' ? repo : strOr(repo?.url)
   const lic = v?.license
   return {
     pk: {
       name,
       latest,
-      latestPublishedAt: latest ? doc.time?.[latest] ?? null : null,
-      createdAt: doc.time?.created ?? null,
-      modifiedAt: doc.time?.modified ?? null,
+      latestPublishedAt: latest ? strOr(doc.time?.[latest]) : null,
+      createdAt: strOr(doc.time?.created),
+      modifiedAt: strOr(doc.time?.modified),
       repository: repoUrl,
-      repositoryDir: typeof repo === 'object' && repo ? repo.directory ?? null : null,
-      license: typeof lic === 'string' ? lic : lic?.type ?? null,
-      tarballUrl: v?.dist?.tarball ?? null,
+      repositoryDir: repo && typeof repo === 'object' ? strOr(repo.directory) : null,
+      license: typeof lic === 'string' ? lic : strOr(lic?.type),
+      tarballUrl: strOr(v?.dist?.tarball),
       deprecated: Boolean(v?.deprecated),
-      deprecatedMessage: v?.deprecated ?? null,
-      keywords: v?.keywords ?? [],
-      main: v?.main ?? null,
+      deprecatedMessage: strOr(v?.deprecated),
+      keywords: strList(v?.keywords),
+      main: strOr(v?.main),
       exports: v?.exports ?? null,
-      maintainers: (doc.maintainers ?? []).map(m => typeof m === 'string' ? m : m.name ?? '').filter(Boolean),
+      maintainers: (Array.isArray(doc.maintainers) ? doc.maintainers : [])
+        .map(m => typeof m === 'string' ? m : (m && typeof m === 'object' ? (m as { name?: unknown }).name : ''))
+        .filter((x): x is string => typeof x === 'string' && x.length > 0),
       distTags,
       readme: typeof doc.readme === 'string' ? doc.readme.slice(0, 200_000) : null,
       integrityOf: Object.fromEntries(

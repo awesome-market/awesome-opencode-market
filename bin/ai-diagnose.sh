@@ -179,7 +179,25 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   case $OLD_PID in
     '') OWNER_DEAD=1 ;;                          # pre-pid-era lock, or crash before the write
     *[!0-9]*) OWNER_DEAD=1 ;;                    # corrupt pid file — treat as dead
-    *) kill -0 "$OLD_PID" 2>/dev/null || OWNER_DEAD=1 ;;
+    *)
+      if kill -0 "$OLD_PID" 2>/dev/null; then
+        # pid alive — but is it still OUR owner? kill -0 can't tell a live
+        # ai-diagnose.sh from an unrelated process the OS recycled the pid
+        # onto; the latter would pin this stale lock forever (every run sees
+        # "owner alive" and skips → only the 48h watchdog is the backstop).
+        # Args still naming the script count as a live owner; empty args
+        # (ps failure) stay conservative — treat as alive rather than risk
+        # stealing a genuinely running diagnose's lock.
+        OWNER_ARGS=$(ps -p "$OLD_PID" -o args= 2>/dev/null || true)
+        case $OWNER_ARGS in
+          *ai-diagnose.sh*) : ;;
+          '') : ;;
+          *) OWNER_DEAD=1 ;;
+        esac
+      else
+        OWNER_DEAD=1
+      fi
+      ;;
   esac
   # stale reclaim must be atomic: rmdir+mkdir lets a second reclaimer delete
   # the fresh lock the first just made (double-run + its trap later rmdir's
