@@ -190,15 +190,24 @@ function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
       .filter((v): v is NonNullable<typeof v> =>
         v?.status === 'verified' && !!v.integrity && v.opencodeVersion === OPENCODE_VERSION)
     if (!donors.length) return p
-    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'])
-      : PluginEntry['verification'] => {
-      if (!anchor || ver.status === 'verified') return ver
+    // adoption is a slot write like any other — the honest-label rule
+    // mergeResults applies to measured results applies here too: a recipient
+    // slot carrying redFlags must not display 'verified' (same bytes can
+    // carry different flags across a ruleset/metadata skew between the two
+    // slots' scans). Evidence fields survive the downgrade, same as writes.
+    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'],
+      flagged: boolean): PluginEntry['verification'] => {
+      // skipIfFlagged wraps EVERY outcome — an already-'verified' recipient
+      // on a flagged slot is the same dishonest label a fresh write would be.
+      if (!anchor || ver.status === 'verified') return skipIfFlagged(ver, flagged)
       const donor = donors.find(d => d.integrity === anchor)
-      return donor ? { ...donor } : ver
+      return donor ? skipIfFlagged({ ...donor }, flagged) : ver
     }
-    const display = adopt(slotAnchor(p, 'display'), p.verification)
+    const display = adopt(slotAnchor(p, 'display'), p.verification,
+      p.capabilities.redFlags.length > 0)
     const pu = p.pendingUpdate
-      ? adopt(p.pendingUpdate.integrity, p.pendingUpdate.verification)
+      ? adopt(p.pendingUpdate.integrity, p.pendingUpdate.verification,
+          p.pendingUpdate.capabilities.redFlags.length > 0)
       : undefined
     if (display === p.verification && (!p.pendingUpdate || pu === p.pendingUpdate.verification)) return p
     return {

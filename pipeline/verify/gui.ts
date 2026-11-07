@@ -11,7 +11,7 @@
  *  Whitelisted requires: @opencode/plugin/gui (stub), effect, solid-js* (real,
  *  renderer-side modules the host provides). Anything else → load failure. */
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
@@ -345,9 +345,18 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
   return { path: file, src: readFileSync(file, 'utf8') }
 }
 
-/* v8 ignore next 8 — subprocess entry: sandboxed gui eval prints one JSON line */
+/* v8 ignore next 14 — subprocess entry: sandboxed gui eval prints one JSON line */
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // The parent takes the LAST stdout line as the verdict. Untrusted bundle
+  // code shares this process's console/setTimeout (HOST_GLOBALS) — a pending
+  // timer could print a forged '{"ok":true}' AFTER our result and win the
+  // `.at(-1)` parse, or keep the process alive to the 90s urun timeout.
+  // Synchronous write + hard exit leaves no async gap: the harness result is
+  // always the final line and leftover untrusted timers never fire.
+  const out = (r: unknown) => {
+    writeSync(1, JSON.stringify(r) + '\n')
+    process.exit(0)
+  }
   checkGuiBundle(readFileSync(process.argv[2]!, 'utf8'))
-    .then(r => { console.log(JSON.stringify(r)) })
-    .catch(e => { console.log(JSON.stringify({ ok: false, stage: 'evaluate', error: String(e) })) })
+    .then(out, e => out({ ok: false, stage: 'evaluate', error: String(e) }))
 }
