@@ -312,6 +312,11 @@ sort -u "$CAT/ai-verdicts.jsonl" "$SPOOL" > "$VVIEW" 2>/dev/null \
 # build the args in an array — ${DIAGNOSE_NAME:+--name "$v"} word-splits a
 # value containing whitespace into a stray positional ('a, b' → only 'a'
 # reviewed, 'b' silently dropped)
+# ${ARGS[@]+"${ARGS[@]}"} not "${ARGS[@]}": launchd runs this via #!/bin/bash
+# = macOS bash 3.2, where nounset + an EMPTY array's "${a[@]}" is a fatal
+# 'unbound variable' — every plain hourly run (no DIAGNOSE_NAME/FORCE) died
+# here after all the prep work. The +-guard expands to zero args on empty
+# and preserves each element (spaces included) on bash 3.2 AND 5.
 ARGS=()
 if [ -n "${DIAGNOSE_NAME:-}" ]; then ARGS+=(--name "$DIAGNOSE_NAME"); fi
 case ${DIAGNOSE_FORCE:-} in ''|0|false|no) ;; *) ARGS+=(--force) ;; esac
@@ -320,7 +325,7 @@ npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" --out "$TMPV" \
   --limit "$DIAGNOSE_LIMIT" --budget "$DIAGNOSE_BUDGET" --state "$STATEF" \
   --sweep-state "$SWEEPF" --health "$HEALTHF" \
-  "${ARGS[@]}" \
+  ${ARGS[@]+"${ARGS[@]}"} \
   || exit $?
 
 # health stamp → catalog branch (transition/24h gated, advisory). CI's

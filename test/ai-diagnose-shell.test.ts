@@ -340,4 +340,30 @@ describe('audit #4 re-do — append normalization, arg passthrough, shallow sync
       expect(git(code, 'rev-parse', '--is-shallow-repository')).toBe('true')
     })
   }, 120_000)
+
+  it('audit#4-r2: plain run under /bin/bash 3.2 (launchd shebang) survives empty ARGS', () => {
+    // launchd execs the script via #!/bin/bash = macOS bash 3.2.57 — where
+    // `set -u` + an EMPTY array's "${ARGS[@]}" is a FATAL 'unbound variable'.
+    // Every hourly run (no DIAGNOSE_NAME/FORCE → empty ARGS) died at the
+    // diagnose invocation after all the prep work. The ${arr[@]+…} guard
+    // expands to zero args on empty. Tests must exercise /bin/bash — the
+    // harness's `bash` resolves to homebrew 5 where the bug is invisible.
+    const argvFile = join(stated, 'argv-32.dump')
+    const v32 = VERDICT_A.replace('pkg-a', 'pkg-b32')
+    withCanned({ CANNED_VERDICTS: `${v32}\n`, CANNED_ARGV: argvFile, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = spawnSync('/bin/bash', [SCRIPT], {
+        env: { ...process.env, HOME: home, MARKET_GIT_URL: remote, ...((globalThis as any).__canned ?? {}) },
+        encoding: 'utf8', timeout: 240_000,
+      })
+      expect(r.status, `${r.stdout}${r.stderr}`).toBe(0)
+      expect(`${r.stdout}${r.stderr}`).not.toContain('unbound variable')
+      // diagnose.ts was actually invoked — and got NO stray empty arg
+      const argvLines = readFileSync(argvFile, 'utf8').split('\n').filter(Boolean)
+      expect(argvLines).toContain('--index')
+      expect(argvLines).not.toContain('')
+      expect(argvLines.filter(a => a === '--name' || a === '--force')).toHaveLength(0)
+      // and the canned verdict really landed on the catalog branch
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-b32')
+    })
+  }, 240_000)
 })
