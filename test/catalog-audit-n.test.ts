@@ -87,7 +87,7 @@ describe('N-2/N-3: verdict keying is case-insensitive end to end', () => {
   })
   it('seedLine writes the seed name lowercase', () => {
     const s = parseSubmission('### npm 包名或 owner/repo\nMy-Pkg\n')
-    expect(s.name).toBe('My-Pkg')           // parse keeps the typed display case
+    expect(s.name).toBe('my-pkg')           // parse normalizes to the canonical identity
     expect(JSON.parse(seedLine(s, 1)).name).toBe('my-pkg')
   })
 })

@@ -114,7 +114,13 @@ export function parseSubmission(body: string, title?: string | null): Submission
    .filter(s => s && !s.startsWith('自动'))
   const category = cats.length ? cats : null
 
-  return { name, repo, kind: name ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }
+  // canonical lowercase name — npm names are case-insensitive identifiers
+  // stored lowercase; a typed 'MyPkg' would fetch /MyPkg at review time and
+  // 404 against the lowercase doc-id (false 'package not found'). seedLine
+  // already lowercases for the seed row — normalizing at parse keeps the
+  // review fetch, target marker, and verdict entry on the same identity.
+  const lname = name?.toLowerCase() ?? null
+  return { name: lname, repo, kind: lname ? 'npm' : repo ? 'repo' : 'none', descEn, descOther, type, category }
 }
 
 /** One-line JSONL for catalog-branch submissions.txt (consumed by run.ts --seed).

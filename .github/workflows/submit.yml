@@ -30,6 +30,7 @@ jobs:
               && !endsWith(github.event.comment.user.login, '[bot]')
               && !startsWith(github.event.comment.body, '/')
               && !startsWith(github.event.comment.body, ' /')
+              && !startsWith(github.event.comment.body, '  /')
               && (!contains(github.event.issue.labels.*.name || 'x', 'submission:approved')
                 || contains(github.event.issue.labels.*.name || 'x', 'submission:rejected'))))
     outputs:
@@ -414,7 +415,9 @@ jobs:
           && (startsWith(github.event.comment.body, '/a') || startsWith(github.event.comment.body, '/A')
               || startsWith(github.event.comment.body, '/c') || startsWith(github.event.comment.body, '/C')
               || startsWith(github.event.comment.body, ' /a') || startsWith(github.event.comment.body, ' /A')
-              || startsWith(github.event.comment.body, ' /c') || startsWith(github.event.comment.body, ' /C'))
+              || startsWith(github.event.comment.body, ' /c') || startsWith(github.event.comment.body, ' /C')
+              || startsWith(github.event.comment.body, '  /a') || startsWith(github.event.comment.body, '  /A')
+              || startsWith(github.event.comment.body, '  /c') || startsWith(github.event.comment.body, '  /C'))
           && !endsWith(github.event.comment.user.login, '[bot]'))
       )
     runs-on: ubuntu-latest
@@ -1150,7 +1153,8 @@ jobs:
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
       && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
-          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W'))
+          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W')
+          || startsWith(github.event.comment.body, '  /w') || startsWith(github.event.comment.body, '  /W'))
       && (github.event.comment.user.login == github.event.issue.user.login
           || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
@@ -1226,7 +1230,8 @@ jobs:
       && !github.event.issue.pull_request
       && (contains(github.event.issue.labels.*.name, 'submission') || startsWith(github.event.issue.title, '[submit]'))
       && (startsWith(github.event.comment.body, '/w') || startsWith(github.event.comment.body, '/W')
-          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W'))
+          || startsWith(github.event.comment.body, ' /w') || startsWith(github.event.comment.body, ' /W')
+          || startsWith(github.event.comment.body, '  /w') || startsWith(github.event.comment.body, '  /W'))
       && !endsWith(github.event.comment.user.login, '[bot]')
       && !(github.event.comment.user.login == github.event.issue.user.login
           || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))

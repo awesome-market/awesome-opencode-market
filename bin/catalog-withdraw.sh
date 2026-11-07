@@ -34,7 +34,12 @@ for i in 1 2 3; do
   # registered worktree') — prune clears it so the retry loop can recover
   git worktree prune
   git worktree add "$WT" origin/catalog --detach || { echo "attempt $i: no origin/catalog"; sleep 3; continue; }
-  touch "$WT/submissions.txt"
+  # Only touch/stage submissions.txt when it exists on the branch — `touch` on
+  # a missing file + unconditional `git add` would COMMIT a stray empty
+  # submissions.txt to the catalog branch. ENTRY tombstoning below still runs
+  # via the env fallback (a pending entry can outlive its seed row).
+  HAD_SEEDS=""
+  [ -f "$WT/submissions.txt" ] && HAD_SEEDS=1
   # ENTRY ground truth = the seed rows actually removed, not the caller's
   # re-parse of the CURRENT issue body — an author who edited the form after
   # ingest would otherwise tombstone the wrong name (or none at all). Env
@@ -43,7 +48,8 @@ for i in 1 2 3; do
   # name+repo seed can own TWO pending entries (the rejected npm name's twin
   # AND the repo twin's github-kind entry) — the last row's `name ?? repo`
   # alone can't see the second one.
-  DERIVED=$(node -e '
+  DERIVED=""
+  [ -n "$HAD_SEEDS" ] && DERIVED=$(node -e '
     const fs=require("fs"),f=process.argv[1],issue=Number(process.argv[2])
     const rows=fs.readFileSync(f,"utf8").split("\n").filter(l=>l.trim())
     const keep=[],removed=[]
@@ -58,7 +64,9 @@ for i in 1 2 3; do
     console.log([...keys].join(" "))
   ' "$WT/submissions.txt" "$ISSUE")
   ENTRY="${DERIVED:-${ENTRY:-}}"
-  git -C "$WT" add submissions.txt
+  # stage seed removals only when the file was tracked on the branch — staging
+  # a just-touched untracked file would commit a stray empty submissions.txt
+  [ -n "$HAD_SEEDS" ] && git -C "$WT" add submissions.txt
   if [ -n "${ENTRY:-}" ] && [ -f "$WT/index.json" ]; then
     node -e '
       const fs=require("fs"),f=process.argv[1]

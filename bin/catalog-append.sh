@@ -98,7 +98,11 @@ for i in 1 2 3 4; do
     git -C "$WT" add "$FILE"
   fi
   if [ "$APPLY_WANT" = 1 ] && [ -f "$WT/index.json" ]; then
-    if npx tsx pipeline/release.ts "$WT/index.json" "$WT/ai-verdicts.jsonl" "$WT/digest-state.json" > "$WT/index.new.json"; then
+    # [ -s ] guard: release.ts exiting 0 with EMPTY stdout would otherwise
+    # truncate index.json and push the empty catalog (same failure shape the
+    # catalog.yml release fold guards against)
+    if npx tsx pipeline/release.ts "$WT/index.json" "$WT/ai-verdicts.jsonl" "$WT/digest-state.json" > "$WT/index.new.json" \
+       && [ -s "$WT/index.new.json" ]; then
       mv "$WT/index.new.json" "$WT/index.json"
       git -C "$WT" add index.json
       APPLY_RES=ok
