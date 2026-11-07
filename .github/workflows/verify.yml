@@ -269,7 +269,12 @@ jobs:
           # here would strand the whole shard set silently
           git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
           case ${rc:-0} in
-            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' ;;
+            # non-fatal on purpose: a transient blip here must not kill the
+            # job before the retry loop — the loop's own guarded fetch
+            # re-populates origin/catalog, and the worktree fallback below
+            # tolerates the missing ref until then
+            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' \
+                 || echo "::warning::pre-loop catalog fetch failed — retry loop will refetch" ;;
             2) echo "no catalog branch yet — nothing to merge into"; exit 0 ;;
             *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
           esac
@@ -296,7 +301,11 @@ jobs:
             # to the freshest tip — a non-FF remote move must not leave
             # origin/catalog stale or every remaining attempt burns on the
             # same rejected push
-            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
+            # fetch is the transient-prone step in this loop — a network blip
+            # must consume a retry, not kill the whole merge under bash -e
+            # (the results then wait ~12h for the next run's artifact sweep).
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' \
+              || { echo "fetch failed (attempt $i) — retrying"; sleep 3; continue; }
             git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
