@@ -325,8 +325,15 @@ jobs:
 
   # approved → append to catalog-branch submissions.txt; catalog.yml --seed picks it up
   ingest:
-    needs: review
-    if: needs.review.outputs.verdict == 'clean' && needs.review.outputs.subline != ''
+    # needs report TOO: the abuse gate's label revert must land AFTER the
+    # report job's label step — running in parallel let report's
+    # 'remove all submission:* + add approved' overwrite the revert, leaving
+    # an approved-labeled issue with NO seed row (comments stop re-reviewing
+    # under 'approved', so the author is stuck until the 30d sweep). The
+    # status-check if bypasses needs-gating: a failed report must not block
+    # queueing — the seed is the load-bearing half, labels are cosmetic.
+    needs: [review, report]
+    if: ${{ !cancelled() && needs.review.result == 'success' && needs.review.outputs.verdict == 'clean' && needs.review.outputs.subline != '' }}
     runs-on: ubuntu-latest
     # per-issue group, NOT catalog-branch: GitHub keeps only ONE pending run
     # per group, so a shared writer lock silently drops a queued ingest
@@ -1171,10 +1178,15 @@ jobs:
           LOW=${COMMENT_BODY,,}
           if [[ ! "$LOW" =~ ^[[:space:]]*/withdraw([[:space:]]|$) ]]; then
             # '/w*' prefix fired the job but the command isn't /withdraw —
-            # command-shaped bodies get the usage hint instead of silence
-            # (same feedback contract the verdict job keeps for /a /c typos)
-            [[ "$LOW" =~ ^[[:space:]]*/[a-z]+ ]] \
-              && gh issue comment "$ISSUE" --body "用法：`/withdraw`——撤回本投稿单的收录种子并关闭 issue。" || true
+            # hint only for withdraw-SHAPED typos ('/w', '/withd', '/withdrawx'):
+            # the job's /w gate also catches prose like '/watch' or '/why',
+            # which must stay silent (same feedback contract the verdict job
+            # keeps for /a /c typos — but its near-miss space is far narrower)
+            CMD=$(printf '%s' "$LOW" | awk '{print $1}' | sed 's|^/*||')
+            case "$CMD" in
+              w|wi|wit|with|withd|withdr|withdra|withdraw|withdraw?*)
+                gh issue comment "$ISSUE" --body "用法：`/withdraw`——撤回本投稿单的收录种子并关闭 issue。" || true ;;
+            esac
             echo "not a withdraw command — skip"; exit 0
           fi
           # ENTRY drives pending-entry retraction: a queued (never published)

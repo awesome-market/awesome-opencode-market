@@ -204,9 +204,20 @@ export function normalizeRepoUrl(raw: string | null | undefined): string | null 
   // npm's repository shorthand — 'github:owner/repo' (optionally '#commit') is
   // as canonical a GitHub pointer as a full URL; gitlab:/bitbucket: still miss
   s = s.replace(/^github:/i, 'https://github.com/')
-  const m = s.match(/github\.com\/([^/]+\/[^/#?]+)/)
-  if (m) return cleanRepo(m[1]!.replace(/\.git$/, '').replace(/\/$/, ''))
+  // capture only repo-charset chars so prose can't smuggle spaces/commas
+  // into the path ('github.com/o/r, it is nice' → 'o/r', not 'o/r, it…').
+  // Repo-legal trailing chars still need cleanup: '.' is in the charset, so
+  // 'o/r.' survives capture — strip sentence punctuation, then .git, then
+  // punctuation again ('o/r..git' → 'o/r.'), then slashes. Legit repo names
+  // never end in these chars.
+  const clean = (p: string) => p
+    .replace(/[.,;:!?)'"\]}>]+$/, '')
+    .replace(/\.git$/, '')
+    .replace(/[.,;:!?)'"\]}>]+$/, '')
+    .replace(/\/+$/, '')
+  const m = s.match(/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9._-]+)/)
+  if (m) return cleanRepo(clean(m[1]!))
   // bare owner/repo — submission seeds and terse repository fields
   const bare = s.match(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)$/)
-  return bare ? cleanRepo(bare[1]!.replace(/\.git$/, '')) : null
+  return bare ? cleanRepo(clean(bare[1]!)) : null
 }
