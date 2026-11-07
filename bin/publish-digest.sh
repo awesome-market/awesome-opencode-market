@@ -35,17 +35,32 @@ log() { printf '%s [digest] %s\n' "$(date '+%F %T')" "$*"; }
 # 回收必须原子:两次同时回收时,rmdir+mkdir 会让第二个回收者删掉第一个
 # 刚建的新锁(双双放行)。mv 是原子操作——先改名者拿走旧锁,败者 mv 撞
 # ENOENT 落入 skip 分支;新 mkdir 也复核——缝隙里挤进来的合法竞争者仍赢。
+# 与 ai-diagnose 同款加固:锁里记 owner pid——age>2h 但 owner 还活着
+# (比如 git push 卡在凭据提示)时绝不抢锁;否则旧主的迟到 EXIT trap 会
+# rmdir 掉新主的锁,放进第三个并发 run 共享 $CATDG worktree。
 LOCK=$HOME/.local/share/opencode-market/digest.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(_mtime "$LOCK") ))
-  if [ "$AGE" -gt 7200 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
-    rmdir "$LOCK.stale.$$" 2>/dev/null   # best-effort sweep of the moved dir
-    log "reclaimed stale lock (${AGE}s old)"
-  else
-    log "another run in progress — skipping"; exit 0
+  OLD_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
+  OWNER_DEAD=0
+  case $OLD_PID in
+    '') OWNER_DEAD=1 ;;                          # pre-pid-era lock, or crash before the write
+    *[!0-9]*) OWNER_DEAD=1 ;;                    # corrupt pid file — treat as dead
+    *) kill -0 "$OLD_PID" 2>/dev/null || OWNER_DEAD=1 ;;
+  esac
+  RECLAIMED=0
+  if [ "$AGE" -gt 7200 ] && [ "$OWNER_DEAD" = 1 ] \
+     && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
+    RECLAIMED=1
+    log "reclaimed stale lock (${AGE}s old${OLD_PID:+, owner pid $OLD_PID gone})"
   fi
+  rm -rf "$LOCK.stale.$$" 2>/dev/null   # the dir now holds a pid file — rmdir can't
+  [ "$RECLAIMED" = 1 ] || { log "another run in progress — skipping"; exit 0; }
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+echo $$ > "$LOCK/pid" 2>/dev/null || true
+# ownership-checked release: stale-reclaim 后 $LOCK 归新主——旧主的迟到
+# 退出绝不能删掉它(否则第三个 run 与新主并发共用 $CATDG)
+trap '[ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ] && { rm -f "$LOCK/pid"; rmdir "$LOCK"; }' EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
 
