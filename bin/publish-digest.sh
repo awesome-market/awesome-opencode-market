@@ -14,6 +14,14 @@
 # - MARKET_GIT_URL 优先于开发 checkout 的 origin(launchd TCC 可能读不到外置卷)。
 set -uo pipefail
 
+# `stat -f` is BSD-only — GNU stat needs `-c` (same portability fix as
+# ai-diagnose.sh: probe once, run under either userland)
+if stat -f%m / >/dev/null 2>&1; then
+  _mtime() { stat -f%m "$1" 2>/dev/null || echo 0; }
+else
+  _mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+fi
+
 REPO=${MARKET_REPO:-/Volumes/2t/code/opencode-market}
 CATDG=$HOME/.local/share/opencode-market-catalog-digest   # 本脚本专属的 catalog checkout
 CODED=$HOME/.local/share/opencode-market-code-digest      # pinned origin/main code checkout
@@ -29,7 +37,7 @@ log() { printf '%s [digest] %s\n' "$(date '+%F %T')" "$*"; }
 # ENOENT 落入 skip 分支;新 mkdir 也复核——缝隙里挤进来的合法竞争者仍赢。
 LOCK=$HOME/.local/share/opencode-market/digest.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
-  AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
+  AGE=$(( $(date +%s) - $(_mtime "$LOCK") ))
   if [ "$AGE" -gt 7200 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
     rmdir "$LOCK.stale.$$" 2>/dev/null   # best-effort sweep of the moved dir
     log "reclaimed stale lock (${AGE}s old)"

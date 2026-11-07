@@ -19,6 +19,16 @@
 #   verdict commit 年龄也看不见"活着但通道受损")。
 set -uo pipefail
 
+# `stat -f` is BSD-only — GNU stat needs `-c`. Probe once so the script runs
+# under either userland (launchd on macOS today; CI/Linux runners in tests).
+if stat -f%m / >/dev/null 2>&1; then
+  _mtime() { stat -f%m "$1" 2>/dev/null || echo 0; }
+  _fsize() { stat -f%z "$1" 2>/dev/null || echo 0; }
+else
+  _mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+  _fsize() { stat -c %s "$1" 2>/dev/null || echo 0; }
+fi
+
 REPO=${MARKET_REPO:-/Volumes/2t/code/opencode-market}
 CAT=$HOME/.local/share/opencode-market-catalog   # dedicated catalog-branch checkout
 CODE=$HOME/.local/share/opencode-market-code     # pinned origin/main code checkout
@@ -159,7 +169,7 @@ esac
 # lock below → a third run starts → double LLM burn + push races.
 LOCK=$STATED/diagnose.lock
 if ! mkdir "$LOCK" 2>/dev/null; then
-  AGE=$(( $(date +%s) - $(stat -f%m "$LOCK" 2>/dev/null || echo 0) ))
+  AGE=$(( $(date +%s) - $(_mtime "$LOCK") ))
   OLD_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
   OWNER_DEAD=0
   case $OLD_PID in
@@ -194,7 +204,7 @@ trap 'exit 130' INT
 
 # launchd appends to fixed files forever — trim past 5MB, keep the tail
 for f in "$LOGD/ai-diagnose.log" "$LOGD/ai-diagnose.err.log"; do
-  [ -f "$f" ] && [ "$(stat -f%z "$f" 2>/dev/null || echo 0)" -gt 5242880 ] \
+  [ -f "$f" ] && [ "$(_fsize "$f")" -gt 5242880 ] \
     && { tail -c 1048576 "$f" > "$f.t"; mv "$f.t" "$f"; }
 done
 
@@ -287,9 +297,11 @@ cd "$CODE"
 # monopolise the LLM (3300 pending × ~1-2min each would run for days)
 DIAGNOSE_LIMIT=${DIAGNOSE_LIMIT:-50}
 DIAGNOSE_BUDGET=${DIAGNOSE_BUDGET:-45}   # minutes of LLM time per run
-TMPV=$(mktemp -t ai-verdicts)
-PAY=$(mktemp -t ai-payload)
-VVIEW=$(mktemp -t verdicts-view)
+# BSD `mktemp -t name` appends X's itself; GNU requires ≥3 X's IN the
+# template — a full path ending in X's is the only spelling both accept
+TMPV=$(mktemp "${TMPDIR:-/tmp}/ai-verdicts.XXXXXXXX")
+PAY=$(mktemp "${TMPDIR:-/tmp}/ai-payload.XXXXXXXX")
+VVIEW=$(mktemp "${TMPDIR:-/tmp}/verdicts-view.XXXXXXXX")
 
 # diagnose must see spooled (un-pushed) verdicts as already-decided — else a
 # push that failed last run triggers a second LLM review of the same keys
