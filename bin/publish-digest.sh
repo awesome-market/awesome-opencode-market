@@ -166,8 +166,10 @@ for i in 1 2 3 4; do
   # 成熟锚推进而公告面缺失,异议窗形同虚设还全程绿(C-2/V-S 同类)
   git add digest/ digest-state.json || { log "add attempt $i failed"; sleep 3; continue; }
   # 压实可能改写了 jsonl——存在才暂存(与 CI 同条件);压实本身非致命,
-  # 这一格 add 失败也只丢本班压实,不挡日报
-  [ -f "$CATDG/ai-verdicts.jsonl" ] && git add ai-verdicts.jsonl || true
+  # add 失败只丢本班压实(下轮幂等重压自愈)不挡日报,但要留痕不能静默
+  if [ -f "$CATDG/ai-verdicts.jsonl" ]; then
+    git add ai-verdicts.jsonl || log "verdicts stage failed (non-fatal) — compaction lost this round"
+  fi
   git diff --cached --quiet && { log "nothing changed vs origin"; exit 0; }
   git commit -qm "digest: $(date +%F)" || { log "commit attempt $i failed"; sleep 3; continue; }
   git push -q origin catalog && exit 0

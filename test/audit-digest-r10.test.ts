@@ -138,6 +138,21 @@ describe('§6 landed — 上期公告·已生效 keys on cumulative announced, n
     const md = renderDigest({ index: approved, verdicts: [p, { ...p }], prev, now: DAY2 })
     expect(md).toContain('上期公告·已生效 1：`landed-pkg`@1.0')
   })
+
+  it('repo-only entries land too: latestVersion null === verdict version null', () => {
+    // github-kind entries carry no versions — schema pins latestVersion:null
+    // (run.ts) and verdicts stamp version:null, so the release check matches
+    // on null===null and the row renders `name`@∅
+    const ghEntry = mkEntry('gh-plugin', {
+      source: { kind: 'github', id: 'owner/gh-plugin' },
+      latestVersion: null, publishedAt: null, distTags: {},
+      approval: 'approved', approvalReason: undefined,
+    })
+    const p = v('gh-plugin', null, 'pass', '2026-02-01T10:00:00Z', 'human', 'reviewed repo')
+    const prev: DigestState = { lastDigestAt: 't', day: '2026-02-02', dayAnnounced: [], announced: [akey(p)] }
+    const md = renderDigest({ index: mkIndex([ghEntry]), verdicts: [p], prev, now: DAY2 })
+    expect(md).toContain('上期公告·已生效 1：`gh-plugin`@∅')
+  })
 })
 
 // ── publish-digest.sh e2e: `git add` failure must retry, never false-green ──

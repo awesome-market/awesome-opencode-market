@@ -101,8 +101,13 @@ jobs:
             git -C /tmp/cat add digest/ digest-state.json \
               || { echo "add attempt $i failed"; sleep 3; continue; }
             # ai-verdicts.jsonl may not exist on a fresh catalog branch —
-            # compaction only rewrites it when present, so stage conditionally
-            [ -f /tmp/cat/ai-verdicts.jsonl ] && git -C /tmp/cat add ai-verdicts.jsonl || true
+            # compaction only rewrites it when present, so stage conditionally.
+            # Non-fatal by design (a lost round self-heals next run) but never
+            # silent — a failed stage means this round's compaction didn't land
+            if [ -f /tmp/cat/ai-verdicts.jsonl ]; then
+              git -C /tmp/cat add ai-verdicts.jsonl \
+                || echo "::warning::verdicts stage failed — compaction lost this round"
+            fi
             # staged-diff precheck: a REAL commit failure must not pass as
             # "nothing changed" — that's how a day's digest-state (the maturity
             # anchor) silently vanishes while the run stays green (C-2/V-S)
