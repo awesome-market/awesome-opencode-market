@@ -26,8 +26,12 @@ REPO=${MARKET_REPO:-/Volumes/2t/code/opencode-market}
 CATDG=$HOME/.local/share/opencode-market-catalog-digest   # 本脚本专属的 catalog checkout
 CODED=$HOME/.local/share/opencode-market-code-digest      # pinned origin/main code checkout
 LOGD=$HOME/Library/Logs/opencode-market
+LOCK=$HOME/.local/share/opencode-market/digest.lock
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-mkdir -p "$LOGD" "$(dirname "$CATDG")"
+# 锁父目录必须先建:mkdir 不带 -p 父级缺失会失败,而下方把"建锁失败"一律
+# 当成"另一 run 在跑"静默 exit 0——ai-diagnose 先跑过的机器没这问题,
+# 只跑本兜底的机器会永远 skip(假阴性,日报静默断供)
+mkdir -p "$LOGD" "$(dirname "$CATDG")" "$(dirname "$LOCK")"
 
 log() { printf '%s [digest] %s\n' "$(date '+%F %T')" "$*"; }
 
@@ -38,7 +42,7 @@ log() { printf '%s [digest] %s\n' "$(date '+%F %T')" "$*"; }
 # 与 ai-diagnose 同款加固:锁里记 owner pid——age>2h 但 owner 还活着
 # (比如 git push 卡在凭据提示)时绝不抢锁;否则旧主的迟到 EXIT trap 会
 # rmdir 掉新主的锁,放进第三个并发 run 共享 $CATDG worktree。
-LOCK=$HOME/.local/share/opencode-market/digest.lock
+# (LOCK 已在上方定义——mkdir -p 需要它的父目录先行存在)
 if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(_mtime "$LOCK") ))
   OLD_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
@@ -157,8 +161,12 @@ for i in 1 2 3 4; do
   (cd "$CODED" && npx tsx pipeline/ai/digest.ts \
     --index "$CATDG/index.json" --verdicts "$CATDG/ai-verdicts.jsonl" \
     --state "$CATDG/digest-state.json" --out-dir "$CATDG") || { log "render attempt $i failed"; sleep 3; continue; }
-  git add digest/ digest-state.json
-  # 压实可能改写了 jsonl——存在才暂存(与 CI 同条件)
+  # add 必须进重试环:失败会部分暂存(ignored 路径 exit 1 但其余照收)或全丢,
+  # 放行后 diff --cached 会把"只提交了 state 没提交日报"误判成正常 commit——
+  # 成熟锚推进而公告面缺失,异议窗形同虚设还全程绿(C-2/V-S 同类)
+  git add digest/ digest-state.json || { log "add attempt $i failed"; sleep 3; continue; }
+  # 压实可能改写了 jsonl——存在才暂存(与 CI 同条件);压实本身非致命,
+  # 这一格 add 失败也只丢本班压实,不挡日报
   [ -f "$CATDG/ai-verdicts.jsonl" ] && git add ai-verdicts.jsonl || true
   git diff --cached --quiet && { log "nothing changed vs origin"; exit 0; }
   git commit -qm "digest: $(date +%F)" || { log "commit attempt $i failed"; sleep 3; continue; }

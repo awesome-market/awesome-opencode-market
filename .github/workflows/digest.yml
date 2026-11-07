@@ -95,7 +95,11 @@ jobs:
               --index /tmp/cat/index.json --verdicts /tmp/cat/ai-verdicts.jsonl \
               --state /tmp/cat/digest-state.json --out-dir /tmp/cat \
               || { echo "render attempt $i failed"; sleep 3; continue; }
-            git -C /tmp/cat add digest/ digest-state.json
+            # add 也在重试环内:git add 对 ignored/损坏路径 exit 1 但仍会
+            # 部分暂存——放行的话 diff --cached 看到残留暂存会提交"只有
+            # state 没有日报 md"的半成品,成熟锚推进而公告面缺失(C-2 同类)
+            git -C /tmp/cat add digest/ digest-state.json \
+              || { echo "add attempt $i failed"; sleep 3; continue; }
             # ai-verdicts.jsonl may not exist on a fresh catalog branch —
             # compaction only rewrites it when present, so stage conditionally
             [ -f /tmp/cat/ai-verdicts.jsonl ] && git -C /tmp/cat add ai-verdicts.jsonl || true

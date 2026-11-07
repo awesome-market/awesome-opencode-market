@@ -216,13 +216,21 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // Without these rows a resolved concern just vanishes from §③ — the
   // reader can't tell "fixed" from "we stopped reporting it". effectiveVerdict
   // keeps R-4: an AI pass never lifts a human concern, so no false '已解除'.
+  // Same-day re-renders carry the morning's announcements in todayFirst —
+  // those rows already render in the fresh §③ table (with the ✅ mark), so
+  // they must be excluded here or the identical row prints twice.
   const latestConcern = new Map<string, AiVerdict>()
   for (const v of verdicts) {
     if (v.verdict !== 'concern') continue
     const cur = latestConcern.get(akey(v))
-    if (!cur || atCmp(v.at, cur.at) > 0) latestConcern.set(akey(v), v)
+    // >= (last-wins), matching latestVerdicts/freshMap: amendAt reuses the
+    // prior line's `at` on a reason-only correction, so the LATER line for
+    // the same akey carries the amended reason — first-wins would render
+    // the superseded text in resolved rows
+    if (!cur || atCmp(v.at, cur.at) >= 0) latestConcern.set(akey(v), v)
   }
   const resolved = [...prevAnnounced]
+    .filter(k => !todayFirst.has(k))
     .map(k => latestConcern.get(k))
     .filter((v): v is AiVerdict => v !== undefined)
     .filter(c => {
@@ -239,18 +247,27 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // is exactly when this warning matters most
   const future = verdicts.filter(v => !notAfterNow(v)).length
 
-  // 上期公告·已生效 — passes the LAST render announced whose slot is now
+  // 上期公告·已生效 — passes announced in a PRIOR digest whose slot is now
   // displayed: the objection window's readers see their own decision land.
-  // prev.dayAnnounced is the last render's day-set (cumulative that day);
+  // Membership is prev.announced (cumulative live candidates), NOT
+  // prev.dayAnnounced: under the objection window a verdict announced on
+  // day N only matures on day N+2's catalog run — by then dayAnnounced has
+  // already rolled to day N+1's first-seen set, so a released pass can
+  // NEVER still sit in the previous render's dayAnnounced (the feature
+  // was dead code). announced membership survives exactly until the
+  // release flips the slot out of candidacy — the line then prunes from
+  // announced, so each release surfaces here exactly once.
   // released = entry approved AND showing that version (superseded-since
-  // releases aren't claimed).
-  const prevDayAnnounced = new Set(prev?.dayAnnounced ?? [])
-  const landed = verdicts.filter(v => {
-    if (v.verdict !== 'pass' || !prevDayAnnounced.has(akey(v))) return false
+  // releases aren't claimed). Deduped by akey like freshMap — a verdict
+  // line appended twice must not list the release twice.
+  const landedMap = new Map<string, AiVerdict>()
+  for (const v of verdicts) {
+    if (v.verdict !== 'pass' || !prevAnnounced.has(akey(v))) continue
     const e = index.plugins.find(p => p.name.toLowerCase() === v.name.toLowerCase())
-    return e !== undefined && e.approval !== 'pending' && e.approval !== 'legacy'
-      && e.latestVersion === v.version
-  })
+    if (e !== undefined && e.approval !== 'pending' && e.approval !== 'legacy'
+        && e.latestVersion === v.version) landedMap.set(akey(v), v)
+  }
+  const landed = [...landedMap.values()]
 
   // §② held — oldest first (matches diagnose's consumption order), with the
   // hold reason visible: "waiting for AI" and "AI concern → needs human" are

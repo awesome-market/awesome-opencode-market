@@ -1068,7 +1068,10 @@ catalog worktree → 循环内 fetch+reset（任一相位失败都 continue 重�
      被 name@null 包级 human concern 覆盖的 → ⛔已被包级 concern 刹车
      ——行照公告但不误导"要上架"；包级/槽级刹车与放行闸共享
      slotVerdict/brakeFor 谓词，展示永不承诺闸门给不了的放行）
-     行尾「上期公告·已生效 N」：上期 dayAnnounced 中今已成展示版的 pass
+     行尾「上期公告·已生效 N」：prev.announced 中今已成展示版的 pass
+     （累计公告集而非上期 dayAnnounced——异议窗机制下公告日 N 的 pass 要到
+     N+2 catalog 才成熟放行，那时 dayAnnounced 已滚动；pass 放行后退出候选、
+     announced 自动裁掉，每条只亮一次）
      ——异议窗读者看得到自己的决定落地
   ② held 积压清单（最老优先，前 50 内联 + 其余 <details> 折叠全量——
      50 条以外的积压对手机读者也必须可读；npm pending 行显示在审版本
