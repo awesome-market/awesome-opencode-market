@@ -1110,6 +1110,7 @@ export default Plugin.define({
         const act = t?.dataset?.act
         if (act === 'devtap') devTap()
         else if (act === 'devsrc' || act === 'devpick') devToggle(act)
+        else if (act === 'skillsrc') void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
         const lm = t?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
         if (lm) { put({ lang: lm }); setLangMode(lm); remounts.forEach(r => r()) }
       }
@@ -1270,23 +1271,30 @@ export default Plugin.define({
         dsWrap.appendChild(permBox)
       }
       root.appendChild(dsWrap)
-      // HTTP skill catalog — lets opencode itself discover/refresh repo skills
-      // from the same site root the index came from (skills/ namespace)
-      root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
+      // HTTP skill catalog — developer surface: lets opencode itself
+      // discover/refresh repo skills from the same site root the index came
+      // from. Hidden with the other dev toggles, EXCEPT while the
+      // subscription is actually enabled — an active skills[] entry in
+      // opencode.json must stay visible so it can be turned off.
+      const ssWrap = el('div', state().devUnlocked || state().devSource || state().devVerPick ? '' : 'display:none')
+      ssWrap.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
       const ssStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:6px')
       const ssBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('useHttpCatalog')) as HTMLButtonElement
       // reversible toggle — enable writes the skills[] url, disable removes it
       // (leaving any other entries untouched). One-way 'enable' used to lock
-      // users into a remote source with no off switch.
+      // users into a remote source with no off switch. Rides root dispatch —
+      // element onclick is dead in this webview.
+      ssBtn.dataset.act = 'skillsrc'
       let ssOn = false
       const ssRefresh = () => void safe.skillSource?.().then(r => {
         ssOn = !!r.enabled
+        if (r.enabled) ssWrap.style.display = ''
         ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${skillsEndpoint()} — ${t('catalogDisabled')}`
         ssBtn.textContent = r.enabled ? t('disable') : t('useHttpCatalog')
       }).catch(() => { ssStatus.textContent = skillsEndpoint() })
       ssRefresh()
-      ssBtn.onclick = () => void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
-      root.append(ssStatus, ssBtn)
+      ssWrap.append(ssStatus, ssBtn)
+      root.appendChild(ssWrap)
       // footer — copyright + version. The version is also the dev-settings
       // easter egg: 10 clicks toggle devUnlocked (Android build-number
       // convention — entering AND leaving both take 10).
@@ -1305,7 +1313,7 @@ export default Plugin.define({
         if (++verTaps >= 10) {
           verTaps = 0
           const on = !state().devUnlocked
-          if (on) { put({ devUnlocked: true }); dsWrap.style.display = ''; paintVer(); return }
+          if (on) { put({ devUnlocked: true }); dsWrap.style.display = ''; ssWrap.style.display = ''; paintVer(); return }
           // leaving dev mode turns the dev features OFF, not just hidden —
           // a hidden devSource would keep pulling the fork catalog, a hidden
           // devVerPick would keep the card dropdowns alive
@@ -1314,6 +1322,9 @@ export default Plugin.define({
           verPicks.clear(); setPickTick(pickTick() + 1)
           paintDsc(); paintVpc()
           dsWrap.style.display = 'none'
+          // the skill-source block stays visible ONLY if the subscription is
+          // really on — it's config state, not a dev flag we can just clear
+          ssWrap.style.display = ssOn ? '' : 'none'
           paintVer()
           if (wasSource) {
             dsNote.textContent = indexUrl()

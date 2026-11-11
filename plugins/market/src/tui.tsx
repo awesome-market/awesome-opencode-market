@@ -61,6 +61,16 @@ export default Plugin.define({
       // setting flips (per-URL index cache keeps the two catalogs isolated —
       // dev entries can't leak into prod views or vice versa).
       const indexUrl = () => resolveIndexUrl((ctx as { options?: { indexUrl?: unknown } }).options, store.devSource)
+      // the skills[] subscription is config state, not a dev flag — while it
+      // is really enabled its settings item stays visible (can't-turn-off
+      // rule) even outside dev mode
+      const [skillSrcOn, setSkillSrcOn] = createSignal(false)
+      void (async () => {
+        try {
+          const d = await readJson(await configPath())
+          setSkillSrcOn(strArrayField(d, 'skills').includes(skillsUrl(indexUrl())))
+        } catch { /* config unreadable — treat as off */ }
+      })()
       const [idx, setIdx] = createSignal<MarketIndex | null>(null)
       const [idxErr, setIdxErr] = createSignal('')
       const [installed, setInstalled] = createSignal<Record<string, string>>({})
@@ -699,6 +709,9 @@ export default Plugin.define({
           } },
           { label: t('permTitle'), run: () => void openSkillPerms() },
         ] : []),
+        // skill-source subscription — dev surface, but stays visible while
+        // actually enabled (an on switch you can't see can't be turned off)
+        ...(store.devUnlocked || store.devSource || store.devVerPick || skillSrcOn() ? [
         { label: t('useHttpCatalog'), run: () => void (async () => {
           const cfg = await configPath()
           try {
@@ -713,9 +726,11 @@ export default Plugin.define({
               else await writeJsonAtomic(cfg, { ...d, skills: [...list, cu] })
               return was
             })
+            setSkillSrcOn(!on)
             setStatus(`catalog source ${on ? t('catalogDisabled') : t('catalogEnabled')} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
+        ] : []),
         // version footer — also the dev-settings easter egg: 10 silent enters
         // TOGGLE devUnlocked. Zero feedback while locked; once unlocked the
         // label's " (dev)" is both the confirmation and the still-on reminder.
