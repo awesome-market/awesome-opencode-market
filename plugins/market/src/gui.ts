@@ -1283,11 +1283,21 @@ export default Plugin.define({
         if (++verTaps >= 10) {
           verTaps = 0
           const on = !state().devUnlocked
-          put({ devUnlocked: on })
-          // leaving dev mode hides the section UNLESS a live dev toggle keeps
-          // it pinned — a dev feature you can't see is one you can't turn off
-          dsWrap.style.display = on || state().devSource || state().devVerPick ? '' : 'none'
+          if (on) { put({ devUnlocked: true }); dsWrap.style.display = ''; paintVer(); return }
+          // leaving dev mode turns the dev features OFF, not just hidden —
+          // a hidden devSource would keep pulling the fork catalog, a hidden
+          // devVerPick would keep the card dropdowns alive
+          const wasSource = state().devSource
+          put({ devUnlocked: false, devSource: false, devVerPick: false })
+          verPicks.clear(); setPickTick(pickTick() + 1)
+          dsc.checked = false; vpc.checked = false
+          dsWrap.style.display = 'none'
           paintVer()
+          if (wasSource) {
+            dsNote.textContent = indexUrl()
+            setErr('')
+            safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
+          }
         }
       }
       foot.appendChild(ver)

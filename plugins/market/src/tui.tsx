@@ -722,7 +722,16 @@ export default Plugin.define({
         { label: `opencode-market v${PKG_VERSION}${store.devUnlocked ? ' (dev)' : ''} · © 2026 awesome-market contributors · MIT`, run: () => {
           const n = devTaps() + 1
           setDevTaps(n)
-          if (n >= 10) { setDevTaps(0); void mutate(d => { d.devUnlocked = !d.devUnlocked }) }
+          // leaving dev mode turns the dev features OFF — a hidden devSource
+          // would keep pulling the fork catalog, a hidden devVerPick would
+          // keep the pickable version markers alive. The index effect
+          // refetches automatically once devSource flips.
+          if (n >= 10) {
+            setDevTaps(0)
+            const leaving = store.devUnlocked
+            void mutate(d => { d.devUnlocked = !leaving; if (leaving) { d.devSource = false; d.devVerPick = false } })
+            if (leaving) setPickVer({})
+          }
         } },
       ])
 
