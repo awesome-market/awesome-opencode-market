@@ -930,7 +930,12 @@ export function halfState(e: MarketEntry, installed: Record<string, string>, ski
   const plan = installPlan(e)
   const pVer = installed[e.name]
   const sDisk = skillHalfVer(installed, e.name)
-  const sVer = skillVers?.[e.name] ?? sDisk
+  // the journal refines WHICH version is on disk — it is never proof a dir
+  // EXISTS. Ungated, a manually-deleted skill dir kept a phantom "installed"
+  // badge forever (skillVers survives; sDisk is the ground truth the TUI
+  // version label already gates on). Lift-only installs keep working: their
+  // `<id>-*` siblings surface sDisk via the prefix probe.
+  const sVer = sDisk !== undefined ? (skillVers?.[e.name] ?? sDisk) : undefined
   const pluginOn = !!pVer, skillOn = !!sVer
   // 'out' additionally requires the half to be deliverable — a git-installed
   // plugin matching a github-kind entry has no market update path, and an

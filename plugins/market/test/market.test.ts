@@ -866,25 +866,35 @@ describe('audit-round-3 fixes', () => {
     } as MarketEntry
     // fresh → both halves sync
     expect(halvesToSync(dual, halfState(dual, {}, {}))).toEqual({ plugin: true, skill: true })
-    // plugin current + skill outdated → only skill
-    const hs1 = halfState(dual, { pkg: '2.0.0' }, { pkg: '1.0.0' })
+    // plugin current + skill outdated → only skill. The __skill_ key stands
+    // for the on-disk dir the scan reported — skillVers is the version journal.
+    const hs1 = halfState(dual, { pkg: '2.0.0', __skill_pkg: 'x' }, { pkg: '1.0.0' })
     expect(hs1.pluginOn).toBe(true); expect(hs1.pluginOut).toBe(false)
     expect(hs1.skillOn).toBe(true); expect(hs1.skillOut).toBe(true)
     expect(halvesToSync(dual, hs1)).toEqual({ plugin: false, skill: true })
     // plugin outdated + skill current → only plugin
-    const hs2 = halfState(dual, { pkg: '1.0.0' }, { pkg: '2.0.0' })
+    const hs2 = halfState(dual, { pkg: '1.0.0', __skill_pkg: 'x' }, { pkg: '2.0.0' })
     expect(halvesToSync(dual, hs2)).toEqual({ plugin: true, skill: false })
     // all current → nothing
-    const hs3 = halfState(dual, { pkg: '2.0.0' }, { pkg: '2.0.0' })
+    const hs3 = halfState(dual, { pkg: '2.0.0', __skill_pkg: 'x' }, { pkg: '2.0.0' })
     expect(hs3.anyOut).toBe(false)
     expect(halvesToSync(dual, hs3)).toEqual({ plugin: false, skill: false })
     // partial install (plugin only) → plugin updates, missing skill NOT resurrected
     const hs4 = halfState(dual, { pkg: '1.0.0' }, {})
     expect(halvesToSync(dual, hs4)).toEqual({ plugin: true, skill: false })
-    // foreign skill dir ('local') → on but never "outdated"
-    const hs5 = halfState(dual, {}, { pkg: 'local' })
+    // foreign skill dir ('local' from disk) → on but never "outdated"
+    const hs5 = halfState(dual, { __skill_pkg: 'local' }, {})
     expect(hs5.skillOn).toBe(true); expect(hs5.skillOut).toBe(false)
     expect(hs5.anyOut).toBe(false)
+    // journal without a disk dir = phantom: the user deleted the skill out of
+    // band — 'installed'/'update' must not survive on bookkeeping alone
+    const hs6 = halfState(dual, { pkg: '2.0.0' }, { pkg: '1.0.0' })
+    expect(hs6.skillOn).toBe(false); expect(hs6.skillOut).toBe(false)
+    expect(halvesToSync(dual, hs6)).toEqual({ plugin: false, skill: false })
+    // journal refines a disk 'local' into the recorded version
+    const hs7 = halfState(dual, { __skill_pkg: 'local' }, { pkg: '1.0.0' })
+    expect(hs7.skillOn).toBe(true); expect(hs7.skillOut).toBe(true)
+    expect(hs7.ver).toBe('1.0.0')
   })
   it('categoriesOf reads zh descriptions too', async () => {
     const { categoriesOf } = await import('../src/catalog.ts')
