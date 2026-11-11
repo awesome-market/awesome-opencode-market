@@ -54,10 +54,13 @@ export default Plugin.define({
     function MarketDialog(): JSX.Element {
       const theme = ctx.theme
       const dims = useTerminalDimensions()
-      // catalog endpoint — plugin options (opencode.json) > env > default
-      const INDEX_URL = resolveIndexUrl((ctx as { options?: { indexUrl?: unknown } }).options)
-      const CATALOG_URL = skillsUrl(INDEX_URL)
       const [store, mutate] = ctx.storage.store<MarketState>('opencode-market', { initial: EMPTY_STATE as MarketState })
+      // catalog endpoint — plugin options (opencode.json) > env > dev-source
+      // settings toggle > published default. Function, not const: reads
+      // store.devSource reactively so the fetch effect re-resolves when the
+      // setting flips (per-URL index cache keeps the two catalogs isolated —
+      // dev entries can't leak into prod views or vice versa).
+      const indexUrl = () => resolveIndexUrl((ctx as { options?: { indexUrl?: unknown } }).options, store.devSource)
       const [idx, setIdx] = createSignal<MarketIndex | null>(null)
       const [idxErr, setIdxErr] = createSignal('')
       const [installed, setInstalled] = createSignal<Record<string, string>>({})
@@ -83,6 +86,7 @@ export default Plugin.define({
       const [status, setStatus] = createSignal('')
       const [searchOn, setSearchOn] = createSignal(!!pendingQuery)
       const [settingsSel, setSettingsSel] = createSignal(0)
+      const [devTaps, setDevTaps] = createSignal(0)   // version-footer tap counter (dev easter egg)
       const [findingsOpen, setFindingsOpen] = createSignal(false)
       // per-entry cancellables — a dual install runs a plugin spawn AND a
       // skill download concurrently, so each entry owns a SET of cancel fns
@@ -158,9 +162,16 @@ export default Plugin.define({
       }
       onMount(() => {
         setLangMode(store.lang ?? 'auto')
-        fetchIndexCached(INDEX_URL).then(setIdx, e => setIdxErr(String(e)))
         void refreshInstalled()
         if (searchOn()) setTimeout(() => searchInput?.focus(), 50)
+      })
+      // index fetch lives in an effect, not onMount — it must re-run when
+      // the resolved source changes (dev-source toggle, or storage hydration
+      // landing after setup). Errors land in idxErr; stale idx stays visible
+      // meanwhile, same as refreshStale semantics elsewhere.
+      createEffect(() => {
+        const u = indexUrl()
+        fetchIndexCached(u).then(setIdx, e => setIdxErr(String(e)))
       })
       ctx.data.on('plugin.updated', () => void refreshInstalled())
 
@@ -290,7 +301,7 @@ export default Plugin.define({
         // version concern'd inside that window must NOT install (GUI host
         // does the same recheck before its spawn). Cheap when health.json
         // hasn't moved; a real re-pull when it has.
-        try { await assertApprovedPin(() => fetchIndexCached(INDEX_URL, true), e.name, pin) }
+        try { await assertApprovedPin(() => fetchIndexCached(indexUrl(), true), e.name, pin) }
         catch { setStatus(t('catalogMoved')); return 'fail' }
         if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
         const cw = compatWarnOf(e)
@@ -376,7 +387,7 @@ export default Plugin.define({
           // anyway is exactly the bypass assertApprovedPin exists to close
           // (GUI writeSkill refuses the same case). A fetch failure surfaces
           // as its real error instead of silently installing anyway.
-          const freshIdx = await fetchIndexCached(INDEX_URL, true)
+          const freshIdx = await fetchIndexCached(indexUrl(), true)
           const fresh = freshIdx?.plugins?.find(x => x.name === e.name)
           if (!fresh) throw new Error(t('catalogMoved'))
           const planNow = installPlan(fresh)
@@ -624,7 +635,7 @@ export default Plugin.define({
         { label: t('clearDataTui'), run: () => openMenu(t('confirmClearTui'), [
           // same scope as GUI clearData — favorites + version bookkeeping +
           // devlog + language, not just the favorites blob
-          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {}; delete d.devlog; delete d.lang }) },
+          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {}; delete d.devlog; delete d.lang; delete d.devSource; delete d.devUnlocked }) },
           { label: t('cancel'), run: noop },
         ]) },
         { label: `${t('devlogTui')}: [${store.devlog ? t('devlogOn') : t('devlogOff')}]（${LOG_FILE}）`, run: () => {
@@ -637,23 +648,39 @@ export default Plugin.define({
           const tail = existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').slice(-15) : [t('noLogs')]
           openMenu(t('devlogMenu'), tail.map(line => ({ label: line, run: noop })))
         })() },
+        // dev catalog source — hidden behind the version-tap easter egg, but
+        // always visible while it's ON (a dev source you can't see is a dev
+        // source you can't turn off). Refetch happens via the index effect.
+        ...(store.devUnlocked || store.devSource ? [{ label: `${t('devSource')}: [${store.devSource ? t('devlogOn') : t('devlogOff')}]`, run: () => {
+          void mutate(d => { d.devSource = !d.devSource }).then(() => setStatus(`${t('devSource')} → ${indexUrl()}`))
+        } }] : []),
         { label: t('useHttpCatalog'), run: () => void (async () => {
           const cfg = await configPath()
           try {
+            const cu = skillsUrl(indexUrl())
             const on = await withConfigLock(async () => {
               const d = await readJson(cfg)
               const list = strArrayField(d, 'skills')
-              const was = list.includes(CATALOG_URL)
+              const was = list.includes(cu)
               // reversible — enable appends the url, re-running disables it
               // (other skills[] entries are preserved either way)
-              if (was) await writeJsonAtomic(cfg, { ...d, skills: list.filter(u => u !== CATALOG_URL) })
-              else await writeJsonAtomic(cfg, { ...d, skills: [...list, CATALOG_URL] })
+              if (was) await writeJsonAtomic(cfg, { ...d, skills: list.filter(u => u !== cu) })
+              else await writeJsonAtomic(cfg, { ...d, skills: [...list, cu] })
               return was
             })
             setStatus(`catalog source ${on ? t('catalogDisabled') : t('catalogEnabled')} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
         { label: t('permTitle'), run: () => void openSkillPerms() },
+        // version footer — also the dev-settings easter egg: 10 silent enters
+        // persist devUnlocked and the dev item above appears. Deliberately zero
+        // feedback — no status, no count; the item appearing is the only signal.
+        { label: `opencode-market v${PKG_VERSION} · © 2026 awesome-market contributors · MIT`, run: () => {
+          if (store.devUnlocked) return
+          const n = devTaps() + 1
+          setDevTaps(n)
+          if (n >= 10) { setDevTaps(0); void mutate(d => { d.devUnlocked = true }) }
+        } },
       ])
 
       // github-kind entries carry no npm version — their marker is pushedAt;
@@ -904,7 +931,7 @@ export default Plugin.define({
         // r = force refresh — TTL must not swallow a user-initiated reload;
         // the outcome label distinguishes "still fresh" from "actually pulled"
         // AND from served-stale/mismatch (old snapshot, not a refresh)
-        if (k === 'r') { setIdxErr(''); fetchIndexCached(INDEX_URL, true).then(i => { setIdx(i); const oc = fetchOutcome(INDEX_URL); setStatus(oc === 'fresh' ? t('dataFresh') : oc === 'mismatch' ? t('refreshMismatch') : oc === 'stale' ? t('refreshStale') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
+        if (k === 'r') { setIdxErr(''); fetchIndexCached(indexUrl(), true).then(i => { setIdx(i); const oc = fetchOutcome(indexUrl()); setStatus(oc === 'fresh' ? t('dataFresh') : oc === 'mismatch' ? t('refreshMismatch') : oc === 'stale' ? t('refreshStale') : tf('refreshedN', { n: i.plugins.length })) }, e => setIdxErr(String(e))); void refreshInstalled(); return }
         if (k === 'U') { updateAll(); return }
         if (k === 'q') { ctx.ui.dialog.clear(); return }
         if (k === 'tab') { toTab((TABS().findIndex(([id]) => id === tab()) + 1) % TABS().length); return }
@@ -1150,7 +1177,7 @@ export default Plugin.define({
                     <Show when={findingsOpen() && e.verification?.logExcerpt}>
                       <For each={(e.verification!.logExcerpt ?? '').split('\n').slice(0, 12)}>{(l) => <text fg={theme.text.muted}>  {l}</text>}</For>
                     </Show>
-                    <Show when={siteDetailUrl(e, INDEX_URL)}>{(u) => (
+                    <Show when={siteDetailUrl(e, indexUrl())}>{(u) => (
                       <text fg={theme.text.muted}>{t('viewOnSite')}: {u()}</text>
                     )}</Show>
                     <box height={1} />

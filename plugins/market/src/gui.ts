@@ -70,9 +70,11 @@ export default Plugin.define({
     if (!api?.index) return {}
     const safe = api as Api
     // catalog endpoint — plugin options (opencode.json) > OPENCODE_MARKET_INDEX
-    // env > published default. Every index-facing IPC call passes it through.
-    const INDEX_URL = resolveIndexUrl(ctx?.options)
-    const SKILLS_URL = skillsUrl(INDEX_URL)
+    // env > dev-source settings toggle > published default. Resolved per call
+    // (state() is read lazily) so the settings toggle re-targets every
+    // index-facing IPC call; the host follows whatever url the renderer sends.
+    const indexUrl = () => resolveIndexUrl(ctx?.options, state().devSource)
+    const skillsEndpoint = () => skillsUrl(indexUrl())
     // single document listener slot — chrome() rebuilds once per mount, so each
     // new build replaces the previous handler instead of accumulating listeners
     let docClick: ((ev: Event) => void) | null = null
@@ -139,6 +141,7 @@ export default Plugin.define({
     const [sortDir, setSortDir] = createSignal<'desc'|'asc'>('desc')
     const [rangeDays, setRangeDays] = createSignal(0)
     const [prog, setProg] = createSignal<Record<string, { lines: string[]; done?: boolean; ok?: boolean; cancelled?: boolean }>>({})
+    let verTaps = 0   // version-tap counter — setup scope so a settingsPanel rebuild can't zero it mid-sequence
     try { const ls = loadState(); setState(ls); setLangMode(ls.lang ?? 'auto') } catch { /* storage unavailable */ }
     const devlog = () => !!state().devlog
     const log = (msg: string) => { if (devlog()) { appendLog(msg); void safe.devlog?.(msg).catch(() => {}) } }
@@ -164,7 +167,7 @@ export default Plugin.define({
       })
     } catch { /* older host: no events */ }
 
-    safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e)))
+    safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
     // inventory health — the list degrades to uncataloged-only when the host
     // inventory is unreachable, and the UI says so instead of pretending
     // nothing is installed
@@ -716,6 +719,8 @@ export default Plugin.define({
         put({ skillVers: { ...state().skillVers, [e.name]: v } })
       }
       const runUpdateAll = async () => {
+        // no catalog = nothing to diff — say fetch failed, not 'all latest'
+        if (!data()) { updAll.textContent = t('fetchFailed'); setTimeout(() => { updAll.textContent = t('updateAll') }, 3000); return }
         if (typeof safe.update !== 'function' && typeof safe.writeSkill !== 'function') { updAll.textContent = t('needRestartDesk'); return }
         // per-half targeting: only halves that are installed AND outdated —
         // a current plugin half must not mask a stale skill half (the old
@@ -1002,7 +1007,7 @@ export default Plugin.define({
         links.appendChild(lb)
       }
       linkBtn(t('verifyRun'), v?.runUrl)
-      linkBtn(t('viewOnSite'), siteDetailUrl(e, INDEX_URL))
+      linkBtn(t('viewOnSite'), siteDetailUrl(e, indexUrl()))
       if (links.childElementCount) root.appendChild(links)
       const btn = installBtn(e); btn.style.marginLeft = '0'
       root.appendChild(btn)
@@ -1057,13 +1062,13 @@ export default Plugin.define({
         refBtn.disabled = true; refBtn.textContent = t('refreshing'); setRefText(''); refStatus.textContent = ''
         const to = <T,>(p: Promise<T>) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(t('refreshTimeout'))), 45_000))])
         try {
-          const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: INDEX_URL }) : safe.index({ url: INDEX_URL }))
+          const idx = await to(typeof safe.refreshIndex === 'function' ? safe.refreshIndex({ url: indexUrl() }) : safe.index({ url: indexUrl() }))
           if (idx) setDataWrap(idx)
           // honest refresh result — only a real pull counts as "refreshed N".
           // 'stale'/'mismatch' mean the host SERVED THE OLD SNAPSHOT (fetch
           // failed / sha disagreement), not that data was refreshed — the
           // old code labeled them refreshed anyway
-          const oc = await safe.indexOutcome?.({ url: INDEX_URL }).catch(() => '') as string
+          const oc = await safe.indexOutcome?.({ url: indexUrl() }).catch(() => '') as string
           const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
           if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
           const time = new Date().toLocaleTimeString()
@@ -1115,6 +1120,26 @@ export default Plugin.define({
       // localStorage buffer made the button a no-op (P0 bug)
       clrL.onclick = () => { clearLog(); void safe.clearDevlog?.().then(refresh).catch(() => {}) }
       root.append(dv, cbL, logBox, clrL)
+      // dev catalog source — the maintainer fork's Pages, used while the
+      // upstream catalog isn't being published (pre-release development).
+      // Hidden behind the version-tap easter egg below, but ALWAYS visible
+      // while devSource is on: a dev source you can't see is one you can't
+      // turn off. Switching refetches on the new source immediately;
+      // explicit indexUrl/env config still outranks the toggle.
+      const dsWrap = el('div', state().devUnlocked || state().devSource ? '' : 'display:none')
+      const dsh = el('h4', 'margin:20px 0 6px;font-weight:600', t('devSource'))
+      const dsc = document.createElement('input'); dsc.type = 'checkbox'; dsc.checked = !!state().devSource
+      const dsNote = el('div', 'font-size:11px;opacity:.6;margin-top:4px', indexUrl())
+      dsc.onchange = () => {
+        put({ devSource: dsc.checked })
+        dsNote.textContent = indexUrl()
+        setErr('')
+        safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
+      }
+      const dscL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      dscL.append(dsc, document.createTextNode(t('devSourceDesc')))
+      dsWrap.append(dsh, dscL, dsNote)
+      root.appendChild(dsWrap)
       // HTTP skill catalog — lets opencode itself discover/refresh repo skills
       // from the same site root the index came from (skills/ namespace)
       root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
@@ -1126,11 +1151,11 @@ export default Plugin.define({
       let ssOn = false
       const ssRefresh = () => void safe.skillSource?.().then(r => {
         ssOn = !!r.enabled
-        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${SKILLS_URL} — ${t('catalogDisabled')}`
+        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${skillsEndpoint()} — ${t('catalogDisabled')}`
         ssBtn.textContent = r.enabled ? t('disable') : t('useHttpCatalog')
-      }).catch(() => { ssStatus.textContent = SKILLS_URL })
+      }).catch(() => { ssStatus.textContent = skillsEndpoint() })
       ssRefresh()
-      ssBtn.onclick = () => void safe.skillSource?.({ url: SKILLS_URL, enable: !ssOn }).then(ssRefresh).catch(() => {})
+      ssBtn.onclick = () => void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
       root.append(ssStatus, ssBtn)
       // skill permissions — per installed skill id, allow/ask/deny written to
       // opencode.json permissions[]; 'clear' returns to the default (ask).
@@ -1162,6 +1187,26 @@ export default Plugin.define({
         void paintPerms()
         root.appendChild(permBox)
       }
+      // footer — copyright + version. The version is also the dev-settings
+      // easter egg: 10 clicks persist devUnlocked (Android build-number
+      // convention).
+      const foot = el('div', 'margin-top:28px;padding-top:12px;border-top:1px solid rgba(128,128,128,.2);font-size:11px;opacity:.55;display:flex;gap:6px;align-items:baseline')
+      foot.appendChild(el('span', '', '© 2026 awesome-market contributors · MIT ·'))
+      // version text doubles as the dev-settings easter egg: 10 silent clicks
+      // persist devUnlocked and reveal the section. Deliberately ZERO affordance
+      // — no pointer cursor, no progress, no message; the section appearing is
+      // the only feedback (user asked for it invisible, not discoverable).
+      const ver = el('span', 'user-select:none;-webkit-user-select:none', `v${PKG_VERSION}`)
+      ver.onclick = () => {
+        if (state().devUnlocked) return
+        if (++verTaps >= 10) {
+          verTaps = 0
+          put({ devUnlocked: true })
+          dsWrap.style.display = ''
+        }
+      }
+      foot.appendChild(ver)
+      root.appendChild(foot)
       return root
     }
 
@@ -1172,19 +1217,26 @@ export default Plugin.define({
       const body = el('div')
       shell.append(head, body)
       createEffect(() => {
-        head.style.display = (data() && view().kind === 'list') ? '' : 'none'
+        // chrome (tabs incl. ≡ settings) must stay visible under fetch
+        // failure — it's the only path to the dev-source toggle. Hiding it
+        // when data is null used to wall the whole panel behind the error.
+        head.style.display = view().kind === 'list' ? '' : 'none'
       })
       insert(body, () => {
+        const v = view()
+        // settings panel BEFORE the error/loading walls — the dev-source
+        // toggle and the version easter egg live there. Walling them behind
+        // a fetch failure is a dead end: broken catalog → can't reach the
+        // toggle that points at the working source → stuck forever.
+        if (v.kind === 'list' && tab() === 'advanced') return settingsPanel()
         if (err()) {
           const d = el('div', 'padding:12px;color:#c66', `error: ${err()}`)
           const rb = el('button', 'margin-left:8px;font-size:12px;cursor:pointer', t('retry')) as HTMLButtonElement
-          rb.onclick = () => { setErr(''); safe.index({ url: INDEX_URL }).then(i => setDataWrap(i), e => setErr(String(e))) }
+          rb.onclick = () => { setErr(''); safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e))) }
           d.appendChild(rb)
           return d
         }
         if (!data()) return el('div', 'padding:12px;opacity:.6', t('loading'))
-        const v = view()
-        if (tab() === 'advanced') return settingsPanel()
         const n = v.kind === 'detail' ? detailView(v.e) : listView()
         n.style.padding = '0 12px 12px'
         // keyboard path discoverability — the webview is mouse-first, but

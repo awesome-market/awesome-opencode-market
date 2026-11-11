@@ -53,6 +53,7 @@
 
 **关键约束**
 - 无服务器、无数据库——index.json 是唯一数据面
+- **两段式数据面**：生产端点固定为上游 org Pages（`awesome-market.github.io/.../index.json`，README 与客户端默认值一致）；开发期 catalog 流水线只跑在维护者 fork（`terry2010.github.io`），避免测试 run 污染上游 catalog 分支。客户端通过设置里的"开发目录源"开关切到 fork 源（`devSource`），显式 `indexUrl`/`OPENCODE_MARKET_INDEX` 始终优先于开关；发布时 org 侧启用流水线后默认值无需改动
 - 所有验证执行都在一次性 CI runner；runner 内不放任何 secret
 - **GITHUB_TOKEN 按 job 分权**：verify/scan job `permissions: {}`（全空，连读都不给——恶意 postinstall 拿不到 token）；publish job 单独 `contents: write` 且**不和 verify 共用 job**（防执行环境与写权限同处）
 - pipeline 全程产物公开：workflow YAML、run 日志、index.json diff——可审计是卖点

@@ -55,21 +55,22 @@ The same catalog feeds the Market panel, the TUI, and the website — one source
 behind every surface:
 
 - Machine-readable index:
-  `https://terry2010.github.io/awesome-opencode-market/index.json`
+  `https://awesome-market.github.io/awesome-opencode-market/index.json`
 - Skill file catalog:
-  `https://terry2010.github.io/awesome-opencode-market/skills/`
-- [Browse the catalog on the web](https://terry2010.github.io/awesome-opencode-market/)
-- [Daily digest](https://github.com/terry2010/awesome-opencode-market/tree/catalog/digest)
+  `https://awesome-market.github.io/awesome-opencode-market/skills/`
+- [Browse the catalog on the web](https://awesome-market.github.io/awesome-opencode-market/)
+- [Daily digest](https://github.com/awesome-market/awesome-opencode-market/tree/catalog/digest)
   — the announcement surface: every version about to be released is posted
   here first, so objections can land before it ships
 
 The index URL is the only data-plane endpoint the client needs. Point it at a
 mirror or a private catalog via the plugin's `indexUrl` option or the
-`OPENCODE_MARKET_INDEX` env var.
+`OPENCODE_MARKET_INDEX` env var; a "dev catalog source" toggle in settings
+switches to the maintainer fork's catalog for development builds.
 
 ## Suggest a plugin or skill
 
-[Send a suggestion](https://github.com/terry2010/awesome-opencode-market/issues/new?template=submission.yml)
+[Send a suggestion](https://github.com/awesome-market/awesome-opencode-market/issues/new?template=submission.yml)
 — submissions go through the same scan and test-install pipeline as everything
 else before they appear in the catalog.
 

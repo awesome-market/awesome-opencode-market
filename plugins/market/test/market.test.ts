@@ -446,6 +446,32 @@ describe('install routing + contract', () => {
     delete env.OPENCODE_MARKET_INDEX
     expect(resolveIndexUrl(null)).toBe(DEFAULT_INDEX_URL)
   })
+  it('resolveIndexUrl: dev-source toggle selects the fork catalog, explicit config still wins', async () => {
+    const { resolveIndexUrl, DEV_INDEX_URL } = await import('../src/catalog.ts')
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    // toggle on → fork Pages; toggle off/absent → upstream org Pages
+    expect(resolveIndexUrl(null, true)).toBe(DEV_INDEX_URL)
+    expect(resolveIndexUrl(null, false)).toBe(DEFAULT_INDEX_URL)
+    expect(resolveIndexUrl(null)).toBe(DEFAULT_INDEX_URL)
+    // explicit config outranks the toggle in both directions
+    expect(resolveIndexUrl({ indexUrl: 'https://opt.example/o.json' }, true)).toBe('https://opt.example/o.json')
+    env.OPENCODE_MARKET_INDEX = 'https://env.example/i.json'
+    expect(resolveIndexUrl(null, true)).toBe('https://env.example/i.json')
+    delete env.OPENCODE_MARKET_INDEX
+    // prod default is the upstream org; dev source is the maintainer fork —
+    // the two must never collapse into each other
+    expect(DEFAULT_INDEX_URL).toContain('awesome-market.github.io')
+    expect(DEV_INDEX_URL).toContain('terry2010.github.io')
+    expect(DEV_INDEX_URL).not.toBe(DEFAULT_INDEX_URL)
+  })
+  it('sanitizeState: devSource boolean accepted, non-boolean dropped', async () => {
+    const { sanitizeState } = await import('../src/catalog.ts')
+    expect(sanitizeState({ favorites: {}, devSource: true }).devSource).toBe(true)
+    expect(sanitizeState({ favorites: {}, devSource: false }).devSource).toBe(false)
+    expect(sanitizeState({ favorites: {}, devSource: 'yes' }).devSource).toBeUndefined()
+    expect(sanitizeState({ favorites: {}, devSource: 1 }).devSource).toBeUndefined()
+    expect(sanitizeState({ favorites: {} }).devSource).toBeUndefined()
+  })
   it('healthUrl/skillsUrl derive sibling endpoints', async () => {
     const { healthUrl, skillsUrl } = await import('../src/catalog.ts')
     expect(healthUrl('https://x.example/i/index.json')).toBe('https://x.example/i/health.json')
