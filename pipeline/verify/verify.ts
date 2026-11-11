@@ -286,7 +286,19 @@ export async function checkSkillTgz(
     // member literally named '--something' would be consumed as an option.
     // The SKILL.md suffix filter happens to block an exploitable payload
     // today — the delimiter makes member-only semantics not depend on it.
-    const body = (await run('tar', ['xzf', tgz, '-O', '--', entry], { timeout: 30_000 })).stdout
+    // maxBuffer: execFile buffers the WHOLE member in memory — a hostile
+    // tarball can name a huge file 'x/SKILL.md'. Cap reads at 8MB (a real
+    // manifest is KBs) and report the cap honestly instead of surfacing
+    // execFile's raw 'maxBuffer exceeded' as an unexplained package failure.
+    let body: string
+    try {
+      body = (await run('tar', ['xzf', tgz, '-O', '--', entry], { timeout: 30_000, maxBuffer: 8 * 1024 * 1024 })).stdout
+    } catch (e) {
+      const msg = String((e as { stderr?: string }).stderr ?? (e as Error).message)
+      if (/maxbuffer|enobufs|ERR_CHILD_PROCESS_STDOUT/i.test(msg))
+        return { ok: false, log: `SKILL.md member '${entry}' in ${label} exceeds the 8MB read cap` }
+      throw e
+    }
     // tolerate a UTF-8 BOM and trailing spaces on the --- fences — real-world
     // SKILL.md files picked up both from Windows editors; neither changes
     // whether opencode can parse the manifest
@@ -530,6 +542,26 @@ export async function verifyPackage(
       throw new Error(`serve did not announce a listener within ${opts.bootWaitMs ?? 15_000}ms` +
         `${dead ? ' (process exited)' : ''}:\n${tail(serveOut)}`)
     }
+    // Marker provenance check (extends the SECURITY ASSUMPTION above): under
+    // lazy load serve's own lines are the ONLY output when these scrape, so
+    // exactly one listener announcement exists. Two DISTINCT listening ports
+    // or passwords means extra output raced the scrape — an eagerly-loaded
+    // plugin printing a forged line, or upstream output drift. Either way the
+    // scrape can't prove which marker is serve's, so BOTH are untrustworthy:
+    // fail the target as harness, never mint a verdict from a coin flip.
+    // Identical repeats (a legit reprint) dedupe harmlessly. Residual: a fake
+    // marker that WINS outright (real marker never arrives in-window) can't be
+    // distinguished this way — that is the documented version-pinned
+    // assumption, guarded by the OPENCODE_VERSION bump test.
+    const listenPorts = new Set(serveOut.split(/\r?\n/)
+      .filter(l => /listening/i.test(l))
+      .map(l => /127\.0\.0\.1:(\d+)/.exec(l)?.[1])
+      .filter((p): p is string => !!p))
+    const pwSet = new Set([...serveOut.matchAll(/server password ([^\r\n]+)/g)].map(m => m[1]!.trim()))
+    if (listenPorts.size > 1 || pwSet.size > 1)
+      throw new Error(`conflicting serve markers (${[...listenPorts].join(',') || port} port(s), ` +
+        `${pwSet.size} password(s)) — output may include a forged listener line; ` +
+        `refusing to trust either (harness)`)
     {
       const auth = ['-u', `opencode:${pw}`]
       const api = `http://127.0.0.1:${port}/api`
@@ -691,8 +723,18 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
   // could forge every 'verified' in the file). verify.yml hard-gates on the
   // same probe as a step, so this only trips on a transient sudo flake —
   // a red job + alert beats a green shard full of forgeable verdicts. Local
-  // callers wanting in-process verification simply don't pass sandboxUser.
+  // callers wanting in-process verification simply don't pass sandboxUser —
+  // but then EVERY untrusted-code path runs as the invoking uid: `plugin add`
+  // (install hooks), `serve` (plugin handlers), tmux (TUI) and the in-process
+  // gui eval (node:vm is NOT a security boundary — a realm escape lands on the
+  // shard's own uid and env). Loud warning, not a refusal: local dev on
+  // already-trusted packages is a legitimate use, tests inject fns anyway.
   let sandboxUser = opts.sandboxUser
+  if (!sandboxUser && !opts.execFn && !opts.spawnFn)
+    console.warn('[verify] WARNING: no sandbox user — package code (install hooks, ' +
+      'serve handlers, gui bundles) will execute as THIS uid with ambient env/home ' +
+      'access. Only verify packages you already trust; set VERIFY_SANDBOX_USER=nobody ' +
+      '(or opts.sandboxUser) for untrusted targets.')
   if (sandboxUser) {
     const probe = opts.execFn ?? exec
     const ok = await probe('sudo', ['-n', '-u', sandboxUser, 'true'], { timeout: 10_000 })

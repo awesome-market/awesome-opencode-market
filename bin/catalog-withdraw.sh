@@ -21,7 +21,8 @@ set -uo pipefail
 : "${ISSUE:?}" "${MSG:?}"
 git config user.email "market-bot@users.noreply.github.com"
 git config user.name "market-bot"
-WT=${WT:-/tmp/catw}
+# PID-unique default — same self-hosted-runner race guard as catalog-append.sh
+WT=${WT:-/tmp/catw.$$}
 for i in 1 2 3; do
   # --depth=1 + forced tracking refspec — same rationale as catalog-append.sh
   # (tip-only reads, non-FF remote must not wedge the retry loop)

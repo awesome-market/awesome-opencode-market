@@ -52,7 +52,10 @@ else
 fi
 git config user.email "market-bot@users.noreply.github.com"
 git config user.name "market-bot"
-WT=${WT:-/tmp/cat}
+# PID-unique default: GH-hosted runners are ephemeral so a fixed /tmp/cat was
+# safe, but on self-hosted runners two concurrent catalog writers would race
+# the same worktree path. WT stays overridable for tests.
+WT=${WT:-/tmp/cat.$$}
 APPLY_RES=skipped
 APPLY_WANT=0
 [ "${APPLY_ONLY:-}" = 1 ] && APPLY_WANT=1

@@ -184,6 +184,7 @@ steps:
 - **增量验证**（防全量重跑超时）：缓存 key = `name@version + opencodeVersion`，只有新版本或宿主升级才重验；全量重验只在缓存失效时发生
 - **matrix 分片**：GH matrix 上限 256 job，按 50 包/片分批串行；每片超时 5min/包
 - **激活信号取日志文件**（A3 定案）：`opencode run` 后 grep `$XDG_DATA_HOME/opencode/log/opencode.log` 的 `msg="loading plugin" id=<name>`；`plugin check` 只查更新不是激活信号，不用它；失败写 `logExcerpt`（≤2KB）+ `runUrl`
+- **本地运行 = 本机执行不可信代码**：`VERIFY_SANDBOX_USER` 未设时，`plugin add`/`serve`/TUI/gui 评估全部以当前 uid 跑（gui 的 `node:vm` 不是安全边界）。shard 驱动对此打印显式警告——verify 是 CI-only 操作；本地只验你已经信任的包。CI 侧边界 = nobody uid + eBPF egress 白名单 + `permissions:{}`。
 
 ---
 
@@ -347,6 +348,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | E1 | 规则集公开 = 恶意作者可针对性绕过 | 分层：扫描+装测+人工高危审；诚实标"未检出≠安全" |
 | E2 | typosquatting/改名包冒充知名插件 | 名称相似度检测 + 官方 ecosystem 名单锚定 |
 | E3 | fork 包冒名原插件身份 | §4.5 去重规则：无自有提交的 fork 不收 |
+| E4 | catalog 分支写通道不止 CI：maintainer Mac 的 launchd 常驻任务（`bin/ai-diagnose.sh`、`bin/publish-digest.sh`）以本地 git 凭证推送，无 egress/permissions 护栏——Mac 失陷或恶意 merge 到 main，下一周期即带写权限执行 | 与 CI secret 同级信任根：`$CODE` 钉 `origin/main` 独立 checkout（脏树不会被跑）；视为数据面第三信任根纳入威胁模型（另两根：GITHUB_TOKEN、GitHub Pages 账号） |
 
 ### F. 治理卡点
 | # | 卡点 | 应对 |
