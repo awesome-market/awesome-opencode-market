@@ -92,7 +92,17 @@ export function verifyQueued(
   // the skip reason no longer describes the slot, so it re-queues for an
   // honest measurement instead of displaying a stale "没跑" forever. Host-
   // stale (a verified result bound to an old runtime) likewise re-measures.
-  return t.unverified || ver?.status === 'skipped' || retryable(ver) || t.hostStale
+  // A terminal 'failed' gets the same host-bump amnesty: the verdict was
+  // measured on a runtime users no longer run, and the new host may pass
+  // what the old one blamed (host bug fixed, plugin needed a newer API).
+  // One fresh measurement per bump — failing again burns one more retries
+  // tick and re-excludes it. Same honesty rules as hostStale: 'unknown' ≠
+  // provably off-host, and 'structure'-level fails never ran the host.
+  const hostStaleFail = ver?.status === 'failed'
+    && ver.level !== 'structure'
+    && ver.opencodeVersion !== 'unknown'
+    && ver.opencodeVersion !== OPENCODE_VERSION
+  return t.unverified || ver?.status === 'skipped' || retryable(ver) || t.hostStale || hostStaleFail
 }
 
 /** The installable parts a verify run must prove, normalized from `contains`.
@@ -216,10 +226,14 @@ if (isMain(import.meta.url)) {
   const latest = verdicts.length ? latestVerdicts(verdicts) : undefined
   const latestHuman = verdicts.length ? latestHumanVerdicts(verdicts) : undefined
   const targets = planTargets(index, cap, process.argv.includes('--retest'), new Date(), latest, latestHuman)
-  // 12/shard with 2 intra-shard lanes ≈ the old 8×serial wall-clock (~30min
-  // worst case): each lane still only carries ~6 targets. Feature-staged
-  // targets cost real minutes — targetWeight keeps shards balanced on time.
-  const shards = shard(targets, 12, targetWeight)
+  // shard size governs wall-clock per job: size/lanes ≈ serial targets per
+  // lane (default 12 ÷ VERIFY_LANES 4 ≈ 3). Bigger shards mean FEWER matrix
+  // jobs — friendlier when account concurrency is shared with other CI —
+  // at the cost of longer per-job runtime (verify.yml timeout-minutes must
+  // keep up). VERIFY_SHARD_SIZE overrides for bump-drain dispatches.
+  const sizeEnv = Number(process.env.VERIFY_SHARD_SIZE)
+  const shardSize = Math.max(1, Math.min(64, Number.isFinite(sizeEnv) && sizeEnv > 0 ? Math.floor(sizeEnv) : 12))
+  const shards = shard(targets, shardSize, targetWeight)
   mkdirSync(outDir!, { recursive: true })
   shards.forEach((s, i) => writeFileSync(join(outDir!, `shard-${i}.json`), JSON.stringify(s)))
   // matrix list goes to a file, not stdout-position — a future log line can't

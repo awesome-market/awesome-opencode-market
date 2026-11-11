@@ -791,12 +791,17 @@ export async function verifyShard(targets: (VerifyTarget | string)[], outPath: s
     // spawn). Three in a row is an outage, not three bad packages: stop
     // burning the remaining targets; they stay unverified for the next run.
     let harnessStreak = 0
-    // two lanes, each target in its own runner-owned home+sandbox uid subtree.
-    // Isolation points: uh is per-target (mkdtemp), the process sweep is
-    // marker-scoped (sweepSandboxProcs), and results/flush are shared in-
-    // process state on one event loop — no locks needed. ~2× throughput;
-    // serve ports are ephemeral (--port 0) so lanes never collide on a port.
-    const LANES = 2
+    // lanes are wait-bound (install/serve/API polls burn wall clock, not CPU),
+    // so widening them multiplies throughput per runner without more matrix
+    // jobs. Isolation is per-TARGET not per-lane: uh is mkdtemp'd, the process
+    // sweep is marker-scoped (sweepSandboxProcs), tmux sessions/sockets are
+    // per-check private, and results/flush are shared in-process state on one
+    // event loop — no locks needed. serve ports are ephemeral (--port 0).
+    // VERIFY_LANES tunes it (CI bump-drain): default 4, ceiling 8 — past that
+    // serve memory (~0.5GB/lane) and concurrent npm fetches start contending
+    // instead of overlapping.
+    const lanesEnv = Number(process.env.VERIFY_LANES)
+    const LANES = Math.max(1, Math.min(8, Number.isFinite(lanesEnv) && lanesEnv > 0 ? Math.floor(lanesEnv) : 4))
     let cursor = 0
     let aborted = false
     const lane = async (): Promise<void> => {

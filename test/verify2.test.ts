@@ -230,7 +230,9 @@ describe('verify/plan', () => {
     // retried still owns its attempts — the window is gone, the counter is
     // the bound
     const stale = entry({ name: 'stale', verification: { status: 'failed', verifiedAt: '2025-12-01T00:00:00Z' } })
-    const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3 } })
+    // budget spent on the CURRENT host → terminal (hostStaleFail amnesty only
+    // applies to failures measured on an old host)
+    const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3, opencodeVersion: OPENCODE_VERSION } })
     const noDate = entry({ name: 'nodate', verification: { status: 'failed' } })
     const got = planTargets(idx([fresh, legacy, stale, exhausted, noDate]), 48, false, now)
     // everything under 3 attempts re-enters; only the exhausted slot is terminal
@@ -637,7 +639,17 @@ describe('verifyShard', () => {
     const notDir = join(home, 'afile')
     writeFileSync(notDir, 'x')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
-    const results = await verifyShard(['a', 'b', 'c', 'd', 'e', 'f'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
+    // pin to 2 lanes so the abort is actually exercised — with 4 default lanes
+    // all 6 targets could be in-flight before the streak can bite
+    const prev = process.env.VERIFY_LANES
+    process.env.VERIFY_LANES = '2'
+    let results
+    try {
+      results = await verifyShard(['a', 'b', 'c', 'd', 'e', 'f'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
+    } finally {
+      if (prev === undefined) delete process.env.VERIFY_LANES
+      else process.env.VERIFY_LANES = prev
+    }
     // 2 lanes: once the streak hits 3 no NEW target is pulled, but a sibling
     // lane may already hold one in-flight target — overshoot is bounded, not
     // zero (an outage is still not 6 bad packages)

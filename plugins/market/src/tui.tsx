@@ -247,11 +247,20 @@ export default Plugin.define({
       // pre-install compat warning — engines declared in the index vs the
       // running host version (ctx.app.version); warn BEFORE the click, not
       // after a load failure
+      const hostVer = String((ctx.app as { version?: string } | undefined)?.version ?? '')
       const compatWarnOf = (e: MarketEntry): string | null => {
         const eng = e.compat?.engines
-        const v = String((ctx.app as { version?: string } | undefined)?.version ?? '')
-        if (!eng || !v) return null
-        return enginesSatisfied(v, eng) === false ? tf('compatWarn', { req: eng, cur: v }) : null
+        if (!eng || !hostVer) return null
+        return enginesSatisfied(hostVer, eng) === false ? tf('compatWarn', { req: eng, cur: hostVer }) : null
+      }
+      // the 'verified' claim was measured on a DIFFERENT host than the one
+      // running — true during the post-bump re-verify window (staleHost tier
+      // drains there first) and whenever the user's runtime leads/lags the
+      // pipeline pin. 'unknown' host stays quiet (can't prove mismatch).
+      const verifyStale = (e: MarketEntry): boolean => {
+        const v = e.verification
+        return v?.status === 'verified' && !!v.opencodeVersion && v.opencodeVersion !== 'unknown'
+          && !!hostVer && v.opencodeVersion !== hostVer
       }
       const pick = () => pool()[sel()]
       let listScroll: { scrollTop: number; scrollTo(y: number): void } | undefined
@@ -1181,7 +1190,7 @@ export default Plugin.define({
                     <Show when={e.integrity}><text fg={theme.text.muted}>integrity: {(e.integrity ?? '').slice(0, 32)}…</text></Show>
                     {/* verify story — status/level/date + run link + log excerpt
                         (AGENTS: 报错三件套 — 发生了什么/为什么/下一步) */}
-                    <text fg={theme.text.muted}>verify: {e.verification?.status ?? 'unverified'}{e.verification?.level ? ` · ${t('verifyLevel')}: ${e.verification.level}` : ''}{e.verification?.verifiedAt ? ` · ${e.verification.verifiedAt.slice(0, 10)}` : ''}{e.verification?.opencodeVersion ? ` (opencode ${e.verification.opencodeVersion})` : ''}</text>
+                    <text fg={theme.text.muted}>verify: {e.verification?.status ?? 'unverified'}{e.verification?.level ? ` · ${t('verifyLevel')}: ${e.verification.level}` : ''}{e.verification?.verifiedAt ? ` · ${e.verification.verifiedAt.slice(0, 10)}` : ''}{e.verification?.opencodeVersion ? ` (opencode ${e.verification.opencodeVersion})` : ''}{verifyStale(e) ? ` — ${t('verifyOldHost')}` : ''}</text>
                     <Show when={e.verification?.runUrl && /^https:\/\//.test(e.verification!.runUrl!)}>
                       <text fg={theme.text.muted}>{t('verifyRun')}: {e.verification!.runUrl}</text>
                     </Show>

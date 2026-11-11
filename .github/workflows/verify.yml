@@ -1,7 +1,14 @@
 name: verify
 # scope: prod-only — scheduled verification automation
 on:
-  schedule: [{ cron: '47 4 * * *' }, { cron: '47 16 * * *' }]   # 2x/day — aligned behind both catalog runs (WF-4)
+  # 4x/day — each tick follows a catalog run by ~90min so fresh entries meet
+  # an imminent verify slot (WF-4). The queue is capped/serialized regardless;
+  # extra ticks only raise daily throughput, they can't multiply shard load.
+  schedule:
+    - { cron: '47 4 * * *' }
+    - { cron: '47 10 * * *' }
+    - { cron: '47 16 * * *' }
+    - { cron: '47 22 * * *' }
   workflow_dispatch:
     inputs:
       targets:
@@ -104,7 +111,11 @@ jobs:
             : > /tmp/ai-verdicts.jsonl
           fi
       - id: shards
-        env: { VERIFY_CAP: "${{ inputs.cap }}" }
+        env:
+          VERIFY_CAP: "${{ inputs.cap }}"
+          # repo-variable override without a code edit (bump-drain tuning):
+          # unset/empty → the code default (12/shard) applies
+          VERIFY_SHARD_SIZE: "${{ vars.VERIFY_SHARD_SIZE || '' }}"
         run: |
           # targeted dispatch → retest mode: failed/verified slots become eligible
           # again (recent failed slots also auto-retry up to 3 attempts — V-3)
@@ -126,7 +137,7 @@ jobs:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 35                 # 12 targets ÷ 2 intra-shard lanes ≈ 30min worst-case (wider API-load window since V-4); margin kept for slow tails
+    timeout-minutes: 35                 # 12 targets ÷ 4 lanes ≈ 15min typical; the 35min ceiling covers VERIFY_SHARD_SIZE=24/VERIFY_LANES=2 drain ops and slow tails (wider API-load window since V-4)
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
@@ -172,6 +183,9 @@ jobs:
           XDG_DATA_HOME: /tmp/vhome/data
           XDG_CACHE_HOME: /tmp/vhome/cache
           VERIFY_SANDBOX_USER: nobody
+          # repo-variable override without a code edit (bump-drain tuning):
+          # unset/empty → the code default (4 lanes) applies
+          VERIFY_LANES: ${{ vars.VERIFY_LANES || '' }}
         run: npx tsx pipeline/verify/verify.ts /tmp/shard-${{ matrix.shard }}.json /tmp/results-${{ matrix.shard }}.json
       # results are flushed per-target inside the shard — a timed-out shard still
       # leaves a partial file worth collecting (N-10)

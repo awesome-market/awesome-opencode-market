@@ -183,9 +183,29 @@ steps:
 - **按类型分级验证**：plugin → install + load（执行）；skill/agent/command → `level: structure`，只校验 SKILL.md/frontmatter 合法性（**不执行**）；mcp → manifest 结构校验；theme → 结构校验
 - **高危件不执行**：scan 命中 redFlag → `status: skipped`（§3 已定，这里呼应）
 - **增量验证**（防全量重跑超时）：缓存 key = `name@version + opencodeVersion`，只有新版本或宿主升级才重验；全量重验只在缓存失效时发生
-- **matrix 分片**：GH matrix 上限 256 job，按 50 包/片分批串行；每片超时 5min/包
+- **matrix 分片**：GH matrix 上限 256 job，默认 12 目标/片；片内 `VERIFY_LANES` 条并行 lane（默认 4，上限 8）——lane 是等待型并发（装/serve/轮询烧墙钟不吃 CPU），加宽它是在不增 matrix job 数的前提下提吞吐的主杠杆；`VERIFY_SHARD_SIZE` 可调片大小（默认 12，上限 64）——片大则 job 少但单 job 时长变长（timeout-minutes 要匹配）
 - **激活信号取日志文件**（A3 定案）：`opencode run` 后 grep `$XDG_DATA_HOME/opencode/log/opencode.log` 的 `msg="loading plugin" id=<name>`；`plugin check` 只查更新不是激活信号，不用它；失败写 `logExcerpt`（≤2KB）+ `runUrl`
-- **本地运行 = 本机执行不可信代码**：`VERIFY_SANDBOX_USER` 未设时，`plugin add`/`serve`/TUI/gui 评估全部以当前 uid 跑（gui 的 `node:vm` 不是安全边界）。shard 驱动对此打印显式警告——verify 是 CI-only 操作；本地只验你已经信任的包。CI 侧边界 = nobody uid + eBPF egress 白名单 + `permissions:{}`。
+- **本地运行 = 本机执行不可信代码**：`VERIFY_SANDBOX_USER` 未设时，`plugin add`/`serve`/TUI/gui 评估全部以当前 uid 跑（gui 的 `node:vm` 不是安全边界）。shard 驱动对此打印显式警告——verify 是 CI-only 操作；本地只验你已经信任的包。CI 侧边界 = nobody uid + eBPF egress 白名单 + `permissions:{}`。**目录裁决必须产自 CI**——merge 把 `runUrl` 写进 verification 作为可审计出处，本地产出的结果没有可链接出处，不进信任链。
+
+### OPENCODE_VERSION 升版 runbook
+
+宿主大版本升级使**全部** `verified`（hostStale）与**旧宿主 terminal-failed**（hostStaleFail，每次升版一次赦免测量）同时回队——这是结构性爆发，规模 = 可算的 stale 计数。操作流程：
+
+1. `pipeline/publish/merge.ts`：`OPENCODE_VERSION` 改为新版本（verify.yml 的 shard job 从该常量反解析安装宿主版本——两 pin 永不漂移）
+2. 量 stale 深度（决定 cap）：
+   ```bash
+   curl -s <indexUrl> | jq '[.plugins[] | select(
+     (.verification.status=="verified" or .verification.status=="failed")
+     and .verification.level != "structure"
+     and .verification.opencodeVersion != "unknown"
+     and .verification.opencodeVersion != "<新版本>")] | length'
+   ```
+3. `Actions → verify → Run workflow`：`cap` 填 stale 数 + 缓冲 → N/VERIFY_SHARD_SIZE 个 shard job 自动出矩阵
+4. 需要更急时设仓库变量：`VERIFY_LANES`（默认 4，上限 8）/ `VERIFY_SHARD_SIZE`（默认 12，片大 = job 少 = 对共享并发更友好，单 job 时长相应变长）
+5. 排干窗口期：`verified` 徽章挂的是**旧宿主上的声明**——详情页 `(opencode x.y)` 明示测量宿主；staleHost 层在队列里仅次 submission，优先排干
+6. 验收：digest backlog 的 staleHost 计数归零
+
+merge 幂等（verifiedAt 新鲜度守卫 + name@version+verifiedAt 去重），多轮 dispatch/中断重跑安全。
 
 ---
 

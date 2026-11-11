@@ -180,7 +180,7 @@ export default Plugin.define({
     // the TUI gets ctx.data.on('plugin.updated'), the GUI window has no
     // such bus; a periodic reconcile keeps the inventory honest. Skips
     // hidden windows so an idle panel costs nothing.
-    setInterval(() => { if (typeof document === 'undefined' || !document.hidden) pullInventory() }, 30_000)
+    setInterval(() => { if (typeof document === 'undefined' || !document.hidden) pullInventory() }, 30 * 60_000)
 
     // tab scope — shared by filtered() and the 全部(N) category chips so the
     // count always matches what the list actually shows on every tab
@@ -983,7 +983,7 @@ export default Plugin.define({
         ...(e.source?.kind === 'github' && e.source?.version ? [`commit: ${e.source.version.slice(0, 12)}`] : []),
         ...(e.integrity ? [`integrity: ${e.integrity.slice(0, 32)}…`] : []),
         `verify: ${v?.status ?? 'unverified'}${v?.level ? ` · ${t('verifyLevel')}: ${v.level}` : ''}`,
-        `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})`,
+        `verified: ${v?.verifiedAt?.slice(0, 10) ?? '—'} (opencode ${v?.opencodeVersion ?? '?'})${v?.status === 'verified' && v.opencodeVersion && v.opencodeVersion !== 'unknown' && hostVersion && v.opencodeVersion !== hostVersion ? ` — ${t('verifyOldHost')}` : ''}`,
         `findings: ${caps?.findings?.length ?? 0} · redFlags: ${caps?.redFlags?.length ?? 0}`,
         `downloads30d: ${e.metrics?.npmDownloads30d ?? '—'} · stars: ${e.metrics?.stars ?? '—'}`,
       ]) info.appendChild(el('div', '', line))
