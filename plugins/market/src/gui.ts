@@ -1104,6 +1104,12 @@ export default Plugin.define({
         const hit = t?.dataset?.act === 'refresh'
         void safe.devlog?.(`md root <${t?.tagName}> ${(t?.textContent ?? '').slice(0, 16)} hit=${hit}`).catch(() => {})
         if (hit) void doRefresh()
+        // the version-tap easter egg MUST dispatch from here too — element-level
+        // onclick never fires in this webview, so ver.onclick silently dropped
+        // every tap (devUnlocked could never toggle from the GUI)
+        const act = t?.dataset?.act
+        if (act === 'devtap') devTap()
+        else if (act === 'devsrc' || act === 'devpick') devToggle(act)
         const lm = t?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
         if (lm) { put({ lang: lm }); setLangMode(lm); remounts.forEach(r => r()) }
       }
@@ -1195,15 +1201,15 @@ export default Plugin.define({
       // explicit indexUrl/env config still outranks the toggle.
       const dsWrap = el('div', state().devUnlocked || state().devSource || state().devVerPick ? '' : 'display:none')
       const dsh = el('h4', 'margin:20px 0 6px;font-weight:600', t('devSource'))
-      const dsc = document.createElement('input'); dsc.type = 'checkbox'; dsc.checked = !!state().devSource
       const dsNote = el('div', 'font-size:11px;opacity:.6;margin-top:4px', indexUrl())
-      dsc.onchange = () => {
-        put({ devSource: dsc.checked })
-        dsNote.textContent = indexUrl()
-        setErr('')
-        safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
-      }
-      const dscL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      // toggles ride root-mousedown dispatch like every other settings
+      // control — checkbox onchange is just as dead as onclick here.
+      // [x]/[ ] text stands in for the checkbox glyph.
+      const dsc = el('span', 'font-family:monospace;user-select:none')
+      const paintDsc = () => { dsc.textContent = state().devSource ? '[x]' : '[ ]' }
+      paintDsc()
+      const dscL = el('div', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      dscL.dataset.act = 'devsrc'
       dscL.append(dsc, document.createTextNode(t('devSourceDesc')))
       dsWrap.append(dsh, dscL, dsNote)
       // version picker — card version labels become dropdowns over every
@@ -1211,11 +1217,26 @@ export default Plugin.define({
       // (dev flag — the name check still applies). Same visibility rule:
       // it's inside the dev-gated wrap and the wrap stays visible while on.
       const vph = el('h4', 'margin:20px 0 6px;font-weight:600', t('devVerPick'))
-      const vpc = document.createElement('input'); vpc.type = 'checkbox'; vpc.checked = !!state().devVerPick
-      vpc.onchange = () => { put({ devVerPick: vpc.checked }); setPickTick(pickTick() + 1) }
-      const vpcL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      const vpc = el('span', 'font-family:monospace;user-select:none')
+      const paintVpc = () => { vpc.textContent = state().devVerPick ? '[x]' : '[ ]' }
+      paintVpc()
+      const vpcL = el('div', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      vpcL.dataset.act = 'devpick'
       vpcL.append(vpc, document.createTextNode(t('devVerPickDesc')))
       dsWrap.append(vph, vpcL)
+      const devToggle = (act: 'devsrc' | 'devpick') => {
+        if (act === 'devsrc') {
+          put({ devSource: !state().devSource })
+          paintDsc()
+          dsNote.textContent = indexUrl()
+          setErr('')
+          safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
+        } else {
+          put({ devVerPick: !state().devVerPick })
+          paintVpc()
+          setPickTick(pickTick() + 1)
+        }
+      }
       // skill permissions — developer surface: per installed skill id,
       // allow/ask/deny written to opencode.json permissions[]; 'clear'
       // returns to the default (ask). Lives INSIDE the dev-gated wrap —
@@ -1277,9 +1298,10 @@ export default Plugin.define({
       // unlocked the label carries a visible " (dev)" — the dev marker is
       // both the confirmation it engaged and the reminder it is still on.
       const ver = el('span', 'user-select:none;-webkit-user-select:none')
+      ver.dataset.act = 'devtap'   // dispatched by root.onmousedown — onclick is dead in this webview
       const paintVer = () => { ver.textContent = `v${PKG_VERSION}${state().devUnlocked ? ' (dev)' : ''}` }
       paintVer()
-      ver.onclick = () => {
+      const devTap = () => {
         if (++verTaps >= 10) {
           verTaps = 0
           const on = !state().devUnlocked
@@ -1290,7 +1312,7 @@ export default Plugin.define({
           const wasSource = state().devSource
           put({ devUnlocked: false, devSource: false, devVerPick: false })
           verPicks.clear(); setPickTick(pickTick() + 1)
-          dsc.checked = false; vpc.checked = false
+          paintDsc(); paintVpc()
           dsWrap.style.display = 'none'
           paintVer()
           if (wasSource) {

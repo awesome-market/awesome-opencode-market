@@ -62,6 +62,42 @@ describe('L3 mount: window-side behavior', () => {
     expect(texts.some(t => t?.includes('backup') || t?.includes('clear'))).toBe(true)
   })
 
+  it('dev easter egg: 10 mousedowns toggle dev section + (dev) marker, 10 more exit and clear dev toggles', async () => {
+    localStorage.clear()
+    const { root, mounted } = await mount()
+    find(root, 'settings')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const root2 = await remount(mounted)
+    const ver = [...root2.querySelectorAll('span')].find(s => (s as HTMLElement).dataset.act === 'devtap') as HTMLElement
+    expect(ver).toBeTruthy()
+    // this webview never fires element onclick — the tap must ride the
+    // settings root's mousedown dispatch (dataset.act), the channel that
+    // actually delivers in production
+    for (let i = 0; i < 10; i++) ver.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(ver.textContent).toContain('(dev)')
+    const dsh = [...root2.querySelectorAll('h4')].find(h => h.textContent?.includes('dev catalog'))
+    expect(dsh).toBeTruthy()
+    const wrap = dsh!.parentElement as HTMLElement
+    expect(wrap.style.display).not.toBe('none')
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').devUnlocked).toBe(true)
+    // a dev toggle turns on via the same mousedown dispatch, then exit resets it
+    const pickRow = wrap.querySelector('[data-act=devpick]') as HTMLElement
+    pickRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').devVerPick).toBe(true)
+    expect(pickRow.textContent).toContain('[x]')
+    for (let i = 0; i < 10; i++) ver.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(ver.textContent).not.toContain('(dev)')
+    expect(pickRow.textContent).toContain('[ ]')
+    const st = JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}')
+    expect(st.devUnlocked).toBe(false)
+    expect(st.devSource).toBe(false)
+    expect(st.devVerPick).toBe(false)
+    expect(wrap.style.display).toBe('none')
+    localStorage.clear()
+  })
+
   it('language switch persists and re-renders labels in zh', async () => {
     localStorage.clear()
     const { root, mounted } = await mount()
