@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -37,6 +37,8 @@ const Market = Ipc.define({
   },
   events: {
     progress: Schema.Unknown,   // { name, line, done, ok, cancelled }
+    index: Schema.Unknown,      // MarketIndex — pushed when a background
+                                // revalidation actually changed the catalog
   },
 })
 type Api = {
@@ -58,6 +60,7 @@ type Api = {
   readDevlog(): Promise<string>
   clearDevlog(): Promise<string>
   on(name: 'progress', fn: (d: { name: string; line: string; done?: boolean; ok?: boolean; cancelled?: boolean }) => void): () => void
+  on(name: 'index', fn: (d: MarketIndex) => void): () => void
 }
 
 type View = { kind: 'list' } | { kind: 'detail'; e: MarketEntry }
@@ -170,6 +173,7 @@ export default Plugin.define({
           ? { ...cur, done: true, ...(d.ok !== undefined ? { ok: d.ok } : {}), ...(d.cancelled ? { cancelled: true } : {}) }
           : { lines: [...cur.lines, d.line].slice(-20) } })
       })
+      safe.on?.('index', (i) => setDataWrap(i))
     } catch { /* older host: no events */ }
 
     safe.index({ url: indexUrl() }).then(i => setDataWrap(i), e => setErr(String(e)))
@@ -1441,7 +1445,22 @@ export default Plugin.define({
     let lastIndexUrl = resolveIndexUrl(null)
     const urlOrDefault = (u: unknown) => isIndexUrl(u) ? u : lastIndexUrl
     m.provide(Market, {
-        index: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl) as Promise<MarketIndex> },
+        index: (p: { url?: unknown }) => {
+          const u = urlOrDefault(p?.url)
+          lastIndexUrl = u
+          const run = fetchIndexCached(u) as Promise<MarketIndex>
+          const snap = indexSnapshot(u)
+          if (!snap) return run   // nothing cached — cold load, keep blocking
+          // stale-while-revalidate: serve the snapshot now; push the fresh
+          // index only when the revalidation really wrote new content — a
+          // TTL/sha-hit leaves the cached object untouched (same reference)
+          void run.then(() => {
+            if (u !== lastIndexUrl) return   // source switched mid-flight — don't clobber the new view
+            const now = indexSnapshot(u)
+            if (now && now.index !== snap.index) m.emit?.('index', now.index)
+          }, () => { /* snapshot already painted — failed revalidate just leaves it */ })
+          return Promise.resolve(snap.index)
+        },
         refreshIndex: (p: { url?: unknown }) => { lastIndexUrl = urlOrDefault(p?.url); return fetchIndexCached(lastIndexUrl, true) as Promise<MarketIndex> },
         indexOutcome: (p?: { url?: unknown }) => fetchOutcome(urlOrDefault(p?.url)),
         installed: async (p?: { names?: unknown }) => {

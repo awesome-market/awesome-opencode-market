@@ -407,7 +407,7 @@ export function saveState(s: LocalState): void {
 const LS_IDX = 'opencode-market.index.v1'
 const TTL_MS = 3600_000
 
-interface CachedIndex { at: number; index: MarketIndex; sha?: string; url?: string }
+export interface CachedIndex { at: number; index: MarketIndex; sha?: string; url?: string }
 
 /** Storage backend — localStorage in the webview; a module-level slot on
  *  Node (TUI/main have no localStorage, so without this every dialog open
@@ -452,6 +452,11 @@ const writeIdxCache = (c: CachedIndex) => {
   }
   memIdx = c
 }
+
+/** SWR snapshot — the last good index for this URL, or null. Reference-
+ *  stable while unchanged: a TTL/sha-hit revalidation returns the very
+ *  same object, so `snap.index !== fresh.index` means a real update. */
+export const indexSnapshot = (url: string): CachedIndex | null => readIdxCache(url)
 
 /** What each catalog URL's last fetchIndexCached call did — UIs can say
  *  "already latest" instead of pretending a refresh happened. Keyed BY URL:
