@@ -1267,21 +1267,27 @@ export default Plugin.define({
       ssBtn.onclick = () => void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
       root.append(ssStatus, ssBtn)
       // footer — copyright + version. The version is also the dev-settings
-      // easter egg: 10 clicks persist devUnlocked (Android build-number
-      // convention).
+      // easter egg: 10 clicks toggle devUnlocked (Android build-number
+      // convention — entering AND leaving both take 10).
       const foot = el('div', 'margin-top:28px;padding-top:12px;border-top:1px solid rgba(128,128,128,.2);font-size:11px;opacity:.55;display:flex;gap:6px;align-items:baseline')
       foot.appendChild(el('span', '', '© 2026 awesome-market contributors · MIT ·'))
       // version text doubles as the dev-settings easter egg: 10 silent clicks
-      // persist devUnlocked and reveal the section. Deliberately ZERO affordance
-      // — no pointer cursor, no progress, no message; the section appearing is
-      // the only feedback (user asked for it invisible, not discoverable).
-      const ver = el('span', 'user-select:none;-webkit-user-select:none', `v${PKG_VERSION}`)
+      // TOGGLE devUnlocked — Android build-number convention, bidirectional.
+      // Zero affordance while locked (no pointer cursor, no progress); once
+      // unlocked the label carries a visible " (dev)" — the dev marker is
+      // both the confirmation it engaged and the reminder it is still on.
+      const ver = el('span', 'user-select:none;-webkit-user-select:none')
+      const paintVer = () => { ver.textContent = `v${PKG_VERSION}${state().devUnlocked ? ' (dev)' : ''}` }
+      paintVer()
       ver.onclick = () => {
-        if (state().devUnlocked) return
         if (++verTaps >= 10) {
           verTaps = 0
-          put({ devUnlocked: true })
-          dsWrap.style.display = ''
+          const on = !state().devUnlocked
+          put({ devUnlocked: on })
+          // leaving dev mode hides the section UNLESS a live dev toggle keeps
+          // it pinned — a dev feature you can't see is one you can't turn off
+          dsWrap.style.display = on || state().devSource || state().devVerPick ? '' : 'none'
+          paintVer()
         }
       }
       foot.appendChild(ver)

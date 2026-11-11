@@ -717,13 +717,12 @@ export default Plugin.define({
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
         // version footer — also the dev-settings easter egg: 10 silent enters
-        // persist devUnlocked and the dev item above appears. Deliberately zero
-        // feedback — no status, no count; the item appearing is the only signal.
-        { label: `opencode-market v${PKG_VERSION} · © 2026 awesome-market contributors · MIT`, run: () => {
-          if (store.devUnlocked) return
+        // TOGGLE devUnlocked. Zero feedback while locked; once unlocked the
+        // label's " (dev)" is both the confirmation and the still-on reminder.
+        { label: `opencode-market v${PKG_VERSION}${store.devUnlocked ? ' (dev)' : ''} · © 2026 awesome-market contributors · MIT`, run: () => {
           const n = devTaps() + 1
           setDevTaps(n)
-          if (n >= 10) { setDevTaps(0); void mutate(d => { d.devUnlocked = true }) }
+          if (n >= 10) { setDevTaps(0); void mutate(d => { d.devUnlocked = !d.devUnlocked }) }
         } },
       ])
 
