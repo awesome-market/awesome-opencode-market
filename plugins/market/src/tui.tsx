@@ -458,6 +458,14 @@ export default Plugin.define({
           const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve('ok' as HalfResult)
           const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve('ok' as HalfResult)
           return (await pJob) === 'ok' && (await sJob) === 'ok'
+        } catch (x) {
+          // halves encode expected failures as HalfResult — a rejection here is
+          // an unexpected throw (spawn setup, catalog plumbing, a future await).
+          // `void install(e)` callers can't catch it: surface it as a status
+          // line instead of an unhandled rejection.
+          setStatus(tf('installFailN', { name: e.name, exit: `: ${String(x)}`, key: 'i' }))
+          log(`install throw ${e.name}: ${String(x)}`)
+          return false
         } finally { claim() }
       }
       const uninstall = (e: MarketEntry) =>
@@ -648,12 +656,16 @@ export default Plugin.define({
           const tail = existsSync(p) ? readFileSync(p, 'utf8').trim().split('\n').slice(-15) : [t('noLogs')]
           openMenu(t('devlogMenu'), tail.map(line => ({ label: line, run: noop })))
         })() },
-        // dev catalog source — hidden behind the version-tap easter egg, but
-        // always visible while it's ON (a dev source you can't see is a dev
-        // source you can't turn off). Refetch happens via the index effect.
-        ...(store.devUnlocked || store.devSource ? [{ label: `${t('devSource')}: [${store.devSource ? t('devlogOn') : t('devlogOff')}]`, run: () => {
-          void mutate(d => { d.devSource = !d.devSource }).then(() => setStatus(`${t('devSource')} → ${indexUrl()}`))
-        } }] : []),
+        // dev catalog source + skill permissions — hidden behind the
+        // version-tap easter egg, but always visible while devSource is ON
+        // (a dev source you can't see is a dev source you can't turn off).
+        // Refetch happens via the index effect.
+        ...(store.devUnlocked || store.devSource ? [
+          { label: `${t('devSource')}: [${store.devSource ? t('devlogOn') : t('devlogOff')}]`, run: () => {
+            void mutate(d => { d.devSource = !d.devSource }).then(() => setStatus(`${t('devSource')} → ${indexUrl()}`))
+          } },
+          { label: t('permTitle'), run: () => void openSkillPerms() },
+        ] : []),
         { label: t('useHttpCatalog'), run: () => void (async () => {
           const cfg = await configPath()
           try {
@@ -671,7 +683,6 @@ export default Plugin.define({
             setStatus(`catalog source ${on ? t('catalogDisabled') : t('catalogEnabled')} — ${t('restartNeeded')}`)
           } catch (x) { setStatus(tf('catalogFail', { err: String(x), cfg })) }
         })() },
-        { label: t('permTitle'), run: () => void openSkillPerms() },
         // version footer — also the dev-settings easter egg: 10 silent enters
         // persist devUnlocked and the dev item above appears. Deliberately zero
         // feedback — no status, no count; the item appearing is the only signal.

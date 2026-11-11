@@ -414,10 +414,21 @@ export default Plugin.define({
         // a strict superset of install and also clears stale same-name specs
         // the inventory may not have reported yet.
         const doInstall = async (): Promise<string> => {
+          // halves are independent surfaces (TUI parity): a failing half must
+          // not stop the sibling from attempting, and a half-success must be
+          // named in the error instead of hiding behind a bare 'failed'.
+          // A cancel still aborts the whole op immediately.
           const outs: string[] = []
-          if (doPlugin)
-            outs.push(await (typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) })))
-          if (doSkill) outs.push(await installSkillNet(e))
+          const errs: string[] = []
+          const wasCancel = (x: unknown) => x instanceof Error ? x.message === 'cancelled' : String(x) === 'cancelled'
+          if (doPlugin) {
+            try { outs.push(await (typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) }))) }
+            catch (x) { if (wasCancel(x)) throw x; errs.push(`plugin: ${String(x)}`) }
+          }
+          if (doSkill) {
+            try { outs.push(await installSkillNet(e)) } catch (x) { if (wasCancel(x)) throw x; errs.push(`skill: ${String(x)}`) }
+          }
+          if (errs.length) throw new Error(`${outs.length ? `${outs.join(' + ')} · ` : ''}${errs.join(' · ')}`)
           return outs.join(' + ') || 'installed'
         }
         try { doInstall().then(
@@ -1139,28 +1150,12 @@ export default Plugin.define({
       const dscL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
       dscL.append(dsc, document.createTextNode(t('devSourceDesc')))
       dsWrap.append(dsh, dscL, dsNote)
-      root.appendChild(dsWrap)
-      // HTTP skill catalog — lets opencode itself discover/refresh repo skills
-      // from the same site root the index came from (skills/ namespace)
-      root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
-      const ssStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:6px')
-      const ssBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('useHttpCatalog')) as HTMLButtonElement
-      // reversible toggle — enable writes the skills[] url, disable removes it
-      // (leaving any other entries untouched). One-way 'enable' used to lock
-      // users into a remote source with no off switch.
-      let ssOn = false
-      const ssRefresh = () => void safe.skillSource?.().then(r => {
-        ssOn = !!r.enabled
-        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${skillsEndpoint()} — ${t('catalogDisabled')}`
-        ssBtn.textContent = r.enabled ? t('disable') : t('useHttpCatalog')
-      }).catch(() => { ssStatus.textContent = skillsEndpoint() })
-      ssRefresh()
-      ssBtn.onclick = () => void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
-      root.append(ssStatus, ssBtn)
-      // skill permissions — per installed skill id, allow/ask/deny written to
-      // opencode.json permissions[]; 'clear' returns to the default (ask).
+      // skill permissions — developer surface: per installed skill id,
+      // allow/ask/deny written to opencode.json permissions[]; 'clear'
+      // returns to the default (ask). Lives INSIDE the dev-gated wrap —
+      // regular users don't need raw permission editing.
       if (typeof safe.skillPermission === 'function') {
-        root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('permTitle')))
+        dsWrap.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('permTitle')))
         const permBox = el('div', 'font-size:12px')
         const paintPerms = async () => {
           const [perms, inv] = await Promise.all([
@@ -1185,8 +1180,26 @@ export default Plugin.define({
           }
         }
         void paintPerms()
-        root.appendChild(permBox)
+        dsWrap.appendChild(permBox)
       }
+      root.appendChild(dsWrap)
+      // HTTP skill catalog — lets opencode itself discover/refresh repo skills
+      // from the same site root the index came from (skills/ namespace)
+      root.appendChild(el('h4', 'margin:20px 0 6px;font-weight:600', t('useHttpCatalog')))
+      const ssStatus = el('div', 'font-size:11px;opacity:.7;margin-bottom:6px')
+      const ssBtn = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit', t('useHttpCatalog')) as HTMLButtonElement
+      // reversible toggle — enable writes the skills[] url, disable removes it
+      // (leaving any other entries untouched). One-way 'enable' used to lock
+      // users into a remote source with no off switch.
+      let ssOn = false
+      const ssRefresh = () => void safe.skillSource?.().then(r => {
+        ssOn = !!r.enabled
+        ssStatus.textContent = r.enabled ? `${r.url} — ${t('catalogEnabled')}` : `${skillsEndpoint()} — ${t('catalogDisabled')}`
+        ssBtn.textContent = r.enabled ? t('disable') : t('useHttpCatalog')
+      }).catch(() => { ssStatus.textContent = skillsEndpoint() })
+      ssRefresh()
+      ssBtn.onclick = () => void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
+      root.append(ssStatus, ssBtn)
       // footer — copyright + version. The version is also the dev-settings
       // easter egg: 10 clicks persist devUnlocked (Android build-number
       // convention).
