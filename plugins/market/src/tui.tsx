@@ -12,7 +12,7 @@ import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } 
 import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec, cleanSpec, featuresMap } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation } from './hostx.js'
+import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 type Tab = 'discover' | 'plugins' | 'skills' | 'favorites' | 'installed' | 'mySkills' | 'settings'
@@ -153,6 +153,10 @@ export default Plugin.define({
         Object.assign(map, scanSkillKeys(
           [await globalSkillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
           d => readdirSync(d), p => existsSync(p)))
+        // plugin.list reports the daemon's LOADED version — a pin we just
+        // wrote still reads old until restart and would resurrect the
+        // outdated badge. Config pins win; overlayConfigPins documents why.
+        await overlayConfigPins(map)
         setInstalled(map); setInstalledIds(ids)
         // plugin.list is THE plugin inventory — its failure means every
         // plugin-side installed badge is silently wrong, even when the disk
@@ -799,9 +803,13 @@ export default Plugin.define({
               else if (rs.includes('cancelled')) cancelled++
               else ok++
             }
-            setStatus(cancelled
+            // config is pinned but the RUNNING daemon still executes the old
+            // bytes — 'updated' without the restart hint reads as "new code
+            // is live", which is exactly the false-success we must not claim
+            const restart = results.some(j => j.pOk === 'ok') ? ` — ${t('restartNeeded')}` : ''
+            setStatus((cancelled
               ? (fail ? tf('sweepCancelFail', { ok, fail, c: cancelled }) : tf('sweepCancel', { ok, c: cancelled }))
-              : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok }))
+              : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })) + restart)
             void refreshInstalled()
           // a lane throwing must not wedge 'U' for the rest of the dialog —
           // reset in finally, not just on the happy path

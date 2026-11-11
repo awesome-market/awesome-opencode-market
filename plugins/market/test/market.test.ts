@@ -660,6 +660,32 @@ describe('hostx id guards', () => {
     expect(await configPath()).toBe('/tmp/custom-opencode.json')
     delete env.OPENCODE_CONFIG; delete env.XDG_CONFIG_HOME
   })
+  it('overlayConfigPins: config pin wins over the daemon-reported version; unreported names not added', async () => {
+    const { overlayConfigPins } = await import('../src/hostx.ts')
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process!.env
+    const cfg = join(mkdtempSync(join(tmpdir(), 'ovp-')), 'opencode.json')
+    writeFileSync(cfg, JSON.stringify({ plugins: [
+      'stale@9.9.9',              // daemon still reports 1.0.0 → pin wins
+      '@scope/pkg@2.0.0',         // scoped pinned — same rule
+      'bare',                     // no pin → daemon's resolved version stands
+      'notloaded@2.0.0',          // absent from plugin.list → must NOT appear
+      'git@evil.com:x/y',         // '@' with a non-version tail → skipped
+      '/local/path/plugin',       // no '@' → skipped
+    ] }))
+    env.OPENCODE_CONFIG = cfg
+    try {
+      const map: Record<string, string> = { stale: '1.0.0', '@scope/pkg': '1.5.0', bare: '3.0.0' }
+      await overlayConfigPins(map)
+      expect(map.stale).toBe('9.9.9')
+      expect(map['@scope/pkg']).toBe('2.0.0')
+      expect(map.bare).toBe('3.0.0')
+      expect(map.notloaded).toBeUndefined()
+      expect(map.git).toBeUndefined()
+    } finally { delete env.OPENCODE_CONFIG }
+  })
   it('writeSkillPermission: set/update/clear round-trip preserves other permissions', async () => {
     const { writeSkillPermission } = await import('../src/hostx.ts')
     const { mkdtempSync, writeFileSync, readFileSync } = await import('node:fs')

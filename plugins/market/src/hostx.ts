@@ -136,6 +136,29 @@ export function withConfigLock<T>(fn: () => Promise<T>): Promise<T> {
   return p
 }
 
+/** Overlay config-pinned versions onto a plugin.list-derived inventory map.
+ *  plugin.list reports the RUNNING daemon's loaded version — after a pinned
+ *  update the config says `name@new` while the daemon still reports the old
+ *  bytes until restart (a "done" update then reads as not-updated, and the
+ *  outdated badge resurrects on the next pull). The pin is what the next
+ *  start runs, so it wins for entries the daemon actually reports; bare
+ *  `name` specs keep the daemon's resolved version (no pin to claim).
+ *  Missing names are NOT added — a plugin absent from plugin.list failed to
+ *  load; config alone can't claim "installed". */
+export async function overlayConfigPins(map: Record<string, string>): Promise<void> {
+  try {
+    const d = await readJson(await configPath())
+    for (const s of strArrayField(d, 'plugins')) {
+      const at = s.lastIndexOf('@')
+      if (at <= 0) continue                       // bare name / local path / non-npm ref
+      const ver = s.slice(at + 1)
+      if (!VER_RE.test(ver)) continue             // git@host:path etc — not a version
+      const name = cleanSpec(s)
+      if (map[name] !== undefined) map[name] = ver
+    }
+  } catch { /* config unreadable — the daemon's versions stand */ }
+}
+
 /** Skills dir under the same config root as configPath() — when the CLI
  *  runs with OPENCODE_CONFIG pointing at a custom file, its skills live
  *  next to THAT file, not under the default ~/.config root. */

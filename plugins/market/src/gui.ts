@@ -11,7 +11,7 @@ import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
 import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
-import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation } from './hostx.js'
+import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
 
 const Market = Ipc.define({
@@ -747,7 +747,7 @@ export default Plugin.define({
         if (!jobs.length) { updAll.textContent = t('allLatest'); setTimeout(() => { setUpdBusy(false); updAll.textContent = t('updateAll') }, 3000); return }
         updAll.disabled = true; setUpdBusy(true)
         const total = jobs.reduce((n, j) => n + (j.sync.plugin ? 1 : 0) + (j.sync.skill ? 1 : 0), 0)
-        let done = 0, ok = 0, fail = 0, cancelled = 0
+        let done = 0, ok = 0, fail = 0, cancelled = 0, okPlugin = 0
         const bump = () => { updAll.textContent = tf('updatingN', { n: ++done, total }) }
         // a user-cancelled half is not a failure — counting it as one made a
         // deliberate 'cancel' read as 'N failed' in the sweep summary
@@ -759,7 +759,7 @@ export default Plugin.define({
         const pluginLane = (async () => {
           for (const j of jobs) if (j.sync.plugin) {
             bump()
-            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++ } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
+            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++; okPlugin++ } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
           }
         })()
         const skillLane = (async () => {
@@ -777,9 +777,13 @@ export default Plugin.define({
         const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
         if (fresh) { setInstalled(fresh.versions); setInstalledExtra(fresh.extras); setFeatMap(fresh.features) }
         updAll.disabled = false; setUpdBusy(false)
-        updAll.textContent = cancelled
+        // config is pinned but the RUNNING daemon still executes the old
+        // bytes — 'updated' without the restart hint reads as "new code is
+        // live", which is exactly the false-success the user reported
+        const restart = okPlugin > 0 ? ` — ${t('restartNeeded')}` : ''
+        updAll.textContent = (cancelled
           ? (fail ? tf('sweepCancelFail', { ok, fail, c: cancelled }) : tf('sweepCancel', { ok, c: cancelled }))
-          : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })
+          : fail ? tf('updatedMix', { ok, fail }) : tf('updatedOk', { ok })) + restart
         setTimeout(() => { updAll.textContent = t('updateAll') }, 4000)
       }
       // same webview quirk as the refresh button — dispatch on the parent
@@ -1396,6 +1400,10 @@ export default Plugin.define({
           Object.assign(map, scanSkillKeys(
             [await skillsRoot(), join(homedir(), '.claude', 'skills'), join(homedir(), '.agents', 'skills')],
             d => readdirSync(d), p => existsSync(p)))
+          // plugin.list reports the daemon's LOADED version — a pin we just
+          // wrote still reads old until restart and would resurrect the
+          // outdated badge. Config pins win; overlayConfigPins documents why.
+          await overlayConfigPins(map)
           // installed plugins with no catalog entry still get a card — but a
           // catalog outage must NOT blank the whole inventory: degrade extras
           // (can't tell installed-but-uncataloged from installed-and-listed)
