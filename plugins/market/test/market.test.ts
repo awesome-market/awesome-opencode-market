@@ -623,6 +623,56 @@ describe('fetchPkgVersionMeta', () => {
   })
 })
 
+describe('fetchPkgVersions (dev version picker source)', () => {
+  it('sorts newest-first, drops created/modified meta keys, caps, shares the packument cache', async () => {
+    const { fetchPkgVersions, fetchPkgVersionMeta } = await import('../src/catalog.ts')
+    const orig = globalThis.fetch
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(JSON.stringify({
+        time: {
+          created: '2020-01-01T00:00:00Z', modified: '2025-01-01T00:00:00Z',
+          '0.1.0': '2020-02-01T00:00:00Z', '1.0.0': '2021-02-01T00:00:00Z',
+          '2.0.0': '2023-02-01T00:00:00Z', '1.5.0': '2022-02-01T00:00:00Z',
+        },
+        versions: { '2.0.0': { dist: { tarball: 'https://r/v2.tgz' } } },
+      }))
+    }) as typeof fetch
+    try {
+      const vs = await fetchPkgVersions('ver-list-zz1')
+      expect(vs.map(v => v.ver)).toEqual(['2.0.0', '1.5.0', '1.0.0', '0.1.0'])
+      // same packument cache as fetchPkgVersionMeta — no second network call
+      const m = await fetchPkgVersionMeta('ver-list-zz1', '2.0.0')
+      expect(m.tarball).toBe('https://r/v2.tgz')
+      expect(calls).toBe(1)
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('cap bounds the list (long histories must not flood the dropdown)', async () => {
+    const { fetchPkgVersions } = await import('../src/catalog.ts')
+    const orig = globalThis.fetch
+    const time: Record<string, string> = {}
+    for (let i = 0; i < 60; i++) time[`1.0.${i}`] = new Date(2020, 0, i + 2).toISOString()
+    globalThis.fetch = (async () => new Response(JSON.stringify({ time, versions: {} }))) as typeof fetch
+    try {
+      const vs = await fetchPkgVersions('ver-cap-zz2', 10)
+      expect(vs).toHaveLength(10)
+      expect(vs[0]!.ver).toBe('1.0.59')   // newest first
+    } finally { globalThis.fetch = orig }
+  })
+})
+
+describe('sanitizeState devVerPick', () => {
+  it('boolean accepted, non-boolean dropped', async () => {
+    const { sanitizeState } = await import('../src/catalog.ts')
+    expect(sanitizeState({ favorites: {}, devVerPick: true }).devVerPick).toBe(true)
+    expect(sanitizeState({ favorites: {}, devVerPick: false }).devVerPick).toBe(false)
+    expect(sanitizeState({ favorites: {}, devVerPick: 'yes' }).devVerPick).toBeUndefined()
+    expect(sanitizeState({ favorites: {} }).devVerPick).toBeUndefined()
+  })
+})
+
 describe('hostx id guards', () => {
   it('assertEntryId: npm names + owner/repo; rejects traversal + junk', async () => {
     const { assertEntryId } = await import('../src/hostx.ts')

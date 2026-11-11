@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -44,8 +44,8 @@ type Api = {
   refreshIndex(p?: { url?: string }): Promise<MarketIndex>
   indexOutcome(p?: { url?: string }): Promise<string>
   installed(p?: { names?: string[] | undefined }): Promise<{ versions: Record<string, string>; extras: { name: string; version: string }[]; features: Record<string, Record<string, true> | undefined>; degraded?: boolean }>
-  install(p: { name: string; spec?: string }): Promise<string>
-  update(p: { name: string; spec?: string }): Promise<string>
+  install(p: { name: string; spec?: string; dev?: boolean }): Promise<string>
+  update(p: { name: string; spec?: string; dev?: boolean }): Promise<string>
   cancelInstall(name: string): Promise<string>
   verifyActivation(spec: string): Promise<string>
   uninstall(name: string): Promise<string>
@@ -89,6 +89,11 @@ export default Plugin.define({
       removedIdx = new Map((i?.removed ?? []).filter(r => r.name).map(r => [r.name!, r]))
     }
     const [installed, setInstalled] = createSignal<Record<string, string>>({})
+    // dev-mode version picker: name → chosen version (plain map — the install
+    // click re-reads it). pickTick is the re-render trigger: picking a
+    // version rebuilds rows so the button label follows the choice.
+    const verPicks = new Map<string, string>()
+    const [pickTick, setPickTick] = createSignal(0)
     const [installedExtra, setInstalledExtra] = createSignal<{ name: string; version: string }[]>([])
     const [refText, setRefText] = createSignal('')
     const [featMap, setFeatMap] = createSignal<Record<string, Record<string, true> | undefined>>({})
@@ -374,8 +379,16 @@ export default Plugin.define({
         fb.onclick = ev => { ev.stopPropagation(); setView({ kind: 'detail', e }) }
         return fb
       }
+      // dev-mode version pick — verPicks is a plain map, re-read at click
+      // time too (the dropdown's onchange rebuilds the list, but the click
+      // must not trust render-time state). A pick differing from the
+      // approved version downgrades this op to an arbitrary-version install:
+      // the host skips the approved-pin gate for it (dev flag).
+      const pick = state().devVerPick ? verPicks.get(e.name) : undefined
+      const usePick = !!pick && !!e.latestVersion && pick !== e.latestVersion
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
-      if (ver && !hs.anyOut)
+      // (a pick ≠ installed version stays actionable — it is a downgrade op)
+      if (ver && !hs.anyOut && !(usePick && pick !== ver))
         return tab() === 'installed' || tab() === 'mySkills'
           ? uninstallBtn(e)
           : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
@@ -384,8 +397,10 @@ export default Plugin.define({
       if (!canInstall(e))
         return el('span', 'font-size:11px;opacity:.55;white-space:nowrap;flex-shrink:0', t('noInstallTarget'))
       // installed > approved = a revert to the reviewed artifact, not an
-      // "update" — label it honestly (hold semantics, AGENTS: 好理解)
-      const label = ver
+      // "update" — label it honestly (hold semantics, AGENTS: 好理解).
+      // usePick names the chosen target instead — 'update' would be a lie
+      // for an arbitrary older version.
+      const label = usePick ? `${t('add')} → v${pick}` : ver
         ? `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}`
         : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
@@ -408,6 +423,11 @@ export default Plugin.define({
         }
         if (isSkill && typeof safe.writeSkill !== 'function') { log(`installSkill missing on host for ${e.name}`); return failOut('host missing writeSkill — plugin version mismatch') }
         log(`install start ${e.name} plugin=${plan.plugin} skill=${plan.skill}`)
+        // re-read the pick at click time — a stale render must not pin a
+        // version the user already changed in the dropdown
+        const clkPick = state().devVerPick ? verPicks.get(e.name) : undefined
+        const clkPickOn = !!clkPick && !!e.latestVersion && clkPick !== e.latestVersion
+        const spec = clkPickOn ? `${e.name}@${clkPick}` : pinSpec(e)
         // dual-nature entries deliver BOTH parts — installing only the skill
         // side silently drops the plugin half the package ships. `update`
         // (add pinned + config dedupe) is used for fresh installs too: it is
@@ -422,11 +442,17 @@ export default Plugin.define({
           const errs: string[] = []
           const wasCancel = (x: unknown) => x instanceof Error ? x.message === 'cancelled' : String(x) === 'cancelled'
           if (doPlugin) {
-            try { outs.push(await (typeof safe.update === 'function' ? safe.update({ name: e.name, spec: pinSpec(e) }) : safe.install({ name: e.name, spec: pinSpec(e) }))) }
+            // dev is omitted when off — the normal path stays byte-identical
+            // to pre-feature calls (no flag leak into the host protocol)
+            const arg = clkPickOn ? { name: e.name, spec, dev: true as const } : { name: e.name, spec }
+            try { outs.push(await (typeof safe.update === 'function' ? safe.update(arg) : safe.install(arg))) }
             catch (x) { if (wasCancel(x)) throw x; errs.push(`plugin: ${String(x)}`) }
           }
           if (doSkill) {
-            try { outs.push(await installSkillNet(e)) } catch (x) { if (wasCancel(x)) throw x; errs.push(`skill: ${String(x)}`) }
+            // the catalog only ships the APPROVED skill bundle — installing
+            // it beside a picked older plugin would pair mismatched halves
+            if (clkPickOn) outs.push('skill: skipped')
+            else try { outs.push(await installSkillNet(e)) } catch (x) { if (wasCancel(x)) throw x; errs.push(`skill: ${String(x)}`) }
           }
           if (errs.length) throw new Error(`${outs.length ? `${outs.join(' + ')} · ` : ''}${errs.join(' · ')}`)
           return outs.join(' + ') || 'installed'
@@ -445,8 +471,9 @@ export default Plugin.define({
               b.textContent = `${t('installed')}`; b.style.color = '#4a4'
             } else {
               // optimistic mark — daemon rescans config async; refresh after a
-              // beat and keep the mark if the inventory still lags
-              const expect = e.latestVersion ?? '?'
+              // beat and keep the mark if the inventory still lags. A picked
+              // version is the expected pin, not the catalog latest.
+              const expect = clkPickOn ? clkPick! : (e.latestVersion ?? '?')
               setInstalled({ ...installed(), [e.name]: expect })
               await new Promise(r => setTimeout(r, 2000))
               const fresh = await safe.installed?.({ names: catalogNames() }).catch(() => null)
@@ -456,7 +483,7 @@ export default Plugin.define({
               }
               const okNow = (fresh?.versions ?? installed())[e.name]
               b.textContent = okNow ? t('verifying') : t('installedPending')
-              const verdict = await safe.verifyActivation?.(pinSpec(e)).catch(() => '')
+              const verdict = await safe.verifyActivation?.(spec).catch(() => '')
               // 'not-loaded' is a confident negative; 'unknown' means the probe
               // itself couldn't run — don't dress uncertainty as a diagnosis
               b.textContent = verdict === 'activated' ? `${t('installed')} · ${t('activated')}`
@@ -605,9 +632,34 @@ export default Plugin.define({
       const dl = e.metrics?.npmDownloads30d, st = e.metrics?.stars
       // github-kind entries carry no npm version — their marker is pushedAt;
       // 'local'/'?' are install-kind markers, not versions — never "vlocal"
-      meta.textContent = [e.latestVersion ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`) : (e.modifiedAt ?? '?').slice(0, 10),
-        dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
-        .filter(Boolean).join(' · ')
+      const verText = e.latestVersion ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`) : (e.modifiedAt ?? '?').slice(0, 10)
+      // dev-mode version picker: the version label becomes a dropdown over
+      // every published version (npm entries only — github-kind keeps text).
+      // Lazy — the packument pull fires on first mousedown, not on render.
+      const pickable = pickTick() >= 0 && state().devVerPick && hasP && !!e.latestVersion && e.latestVersion !== 'local' && e.latestVersion !== '?' && e.source?.kind !== 'github'
+      if (pickable) {
+        const cur = verPicks.get(e.name) ?? e.latestVersion!
+        const sel = el('select', 'font-size:11px;color:inherit;background:transparent;border:none;opacity:1;max-width:140px;padding:0;margin:0') as HTMLSelectElement
+        const mk = (ver: string, at?: string) => { const o = el('option', '', `v${ver}${at ? ` ${at.slice(0, 10)}` : ''}`) as HTMLOptionElement; o.value = ver; return o }
+        sel.appendChild(mk(cur))
+        const fill = async () => {
+          try {
+            const vs = await fetchPkgVersions(e.name)
+            sel.replaceChildren(...vs.map(v => mk(v.ver, v.at)))
+            if (!vs.some(v => v.ver === cur)) sel.appendChild(mk(cur))
+            sel.value = cur
+          } catch { /* packument unreachable — keep the single current option */ }
+        }
+        sel.onmousedown = ev => { ev.stopPropagation(); if (sel.options.length <= 1) void fill() }
+        sel.onclick = ev => ev.stopPropagation()
+        sel.onchange = () => { verPicks.set(e.name, sel.value); setPickTick(pickTick() + 1) }
+        meta.appendChild(sel)
+        const rest = [dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : ''].filter(Boolean).join(' · ')
+        if (rest) meta.appendChild(document.createTextNode(` · ${rest}`))
+      } else {
+        meta.textContent = [verText, dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
+          .filter(Boolean).join(' · ')
+      }
       // desc clamps at 2 lines; ⌄ sits at the end of the last visible line and flips to ⌃ once expanded
       const desc = el('div', 'opacity:.6;font-size:12px;margin-top:3px;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;position:relative', descOf(e))
       const expander = el('div', 'font-size:11px;line-height:14px;opacity:.5;cursor:pointer;user-select:none;display:none;position:absolute;right:0;bottom:0;padding-left:6px', '⌄')
@@ -1141,7 +1193,7 @@ export default Plugin.define({
       // while devSource is on: a dev source you can't see is one you can't
       // turn off. Switching refetches on the new source immediately;
       // explicit indexUrl/env config still outranks the toggle.
-      const dsWrap = el('div', state().devUnlocked || state().devSource ? '' : 'display:none')
+      const dsWrap = el('div', state().devUnlocked || state().devSource || state().devVerPick ? '' : 'display:none')
       const dsh = el('h4', 'margin:20px 0 6px;font-weight:600', t('devSource'))
       const dsc = document.createElement('input'); dsc.type = 'checkbox'; dsc.checked = !!state().devSource
       const dsNote = el('div', 'font-size:11px;opacity:.6;margin-top:4px', indexUrl())
@@ -1154,6 +1206,16 @@ export default Plugin.define({
       const dscL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
       dscL.append(dsc, document.createTextNode(t('devSourceDesc')))
       dsWrap.append(dsh, dscL, dsNote)
+      // version picker — card version labels become dropdowns over every
+      // published version; a picked install skips the approved-pin gate
+      // (dev flag — the name check still applies). Same visibility rule:
+      // it's inside the dev-gated wrap and the wrap stays visible while on.
+      const vph = el('h4', 'margin:20px 0 6px;font-weight:600', t('devVerPick'))
+      const vpc = document.createElement('input'); vpc.type = 'checkbox'; vpc.checked = !!state().devVerPick
+      vpc.onchange = () => { put({ devVerPick: vpc.checked }); setPickTick(pickTick() + 1) }
+      const vpcL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      vpcL.append(vpc, document.createTextNode(t('devVerPickDesc')))
+      dsWrap.append(vph, vpcL)
       // skill permissions — developer surface: per installed skill id,
       // allow/ask/deny written to opencode.json permissions[]; 'clear'
       // returns to the default (ask). Lives INSIDE the dev-gated wrap —
@@ -1424,7 +1486,7 @@ export default Plugin.define({
           // unverifiable and the renderer must say so (invDown)
           return { versions: map, extras, features: featByName, degraded: !(apiOk || cliOk) }
         },
-        install: async (p: { name: string; spec?: string }) => {
+        install: async (p: { name: string; spec?: string; dev?: boolean }) => {
           const { spawn } = require('node:child_process') as typeof import('node:child_process')
           assertSpecForName(p.name, p.spec)
           // double-click / retry-during-flight guard — jobs.set would orphan
@@ -1438,8 +1500,12 @@ export default Plugin.define({
           // the renderer's entry can lag the publication by up to TTL — a
           // version concern'd inside that window must NOT install. Health-
           // cheap recheck: a moved manifest sha forces a real re-pull.
-          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
+          // p.dev skips it: the dev-mode version picker deliberately installs
+          // versions the catalog never approved — assertSpecForName still
+          // pins the name; the chosen version is the dev's own responsibility.
+          if (!p.dev) try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, spec) }
           catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
+          else lg(`install ${p.name}: dev override — skipping approved-pin check for ${spec}`)
           const clean = cleanSpec(spec)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
           const done = (ok: boolean, wasCancelled = false) => m.emit?.('progress', { name: p.name, line: '', done: true, ok, ...(wasCancelled ? { cancelled: true } : {}) })
@@ -1498,7 +1564,7 @@ export default Plugin.define({
             done(false, isCancelled(x)); throw x
           } finally { pendingInstall.delete(p.name) }
         },
-        update: async (p: { name: string; spec?: string }) => {
+        update: async (p: { name: string; spec?: string; dev?: boolean }) => {
           assertSpecForName(p.name, p.spec)
           // pendingInstall closes the same pre-spawn window as install —
           // a sweep lane and a manual click must not double-start a spec
@@ -1509,9 +1575,11 @@ export default Plugin.define({
           const pin = p.spec ?? p.name             // catalog-approved pinned spec
           const clean = cleanSpec(pin)
           // same stale-window guard as install — pin must still equal the
-          // catalog-approved spec before spawn/config writes happen
-          try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, pin) }
+          // catalog-approved spec before spawn/config writes happen.
+          // p.dev skips it (version picker): name check already ran above.
+          if (!p.dev) try { await assertApprovedPin(() => fetchIndexCached(lastIndexUrl, true), p.name, pin) }
           catch (x) { pendingInstall.delete(p.name); throw new Error(/catalog moved|not in catalog/.test(String(x)) ? t('catalogMoved') : String(x)) }
+          else lg(`update ${p.name}: dev override — skipping approved-pin check for ${pin}`)
           lg(`update ${p.name}: pin=${pin} clean=${clean}`)
           const push = (line: string) => m.emit?.('progress', { name: p.name, line })
           const done = (ok: boolean, wasCancelled = false) => m.emit?.('progress', { name: p.name, line: '', done: true, ok, ...(wasCancelled ? { cancelled: true } : {}) })

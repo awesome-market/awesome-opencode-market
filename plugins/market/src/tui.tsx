@@ -9,7 +9,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { fetchIndexCached, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec, cleanSpec, featuresMap } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
@@ -87,6 +87,10 @@ export default Plugin.define({
       const [searchOn, setSearchOn] = createSignal(!!pendingQuery)
       const [settingsSel, setSettingsSel] = createSignal(0)
       const [devTaps, setDevTaps] = createSignal(0)   // version-footer tap counter (dev easter egg)
+      // dev-mode version picker: name → chosen version; verLists caches the
+      // packument version list per package (lazy — 'v' fetches on first use)
+      const [pickVer, setPickVer] = createSignal<Record<string, string>>({})
+      const verLists = new Map<string, { ver: string; at: string }[]>()
       const [findingsOpen, setFindingsOpen] = createSignal(false)
       // per-entry cancellables — a dual install runs a plugin spawn AND a
       // skill download concurrently, so each entry owns a SET of cancel fns
@@ -296,11 +300,18 @@ export default Plugin.define({
       // per-half result — 'cancelled' is NOT a failure: a sweep the user
       // stopped must not read as "N failed" in the summary
       type HalfResult = 'ok' | 'fail' | 'cancelled'
-      const installPluginHalf = async (e: MarketEntry, updating: boolean): Promise<HalfResult> => {
+      // devPick comes from the 'i' path only — updateAll passes nothing so a
+      // leftover pick can never steer a sweep away from the approved pin
+      const installPluginHalf = async (e: MarketEntry, updating: boolean, devPick?: string): Promise<HalfResult> => {
+        // dev-mode version pick overrides the catalog-approved pin —
+        // assertSpecForName still pins the name; the approved-pin gate below
+        // is skipped for picks (same `dev` flag semantics as the GUI host)
+        const usePick = !!devPick && !!e.latestVersion && devPick !== e.latestVersion
+        const pick = usePick ? devPick : undefined
         let pin: string
         // pinSpec itself throws on a crafted latestVersion — outside the try
         // it escaped as an unhandled rejection instead of a status line
-        try { pin = pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return 'fail' }
+        try { pin = usePick ? `${e.name}@${pick}` : pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return 'fail' }
         // claim BEFORE the awaits — the pin recheck (network) and the dynamic
         // import left jobs empty, so 'C' hit a noop (cancel lied: status said
         // cancelled while the spawn still ran) and a second 'i'/sweep lane
@@ -314,12 +325,13 @@ export default Plugin.define({
         // version concern'd inside that window must NOT install (GUI host
         // does the same recheck before its spawn). Cheap when health.json
         // hasn't moved; a real re-pull when it has.
-        try { await assertApprovedPin(() => fetchIndexCached(indexUrl(), true), e.name, pin) }
+        try { if (!usePick) await assertApprovedPin(() => fetchIndexCached(indexUrl(), true), e.name, pin) }
         catch { setStatus(t('catalogMoved')); return 'fail' }
         if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
         const cw = compatWarnOf(e)
         if (cw) setStatus(cw)
-        if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
+        if (usePick) setStatus(`${t('installing')} ${pin}…`)
+        else if (updating) setStatus(`${t('update')} ${e.name} → ${e.latestVersion ?? '?'}…`)
         else setStatus(tf('installingN', { name: e.name }))
         const { spawn } = await import('node:child_process')
         if (userCancel) { setStatus(t('cancelled')); return 'cancelled' }
@@ -463,13 +475,18 @@ export default Plugin.define({
         try {
           const plan = installPlan(e)
           const sync = halvesFor(e)
-          log(`install start ${e.name} plugin=${sync.plugin} skill=${sync.skill}`)
+          // dev-mode version pick — 'i' carries it, updateAll never does.
+          // A picked version skips the skill half: the catalog only ships the
+          // APPROVED skill bundle, pairing it with an older plugin would lie
+          const pv = store.devVerPick ? pickVer()[e.name] : undefined
+          const usePick = !!pv && !!e.latestVersion && pv !== e.latestVersion
+          log(`install start ${e.name} plugin=${sync.plugin} skill=${usePick ? false : sync.skill}${usePick ? ` pick=v${pv}` : ''}`)
           if (!sync.plugin && !sync.skill) { setStatus(t('allLatest')); return true }
           setStatus(tf('installingN', { name: e.name }))
           // halves run concurrently — plugin add mutates opencode.json, skill
           // install writes the skills root; independent surfaces (GUI parity)
-          const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!)) : Promise.resolve('ok' as HalfResult)
-          const sJob = sync.skill ? installSkill(e, plan) : Promise.resolve('ok' as HalfResult)
+          const pJob = sync.plugin ? installPluginHalf(e, !!installed()[e.name] && hasUpdate(e, installed()[e.name]!), usePick ? pv : undefined) : Promise.resolve('ok' as HalfResult)
+          const sJob = sync.skill && !usePick ? installSkill(e, plan) : Promise.resolve('ok' as HalfResult)
           return (await pJob) === 'ok' && (await sJob) === 'ok'
         } catch (x) {
           // halves encode expected failures as HalfResult — a rejection here is
@@ -656,7 +673,7 @@ export default Plugin.define({
         { label: t('clearDataTui'), run: () => openMenu(t('confirmClearTui'), [
           // same scope as GUI clearData — favorites + version bookkeeping +
           // devlog + language, not just the favorites blob
-          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {}; delete d.devlog; delete d.lang; delete d.devSource; delete d.devUnlocked }) },
+          { label: t('clearConfirm'), run: () => void mutate(d => { d.favorites = {}; d.skillVers = {}; delete d.devlog; delete d.lang; delete d.devSource; delete d.devUnlocked; delete d.devVerPick; setPickVer({}) }) },
           { label: t('cancel'), run: noop },
         ]) },
         { label: `${t('devlogTui')}: [${store.devlog ? t('devlogOn') : t('devlogOff')}]（${LOG_FILE}）`, run: () => {
@@ -673,9 +690,12 @@ export default Plugin.define({
         // version-tap easter egg, but always visible while devSource is ON
         // (a dev source you can't see is a dev source you can't turn off).
         // Refetch happens via the index effect.
-        ...(store.devUnlocked || store.devSource ? [
+        ...(store.devUnlocked || store.devSource || store.devVerPick ? [
           { label: `${t('devSource')}: [${store.devSource ? t('devlogOn') : t('devlogOff')}]`, run: () => {
             void mutate(d => { d.devSource = !d.devSource }).then(() => setStatus(`${t('devSource')} → ${indexUrl()}`))
+          } },
+          { label: `${t('devVerPick')}: [${store.devVerPick ? t('devlogOn') : t('devlogOff')}]`, run: () => {
+            void mutate(d => { d.devVerPick = !d.devVerPick }).then(() => setStatus(`${t('devVerPick')} ${store.devVerPick ? 'off' : 'on'}`))
           } },
           { label: t('permTitle'), run: () => void openSkillPerms() },
         ] : []),
@@ -708,16 +728,43 @@ export default Plugin.define({
       ])
 
       // github-kind entries carry no npm version — their marker is pushedAt;
-      // 'local'/'?' are install-kind markers, not versions — never "vlocal"
-      const dispVer = (e: MarketEntry) => e.latestVersion
-        ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`)
-        : (e.modifiedAt ?? '?').slice(0, 10)
+      // 'local'/'?' are install-kind markers, not versions — never "vlocal".
+      // devVerPick: a picked version renders with a trailing * — the star is
+      // the honest "this is NOT the catalog-approved version" marker.
+      const dispVer = (e: MarketEntry) => {
+        const pv = store.devVerPick ? pickVer()[e.name] : undefined
+        if (pv && e.latestVersion && pv !== e.latestVersion) return `v${pv}*`
+        return e.latestVersion
+          ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`)
+          : (e.modifiedAt ?? '?').slice(0, 10)
+      }
+      // 'v' cycles the selected card's pick through every published version —
+      // dev-mode only, npm entries only (github-kind has no version stream)
+      const cyclePick = async (e: MarketEntry) => {
+        if (!e.latestVersion || e.latestVersion === 'local' || e.latestVersion === '?' || e.source?.kind === 'github') return
+        let vs = verLists.get(e.name)
+        if (!vs) {
+          setStatus(`${e.name}: ${t('loading')}`)
+          try { vs = await fetchPkgVersions(e.name); verLists.set(e.name, vs) }
+          catch (x) { setStatus(`${e.name}: ${t('fetchFailed')} — ${String(x)}`); return }
+        }
+        if (!vs.length) { setStatus(`${e.name}: ${t('noMatch')}`); return }
+        const cur = pickVer()[e.name] ?? e.latestVersion
+        const next = vs[(vs.findIndex(v => v.ver === cur) + 1) % vs.length].ver
+        setPickVer({ ...pickVer(), [e.name]: next })
+        setStatus(`${e.name} → v${next}${next === e.latestVersion ? '' : ' (dev pick)'}`)
+      }
       const actionLabel = (e: MarketEntry) => {
         // per-half state — a current plugin half must not mask a stale skill
         // half (and vice versa); the old merged-version check did exactly that
         const hs = halfState(e, installed(), store.skillVers)
         const ver = hs.ver
-        if (hs.anyOn && !hs.anyOut) return `✓ ${t('installed')}`
+        // a pick ≠ installed version stays actionable — it's a downgrade op
+        const pv = store.devVerPick ? pickVer()[e.name] : undefined
+        const usePick = !!pv && !!e.latestVersion && pv !== e.latestVersion
+        if (hs.anyOn && !hs.anyOut && !(usePick && pv !== ver)) return `✓ ${t('installed')}`
+        // a pick names the chosen target — 'update' would lie about direction
+        if (usePick) return `${t('add')} → v${pv}*`
         // installed > approved = revert to the reviewed artifact — honest
         // label, not "update" (hold semantics)
         if (hs.anyOn) return `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${dispVer(e)}`
@@ -938,6 +985,8 @@ export default Plugin.define({
         if (k === '/') { setSearchOn(true); searchInput?.focus(); return }
         if (k === 'f') { pickFilter(); return }
         if (k === 'c') { pickCategory(); return }
+        // v = cycle the dev version pick — silent no-op outside devVerPick
+        if (k === 'v') { const e = detail() ?? pick(); if (e && store.devVerPick) void cyclePick(e); return }
         if (k === 'i') { const e = detail() ?? pick(); if (e && actionLabel(e) !== `✓ ${t('installed')}`) { if (canInstall(e)) void install(e); else setStatus(t('noInstallTarget')) } return }
         if (k === 'u') { const e = detail() ?? pick(); if (e && verOf(e)) void uninstall(e); return }
         if (k === '*') { const e = detail() ?? pick(); if (e) toggleFav(e); return }

@@ -214,8 +214,13 @@ export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string 
 }
 
 /** Minimal npm packument shape the client reads — dist.integrity feeds the
- *  post-download drift check (the bytes the catalog reviewed). */
-export interface Packument { versions?: Record<string, { dist?: { tarball?: string; integrity?: string } }> }
+ *  post-download drift check (the bytes the catalog reviewed); `time` feeds
+ *  the dev-mode historical-version picker. */
+export interface Packument {
+  versions?: Record<string, { dist?: { tarball?: string; integrity?: string } }>
+  /** version → publish timestamp (plus created/modified meta keys) */
+  time?: Record<string, string>
+}
 
 /** Tarball URL for the catalog-APPROVED version only — never dist-tags.latest:
  *  latest is the pendingUpdate users must not receive yet (hold semantics).
@@ -359,6 +364,7 @@ export interface LocalState {
   devlog?: boolean                    // write detailed debug logs (default off)
   devSource?: boolean                 // dev-mode: read catalog from the maintainer's fork Pages
   devUnlocked?: boolean               // easter egg: 10 version taps reveal dev settings (stays unlocked)
+  devVerPick?: boolean                // dev-mode: card version becomes a picker for ANY published version
   lang?: LangMode                     // UI language override (default 'auto' → navigator.language)
   skillVers?: Record<string, string>  // pkg name → version installed via market (enables real update checks)
 }
@@ -389,6 +395,7 @@ export function sanitizeState(x: unknown): LocalState {
   if (typeof o.devlog === 'boolean') s.devlog = o.devlog
   if (typeof o.devSource === 'boolean') s.devSource = o.devSource
   if (typeof o.devUnlocked === 'boolean') s.devUnlocked = o.devUnlocked
+  if (typeof o.devVerPick === 'boolean') s.devVerPick = o.devVerPick
   if (o.lang === 'auto' || o.lang === 'zh' || o.lang === 'en') s.lang = o.lang
   return s
 }
@@ -744,7 +751,7 @@ export type I18nKey =
   'verified'|'failed'|'skipped'|'unverified'|'noInstallTarget'|'installed'|'search'|'back'|'loading'|'update'|'reinstall'|'add'|'cancel'|'exportLog'|'activated'|'restartNeeded'|'favorites'|'allCategories'|'noMatch'|'fetchFailed'|'redFlags'|'findings'|'notSafe'|'market'|'uninstall'|'confirmUninstall'|'retry'|'loadMore'|'lang'|'langAuto'|'langZh'|'langEn'|
   'partsHint'|'installing'|'installFailed'|'failedRetry'|'verifying'|'installedPending'|'skill'|'plugin'|'uncataloged'|'updateAll'|'needRestartDesk'|'allLatest'|'updatingN'|'updatedOk'|'updatedMix'|
   'tabDiscover'|'tabPlugins'|'tabSkills'|'tabFavorites'|'tabInstalled'|'tabMySkills'|'tabAdvanced'|'filter'|'sortField'|'sortDownloads'|'sortStars'|'sortName'|'sortVerified'|'sortDirLabel'|'sortDesc'|'sortAsc'|'publishRange'|'rangeAll'|'range1d'|'range7d'|'range30d'|'range90d'|'range1y'|'allN'|
-  'refreshData'|'refreshing'|'refreshedN'|'refreshFailed'|'refreshTimeout'|'backupRestore'|'backupDesc'|'exportBackup'|'exportedN'|'pasteBackup'|'restore'|'restored'|'restoreInvalid'|'clearData'|'confirmClear'|'cleared'|'devlogLabel'|'devlogDesc'|'noLogs'|'clearLogs'|'devSource'|'devSourceDesc'|
+  'refreshData'|'refreshing'|'refreshedN'|'refreshFailed'|'refreshTimeout'|'backupRestore'|'backupDesc'|'exportBackup'|'exportedN'|'pasteBackup'|'restore'|'restored'|'restoreInvalid'|'clearData'|'confirmClear'|'cleared'|'devlogLabel'|'devlogDesc'|'noLogs'|'clearLogs'|'devSource'|'devSourceDesc'|'devVerPick'|'devVerPickDesc'|
   'cat'|'keysHint'|'menuSettings'|'exportBackupTui'|'restoreTui'|'restorePrompt'|'clearDataTui'|'confirmClearTui'|'clearConfirm'|'devlogTui'|'devlogOn'|'devlogOff'|'viewLogs'|'devlogMenu'|'useHttpCatalog'|'retryKey'|'updateN'|'confirmEnter'|
   'all'|'expand'|'installingN'|'updatedN'|'removedN'|'installFailN'|'uninstallFail'|'uninstallPartial'|'updateFail'|'exportFail'|'restoreFail'|'catalogFail'|'catalogAlready'|'catalogEnabled'|'cancelled'|'heldReview'|'dataFresh'|'integrityFail'|
   'deprecated'|'replacedBy'|'legacy'|'removedFrom'|'reasonNpm404'|'reasonRepo404'|'reasonFiltered'|'reasonCapped'|'reasonManual'|'reasonUnknown'|'viewOnSite'|'compat'|'heldReason'|'verifyLevel'|'verifyLog'|'verifyRun'|'permTitle'|'permAllow'|'permAsk'|'permDeny'|'permOff'|'disable'|'revertTo'|'featFilter'|'installRunning'|'catalogDisabled'|
@@ -752,7 +759,7 @@ export type I18nKey =
 const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', skipped: 'skipped', unverified: 'unverified', noInstallTarget: 'no installable package', installed: 'installed', search: 'search…', back: '← back', loading: 'loading…', update: 'update', reinstall: 'reinstall', add: 'add', cancel: 'cancel', exportLog: 'export log', activated: 'activated', restartNeeded: 'restart to activate', favorites: 'favorites', allCategories: 'all categories', noMatch: 'no match', fetchFailed: 'fetch failed', redFlags: 'red flags', findings: 'findings', notSafe: 'not found — this does not mean safe', market: 'opencode market', uninstall: 'uninstall', confirmUninstall: 'confirm uninstall?', retry: 'retry', loadMore: 'load more', lang: 'language', langAuto: 'system', langZh: '中文', langEn: 'English',
   partsHint: '{k} parts (multi-select)', installing: 'installing…', installFailed: 'install failed', failedRetry: 'failed — retry', verifying: 'verifying…', installedPending: 'installed (verify pending)', skill: 'skill', plugin: 'plugin', uncataloged: 'uncataloged', updateAll: 'update all', needRestartDesk: 'restart desktop required', allLatest: 'all up to date', updatingN: 'updating {n}/{total}…', updatedOk: 'updated {ok}', updatedMix: 'updated {ok}, {fail} failed',
   tabDiscover: 'discover', tabPlugins: 'plugins', tabSkills: 'skills', tabFavorites: 'favorites', tabInstalled: 'my plugins', tabMySkills: 'my skills', tabAdvanced: 'settings', filter: 'filter', sortField: 'sort by', sortDownloads: 'npm downloads (30d)', sortStars: 'stars', sortName: 'name', sortVerified: 'verification', sortDirLabel: 'direction', sortDesc: 'descending', sortAsc: 'ascending', publishRange: 'published', rangeAll: 'all time', range1d: 'last 1 day', range7d: 'last 7 days', range30d: 'last 30 days', range90d: 'last 90 days', range1y: 'last year', allN: 'all({n})',
-  refreshData: 'refresh data (force index reload)', refreshing: 'refreshing…', refreshedN: 'refreshed {n} entries', refreshFailed: 'refresh failed: {err}', refreshTimeout: 'timeout 45s', backupRestore: 'backup & restore', backupDesc: 'favorites live in localStorage. Export a backup as JSON; paste it back to restore.', exportBackup: 'export backup', exportedN: 'exported {file}', pasteBackup: 'paste backup JSON…', restore: 'restore', restored: 'restored', restoreInvalid: 'restore failed: not a valid backup JSON', clearData: 'clear data', confirmClear: 'clear all favorites?', cleared: 'cleared', devlogLabel: 'dev log', devlogDesc: 'record debug logs (install stages + errors, stored locally)', noLogs: 'no logs yet', clearLogs: 'clear logs', devSource: 'dev catalog source', devSourceDesc: 'read the catalog from the maintainer fork (development builds only)',
+  refreshData: 'refresh data (force index reload)', refreshing: 'refreshing…', refreshedN: 'refreshed {n} entries', refreshFailed: 'refresh failed: {err}', refreshTimeout: 'timeout 45s', backupRestore: 'backup & restore', backupDesc: 'favorites live in localStorage. Export a backup as JSON; paste it back to restore.', exportBackup: 'export backup', exportedN: 'exported {file}', pasteBackup: 'paste backup JSON…', restore: 'restore', restored: 'restored', restoreInvalid: 'restore failed: not a valid backup JSON', clearData: 'clear data', confirmClear: 'clear all favorites?', cleared: 'cleared', devlogLabel: 'dev log', devlogDesc: 'record debug logs (install stages + errors, stored locally)', noLogs: 'no logs yet', clearLogs: 'clear logs', devSource: 'dev catalog source', devSourceDesc: 'read the catalog from the maintainer fork (development builds only)', devVerPick: 'version picker', devVerPickDesc: 'card version becomes a dropdown — install ANY published version, not just the approved one (development builds only)',
   cat: 'category', keysHint: '←↑↓→/hjkl select · enter detail · i install · u uninstall · * fav · / search · f filter · c category · r refresh · U update all · 1-7/tab switch · esc back', menuSettings: 'settings', exportBackupTui: 'export backup → ~/opencode-market-backup.json', restoreTui: 'restore (enter backup file path)', restorePrompt: 'restore', clearDataTui: 'clear data (favorites)', confirmClearTui: 'clear data — irreversible, confirm?', clearConfirm: '✗ clear', devlogTui: 'dev log', devlogOn: 'on', devlogOff: 'off', viewLogs: 'view logs', devlogMenu: 'dev log (esc to close)', useHttpCatalog: 'use HTTP catalog source', retryKey: 'press {key} to retry', updateN: 'updating {n} items…', confirmEnter: 'enter confirm · esc cancel',
   all: 'all', expand: 'expand', installingN: 'installing {name}…', updatedN: '{name} updated', removedN: '{name} removed', installFailN: '{name} install failed{exit} — press {key} to retry', uninstallFail: 'uninstall failed: {err} — press {key} to retry', uninstallPartial: '{name} removed — skill dir kept: {err}', updateFail: 'update failed: {err}', exportFail: 'export failed: {err}', restoreFail: 'restore failed: {err} — check the backup file and retry', catalogFail: 'catalog source failed: {err} — check {cfg} and retry', catalogAlready: 'already enabled', catalogEnabled: 'enabled', cancelled: 'cancelled', heldReview: 'v{v} pending review — not installable yet', dataFresh: 'already up to date', integrityFail: 'downloaded bytes do not match the reviewed artifact — retry, or report if it persists',
   deprecated: 'deprecated', replacedBy: 'use {name} instead', legacy: 'legacy', removedFrom: 'removed from catalog', reasonNpm404: 'gone from npm', reasonRepo404: 'repository gone', reasonFiltered: 'filtered out', reasonCapped: 'over catalog cap', reasonManual: 'removed by maintainer', reasonUnknown: 'reason unknown', viewOnSite: 'view on site', compat: 'requires', heldReason: 'reason', verifyLevel: 'level', verifyLog: 'verify log', verifyRun: 'verify run', permTitle: 'skill permissions', permAllow: 'allow', permAsk: 'ask', permDeny: 'deny', permOff: 'clear', disable: 'disable', revertTo: 'revert to approved', featFilter: 'parts', installRunning: 'install already running', catalogDisabled: 'disabled',
@@ -761,7 +768,7 @@ const EN: Record<I18nKey, string> = { verified: 'verified', failed: 'failed', sk
 const ZH: Record<I18nKey, string> = { verified: '已实测可装可用', failed: '装不上或加载失败', skipped: '有高危信号没跑', unverified: '还没验', noInstallTarget: '没有可安装的包', installed: '已安装', search: '搜索…', back: '← 返回', loading: '加载中…', update: '更新', reinstall: '重装', add: '安装', cancel: '取消', exportLog: '导出日志', activated: '已激活', restartNeeded: '重启后生效', favorites: '收藏', allCategories: '全部分类', noMatch: '没搜到', fetchFailed: '拉取失败', redFlags: '高危信号', findings: '扫描提示', notSafe: '没扫到——这不等于安全', market: 'opencode 市场', uninstall: '卸载', confirmUninstall: '确认卸载？', retry: '重试', loadMore: '加载更多', lang: '语言', langAuto: '跟随系统', langZh: '中文', langEn: 'English',
   partsHint: '{k} 部件（可多选）', installing: '安装中…', installFailed: '安装失败', failedRetry: '失败 — 重试', verifying: '验证中…', installedPending: '已安装（等待验证）', skill: '技能', plugin: '插件', uncataloged: '未收录', updateAll: '全部更新', needRestartDesk: '需重启桌面端', allLatest: '全部已是最新', updatingN: '更新中 {n}/{total}…', updatedOk: '已更新 {ok} 个', updatedMix: '更新 {ok} 成功 {fail} 失败',
   tabDiscover: '发现', tabPlugins: '插件', tabSkills: '技能', tabFavorites: '收藏', tabInstalled: '我的插件', tabMySkills: '我的技能', tabAdvanced: '设置', filter: '筛选', sortField: '排序字段', sortDownloads: 'npm 下载量（近 30 天）', sortStars: 'Star 数', sortName: '名称', sortVerified: '验证状态', sortDirLabel: '排序方向', sortDesc: '降序', sortAsc: '升序', publishRange: '发布时间范围', rangeAll: '全部时间', range1d: '最近 1 天', range7d: '最近 7 天', range30d: '最近 30 天', range90d: '最近 90 天', range1y: '最近 1 年', allN: '全部({n})',
-  refreshData: '更新数据（强制刷新索引）', refreshing: '刷新中…', refreshedN: '已刷新 {n} 条', refreshFailed: '刷新失败: {err}', refreshTimeout: '超时 45s', backupRestore: '备份与恢复', backupDesc: '收藏存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。', exportBackup: '导出备份', exportedN: '已导出 {file}', pasteBackup: '粘贴备份 JSON…', restore: '恢复', restored: '已恢复', restoreInvalid: '恢复失败：不是有效的备份 JSON', clearData: '清空数据', confirmClear: '清空所有收藏？', cleared: '已清空', devlogLabel: '开发日志', devlogDesc: '记录调试日志（装包各阶段+错误，存本机）', noLogs: '暂无日志', clearLogs: '清空日志', devSource: '开发目录源', devSourceDesc: '从维护者 fork 读取目录（仅开发用）',
+  refreshData: '更新数据（强制刷新索引）', refreshing: '刷新中…', refreshedN: '已刷新 {n} 条', refreshFailed: '刷新失败: {err}', refreshTimeout: '超时 45s', backupRestore: '备份与恢复', backupDesc: '收藏存在本机 localStorage。备份导出为 JSON，恢复时粘贴内容即可。', exportBackup: '导出备份', exportedN: '已导出 {file}', pasteBackup: '粘贴备份 JSON…', restore: '恢复', restored: '已恢复', restoreInvalid: '恢复失败：不是有效的备份 JSON', clearData: '清空数据', confirmClear: '清空所有收藏？', cleared: '已清空', devlogLabel: '开发日志', devlogDesc: '记录调试日志（装包各阶段+错误，存本机）', noLogs: '暂无日志', clearLogs: '清空日志', devSource: '开发目录源', devSourceDesc: '从维护者 fork 读取目录（仅开发用）', devVerPick: '版本选择', devVerPickDesc: '卡片版本号变成下拉框——可装任意已发布版本，不限于目录批准版（仅开发用）',
   cat: '分类', keysHint: '←↑↓→/hjkl 选择 · enter 详情 · i 装 · u 卸 · * 收藏 · / 搜索 · f 筛选 · c 分类 · r 刷新 · U 全更 · 1-7/tab 切页 · esc 返回', menuSettings: '设置', exportBackupTui: '导出备份 → ~/opencode-market-backup.json', restoreTui: '恢复（输入备份文件路径）', restorePrompt: '恢复', clearDataTui: '清空数据（收藏）', confirmClearTui: '清空数据 — 不可撤销，确认？', clearConfirm: '✗ 清空', devlogTui: '开发日志', devlogOn: '开', devlogOff: '关', viewLogs: '查看日志', devlogMenu: '开发日志（esc 关闭）', useHttpCatalog: '使用 HTTP catalog 源', retryKey: '按 {key} 重试', updateN: '更新 {n} 项…', confirmEnter: 'enter 确认 · esc 取消',
   all: '全部', expand: '展开', installingN: '{name} 安装中…', updatedN: '{name} 已更新', removedN: '{name} 已卸载', installFailN: '{name} 安装失败{exit} — 按 {key} 重试', uninstallFail: '卸载失败: {err} — 按 {key} 重试', uninstallPartial: '{name} 已卸载——技能目录保留：{err}', updateFail: '更新失败: {err}', exportFail: '导出失败: {err}', restoreFail: '恢复失败: {err} — 检查备份文件后重试', catalogFail: 'catalog 源失败: {err} — 检查 {cfg} 后重试', catalogAlready: '已开启', catalogEnabled: '已启用', cancelled: '已取消', heldReview: 'v{v} 在审——暂不可装', dataFresh: '数据已是最新', integrityFail: '下载的字节与评审过的产物不一致——重试，持续出现请反馈',
   deprecated: '已弃用', replacedBy: '建议改用 {name}', legacy: '门禁前收录', removedFrom: '已从目录移除', reasonNpm404: 'npm 上已消失', reasonRepo404: '仓库已消失', reasonFiltered: '被入场过滤移除', reasonCapped: '超出目录上限', reasonManual: '被人工移除', reasonUnknown: '原因未知', viewOnSite: '站点详情', compat: '要求', heldReason: '原因', verifyLevel: '阶段', verifyLog: '验证日志', verifyRun: '验证记录', permTitle: '技能权限', permAllow: '允许', permAsk: '询问', permDeny: '拒绝', permOff: '清除', disable: '关闭', revertTo: '回退到批准版', featFilter: '部件', installRunning: '安装进行中', catalogDisabled: '已关闭',
@@ -1011,6 +1018,15 @@ const npmRegistry = (): string => {
   return 'https://registry.npmjs.org'
 }
 export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ tarball: string | null; integrity: string | null }> {
+  const pk = await packumentOf(name)
+  const d = pk.versions?.[ver]?.dist
+  return {
+    tarball: approvedTarballUrl(pk, { latestVersion: ver }),
+    integrity: typeof d?.integrity === 'string' ? d.integrity : null,
+  }
+}
+
+async function packumentOf(name: string): Promise<Packument> {
   // registry-scoped key — npm_config_registry is user-controlled env read at
   // call time; a bare `name` key would serve the previous registry's
   // packument for up to 10min after a switch (private packages 404 "no
@@ -1031,11 +1047,19 @@ export async function fetchPkgVersionMeta(name: string, ver: string): Promise<{ 
     pkMetaCache.set(ck, { at: Date.now(), pk })
     if (pkMetaCache.size > PK_META_MAX) pkMetaCache.delete(pkMetaCache.keys().next().value!)
   }
-  const d = pk.versions?.[ver]?.dist
-  return {
-    tarball: approvedTarballUrl(pk, { latestVersion: ver }),
-    integrity: typeof d?.integrity === 'string' ? d.integrity : null,
-  }
+  return pk
+}
+
+/** Dev-mode version-picker source: every published version + its timestamp,
+ *  newest first (packument `time` minus the created/modified meta keys).
+ *  Capped — ancient packages ship hundreds of releases. */
+export async function fetchPkgVersions(name: string, cap = 40): Promise<{ ver: string; at: string }[]> {
+  const pk = await packumentOf(name)
+  return Object.entries(pk.time ?? {})
+    .filter(([v, at]) => v !== 'created' && v !== 'modified' && !!at)
+    .map(([ver, at]) => ({ ver, at }))
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+    .slice(0, cap)
 }
 
 /** sha512 SRI check for a downloaded artifact against the index-announced

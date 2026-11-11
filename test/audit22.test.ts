@@ -91,7 +91,7 @@ describe('audit #10 — client consumption flow', () => {
 
   it('tui installPluginHalf evaluates pinSpec inside the guarded try', () => {
     const src = rfs(join(__dirname, '..', 'plugins', 'market', 'src', 'tui.tsx'), 'utf8')
-    const m = src.match(/installPluginHalf = async \(e: MarketEntry, updating: boolean\)[\s\S]{0,500}/)
+    const m = src.match(/installPluginHalf = async \(e: MarketEntry, updating: boolean[^)]*\)[\s\S]{0,700}/)
     expect(m).toBeTruthy()
     const head = m![0]
     const tryPos = head.indexOf('try {')
