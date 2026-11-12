@@ -197,8 +197,12 @@ beforeAll(() => {
   coded = join(home, '.local', 'share', 'opencode-market-code-digest')
   catdg = join(home, '.local', 'share', 'opencode-market-catalog-digest')
   remote = join(e2eRoot, 'remote.git')
-  // bare remote carrying this repo's main (CODED renders from it)
+  // bare remote carrying this repo's main (CODED renders from it).
+  // pull_request checkouts are detached HEADs — the bare clone gets no
+  // 'main' ref and the --branch main clone below dies. Pin one to HEAD.
   sh(`git clone -q --bare "${REPO}" "${remote}"`)
+  const head = sh(`git -C "${REPO}" rev-parse HEAD`).trim()
+  sh(`git -C "${remote}" update-ref refs/heads/main "${head}" && git -C "${remote}" symbolic-ref HEAD refs/heads/main`)
   // pre-seed CODED: pinned main + deps stamp + node_modules link (skip npm ci)
   sh(`git clone -q --depth=1 --single-branch --branch main "${remote}" "${coded}"`)
   symlinkSync(join(REPO, 'node_modules'), join(coded, 'node_modules'), 'dir')
