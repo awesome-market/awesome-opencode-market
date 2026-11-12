@@ -220,7 +220,16 @@ jobs:
               echo "::warning::release.ts failed during publish attempt $i — verdict apply skipped (next catalog run re-derives)"
             fi
             cp /tmp/index.json /tmp/cat/index.json
+            # stage review-material bundles for fresh pendings — CI unpacks
+            # the tarballs once so the diagnose daemon reviews from ≤32KB
+            # bundles instead of re-downloading (huge packages keep their
+            # text review surface). Best-effort: a build failure must not
+            # block the index publish.
+            npx tsx pipeline/ai/material.ts --index /tmp/cat/index.json \
+              --verdicts /tmp/cat/ai-verdicts.jsonl --outdir /tmp/cat/material --limit 500 \
+              || echo "::warning::material bundle build failed — daemon falls back to live tarball collection"
             git -C /tmp/cat add index.json
+            [ -d /tmp/cat/material ] && git -C /tmp/cat add -A material || true
             # staged-diff precheck: distinguish "nothing to commit" (remote head
             # already carries this content → success) from a real commit failure,
             # which `commit || echo` would mask into a false-success push (C-2)

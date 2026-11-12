@@ -43,7 +43,7 @@
  *       judge identity never lives in the published code), AI_API_KEY —
  *       source ~/.config/opencode-market/ai.env or let the plist set them;
  *       GALVANIZE_DIR (REQUIRED) for the L0.5 classifier dir. */
-import { readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, appendFileSync, statSync, existsSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { exit, env } from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -97,7 +97,48 @@ async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): P
   return out
 }
 
-interface Material { id: string; text: string }
+export interface Material { id: string; text: string }
+
+/** CI-built review-material bundle staged on the catalog branch at
+ *  material/<name-with-%2F>@<ver>.json — the heavy tarball download/extract
+ *  happens in CI so the daemon reviews without touching npm tarballs.
+ *  `sourceSha` binds the bundle to the exact bytes it describes: a registry
+ *  re-tag invalidates the bundle (sha pin = same discipline as verdicts). */
+export interface MaterialBundle {
+  name: string
+  version: string
+  sourceSha?: string | undefined
+  builtAt?: string | undefined
+  material: Material[]
+}
+
+export const materialFileName = (name: string, ver: string) =>
+  `${name.replaceAll('/', '%2F')}@${ver}.json`
+
+export const materialDirOf = (indexPath: string) => join(dirname(indexPath), 'material')
+
+/** Read a staged bundle; a malformed/absent one is just a miss — the caller
+ *  falls back to live material collection. */
+export function readMaterialBundle(dir: string, name: string, ver: string): { path: string; bundle: MaterialBundle } | null {
+  try {
+    const p = join(dir, materialFileName(name, ver))
+    const j = JSON.parse(readFileSync(p, 'utf8')) as Record<string, unknown>
+    const mat = Array.isArray(j.material)
+      ? (j.material as unknown[]).filter(m =>
+          !!m && typeof m === 'object' && !Array.isArray(m)
+          && typeof (m as Record<string, unknown>).id === 'string'
+          && typeof (m as Record<string, unknown>).text === 'string') as Material[]
+      : []
+    if (!mat.length) return null
+    return { path: p, bundle: {
+      name: typeof j.name === 'string' ? j.name : name,
+      version: typeof j.version === 'string' ? j.version : ver,
+      sourceSha: typeof j.sourceSha === 'string' ? j.sourceSha : undefined,
+      builtAt: typeof j.builtAt === 'string' ? j.builtAt : undefined,
+      material: mat,
+    } }
+  } catch { return null }
+}
 
 /** Review material = the text surface a user/agent actually sees plus the
  *  structured signals the reviewer needs — NOT the whole source tree
@@ -562,7 +603,7 @@ export function unreviewedTargets(
   index: CatalogIndex,
   verdicts: AiVerdict[],
   names?: Set<string> | null,
-  opts: { now?: string; force?: boolean } = {},
+  opts: { now?: string; force?: boolean; ahead?: boolean } = {},
 ): CatalogIndex['plugins'] {
   const now = Date.parse(opts.now ?? new Date().toISOString())
   const seen = latestVerdicts(verdicts)
@@ -592,15 +633,21 @@ export function unreviewedTargets(
     // reviewing without install evidence wastes tokens and the release gate
     // requires verified anyway. Past 48h: degraded review proceeds.
     const vf = candidateSlot(e)?.verification ?? e.verification
-    if (vf.status === 'unverified' && now - candidateHeldAt(e) < VERIFY_WAIT_MS) return false
-    // A retryable 'failed' slot still belongs to the verify loop (V-3): the
-    // auto-retry may flip it to verified, and a premature short-circuit
-    // concern would close the review FOREVER — verdicted keys never re-enter,
-    // so a transient failure would become permanent human debt. Defer like
-    // 'unverified' until the attempts budget is spent; then the
-    // verify-failed short-circuit writes the mechanical concern.
-    // Harness-error rows were never measured — they review normally.
-    if (vf.status === 'failed' && !isHarnessFailure(vf) && retryable(vf)) return false
+    // `ahead` = material-bundle production selection: build bundles BEFORE
+    // verify lands so install evidence and review material arrive together.
+    // The daemon's own selection keeps the defers — reviewing early wastes
+    // tokens, pre-building a text blob doesn't.
+    if (!opts.ahead) {
+      if (vf.status === 'unverified' && now - candidateHeldAt(e) < VERIFY_WAIT_MS) return false
+      // A retryable 'failed' slot still belongs to the verify loop (V-3): the
+      // auto-retry may flip it to verified, and a premature short-circuit
+      // concern would close the review FOREVER — verdicted keys never re-enter,
+      // so a transient failure would become permanent human debt. Defer like
+      // 'unverified' until the attempts budget is spent; then the
+      // verify-failed short-circuit writes the mechanical concern.
+      // Harness-error rows were never measured — they review normally.
+      if (vf.status === 'failed' && !isHarnessFailure(vf) && retryable(vf)) return false
+    }
     return true
   }).sort((a, b) => (candidateHeldAt(a) || 0) - (candidateHeldAt(b) || 0))
 }
@@ -677,12 +724,13 @@ export async function main(
     if (!Number.isFinite(n) || n < 0) die(`usage: ${k} must be a non-negative number`)
     return n
   }
-  const usage = 'usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>]'
+  const usage = 'usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>] [--material-rm <p>]'
   // `?? die(...)`: die returns never, so the result type is string — a plain
   // `if (!x) die()` does not narrow these destructured bindings.
   const idxPath = arg('--index') ?? die(usage)
   const verdictsPath = arg('--verdicts') ?? die(usage)
   const outPath = arg('--out') ?? die(usage)
+  const materialRmPath = arg('--material-rm')
   const statePath = arg('--state')
   const limit = numArg('--limit', 50) // bounded by default — a bare run must not fan the whole backlog into the LLM
   const budgetMs = numArg('--budget', 120) * 60_000 // bounded even for manual runs — Infinity let a bare invocation burn days
@@ -802,6 +850,13 @@ export async function main(
    *  self-heal it). Harness rows were never measured — also not terminal. */
   const terminalFailed = (vf: Work['vf']) =>
     vf.status === 'failed' && !isHarnessFailure(vf) && !retryable(vf)
+  // CI-staged material bundles: a sha-matching bundle replaces the whole
+  // material block AND skips the tarball fetch entirely — the daemon never
+  // downloads a package CI already unpacked. Files queued for deletion ride
+  // out via --material-rm; the shell replays them inside the push retry loop
+  // (its `reset --hard` would otherwise resurrect every deleted file).
+  const matDir = materialDirOf(idxPath)
+  const rmFiles = new Set<string>()
   const works: Work[] = await mapPool(candidates, 8, async e => {
     const ver = verOf(e) ?? '?'
     const slot = candidateSlot(e)
@@ -813,16 +868,44 @@ export async function main(
     // signal — but a pass overturned since must not resurrect)
     const t = sha ? bySha.get(`${e.name.toLowerCase()}\0${sha}`) : undefined
     const twin = t && t.version !== verOf(e) ? t : undefined
+    const staged = ver !== '?' ? readMaterialBundle(matDir, e.name, ver) : null
+    const stagedHit = staged && sha && staged.bundle.sourceSha === sha
+    if (staged && sha && staged.bundle.sourceSha && staged.bundle.sourceSha !== sha)
+      rmFiles.add(staged.path) // proven stale — tarball moved under the bundle
+    if (stagedHit) rmFiles.add(staged!.path) // consumed this run
     // §5/§6: npm candidates get REAL package content in the material —
     // twins and terminal verify-failed short-circuits never reach the model
     // so their fetch is wasted; github-kind entries have no npm tarball
-    const content = (!twin && e.source.kind === 'npm' && ver !== '?' && !terminalFailed(vf))
+    const content = (!stagedHit && !twin && e.source.kind === 'npm' && ver !== '?' && !terminalFailed(vf))
       ? await contentMaterial(e.name, ver, await tarballOf(e.name, ver), deps.fetchFn).catch(() => [] as Material[])
       : []
     const rec = driftedSet.has(e) ? seen.get(vkey(e.name, ver)) : undefined
-    return { e, ver, material: [...reviewMaterial(e), ...content], sha, vf,
+    // a bundle's meta blocks are a CI-time snapshot — take only its
+    // content-derived blocks (content:*, content-coverage, binary-manifest)
+    // and pair them with LIVE reviewMaterial so a bundle built before
+    // verify landed can't feed the judge a stale 'unverified' line
+    const material = stagedHit
+      ? [...reviewMaterial(e), ...staged!.bundle.material.filter(b => b.id.startsWith('content') || b.id === 'binary-manifest')]
+      : [...reviewMaterial(e), ...content]
+    return { e, ver, material, sha, vf,
       flagged: caps.redFlags.length > 0, twin, retagOfHuman: rec?.source === 'human' }
   })
+  // material GC: files for keys that can never be consumed (verdicted,
+  // braked, removed, gone) get swept — pending-but-unselected keys KEEP
+  // their bundle for a future run's selection. Proven-stale (sha mismatch)
+  // files are already in rmFiles from the works pass above.
+  const keepKeys = new Set(
+    unreviewedTargets(idx, allVerdicts, null, { ahead: true })
+      .flatMap(e => verOf(e) ? [materialFileName(e.name, verOf(e)!)] : []))
+  if (existsSync(matDir)) for (const f of readdirSync(matDir)) {
+    if (f.endsWith('.json') && !keepKeys.has(f)) rmFiles.add(join(matDir, f))
+  }
+  if (materialRmPath && rmFiles.size) {
+    try {
+      writeFileSync(materialRmPath, [...rmFiles].map(p => p.slice(matDir.length + 1)).join('\n') + '\n')
+      console.log(`[diagnose] ${rmFiles.size} material bundle(s) queued for deletion`)
+    } catch (x) { console.warn(`[diagnose] material-rm write failed (${String(x).slice(0, 120)}) — stale bundles stay`) }
+  }
 
   // one python spawn per run — per-candidate spawns paid a 500MB-model load
   // each. Composite id `name\0block` groups scores back per entry.

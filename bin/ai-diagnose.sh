@@ -42,6 +42,9 @@ HEALTHF=$STATED/diagnose-health.json
 # verdicts whose push never landed — replayed into the next run's payload and
 # fed back as evidence so the same keys aren't re-reviewed at LLM cost
 SPOOL=$STATED/pending-verdicts.jsonl
+# material-bundle deletions ride out on the same push as verdicts — the list
+# is durable state like the spool: a failed push keeps it for next run's replay
+RMF=$STATED/material-rm.list
 mkdir -p "$LOGD" "$STATED"
 
 log() { printf '%s [diagnose] %s\n' "$(date '+[%Y-%m-%d %H:%M:%S]')" "$*"; }
@@ -364,7 +367,7 @@ case ${DIAGNOSE_FORCE:-} in ''|0|false|no) ;; *) ARGS+=(--force) ;; esac
 npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" --out "$TMPV" \
   --limit "$DIAGNOSE_LIMIT" --budget "$DIAGNOSE_BUDGET" --state "$STATEF" \
-  --sweep-state "$SWEEPF" --health "$HEALTHF" \
+  --sweep-state "$SWEEPF" --health "$HEALTHF" --material-rm "$RMF" \
   ${ARGS[@]+"${ARGS[@]}"} \
   || exit $?
 
@@ -399,7 +402,7 @@ if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileS
 cp "$PAY" "$SPOOL" 2>/dev/null \
   || log "WARN: spool sync failed ($SPOOL) — a failed push would lose this run's verdicts and re-burn the LLM next run"
 
-[ -s "$PAY" ] || { log "no new verdicts"; exit 0; }
+[ -s "$PAY" ] || [ -s "$RMF" ] || { log "no new verdicts"; exit 0; }
 
 # Replay push: verdicts live in $PAY, not the worktree — a failed push just
 # means re-append onto the newest origin/catalog next attempt.
@@ -417,19 +420,35 @@ for i in 1 2 3 4; do
   # push success/failure — never local git state — clear the spool.
   comm -13 <(git show origin/catalog:ai-verdicts.jsonl 2>/dev/null | sort -u) \
            <(sort -u "$PAY") > "$VVIEW"
-  [ -s "$VVIEW" ] || { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
-  touch ai-verdicts.jsonl
-  # a remote file whose last byte isn't '\n' would fuse its last line with the
-  # first appended line — two verdicts lost inside one malformed blob that the
-  # append-only gate never re-checks. Normalize before appending.
-  [ -s ai-verdicts.jsonl ] && [ -n "$(tail -c1 ai-verdicts.jsonl)" ] && printf '\n' >> ai-verdicts.jsonl
-  # append only lines the remote still lacks — a push that succeeded but
-  # reported failure must not produce duplicate verdict lines next attempt
-  cat "$VVIEW" >> ai-verdicts.jsonl
-  git add ai-verdicts.jsonl
+  [ -s "$VVIEW" ] || [ -s "$RMF" ] || { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
+  if [ -s "$VVIEW" ]; then
+    touch ai-verdicts.jsonl
+    # a remote file whose last byte isn't '\n' would fuse its last line with
+    # the first appended line — two verdicts lost inside one malformed blob
+    # that the append-only gate never re-checks. Normalize before appending.
+    [ -s ai-verdicts.jsonl ] && [ -n "$(tail -c1 ai-verdicts.jsonl)" ] && printf '\n' >> ai-verdicts.jsonl
+    # append only lines the remote still lacks — a push that succeeded but
+    # reported failure must not produce duplicate verdict lines next attempt
+    cat "$VVIEW" >> ai-verdicts.jsonl
+    git add ai-verdicts.jsonl
+  fi
+  # replay material-bundle deletions inside the retry loop — the reset --hard
+  # above resurrects them each attempt, so the durable list is the only place
+  # they survive. Stale after a run? Next run's GC re-detects and re-lists.
+  if [ -s "$RMF" ]; then
+    while IFS= read -r f; do case "$f" in */*) continue ;; esac; rm -f "material/$f"; done < "$RMF"
+    git add -A -- material 2>/dev/null || true
+  fi
+  # nothing staged = remote already carries the verdicts AND the cleanup —
+  # without this check a cleanup-only run would hit 4 "nothing to commit"
+  # failures and misreport the push as lost
+  if git diff --cached --quiet; then
+    log "nothing new to push — remote already carries verdicts+cleanup"
+    : > "$SPOOL"; : > "$RMF"; stamp_health pushed already-landed; exit 0
+  fi
   git commit -qm "ai-diagnose: $(date '+%F %H:%M')" \
     || { log "commit attempt $i failed"; sleep 3; continue; }
-  git push -q origin catalog && { : > "$SPOOL"; stamp_health pushed ok; exit 0; }
+  git push -q origin catalog && { : > "$SPOOL"; : > "$RMF"; stamp_health pushed ok; exit 0; }
   log "push attempt $i failed"; sleep 3
 done
 # push never landed — keep the payload for the next run instead of burning
