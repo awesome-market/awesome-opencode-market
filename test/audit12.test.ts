@@ -19,7 +19,7 @@ const mkEntry = (name: string, over: Partial<PluginEntry> = {}): PluginEntry => 
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: { latest: '1.0.0' },
   firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: '2026-01-01',
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-02-02T00:00:00Z' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-02-02T00:00:00Z' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'pending', approvalReason: 'awaiting-review',
@@ -46,7 +46,7 @@ describe('audit#1: refreshMeta follows a repointed packument repository', () => 
     const dir = mkdtempSync(join(tmpdir(), 'a12-refresh-'))
     const prev = mkEntry('repoint-pkg', {
       source: { kind: 'npm', id: 'repoint-pkg', repo: 'o/old', repoId: 7 },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },   // stale → refresh
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },   // stale → refresh
       approval: 'approved',
     })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
@@ -79,7 +79,7 @@ describe('audit#1: refreshMeta follows a repointed packument repository', () => 
     const dir = mkdtempSync(join(tmpdir(), 'a12-fallback-'))
     const prev = mkEntry('keep-pkg', {
       source: { kind: 'npm', id: 'keep-pkg', repo: 'o/keep', repoId: 7 },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
       approval: 'approved',
     })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))

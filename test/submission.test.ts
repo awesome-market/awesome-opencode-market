@@ -133,7 +133,7 @@ describe('submission parser', () => {
 describe('markNotified', () => {
   const idx = CatalogIndex.parse({
     version: '1', generatedAt: 't', categories: {},
-    plugins: [{ name: 'opencode-foo', slug: 'x', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'x' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {} }],
+    plugins: [{ name: 'opencode-foo', slug: 'x', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'x' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {} }],
     removed: [],
   })
   const lines = [
@@ -152,7 +152,7 @@ describe('markNotified', () => {
   it('repo-only seeds match the github-kind entry by repo, not name', () => {
     const ghIdx = CatalogIndex.parse({
       version: '1', generatedAt: 't', categories: {},
-      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'approved' }],
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'approved' }],
       removed: [],
     })
     const seed = ['{"repo":"o/r","issue":11,"notified":false}',
@@ -165,7 +165,7 @@ describe('markNotified', () => {
   it('repo seed stays quiet while the entry is still pending', () => {
     const ghIdx = CatalogIndex.parse({
       version: '1', generatedAt: 't', categories: {},
-      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'pending' }],
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'pending' }],
       removed: [],
     })
     const { issues } = markNotified(ghIdx, ['{"repo":"o/r","issue":11,"notified":false}'])
@@ -351,7 +351,7 @@ describe('run: JSONL seed declared metadata', () => {
 })
 
 describe('submissionStatuses', () => {
-  const basePlugin = { name: 'p1', slug: 'p1', aliases: [], type: 'plugin' as const, discoveredVia: [], source: { kind: 'npm' as const, id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' as const }, compat: {} }
+  const basePlugin = { name: 'p1', slug: 'p1', aliases: [], type: 'plugin' as const, discoveredVia: [], source: { kind: 'npm' as const, id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' as const }, compat: {} }
   const mkIdx = (plugins: unknown[]) => CatalogIndex.parse({ version: '1', generatedAt: 't', categories: {}, plugins, removed: [] })
 
   it('phases: queued (no entry) / review (pending); landed is skipped (notified already covers it)', () => {
@@ -489,7 +489,7 @@ describe('notify-published main', () => {
     const seedPath = join(dir, 'subs.txt')
     writeFileSync(idxPath, JSON.stringify({
       version: '1', generatedAt: 't', categories: {}, removed: [],
-      plugins: [{ name: 'p1', slug: 'p1', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: '1', publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {}, approval: 'approved' }],
+      plugins: [{ name: 'p1', slug: 'p1', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: '1', publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {}, approval: 'approved' }],
     }))
     writeFileSync(seedPath, '{"name":"p1","issue":3,"notified":false}\n')
     const logs: string[] = []

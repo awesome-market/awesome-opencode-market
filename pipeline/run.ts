@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
-import { fetchPackument, fetchTarball, fetchDownloads30d, compatStrings, type PackumentResult } from './fetch/npm.ts'
+import { fetchPackument, fetchTarball, fetchDownloads30d, fetchDownloadsMonth, compatStrings, type PackumentResult } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
@@ -34,6 +34,10 @@ export interface RunOptions {
   /** workflow_dispatch escape hatch: publish despite a red corruption gate
    *  (legitimate mass-deprecation/removal events otherwise dead-lock every run) */
   forceGate?: boolean | undefined
+  /** catalog-branch metrics-history.json — rolling ~95d per-entry snapshots
+   *  of {stars, npmDownloads30d}; read+updated+rewritten each run so
+   *  metrics.starsDelta30d is computable (absent → history feature off) */
+  metricsHistPath?: string | undefined
   /** optional output: {submissionKey: rejectionCode} for seed rows the
    *  admission path rejected this run — the publish job stamps them onto
    *  submissions.txt so the issue's status comment can explain WHY the
@@ -105,6 +109,45 @@ export function anchorIntegrity(
 
 const METRICS_STALE_MS = 7 * 24 * 3600 * 1000
 
+// ---- metrics history sidecar --------------------------------------------
+type HistPts = [number, number][]
+interface MetricsHist { v: 1; e: Record<string, { s?: HistPts | undefined; d?: HistPts | undefined }> }
+const HIST_WINDOW_MS = 95 * 24 * 3600 * 1000
+const DELTA_MS = 30 * 24 * 3600 * 1000
+
+/** Tolerant reader — a missing/malformed file degrades to an empty history
+ *  (same contract as loadVerdicts: a dirty sidecar must not kill the run). */
+export function loadMetricsHistory(path: string): MetricsHist {
+  try {
+    const j = JSON.parse(readFileSync(path, 'utf8')) as unknown
+    const e = j && typeof j === 'object' && !Array.isArray(j) ? (j as { e?: unknown }).e : null
+    const out: MetricsHist['e'] = {}
+    if (e && typeof e === 'object' && !Array.isArray(e)) {
+      for (const [k, v] of Object.entries(e as Record<string, unknown>)) {
+        const rec = v && typeof v === 'object' && !Array.isArray(v) ? v as { s?: unknown; d?: unknown } : {}
+        const pts = (x: unknown): HistPts | undefined => Array.isArray(x)
+          ? x.filter((p): p is [number, number] => Array.isArray(p) && p.length === 2 && typeof p[0] === 'number' && typeof p[1] === 'number')
+          : undefined
+        const s = pts(rec.s), d = pts(rec.d)
+        out[k] = {}
+        if (s?.length) out[k]!.s = s
+        if (d?.length) out[k]!.d = d
+      }
+    }
+    return { v: 1, e: out }
+  } catch { return { v: 1, e: {} } }
+}
+
+/** current − newest point that is itself ≥30d old; null when the history
+ *  doesn't reach that far back (absent evidence, not a zero delta). */
+export function delta30(pts: HistPts | undefined, cur: number | null, nowMs: number): number | null {
+  if (cur == null || !pts?.length) return null
+  const cutoff = nowMs - DELTA_MS
+  let base: number | null = null
+  for (const [t, v] of pts) if (t <= cutoff) base = v
+  return base === null ? null : cur - base
+}
+
 export async function run(opts: RunOptions = {}) {
   const f = opts.fetchFn ?? fetch
   const now = opts.now ?? new Date().toISOString()
@@ -146,6 +189,16 @@ export async function run(opts: RunOptions = {}) {
   // worker's hold-pin checks on the same tombstone rules as the release gate
   // (named tombAt — `tomb` is already the worker's per-name RemovedEntry)
   const tombAt = tombEpochs(old?.removed)
+  // repo back-match for npm packages that declare no repository: github-kind
+  // entries carry `pkgName` — the `name` of the repo's OWN package.json. A
+  // repo whose manifest names the npm package IS that package's repo —
+  // verified-by-content inference, same evidence class as a declared link.
+  const repoByPkgName = new Map<string, string>()
+  for (const e of old?.plugins ?? []) {
+    if (e.source?.kind === 'github' && typeof e.pkgName === 'string' && e.pkgName && e.source.repo) {
+      repoByPkgName.set(e.pkgName.toLowerCase(), e.source.repo)
+    }
+  }
   const blocklist = loadBlocklist(opts.blocklistPath)
   const isBlocked = (name: string, slug?: string) =>
     !!blocklist && (blocklist.names.includes(name) || (!!slug && blocklist.slugs.includes(slug)))
@@ -429,11 +482,16 @@ export async function run(opts: RunOptions = {}) {
     // repoPkg would keep probing the stale repo forever and repoId could never
     // drift onto a different repo, so sec:repo-recreated could never fire.
     const repoP = pkResP.then(({ pk }) =>
-      normalizeRepoUrl(pk?.repository ?? null) ?? e.source.repo ?? null)
-    const [pkRes, repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
+      normalizeRepoUrl(pk?.repository ?? null)
+        ?? normalizeRepoUrl(pk?.homepage ?? null)
+        ?? normalizeRepoUrl(pk?.bugs ?? null)
+        ?? repoByPkgName.get(e.name.toLowerCase())
+        ?? e.source.repo ?? null)
+    const [pkRes, repoMetaRes, downloads, downloadsMo, marketMeta, repoPkg] = await Promise.all([
       pkResP,
       repoP.then(r => r ? fetchRepoMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
       isNpm ? fetchDownloads30d(e.name, { fetchFn: f }) : Promise.resolve(null),
+      isNpm ? fetchDownloadsMonth(e.name, { fetchFn: f }) : Promise.resolve(null),
       repoP.then(r => r ? fetchMarketMeta(r, { token: opts.ghToken, fetchFn: f }) : null),
       repoP.then(repo => pkResP.then(({ pk }) => repo && pk?.repositoryDir
         ? fetchRepoPackageName(repo, { dir: pk.repositoryDir, fetchFn: f })
@@ -519,6 +577,8 @@ export async function run(opts: RunOptions = {}) {
       metrics: {
         stars: repoMetaRes?.meta?.stars ?? e.metrics.stars,
         npmDownloads30d: downloads ?? e.metrics.npmDownloads30d,
+        downloadsMonth: downloadsMo ?? e.metrics.downloadsMonth,
+        starsDelta30d: e.metrics.starsDelta30d ?? null,
         checkedAt: now,
       },
       // backfill SRI for entries that predate the integrity field — the field
@@ -582,6 +642,12 @@ export async function run(opts: RunOptions = {}) {
         const needsIntegrity = (!prev.integrity && !!prev.latestVersion)
           || (prevSlot !== null && !prevSlot.integrity)
         const next = stale || needsIntegrity ? await refreshMeta(prev) : prev
+        // repo back-match runs on the reuse path too — a repo that names the
+        // package in ITS OWN package.json needs no fresh probing to adopt
+        if (!next.source.repo) {
+          const inferred = repoByPkgName.get(next.name.toLowerCase())
+          if (inferred) next.source = { ...next.source, repo: inferred }
+        }
         // refreshMeta re-resolves packument.repository — a repoint onto a
         // blocklisted repo must not keep publishing just because the stored
         // name/slug aren't on the list. Lowercase: slugs/list rows are lc.
@@ -646,7 +712,11 @@ export async function run(opts: RunOptions = {}) {
       // stale search index drift while the actual submitted repo hint was
       // never compared (refreshMeta's reuse path already reads seedMeta).
       const declaredRepo = seedMeta.get(cand.name)?.repo ?? null
-      const repo = normalizeRepoUrl(pk.repository) ?? declaredRepo
+      const repo = normalizeRepoUrl(pk.repository)
+        ?? normalizeRepoUrl(pk.homepage)
+        ?? normalizeRepoUrl(pk.bugs)
+        ?? repoByPkgName.get(cand.name.toLowerCase())
+        ?? declaredRepo
       const slug = slugOf({ repo: repo ?? undefined, npmName: cand.name })
       if (isBlocked(cand.name, slug)) {
         // the stored identity may not show the block (repointed repo) — tell
@@ -693,9 +763,10 @@ export async function run(opts: RunOptions = {}) {
           // guard included — repository.directory is attacker-controlled)
           const dir = pk.repositoryDir ?? undefined
           const dirTraversal = unsafeRepoDir(dir)
-          const [repoMetaRes, downloads, marketMeta, repoPkg] = await Promise.all([
+          const [repoMetaRes, downloads, downloadsMo, marketMeta, repoPkg] = await Promise.all([
             repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
             fetchDownloads30d(cand.name, { fetchFn: f }),
+            fetchDownloadsMonth(cand.name, { fetchFn: f }),
             repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
             repo && !dirTraversal
               ? fetchRepoPackageName(repo, { dir, fetchFn: f })
@@ -796,7 +867,7 @@ export async function run(opts: RunOptions = {}) {
             source: { ...heldPrev.source, ...(repo ? { repo } : {}), ...(repoMetaRes?.meta?.id ? { repoId: repoMetaRes.meta.id } : {}) },
             integrity: dispA.integrity,
             compat: pk.compatOf[heldPrev.latestVersion ?? ''] ?? heldPrev.compat,
-            metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads ?? heldPrev.metrics.npmDownloads30d, checkedAt: now },
+            metrics: { stars: repoMetaRes?.meta?.stars ?? heldPrev.metrics.stars, npmDownloads30d: downloads ?? heldPrev.metrics.npmDownloads30d, downloadsMonth: downloadsMo ?? heldPrev.metrics.downloadsMonth, starsDelta30d: heldPrev.metrics.starsDelta30d ?? null, checkedAt: now },
           })
           reusedNames.add(cand.name)
           console.log(`  [${entries.length}] ${cand.name} (hold pinned at v${heldPin.version}; upstream ${pk.latest})`)
@@ -831,9 +902,10 @@ export async function run(opts: RunOptions = {}) {
       // marketMeta don't depend on each other and the serial awaits were pure
       // queue latency (the dead fetchRepoTree call that used to sit here only
       // fed a truncated-warning; skill detection uses tarball scanFiles)
-      const [repoMetaRes, downloads, marketMeta] = await Promise.all([
+      const [repoMetaRes, downloads, downloadsMo, marketMeta] = await Promise.all([
         repo ? fetchRepoMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
         fetchDownloads30d(cand.name, { fetchFn: f }),
+        fetchDownloadsMonth(cand.name, { fetchFn: f }),
         repo ? fetchMarketMeta(repo, { token: opts.ghToken, fetchFn: f }) : Promise.resolve(null),
       ])
       if (repoMetaRes?.status === 'rate-limited') rateLimitedCalls++
@@ -920,7 +992,7 @@ export async function run(opts: RunOptions = {}) {
         latestVersion: pk.latest,
         publishedAt: pk.latestPublishedAt,
         integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
-        metrics: { stars: repoMeta?.stars ?? null, npmDownloads30d: downloads, checkedAt: now },
+        metrics: { stars: repoMeta?.stars ?? null, npmDownloads30d: downloads, downloadsMonth: downloadsMo, starsDelta30d: null, checkedAt: now },
         capabilities: scan,
         // no installable payload → 'skipped' like repo-only entries: the
         // release gate treats it as "deliberately not run", and verifyPartsOf
@@ -1328,7 +1400,7 @@ export async function run(opts: RunOptions = {}) {
         latestVersion: null,
         publishedAt: null,
         integrity: null,
-        metrics: { stars: cand.stars, npmDownloads30d: null, checkedAt: now },
+        metrics: { stars: cand.stars, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: now },
         capabilities: scan,
         // parts-aware initial state: an installable payload (plugin/skill) is
         // 'unverified' and enters the shard queue — github-kind now verifies
@@ -1587,6 +1659,45 @@ export async function run(opts: RunOptions = {}) {
     if (seedOutcomes.size) console.log(`seed outcomes: ${[...seedOutcomes].map(([k, v]) => `${k}→${v}`).join(', ')}`)
   }
 
+  // metrics-history sidecar: snapshot {stars, npmDownloads30d} only on runs
+  // that actually re-probed (checkedAt === now marks a fresh fetch — reused
+  // entries keep their cadence points without duping a week-old reading),
+  // keep a ~95d window, and derive starsDelta30d from the newest point that
+  // is itself ≥30d old. Until ~30d of snapshots accumulate, delta is null —
+  // honestly absent, not zero.
+  if (opts.metricsHistPath) {
+    const hist = loadMetricsHistory(opts.metricsHistPath)
+    const nowMs = Date.parse(now)
+    const today = now.slice(0, 10)
+    const live = new Set(index.plugins.map(e => e.name))
+    for (const k of Object.keys(hist.e)) if (!live.has(k)) delete hist.e[k]
+    for (const e of index.plugins) {
+      const rec = hist.e[e.name] ??= {}
+      if (e.metrics.checkedAt === now) {
+        const put = (a: HistPts | undefined, v: number | null): HistPts | undefined => {
+          if (v == null) return a
+          const out = a ?? []
+          const last = out[out.length - 1]
+          if (last && new Date(last[0]).toISOString().slice(0, 10) === today) { last[0] = nowMs; last[1] = v }
+          else out.push([nowMs, v])
+          return out
+        }
+        rec.s = put(rec.s, e.metrics.stars)
+        rec.d = put(rec.d, e.metrics.npmDownloads30d)
+      }
+      for (const k of ['s', 'd'] as const) {
+        const a = rec[k]
+        if (a) {
+          const keep = a.filter(p => nowMs - p[0] <= HIST_WINDOW_MS)
+          if (keep.length) rec[k] = keep; else delete rec[k]
+        }
+      }
+      e.metrics.starsDelta30d = delta30(rec.s, e.metrics.stars, nowMs)
+    }
+    try { writeFileSync(opts.metricsHistPath, JSON.stringify(hist)) }
+    catch (x) { console.warn(`metrics-history write failed (${String(x).slice(0, 80)}) — deltas stay null next run`) }
+  }
+
   // 6. write
   const out = opts.outPath ?? 'dist/index.json'
   mkdirSync(dirname(out), { recursive: true })
@@ -1614,6 +1725,7 @@ if (isMain(import.meta.url)) {
     verdictsPath: arg('--verdicts'),
     digestStatePath: arg('--digest-state'),
     seedOutcomesPath: arg('--seed-outcomes'),
+    metricsHistPath: arg('--metrics-history'),
     ...(process.argv.includes('--force-gate') ? { forceGate: true } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }

@@ -9,6 +9,10 @@ export interface Packument {
   modifiedAt: string | null
   repository: string | null
   repositoryDir: string | null     // monorepo subdirectory, e.g. "packages/foo"
+  /** repo-adjacent fallbacks for the ~8% of packages that never declare
+   *  `repository` — homepage/bugs often carry the GitHub URL anyway */
+  homepage: string | null
+  bugs: string | null
   license: string | null
   tarballUrl: string | null
   deprecated: boolean
@@ -116,8 +120,12 @@ export async function fetchPackument(
   let doc: {
     'dist-tags'?: { latest?: string } & Record<string, string>
     maintainers?: Array<{ name?: string } | string>
+    homepage?: string
+    bugs?: string | { url?: string }
     versions?: Record<string, {
       repository?: string | { url?: string; directory?: string }
+      homepage?: string
+      bugs?: string | { url?: string }
       license?: string | { type?: string }
       dist?: { tarball?: string; integrity?: string }
       keywords?: string[]
@@ -169,6 +177,8 @@ export async function fetchPackument(
       modifiedAt: strOr(doc.time?.modified),
       repository: repoUrl,
       repositoryDir: repo && typeof repo === 'object' ? strOr(repo.directory) : null,
+      homepage: strOr(v?.homepage) ?? strOr(doc.homepage),
+      bugs: (() => { const b = v?.bugs ?? doc.bugs; return typeof b === 'string' ? b : strOr(b?.url) })(),
       license: typeof lic === 'string' ? lic : strOr(lic?.type),
       tarballUrl: strOr(v?.dist?.tarball),
       deprecated: Boolean(v?.deprecated),
@@ -266,14 +276,17 @@ export async function fetchTarball(
   }
 }
 
-/** npm download counts, last-30-days window (field name stays honest: this is not installs). */
-export async function fetchDownloads30d(
+/** npm download counts over an API range ('last-week', 'last-month', or an
+ *  explicit 'YYYY-MM-DD:YYYY-MM-DD' window — range strings are constructed
+ *  in-process only, never from package data). */
+export async function fetchDownloadsRange(
   name: string,
+  range: string,
   opts: { fetchFn?: typeof fetch } = {},
 ): Promise<number | null> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   try {
-    const res = await f(`https://api.npmjs.org/downloads/point/last-month/${encodeURIComponent(name)}`)
+    const res = await f(`https://api.npmjs.org/downloads/point/${range}/${encodeURIComponent(name)}`)
     if (!res.ok) return null
     const body = await readJsonCapped<{ downloads?: unknown } | null>(res, 1024 * 1024)
     const d = body?.downloads
@@ -281,4 +294,26 @@ export async function fetchDownloads30d(
   } catch {
     return null
   }
+}
+
+/** Last-30-days rolling window (field name stays honest: this is not installs). */
+export async function fetchDownloads30d(
+  name: string,
+  opts: { fetchFn?: typeof fetch } = {},
+): Promise<number | null> {
+  return fetchDownloadsRange(name, 'last-month', opts)
+}
+
+/** Calendar month-to-date (YYYY-MM-01..today). Deliberately a separate field
+ *  from the rolling 30d window: early-month numbers are small by SHAPE, not
+ *  by adoption — readers compare MTD to MTD or 30d to 30d, never across. */
+export async function fetchDownloadsMonth(
+  name: string,
+  opts: { fetchFn?: typeof fetch; now?: Date } = {},
+): Promise<number | null> {
+  const now = opts.now ?? new Date()
+  const yyyy = now.getUTCFullYear()
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(now.getUTCDate()).padStart(2, '0')
+  return fetchDownloadsRange(name, `${yyyy}-${mm}-01:${yyyy}-${mm}-${dd}`, opts)
 }

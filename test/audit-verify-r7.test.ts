@@ -16,7 +16,7 @@ const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '2.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', findings: [], redFlags: [] },
   // budget burned (3 retries) on an OLD host — the amnesty case
   verification: { status: 'failed', level: 'load', opencodeVersion: 'oc-old',

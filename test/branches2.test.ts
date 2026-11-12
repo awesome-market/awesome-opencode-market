@@ -18,7 +18,7 @@ const mkEntry = (name: string, v = '1'): PluginEntry => ({
   source: { kind: 'npm', id: name }, description: { en: '' }, category: [],
   license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2020-01-01', latestVersion: v, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',

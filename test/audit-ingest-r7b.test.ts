@@ -30,7 +30,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {},
   approval: 'approved',

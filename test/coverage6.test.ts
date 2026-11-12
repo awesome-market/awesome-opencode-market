@@ -57,7 +57,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {},
   approval: 'pending',
@@ -748,7 +748,7 @@ describe('run.ts uncovered arms', () => {
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '1.0.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01T00:00:00Z' }, // stale → refreshMeta
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01T00:00:00Z' }, // stale → refreshMeta
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -800,7 +800,7 @@ describe('run.ts uncovered arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '0.9.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good', version: '0.9.0' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -1093,7 +1093,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '0.9.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },   // no version field → 326#1 arm
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
       pendingUpdate: { version: '1.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })])
     const oldPath = join(d, 'old.json')
@@ -1119,7 +1119,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'pending', approvalReason: 'concern-x',
       latestVersion: '0.9.0', source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -1133,7 +1133,7 @@ describe('run.ts remaining arms', () => {
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '1.0.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -1207,7 +1207,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', latestVersion: '1.0.0', integrity: null,
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: 't' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -1331,7 +1331,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good',
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: null, npmDownloads30d: 42, checkedAt: '2000-01-01T00:00:00.000Z' },
+      metrics: { stars: null, npmDownloads30d: 42, downloadsMonth: null, starsDelta30d: null, checkedAt: '2000-01-01T00:00:00.000Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))

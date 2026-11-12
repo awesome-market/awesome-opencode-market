@@ -15,7 +15,7 @@ const basePlugin = {
   category: [], license: null, deprecated: false, deprecatedMessage: null,
   replacement: null, createdAt: null, modifiedAt: null, maintainers: [],
   distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: caps, verification: ver, compat: {},
 }
 const mkIdx = (plugins: unknown[], removed: unknown[] = []) =>

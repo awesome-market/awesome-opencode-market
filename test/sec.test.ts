@@ -14,7 +14,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['alice'], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',

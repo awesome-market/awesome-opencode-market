@@ -15,7 +15,7 @@ const mkEntry = (name: string, over: Partial<PluginEntry> = {}): PluginEntry => 
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: { latest: '1.0.0' },
   firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: '2026-01-01',
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] },
   verification: { status: 'verified', level: 'load' }, compat: {},
   approval: 'approved',
@@ -576,14 +576,14 @@ describe('run — hold semantics end-to-end', () => {
     const old = mkIndex([mkEntry('mypkg', {
       latestVersion: '1.0.0', approval: 'approved', pendingUpdate: pu,
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-02-02T00:00:00Z' },
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-02-02T00:00:00Z' },
     })])
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(old))
     const idxOld = mkIndex([mkEntry('mypkg', {
       latestVersion: '1.0.0', approval: 'approved',
       pendingUpdate: { ...pu, capabilities: { ...pu.capabilities, rulesetVersion: RULESET_VERSION } },
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-02-02T00:00:00Z' },
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-02-02T00:00:00Z' },
     })])
     writeFileSync(oldPath, JSON.stringify(idxOld))
     const idx = await run({ outPath: join(dir, 'out.json'), oldIndexPath: oldPath, fetchFn: mkFetchFor('1.1.0', mkTgz()), now: '2026-02-02T00:00:00Z' })

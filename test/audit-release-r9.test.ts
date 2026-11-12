@@ -25,7 +25,7 @@ const ghEntry = (name: string, commitSha: string, over: Partial<PluginEntry> = {
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: null, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] },
   verification: { status: 'skipped', level: 'install' }, compat: {},
   approval: 'pending', approvalReason: 'awaiting-review',

@@ -23,7 +23,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2020-01-01T00:00:00Z', latestVersion: '2.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: caps(), verification: { status: 'verified' }, compat: {},
   approval: 'pending',
   ...over,

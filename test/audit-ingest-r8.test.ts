@@ -34,7 +34,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '1.0.0', publishedAt: null, integrity: 'sha512-AAA=',
-  metrics: { stars: 1, npmDownloads30d: null, checkedAt: STALE },
+  metrics: { stars: 1, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: STALE },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {},
   approval: 'approved',
@@ -137,7 +137,7 @@ describe('refreshMeta: github-kind entries never probe npm', () => {
     writeFileSync(oldPath, JSON.stringify(idx([
       e({ name: 'pkg', slug: 'o/gh', latestVersion: '1.0.0', integrity: null,
         source: { kind: 'github', id: 'o/gh', repo: 'o/gh', version: 'sha1' },
-        metrics: { stars: 1, npmDownloads30d: null, checkedAt: STALE } }),
+        metrics: { stars: 1, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: STALE } }),
     ])))
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: NOW })
     expect(fetched.some(u => u.startsWith('https://registry.npmjs.org/pkg'))).toBe(false)
@@ -169,7 +169,7 @@ describe('rescanStaleGh: moved-commit verify reset requires a queueable payload'
     const gh = (over: Partial<PluginEntry> = {}): PluginEntry => e({
       discoveredVia: ['github-topic'],
       latestVersion: null, integrity: null, modifiedAt: 't',
-      metrics: { stars: 1, npmDownloads30d: null, checkedAt: NOW },
+      metrics: { stars: 1, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: NOW },
       capabilities: { scannedAt: 't', rulesetVersion: 'old-rules', findings: [], redFlags: [] },
       ...over,
     })

@@ -41,7 +41,7 @@ const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
   integrity: null, contains: ['plugin'],
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', findings: [], redFlags: [], rulesetVersion: RULESET_VERSION },
   verification: { status: 'verified' }, compat: {},
   approval: 'approved',

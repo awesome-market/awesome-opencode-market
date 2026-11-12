@@ -8,7 +8,7 @@ const entry = {
   description: { en: 'd' }, category: [], license: 'MIT',
   deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: 1, npmDownloads30d: 10, checkedAt: '2026-01-01T00:00:00Z' },
+  metrics: { stars: 1, npmDownloads30d: 10, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' },
   compat: {},

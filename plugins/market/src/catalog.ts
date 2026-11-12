@@ -31,7 +31,7 @@ export interface MarketEntry {
   approval?: 'approved' | 'pending' | 'legacy'
   capabilities?: { scannedAt: string | null; findings: string[]; redFlags: string[] }
   verification?: { status: string; level?: string; verifiedAt?: string; opencodeVersion?: string; runUrl?: string; logExcerpt?: string }
-  metrics?: { stars: number | null; npmDownloads30d: number | null } | undefined
+  metrics?: { stars: number | null; npmDownloads30d: number | null; downloadsMonth: number | null; starsDelta30d: number | null } | undefined
   /** npm dist-tags as published (latest/beta/…) — display-only context; the
    *  install pin always comes from latestVersion, never dist-tags.latest */
   distTags?: Record<string, string> | undefined
@@ -165,6 +165,8 @@ export function sanitizeIndex(idx: MarketIndex): MarketIndex {
         metrics: e.metrics && typeof e.metrics === 'object' && !Array.isArray(e.metrics) ? {
             stars: typeof e.metrics.stars === 'number' && Number.isFinite(e.metrics.stars) ? e.metrics.stars : null,
             npmDownloads30d: typeof e.metrics.npmDownloads30d === 'number' && Number.isFinite(e.metrics.npmDownloads30d) ? e.metrics.npmDownloads30d : null,
+            downloadsMonth: typeof e.metrics.downloadsMonth === 'number' && Number.isFinite(e.metrics.downloadsMonth) ? e.metrics.downloadsMonth : null,
+            starsDelta30d: typeof e.metrics.starsDelta30d === 'number' && Number.isFinite(e.metrics.starsDelta30d) ? e.metrics.starsDelta30d : null,
           } : undefined,
       }
     })

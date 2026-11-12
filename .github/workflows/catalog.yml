@@ -98,6 +98,14 @@ jobs:
             else
               rm -f /tmp/digest-state.json
             fi
+            # metrics history: absent = feature off / cold start; present-but-
+            # unreadable hard-fails like every other aux file (a silent empty
+            # history would zero starsDelta30d for a month before anyone noticed)
+            if git cat-file -e origin/catalog:metrics-history.json 2>/dev/null; then
+              git show origin/catalog:metrics-history.json > /tmp/metrics-history.json || { echo "metrics-history.json exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              rm -f /tmp/metrics-history.json
+            fi
             ;;
             2) touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl ;;   # first run ever — no blocklist yet (absent = disabled, not corrupt)
             *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc}) — refusing to run blind (WF-1)" >&2; exit 1 ;;
@@ -106,13 +114,14 @@ jobs:
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
           GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out
           path: |
             /tmp/index.json
             /tmp/seed-outcomes.json
+            /tmp/metrics-history.json
           retention-days: 1
 
   publish:
@@ -220,6 +229,9 @@ jobs:
               echo "::warning::release.ts failed during publish attempt $i — verdict apply skipped (next catalog run re-derives)"
             fi
             cp /tmp/index.json /tmp/cat/index.json
+            # metrics history sidecar — written by generate whenever the flag is
+            # passed; absent on cold bootstrap only until the first run writes it
+            [ -f /tmp/metrics-history.json ] && cp /tmp/metrics-history.json /tmp/cat/metrics-history.json || true
             # stage review-material bundles for fresh pendings — CI unpacks
             # the tarballs once so the diagnose daemon reviews from ≤32KB
             # bundles instead of re-downloading (huge packages keep their
@@ -229,6 +241,7 @@ jobs:
               --verdicts /tmp/cat/ai-verdicts.jsonl --outdir /tmp/cat/material --limit 500 \
               || echo "::warning::material bundle build failed — daemon falls back to live tarball collection"
             git -C /tmp/cat add index.json
+            [ -f /tmp/cat/metrics-history.json ] && git -C /tmp/cat add metrics-history.json || true
             [ -d /tmp/cat/material ] && git -C /tmp/cat add -A material || true
             # staged-diff precheck: distinguish "nothing to commit" (remote head
             # already carries this content → success) from a real commit failure,

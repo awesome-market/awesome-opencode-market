@@ -36,7 +36,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null,
   maintainers: [], distTags: { latest: '1.0.0' }, firstSeenAt: '2020-01-01T00:00:00Z',
   latestVersion: '1.0.0', publishedAt: null, integrity: 'sha512-old',
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2020-01-01T00:00:00Z' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01T00:00:00Z' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {}, approval: 'approved',
   ...over,
@@ -74,7 +74,7 @@ describe('blocklist: repointed repository cannot keep a banned entry alive', () 
   it('full path: repoint to banned repo → manual tombstone, not gone-check keep', async () => {
     const d = tmp('air7-')
     const oldPath = join(d, 'old.json')
-    writeFileSync(oldPath, JSON.stringify(idx([e({ metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-06-01T00:00:00Z' } })])))
+    writeFileSync(oldPath, JSON.stringify(idx([e({ metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-06-01T00:00:00Z' } })])))
     writeFileSync(join(d, 'blocklist.json'), JSON.stringify({ slugs: ['evil/repo'] }))
     // search reports a version bump → the worker takes the full path where
     // isBlocked(fresh slug) drops it; without blockedFresh, gone-check's
@@ -92,7 +92,7 @@ describe('blocklist: repointed repository cannot keep a banned entry alive', () 
   it('evidence-regressed keep: banned repoint beats the approved-slot protect', async () => {
     const d = tmp('air7-')
     const oldPath = join(d, 'old.json')
-    writeFileSync(oldPath, JSON.stringify(idx([e({ metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-06-01T00:00:00Z' } })])))
+    writeFileSync(oldPath, JSON.stringify(idx([e({ metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-06-01T00:00:00Z' } })])))
     writeFileSync(join(d, 'blocklist.json'), JSON.stringify({ slugs: ['evil/repo'] }))
     // same scenario but the packument lost its opencode evidence too — the
     // approved-slot keep must not shield a fresh banned repo identity

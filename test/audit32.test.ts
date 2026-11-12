@@ -11,7 +11,7 @@ const mk = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   source: { kind: 'npm', id: 'p' }, description: { en: 'desc' }, category: [],
   license: 'MIT', deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: 5, npmDownloads30d: 100, checkedAt: 't' },
+  metrics: { stars: 5, npmDownloads30d: 100, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',

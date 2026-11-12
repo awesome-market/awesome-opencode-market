@@ -31,7 +31,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: 'MIT', deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: 'oldpush', maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: null, publishedAt: null, integrity: null,
-  metrics: { stars: 3, npmDownloads30d: null, checkedAt: NOW },
+  metrics: { stars: 3, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: NOW },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   contains: ['plugin'],
   verification: { status: 'verified' }, compat: {},

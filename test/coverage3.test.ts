@@ -64,7 +64,7 @@ describe('coverage round 3', () => {
       source: { kind: 'npm', id: 'p', repo: 'o/p' }, description: { en: 'd' }, category: [],
       license: 'MIT', deprecated: true, replacement: 'other', deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1', publishedAt: null,
-      metrics: { stars: 1, npmDownloads30d: 2, checkedAt: 't' },
+      metrics: { stars: 1, npmDownloads30d: 2, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: [] },
       verification: { status: 'failed', logExcerpt: 'boom', runUrl: 'https://run/1', opencodeVersion: '2.2.5' },
       compat: {},

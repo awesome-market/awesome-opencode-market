@@ -121,7 +121,7 @@ describe('run.ts remaining branches', () => {
     license: 'MIT', deprecated: false, replacement: null,
     deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
-    metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+    metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
@@ -175,7 +175,7 @@ describe('backfill + refreshMeta remaining branches', () => {
   it('run: stale reused entry refreshes repoId + deprecated via refreshMeta', async () => {
     const e = mkEntryX('stale-pkg', {
       source: { kind: 'npm', id: 'stale-pkg', repo: 'o/r' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01' },   // very stale → refresh path
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01' },   // very stale → refresh path
     })
     const old = join(mkdtempSync(join(tmpdir(), 'old-')), 'index.json')
     writeFileSync(old, JSON.stringify({ version: '1', generatedAt: 'x', categories: {}, plugins: alive2(), removed: [] }))
@@ -205,7 +205,7 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
     license: 'MIT', deprecated: false, replacement: null,
     deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
-    metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+    metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
@@ -215,6 +215,6 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
 function alive2() {
   return [...Array.from({ length: 4 }, (_, i) => mkEntryX(`alive-${i}`)), mkEntryX('stale-pkg', {
     source: { kind: 'npm', id: 'stale-pkg', repo: 'o/r' },
-    metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01' },
+    metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01' },
   })]
 }

@@ -140,6 +140,12 @@ export const PluginEntry = z.looseObject({
   metrics: z.looseObject({
     stars: z.number().int().nonnegative().nullable().default(null),
     npmDownloads30d: z.number().int().nonnegative().nullable().default(null),
+    /** calendar month-to-date downloads — MTD compares only to MTD, never
+     *  to the rolling 30d figure (early-month smallness is shape, not adoption) */
+    downloadsMonth: z.number().int().nonnegative().nullable().default(null),
+    /** stars gained over the trailing ~30d — derived from the metrics-history
+     *  sidecar snapshots; null until ~30d of history has accumulated */
+    starsDelta30d: z.number().int().nullable().default(null),
     checkedAt: z.string(),
   }),
   capabilities: Capabilities,

@@ -110,7 +110,7 @@ describe('branch coverage', () => {
       plugins: [{ name: 'evid', slug: 'o/e', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
         source: { kind: 'npm', id: 'evid' }, description: { en: '' }, category: [], license: null,
         deprecated: false, replacement: null, firstSeenAt: '2020-01-01', latestVersion: '1', publishedAt: null,
-        metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+        metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
         capabilities: { scannedAt: 's', findings: ['f'], redFlags: [] },
         verification: { status: 'verified' }, compat: {} }] }))
     const f = (async (input: RequestInfo | URL) => {

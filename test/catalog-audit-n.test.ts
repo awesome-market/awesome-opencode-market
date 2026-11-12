@@ -24,7 +24,7 @@ const mkEntry = (name: string, over: Partial<PluginEntry> = {}): PluginEntry => 
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: { latest: '1.0.0' },
   firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: '2026-01-01',
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-02-02T00:00:00Z' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-02-02T00:00:00Z' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'pending', approvalReason: 'awaiting-review',
@@ -138,7 +138,7 @@ describe('N-5/N-7: refreshMeta repo refresh + coveredRepos exemption', () => {
     const prev = mkEntry('reuse-pkg', {
       description: { en: 'old desc' }, category: [],
       source: { kind: 'npm', id: 'reuse-pkg', repo: 'o/reuse' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },   // >7d stale
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },   // >7d stale
     })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
     const f = (async (input: RequestInfo | URL) => {
@@ -164,7 +164,7 @@ describe('N-5/N-7: refreshMeta repo refresh + coveredRepos exemption', () => {
   it('existing gh entry covered by an npm twin still flows through ghWorker (metrics refresh)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'n-cov-'))
     const prev = ghEntry('o/covered', 'commitA', { approval: 'approved', modifiedAt: 'samepush',
-      metrics: { stars: 1, npmDownloads30d: null, checkedAt: '2026-01-01T00:00:00Z' } })
+      metrics: { stars: 1, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' } })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
     const tgz = mkTgz({ 'package.json': '{"name":"x"}', '.opencode/plugin/i.js': 'x' })
     const f = (async (input: RequestInfo | URL) => {
@@ -342,7 +342,7 @@ describe('O-5: refreshMeta — a fully-failed refresh is not a refresh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rf-fail-'))
     const prev = mkEntry('reuse-pkg', {
       source: { kind: 'npm', id: 'reuse-pkg', repo: 'o/reuse' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },   // >7d stale → refresh path
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },   // >7d stale → refresh path
     })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
     const f = (async (input: RequestInfo | URL) => {
@@ -361,7 +361,7 @@ describe('O-5: refreshMeta — a fully-failed refresh is not a refresh', () => {
   it('partial success still refreshes — one live probe is enough', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'rf-part-'))
     const prev = mkEntry('reuse-pkg', {
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
     })
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(idxOf([prev])))
     const f = (async (input: RequestInfo | URL) => {
