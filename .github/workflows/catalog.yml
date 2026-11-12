@@ -1,7 +1,11 @@
 name: catalog
 # scope: prod-only — scheduled catalog automation (fork runs produce the dev catalog)
 on:
-  schedule: [{ cron: '17 3 * * *' }, { cron: '0 11 * * *' }]
+  # hourly — the publish step is a no-op when the index is unchanged, so an
+  # empty crawl costs one fast generate cycle and zero commits/dispatches.
+  # Fresh pendings meet an event-driven verify dispatch (below), and mature
+  # verdicts fold into the index within the hour instead of ~12h.
+  schedule: [{ cron: '7 * * * *' }]
   workflow_dispatch:
     inputs:
       force_publish:
@@ -225,7 +229,7 @@ jobs:
               ok=1; break
             fi
             git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
-            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; echo "PUBLISHED=1" >> "$GITHUB_ENV"; break; }
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
@@ -355,7 +359,10 @@ jobs:
           fi
       # V-8: site.yml is the single Pages publisher — dispatch it so this push's
       # index lands on the site now instead of at the next scheduled rebuild.
+      # Only on a real index push: hourly ticks with no change must not rebuild
+      # Pages 24x/day for nothing.
       - name: trigger site rebuild
+        if: env.PUBLISHED == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -370,6 +377,15 @@ jobs:
             if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
             else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
           }; }
+      # event-driven verify: a real index push may carry fresh pendings —
+      # dispatch verify now so install evidence lands within the hour, not at
+      # the next scheduled tick. Best-effort: the 4x/day crons are the backstop,
+      # so a missed dispatch self-heals in ~6h.
+      - name: dispatch verify for fresh pendings
+        if: env.PUBLISHED == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run verify.yml || echo "::warning::verify dispatch failed — next scheduled verify covers it (~6h)"
 
   alert:
     needs: [generate, publish]

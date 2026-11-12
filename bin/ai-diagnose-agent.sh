@@ -23,7 +23,7 @@ DIR=$HOME/.local/share/opencode-market/bin
 DST=$DIR/ai-diagnose.sh
 mkdir -p "$DIR"
 
-TICK=${DIAGNOSE_TICK:-3600}     # 正常节拍（对齐原 launchd 每小时设计）
+TICK=${DIAGNOSE_TICK:-1800}     # 正常节拍：30min——对齐 hourly catalog + 事件驱动 verify 后的判词时延目标
 RETRY=${DIAGNOSE_RETRY:-300}    # 失败重试间隔
 
 # MARKET_GIT_PROXY：给本机所有 git 子进程统一覆盖代理 —— ~/.gitconfig 里的
