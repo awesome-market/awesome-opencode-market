@@ -9,7 +9,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec, cleanSpec, featuresMap } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
@@ -321,7 +321,12 @@ export default Plugin.define({
         // dev-mode version pick overrides the catalog-approved pin —
         // assertSpecForName still pins the name; the approved-pin gate below
         // is skipped for picks (same `dev` flag semantics as the GUI host)
+        // no downgrade op — defense-in-depth at the install site: a pick
+        // at/below the installed version is inert even if a stale caller
+        // forwarded it (render/label sites gate the same way)
+        const iver = installed()[e.name]
         const usePick = !!devPick && !!e.latestVersion && devPick !== e.latestVersion
+          && (!iver || versionCmp(devPick, iver) > 0)
         const pick = usePick ? devPick : undefined
         let pin: string
         // pinSpec itself throws on a crafted latestVersion — outside the try
@@ -494,7 +499,11 @@ export default Plugin.define({
           // A picked version skips the skill half: the catalog only ships the
           // APPROVED skill bundle, pairing it with an older plugin would lie
           const pv = store.devVerPick ? pickVer()[e.name] : undefined
+          // no downgrade op — a pick is live only when strictly newer than
+          // installed; at/below it the install judges by latestVersion
+          const iv = halfState(e, installed(), store.skillVers).ver
           const usePick = !!pv && !!e.latestVersion && pv !== e.latestVersion
+            && (!iv || versionCmp(pv, iv) > 0)
           log(`install start ${e.name} plugin=${sync.plugin} skill=${usePick ? false : sync.skill}${usePick ? ` pick=v${pv}` : ''}`)
           if (!sync.plugin && !sync.skill) { setStatus(t('allLatest')); return true }
           setStatus(tf('installingN', { name: e.name }))
@@ -761,7 +770,10 @@ export default Plugin.define({
       // the honest "this is NOT the catalog-approved version" marker.
       const dispVer = (e: MarketEntry) => {
         const pv = store.devVerPick ? pickVer()[e.name] : undefined
-        if (pv && e.latestVersion && pv !== e.latestVersion) return `v${pv}*`
+        // live picks only — an inert pick (≤ installed) shows the approved
+        // version like any other card, not a dead target
+        const iv = halfState(e, installed(), store.skillVers).ver
+        if (pv && e.latestVersion && pv !== e.latestVersion && (!iv || versionCmp(pv, iv) > 0)) return `v${pv}*`
         return e.latestVersion
           ? (e.latestVersion === 'local' || e.latestVersion === '?' ? e.latestVersion : `v${e.latestVersion}`)
           : (e.modifiedAt ?? '?').slice(0, 10)
@@ -777,8 +789,13 @@ export default Plugin.define({
           catch (x) { setStatus(`${e.name}: ${t('fetchFailed')} — ${String(x)}`); return }
         }
         if (!vs.length) { setStatus(`${e.name}: ${t('noMatch')}`); return }
+        // no downgrade op — when installed, cycling only offers versions
+        // strictly newer (a stale cur outside the pool wraps to pool[0])
+        const iv = halfState(e, installed(), store.skillVers).ver
+        const pool = iv ? vs.filter(v => versionCmp(v.ver, iv) > 0) : vs
+        if (!pool.length) { setStatus(`${e.name}: ${t('allLatest')}`); return }
         const cur = pickVer()[e.name] ?? e.latestVersion
-        const next = vs[(vs.findIndex(v => v.ver === cur) + 1) % vs.length].ver
+        const next = pool[(pool.findIndex(v => v.ver === cur) + 1) % pool.length].ver
         setPickVer({ ...pickVer(), [e.name]: next })
         setStatus(`${e.name} → v${next}${next === e.latestVersion ? '' : ' (dev pick)'}`)
       }
@@ -787,12 +804,15 @@ export default Plugin.define({
         // half (and vice versa); the old merged-version check did exactly that
         const hs = halfState(e, installed(), store.skillVers)
         const ver = hs.ver
-        // a pick ≠ installed version stays actionable — it's a downgrade op
+        // no downgrade op — a pick is a live target only when strictly
+        // newer than installed; at/below it the label judges by latestVersion
         const pv = store.devVerPick ? pickVer()[e.name] : undefined
         const usePick = !!pv && !!e.latestVersion && pv !== e.latestVersion
-        if (hs.anyOn && !hs.anyOut && !(usePick && pv !== ver)) return `✓ ${t('installed')}`
-        // a pick names the chosen target — 'update' would lie about direction
-        if (usePick) return `${t('add')} → v${pv}*`
+          && (!ver || versionCmp(pv, ver) > 0)
+        if (hs.anyOn && !hs.anyOut && !usePick) return `✓ ${t('installed')}`
+        // a pick names the chosen target — the verb follows installed state
+        // (update-to-pick vs fresh install), never 'update' for an old ver
+        if (usePick) return `${ver ? t('update') : t('add')} → v${pv}*`
         // installed > approved = revert to the reviewed artifact — honest
         // label, not "update" (hold semantics)
         if (hs.anyOn) return `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${dispVer(e)}`

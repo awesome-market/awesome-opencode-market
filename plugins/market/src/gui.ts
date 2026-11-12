@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -385,14 +385,16 @@ export default Plugin.define({
       }
       // dev-mode version pick — verPicks is a plain map, re-read at click
       // time too (the dropdown's onchange rebuilds the list, but the click
-      // must not trust render-time state). A pick differing from the
-      // approved version downgrades this op to an arbitrary-version install:
-      // the host skips the approved-pin gate for it (dev flag).
+      // must not trust render-time state). There is no downgrade op: a pick
+      // is a live target only when strictly newer than the installed version
+      // (or when nothing is installed). A stale pick at/below installed is
+      // inert — the button judges by latestVersion like any other card
+      // ('local' can't be ordered → inert).
       const pick = state().devVerPick ? verPicks.get(e.name) : undefined
       const usePick = !!pick && !!e.latestVersion && pick !== e.latestVersion
+        && (!ver || versionCmp(pick, ver) > 0)
       // manage tabs get a real uninstall action; other tabs keep the quiet badge
-      // (a pick ≠ installed version stays actionable — it is a downgrade op)
-      if (ver && !hs.anyOut && !(usePick && pick !== ver))
+      if (ver && !hs.anyOut && !usePick)
         return tab() === 'installed' || tab() === 'mySkills'
           ? uninstallBtn(e)
           : el('span', 'font-size:11px;color:#1a7;white-space:nowrap;flex-shrink:0', `✓ ${t('installed')}`)
@@ -404,7 +406,7 @@ export default Plugin.define({
       // "update" — label it honestly (hold semantics, AGENTS: 好理解).
       // usePick names the chosen target instead — 'update' would be a lie
       // for an arbitrary older version.
-      const label = usePick ? `${t('add')} → v${pick}` : ver
+      const label = usePick ? `${ver ? t('update') : t('add')} → v${pick}` : ver
         ? `${isDowngrade(e, ver) ? t('revertTo') : t('update')} → ${e.latestVersion ? `v${e.latestVersion}` : (e.modifiedAt ?? '?').slice(0, 10)}`
         : t('add')
       const b = el('button', 'font-size:12px;cursor:pointer;color:inherit;background:transparent;border:1px solid rgba(128,128,128,.5);border-radius:6px;padding:2px 14px', label) as HTMLButtonElement
@@ -431,6 +433,7 @@ export default Plugin.define({
         // version the user already changed in the dropdown
         const clkPick = state().devVerPick ? verPicks.get(e.name) : undefined
         const clkPickOn = !!clkPick && !!e.latestVersion && clkPick !== e.latestVersion
+          && (!ver || versionCmp(clkPick, ver) > 0)
         const spec = clkPickOn ? `${e.name}@${clkPick}` : pinSpec(e)
         // dual-nature entries deliver BOTH parts — installing only the skill
         // side silently drops the plugin half the package ships. `update`
@@ -643,8 +646,11 @@ export default Plugin.define({
       const pickable = pickTick() >= 0 && state().devVerPick && hasP && !!e.latestVersion && e.latestVersion !== 'local' && e.latestVersion !== '?' && e.source?.kind !== 'github'
       if (pickable) {
         const cur = verPicks.get(e.name) ?? e.latestVersion!
+        // no downgrade op — versions at/below the installed one are shown
+        // but disabled, so the picker itself says "not an install target"
+        const iv = halfState(e, installed(), state().skillVers).ver
         const sel = el('select', 'font-size:11px;color:inherit;background:transparent;border:none;opacity:1;max-width:140px;padding:0;margin:0') as HTMLSelectElement
-        const mk = (ver: string, at?: string) => { const o = el('option', '', `v${ver}${at ? ` ${at.slice(0, 10)}` : ''}`) as HTMLOptionElement; o.value = ver; return o }
+        const mk = (ver: string, at?: string) => { const o = el('option', '', `v${ver}${at ? ` ${at.slice(0, 10)}` : ''}`) as HTMLOptionElement; o.value = ver; o.disabled = !!iv && versionCmp(ver, iv) <= 0; return o }
         sel.appendChild(mk(cur))
         const fill = async () => {
           try {

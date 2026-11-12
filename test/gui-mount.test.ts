@@ -98,6 +98,43 @@ describe('L3 mount: window-side behavior', () => {
     localStorage.clear()
   })
 
+  it('stale pick at/below installed stays inert — button judges by latestVersion (no downgrade op)', async () => {
+    localStorage.clear()
+    localStorage.setItem('opencode-market.state.v1', JSON.stringify({ devUnlocked: true, devVerPick: true }))
+    // screenshot regression: @y/new installed at its approved version while a
+    // leftover pick (0.5.0) must NOT resurrect an install-to-old-ver button
+    const { root, mounted } = await mount({
+      installed: vi.fn(async () => ({ versions: { '@x/old': '1.0.0', '@y/new': '1.0.0' }, extras: [], features: {} })),
+    })
+    const card0 = [...root.querySelectorAll('div')].find(d => (d as HTMLElement).dataset.mi && d.textContent?.includes('@y/new'))!
+    const sel = card0.querySelector('select') as HTMLSelectElement
+    expect(sel).toBeTruthy()
+    // the installed version itself is already a disabled option
+    expect(sel.options[0]?.value).toBe('1.0.0')
+    expect(sel.options[0]?.disabled).toBe(true)
+    // seed the stale pick via the same onchange path the UI uses — picks are
+    // written before install state changes, so a disabled-looking option can
+    // still sit in the map (picked while uninstalled → upgraded → leftover)
+    const opt = document.createElement('option'); opt.value = '0.5.0'
+    sel.appendChild(opt); sel.value = '0.5.0'
+    sel.dispatchEvent(new Event('change'))
+    await flush()
+    const root2 = await remount(mounted)
+    const card = [...root2.querySelectorAll('div')].find(d => (d as HTMLElement).dataset.mi && d.textContent?.includes('@y/new'))!
+    // no install-semantics button on the card — the pick is inert so the
+    // card shows the quiet installed badge, never "add → v0.5.0" (the ☆
+    // favorite button is allowed to remain)
+    const installish = [...card.querySelectorAll('button')].filter(b => /add|update|install|v0\.5/i.test(b.textContent ?? ''))
+    expect(installish).toHaveLength(0)
+    expect(card.textContent).toContain('✓')
+    // and the picker's own option for the stale version is disabled —
+    // "not an install target" is visible in the picker itself
+    const sel2 = card.querySelector('select') as HTMLSelectElement
+    expect(sel2).toBeTruthy()
+    expect([...sel2.options].find(o => o.value === '0.5.0')?.disabled).toBe(true)
+    localStorage.clear()
+  })
+
   it('language switch persists and re-renders labels in zh', async () => {
     localStorage.clear()
     const { root, mounted } = await mount()
