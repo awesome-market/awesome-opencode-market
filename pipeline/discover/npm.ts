@@ -19,6 +19,8 @@ export interface NpmSearchResult {
   publishedAt: string | null
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 export async function searchByKeyword(
   keyword: string,
   opts: { size?: number; maxPages?: number; fetchFn?: typeof fetch } = {},
@@ -31,18 +33,35 @@ export async function searchByKeyword(
   for (let page = 0; page < maxPages; page++) {
     const url = `${NPM_SEARCH_URL}?text=keywords:${encodeURIComponent(keyword)}&size=${size}&from=${page * size}`
     let body: unknown
-    try {
-      const res = await f(url)
-      // a mid-pagination failure must be loud — the candidate tail silently
-      // vanished otherwise (truncation telemetry). fetch throws and JSON
-      // parse/oversize errors take the same path: run.ts awaits discovery
-      // bare, so an uncaught rejection here kills the whole catalog run
-      if (!res.ok) { console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`); break }
-      body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
-    } catch (e) {
-      console.warn(`[discover:npm] '${keyword}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+    let retried = false
+    for (;;) {
+      try {
+        const res = await f(url)
+        // a mid-pagination failure must be loud — the candidate tail silently
+        // vanished otherwise (truncation telemetry). fetch throws and JSON
+        // parse/oversize errors take the same path: run.ts awaits discovery
+        // bare, so an uncaught rejection here kills the whole catalog run.
+        // 429/5xx are rate/transient — one spaced retry per page recovers
+        // most truncations; honor Retry-After when the registry sends one.
+        if (!res.ok) {
+          if ((res.status === 429 || res.status >= 500) && !retried) {
+            retried = true
+            const ra = Number.parseInt(res.headers.get('retry-after') ?? '', 10)
+            const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) : 3
+            await sleep(opts.fetchFn ? 0 : wait * 1000)
+            continue
+          }
+          console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`)
+          break
+        }
+        body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
+      } catch (e) {
+        console.warn(`[discover:npm] '${keyword}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+        break
+      }
       break
     }
+    if (body === undefined) break
     // same malformed-doc contract as fetchPackument: non-object body or a
     // non-array `objects` degrades to an empty page. Each hit needs a string
     // package.name — it is the dedupe key (`map.set(r.name)` in discoverNpm

@@ -1274,7 +1274,9 @@ describe('run.ts remaining arms', () => {
       return new Response(JSON.stringify({ items: [] }))
     }) as typeof fetch
     await searchTopic('opencode', { fetchFn: f, maxPages: 1 })
-    expect(seen).toContain('fork:false')
+    // q is encoded wholesale (created: slices join it) — assert the
+    // qualifier semantically, not its wire encoding
+    expect(decodeURIComponent(seen)).toContain('fork:false')
   })
 
   it('searchTopic: missing optional item fields → null/[] arms', async () => {

@@ -42,18 +42,53 @@ export function ghHeaders(token?: string): Record<string, string> {
   return h
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+
+/** The repo-search API hard-caps ANY single query at 1000 results — a full
+ *  tenth page is the window cutting us off, not discovery finishing. When a
+ *  query's total_count exceeds it, the created-date range is bisected until
+ *  every slice fits (each slice gets its own 1000 window). Half-open ranges
+ *  `>=lo AND <hi` cover exhaustively without boundary dupes; GH_EPOCH
+ *  predates GitHub so the first cover is total. MAX_SPLIT_DEPTH bounds the
+ *  request count for a pathological topic. */
+const SEARCH_WINDOW = 1000
+const MAX_SPLIT_DEPTH = 8
+const GH_EPOCH = Date.parse('2008-01-01T00:00:00Z')
+
+// search/repositories and search/code share the same item-shape contract:
+// non-object body or non-array items degrades to an empty page; each hit
+// needs a string full_name — it is the dedupe key (`r.fullName
+// .toLowerCase()` in discoverGithub), so a missing/wrong-typed name was a
+// run-killer. Every carried field is normalized, not `??`-trusted.
+const mapSearchItem = (r: Record<string, unknown>, fullName: string): GhRepo => ({
+  fullName,
+  description: strOr(r.description) ?? '',
+  archived: r.archived === true,
+  fork: r.fork === true,
+  pushedAt: strOr(r.pushed_at),
+  stars: numOr(r.stargazers_count) ?? 0,
+  defaultBranch: strOr(r.default_branch) ?? 'HEAD',
+  id: numOr(r.id),
+  createdAt: strOr(r.created_at),
+  license: spdxOr(r.license),
+  topics: strList(r.topics),
+})
+
 export async function searchTopic(
   topic: string,
   opts: { token?: string | undefined; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<GhRepo[]> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  const out: GhRepo[] = []
+  const maxPages = opts.maxPages ?? 10
   // fork:false is a zero-cost server-side filter — mirror forks only ever
   // produce duplicate content entries (submission-seeded forks still get in,
-  // a human asked for those). maxPages 10 hits the search API's 1000-result cap.
-  let hitPageCap = false
-  for (let page = 1; page <= (opts.maxPages ?? 10); page++) {
-    const url = `${GH_API}/search/repositories?q=topic:${encodeURIComponent(topic)}+fork:false&sort=updated&per_page=100&page=${page}`
+  // a human asked for those).
+  const base = `topic:${topic} fork:false`
+  const seen = new Map<string, GhRepo>()
+
+  const fetchPage = async (q: string, page: number): Promise<{ items: GhRepo[]; total: number } | null> => {
+    const url = `${GH_API}/search/repositories?q=${encodeURIComponent(q)}&sort=updated&per_page=100&page=${page}`
     let body: unknown
     try {
       const res = await f(url, { headers: ghHeaders(opts.token) })
@@ -61,44 +96,66 @@ export async function searchTopic(
       // vanished otherwise (truncation telemetry). fetch throws and JSON
       // parse/oversize errors take the same path: run.ts awaits discovery
       // bare, so an uncaught rejection here kills the whole catalog run
-      if (!res.ok) { console.warn(`[discover:github] '${topic}' page ${page} failed (${res.status}) — results truncated`); break }
+      if (!res.ok) { console.warn(`[discover:github] '${topic}' page ${page} failed (${res.status}) — results truncated`); return null }
       body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
     } catch (e) {
       console.warn(`[discover:github] '${topic}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
-      break
+      return null
     }
-    // non-object body or non-array items degrades to an empty page; each hit
-    // needs a string full_name — it is the dedupe key (`r.fullName
-    // .toLowerCase()` below), so a missing/wrong-typed name was a run-killer
-    const raw = body && typeof body === 'object' && !Array.isArray(body)
-      ? (body as { items?: unknown }).items : undefined
+    const obj = body && typeof body === 'object' && !Array.isArray(body)
+      ? body as { items?: unknown; total_count?: unknown } : null
+    const raw = obj?.items
     const items = Array.isArray(raw) ? raw : []
+    const out: GhRepo[] = []
     for (const it of items) {
       if (!it || typeof it !== 'object' || Array.isArray(it)) continue
       const r = it as Record<string, unknown>
       const fullName = strOr(r.full_name)
       if (!fullName) continue
-      out.push({
-        fullName,
-        description: strOr(r.description) ?? '',
-        archived: r.archived === true,
-        fork: r.fork === true,
-        pushedAt: strOr(r.pushed_at),
-        stars: numOr(r.stargazers_count) ?? 0,
-        defaultBranch: strOr(r.default_branch) ?? 'HEAD',
-        id: numOr(r.id),
-        createdAt: strOr(r.created_at),
-        license: spdxOr(r.license),
-        topics: strList(r.topics),
-      })
+      out.push(mapSearchItem(r, fullName))
     }
-    if (items.length < 100) break
-    if (page === (opts.maxPages ?? 10)) hitPageCap = true
+    return { items: out, total: numOr(obj?.total_count) ?? 0 }
   }
-  // the search API hard-caps at 1000 results — a full last page means the
-  // window itself cut us off, not that discovery is complete
-  if (hitPageCap) console.warn(`[discover:github] '${topic}' hit the search window cap — tail results dropped`)
-  return out
+
+  // sweep one ≤window slice; fetchPage(page 1) already consumed by slice().
+  // total=0 means the count was missing/unreadable — fall back to paging
+  // until a short page, the pre-bisection semantics.
+  const sweep = async (q: string, total: number, first: GhRepo[]): Promise<void> => {
+    const windowTotal = total > 0 ? Math.min(total, SEARCH_WINDOW) : maxPages * 100
+    let page = 1, items = first
+    for (;;) {
+      for (const r of items) seen.set(r.fullName.toLowerCase(), r)
+      if (items.length < 100) return
+      if (page >= Math.min(maxPages, Math.ceil(windowTotal / 100))) {
+        // window-cap truncation warned by slice(); this is the page cap —
+        // page*100 < windowTotal is exact for known totals, a full last
+        // page is the best signal when the count never arrived
+        const dropped = total > 0 ? page * 100 < windowTotal : items.length === 100
+        if (dropped) console.warn(`[discover:github] '${topic}' page cap — tail results dropped`)
+        return
+      }
+      const p = await fetchPage(q, page + 1)
+      if (!p) return
+      items = p.items; page++
+    }
+  }
+
+  const slice = async (lo: number, hi: number, depth: number): Promise<void> => {
+    const q = depth === 0 ? base : `${base} created:>=${isoDay(lo)} created:<${isoDay(hi)}`
+    const p1 = await fetchPage(q, 1)
+    if (!p1) return
+    if (p1.total > SEARCH_WINDOW && depth < MAX_SPLIT_DEPTH && hi - lo > 86_400_000) {
+      const mid = lo + (hi - lo) / 2
+      await slice(lo, mid, depth + 1)
+      await slice(mid, hi, depth + 1)
+      return
+    }
+    if (p1.total > SEARCH_WINDOW)
+      console.warn(`[discover:github] '${topic}' created:${isoDay(lo)}..${isoDay(hi)} still exceeds the search window (${p1.total}) — tail dropped`)
+    await sweep(q, p1.total, p1.items)
+  }
+  await slice(GH_EPOCH, Date.now(), 0)
+  return [...seen.values()]
 }
 
 /** Precision channel: repos that actually carry an opencode artifact
@@ -107,11 +164,14 @@ export async function searchTopic(
  *  the search API offers. Code search is rate-limited separately
  *  (~10 req/min authed, and REFUSED outright without a token), so the query
  *  set stays small, pages stay shallow, and calls run serially. */
+// No `fork:` qualifier on purpose: it is a repo-search qualifier — on the
+// code-search endpoint it makes the whole query 422 ("unable to parse").
+// Code search simply never indexes forks, so nothing needs saying.
 export const CODE_QUERIES = [
-  'filename:opencode.json fork:false',
-  'filename:opencode.jsonc fork:false',
-  'path:/\\.opencode\\// fork:false',
-  'filename:SKILL.md opencode fork:false',
+  'filename:opencode.json',
+  'filename:opencode.jsonc',
+  'path:.opencode',
+  'filename:SKILL.md opencode',
 ] as const
 
 export async function searchCode(
@@ -123,20 +183,35 @@ export async function searchCode(
   for (let page = 1; page <= (opts.maxPages ?? 2); page++) {
     const url = `${GH_API}/search/code?q=${encodeURIComponent(query)}&per_page=100&page=${page}`
     let body: unknown
-    try {
-      const res = await f(url, { headers: ghHeaders(opts.token) })
-      // mid-pagination failure must be loud — same truncation telemetry as
-      // the topic path; throws/parse errors take the same warn+truncate path
-      // (run.ts awaits discovery bare — an uncaught rejection kills the run)
-      if (!res.ok) { console.warn(`[discover:github] code search '${query}' page ${page} failed (${res.status}) — results truncated`); break }
-      body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
-    } catch (e) {
-      console.warn(`[discover:github] code search '${query}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+    let retried = false
+    for (;;) {
+      try {
+        const res = await f(url, { headers: ghHeaders(opts.token) })
+        // mid-pagination failure must be loud — same truncation telemetry as
+        // the topic path; throws/parse errors take the same warn+truncate
+        // path (run.ts awaits discovery bare — an uncaught rejection kills
+        // the run). 403/429 are the shared search budget talking — one
+        // spaced retry recovers most of them; anything else truncates.
+        if (!res.ok) {
+          if ((res.status === 403 || res.status === 429) && !retried) {
+            retried = true; await sleep(opts.fetchFn ? 0 : 15_000); continue
+          }
+          console.warn(`[discover:github] code search '${query}' page ${page} failed (${res.status}) — results truncated`)
+          break
+        }
+        body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
+      } catch (e) {
+        console.warn(`[discover:github] code search '${query}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+        break
+      }
       break
     }
+    if (body === undefined) break
     // same malformed-doc contract as searchTopic — non-object body/items
     // degrades; each hit needs a string repository.full_name (the dedupe
-    // key), and every carried field is normalized, not `??`-trusted
+    // key). Repository objects can be partial — fields the API omits stay
+    // null/empty/'HEAD' and ghWorker's meta backfill fills them (repoId,
+    // pushedAt, canonical casing) before the evidence gate judges.
     const raw = body && typeof body === 'object' && !Array.isArray(body)
       ? (body as { items?: unknown }).items : undefined
     const items = Array.isArray(raw) ? raw : []
@@ -147,22 +222,7 @@ export async function searchCode(
       const r = repo as Record<string, unknown>
       const fullName = strOr(r.full_name)
       if (!fullName) continue
-      // code-search repository objects can be partial — fields the API omits
-      // stay null/empty/'HEAD' and ghWorker's meta backfill fills them
-      // (repoId, pushedAt, canonical casing) before the evidence gate judges
-      out.push({
-        fullName,
-        description: strOr(r.description) ?? '',
-        archived: r.archived === true,
-        fork: r.fork === true,
-        pushedAt: strOr(r.pushed_at),
-        stars: numOr(r.stargazers_count) ?? 0,
-        defaultBranch: strOr(r.default_branch) ?? 'HEAD',
-        id: numOr(r.id),
-        createdAt: strOr(r.created_at),
-        license: spdxOr(r.license),
-        topics: strList(r.topics),
-      })
+      out.push(mapSearchItem(r, fullName))
     }
     if (items.length < 100) break
   }
@@ -177,31 +237,32 @@ export async function discoverGithub(
   // map keys are canonical lowercase — the same repo seen as Owner/Repo in one
   // topic and owner/repo in another (or a seed typed differently) must dedupe
   // into ONE candidate, not two identity twins
-  // 2-way concurrency stays well under the search API's secondary rate limits
-  await mapPool(topics, 2, async t => {
-    for (const r of await searchTopic(t, opts)) {
-      const key = r.fullName.toLowerCase()
-      if (!map.has(key)) {
-        map.set(key, { ...r, discoveredVia: ['github-topic'] })
-      }
-    }
-  })
-  // code-search precision channel — serial after the topic burst: it's
-  // rate-limited separately (~10 req/min) and refused outright without a
-  // token, so unauthenticated runs simply skip the channel.
+  //
+  // code-search precision channel FIRST, serial and paced: it is refused
+  // outright without a token and has its own ~10 req/min pool — running it
+  // before the topic burst means a fresh budget; after ~70 repo-search calls
+  // it mostly drew 403/429. The pace keeps us under the per-minute pool.
   if (opts.token) {
     for (const q of CODE_QUERIES) {
       for (const r of await searchCode(q, opts)) {
         const key = r.fullName.toLowerCase()
-        const ex = map.get(key)
-        if (ex) {
-          if (!ex.discoveredVia.includes('code-search')) ex.discoveredVia.push('code-search')
-        } else {
-          map.set(key, { ...r, discoveredVia: ['code-search'] })
-        }
+        if (!map.has(key)) map.set(key, { ...r, discoveredVia: ['code-search'] })
       }
+      await sleep(opts.fetchFn ? 0 : 2_000)
     }
   }
+  // 2-way concurrency stays well under the search API's secondary rate limits
+  await mapPool(topics, 2, async t => {
+    for (const r of await searchTopic(t, opts)) {
+      const key = r.fullName.toLowerCase()
+      const ex = map.get(key)
+      if (ex) {
+        if (!ex.discoveredVia.includes('github-topic')) ex.discoveredVia.push('github-topic')
+      } else {
+        map.set(key, { ...r, discoveredVia: ['github-topic'] })
+      }
+    }
+  })
   return map
 }
 

@@ -222,3 +222,85 @@ describe('discover/filter', () => {
     expect(hasRepoEvidence(S('README.md'), []).ok).toBe(false)
   })
 })
+
+describe('discovery: rate-limit & window handling', () => {
+  it('searchTopic: total_count over the 1000-window bisects created ranges', async () => {
+    const calls: string[] = []
+    const f = async (input: RequestInfo | URL) => {
+      const url = String(input); calls.push(url)
+      const q = new URL(url).searchParams.get('q') ?? ''
+      if (!q.includes('created:')) {
+        return mkRes({ total_count: 2500, items: [{ full_name: 'o/root', stargazers_count: 1 }] })
+      }
+      // every slice fits its own window → one page each; name encodes the
+      // slice's lower bound so coverage is visible
+      const lo = q.match(/created:>=([0-9-]+)/)?.[1] ?? 'x'
+      return mkRes({ total_count: 40, items: [{ full_name: `o/since-${lo}` }] })
+    }
+    const r = await searchTopic('t', { fetchFn: f as typeof fetch })
+    // root + exactly two half-slices, both carrying the created qualifiers
+    expect(calls).toHaveLength(3)
+    expect(calls.filter(u => u.includes('created%3A'))).toHaveLength(2)
+    expect(calls.filter(u => u.includes('created%3A'))[0]).toContain('created%3A%3E%3D')
+    // each half contributed its own repo (name carries the slice lower bound;
+    // the midpoint date itself depends on the run day — assert shape only)
+    expect(r).toHaveLength(2)
+    for (const x of r) expect(x.fullName).toMatch(/^o\/since-\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('searchTopic: ≤window total never emits a created qualifier', async () => {
+    const calls: string[] = []
+    const f = async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      return mkRes({ total_count: 2, items: [{ full_name: 'o/a' }, { full_name: 'o/b' }] })
+    }
+    const r = await searchTopic('t', { fetchFn: f as typeof fetch })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).not.toContain('created')
+    expect(r).toHaveLength(2)
+  })
+
+  it('discoverGithub: code-search fires BEFORE the topic burst', async () => {
+    const calls: string[] = []
+    const f = async (input: RequestInfo | URL) => { calls.push(String(input)); return mkRes({ items: [] }) }
+    await discoverGithub(['t1'], { token: 'tok', fetchFn: f as typeof fetch })
+    const firstCode = calls.findIndex(u => u.includes('/search/code'))
+    const firstRepo = calls.findIndex(u => u.includes('/search/repositories'))
+    expect(firstCode).toBe(0)
+    expect(firstRepo).toBeGreaterThan(firstCode)
+  })
+
+  it('searchCode: no fork: qualifier is emitted (endpoint 422s on it)', async () => {
+    const calls: string[] = []
+    const f = async (input: RequestInfo | URL) => { calls.push(String(input)); return mkRes({ items: [] }) }
+    const { CODE_QUERIES } = await import('../pipeline/discover/github.ts')
+    for (const q of CODE_QUERIES) {
+      expect(q).not.toContain('fork')
+      await searchCode(q, { fetchFn: f as typeof fetch })
+    }
+    for (const u of calls) expect(decodeURIComponent(u)).not.toContain('fork:')
+  })
+
+  it('searchByKeyword: 429 retried once then recovers; persistent 429 truncates', async () => {
+    let calls = 0
+    const f = async () => {
+      calls++
+      return calls === 1 ? mkRes({}, 429) : mkRes({ objects: [{ package: { name: 'ok', version: '1', links: {} } }] })
+    }
+    const r = await searchByKeyword('k', { fetchFn: f as typeof fetch })
+    expect(calls).toBe(2)
+    expect(r.map(x => x.name)).toEqual(['ok'])
+
+    let calls2 = 0
+    const r2 = await searchByKeyword('k', { fetchFn: (async () => { calls2++; return mkRes({}, 429) }) as typeof fetch })
+    expect(calls2).toBe(2) // one retry, no endless hammering
+    expect(r2).toEqual([])
+  })
+
+  it('searchCode: 403 retried once then truncates', async () => {
+    let calls = 0
+    const r = await searchCode('q', { fetchFn: (async () => { calls++; return mkRes({}, 403) }) as typeof fetch })
+    expect(calls).toBe(2)
+    expect(r).toEqual([])
+  })
+})
