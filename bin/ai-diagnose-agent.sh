@@ -23,6 +23,11 @@ DIR=$HOME/.local/share/opencode-market/bin
 DST=$DIR/ai-diagnose.sh
 mkdir -p "$DIR"
 
+# agent 旋钮也从 ai.env 读 —— 那是 worker 自己的诊断配置文件，TICK/RETRY
+# 只是搭车；文件缺失或语法错不致命（worker 启动时会做硬校验）。
+ENVF=$HOME/.config/opencode-market/ai.env
+[ -f "$ENVF" ] && bash -n "$ENVF" 2>/dev/null && { set -a; . "$ENVF"; set +a; }
+
 TICK=${DIAGNOSE_TICK:-1800}     # 正常节拍：30min——对齐 hourly catalog + 事件驱动 verify 后的判词时延目标
 RETRY=${DIAGNOSE_RETRY:-300}    # 失败重试间隔
 
