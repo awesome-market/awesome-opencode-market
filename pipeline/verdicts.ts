@@ -628,3 +628,17 @@ export function explainEntry(
   out.push(displayed)
   return out
 }
+
+/** Mechanical-flag verdict reasons historically embedded the raw flag
+ *  enumeration — issue/digest/site surfaces now render the flag list once
+ *  themselves, so a stored reason's trailing `type:path; type:path; …`
+ *  enumeration is triplication noise. Strips ONLY a tail that is purely
+ *  flag-shaped items (real prose ends with words, not `a:b` pairs), keeping
+ *  the annotation in front of it — `（AI 草稿，LLM 判 pass）`, `(LLM draft
+ *  failed)` — which is the information the tail-less reason actually carries. */
+const FLAG_ITEM = String.raw`[\w:.*+\-]+:[\w/@.~*+\-]+`
+// a mid-write slice can cut the LAST item anywhere — mid-type (`; cred`) or
+// mid-path (`:package/dist/sea`) — so the tail may end in a fragment
+const FLAG_FRAG = String.raw`[\w:.*+\-]+(?::[\w/@.~*+\-]*)?`
+export const stripFlagTail = (s: string): string =>
+  s.replace(new RegExp(`[：:][\\s　]*(?:${FLAG_ITEM}[\\s　]*;[\\s　]*)*(?:${FLAG_FRAG})?$`), '')

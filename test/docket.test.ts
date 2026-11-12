@@ -40,7 +40,7 @@ describe('docketTargets', () => {
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })]), [v({ version: '2.0.0', verdict: 'concern' })])
     expect(t).toEqual([{ name: 'pkg', version: '2.0.0', verdict: 'concern', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0 }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true }])
   })
   it('human verdict already rules → no docket entry', () => {
     expect(docketTargets(idx([e()]), [v({ source: 'human' })])).toEqual([])
@@ -196,7 +196,8 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e({ approval: 'approved', publishedAt: '2026-01-01T00:00:00Z',
       capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-recreated'] } })]), [])
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'flag', reason: 'sec:repo-recreated',
-      verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, publishedAt: '2026-01-01T00:00:00Z' }])
+      verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, publishedAt: '2026-01-01T00:00:00Z',
+      redFlagList: ['sec:repo-recreated'], sitePage: true }])
   })
   it('flag retired only by a human verdict that POSTDATES the flag (flaggedAt)', () => {
     const flaggedAt = (stamp?: string) => e({ approval: 'approved',
@@ -322,7 +323,7 @@ describe('issueBody', () => {
     expect(body).toContain('verdict:pass')
   })
   it('repo/pagesBase opts render data + detail links', () => {
-    const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'flag', reason: 'sec:x', slug: 'o/p' },
+    const body = issueBody({ name: 'p', version: '1.0.0', verdict: 'flag', reason: 'sec:x', slug: 'o/p', sitePage: true },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     expect(body).toContain('github.com/o/r/blob/catalog')
     expect(body).toContain('https://o.github.io/r/p/o/p.html')
@@ -388,6 +389,48 @@ describe('issueBody', () => {
     expect(body).toContain('扫描摘录')
     expect(body).toContain('sec:x \\[y\\]')
     expect(body).toContain('f1')
+  })
+  it('scan preview excludes signals already shown in 红旗清单 — no signal prints twice', () => {
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: ['f:a.js', 'credential-read:a.js'], redFlags: ['credential-read:a.js'] },
+    })]), [v()])
+    // the finding escalated to a flag renders in 红旗清单, not the excerpt
+    expect(t[0]!.scanPreview).toEqual(['f:a.js'])
+    expect(t[0]!.redFlagList).toEqual(['credential-read:a.js'])
+  })
+  it('详情页 link only for site-visible entries — pending targets 404 by design', () => {
+    // pending entry → no site page exists → link suppressed, excerpt points at index.json
+    const pending = docketTargets(idx([e({ capabilities: { scannedAt: 't', findings: ['f:a.js'], redFlags: [] } })]), [v()])
+    const body = issueBody(pending[0]!, { repo: 'o/r', pagesBase: 'https://pages' })
+    expect(body).not.toContain('详情页：https://pages/')
+    expect(body).toContain('完整清单见index.json')
+    // approved entry's held slot → the entry renders → link emitted
+    const held = docketTargets(idx([e({ approval: 'approved',
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })]), [v({ version: '2.0.0', verdict: 'concern' })])
+    const body2 = issueBody(held[0]!, { repo: 'o/r', pagesBase: 'https://pages' })
+    expect(body2).toContain('详情页：https://pages/p/o/pkg.html')
+  })
+  it('mechanical-flag reason tail stripped once — annotation kept, list rendered in 红旗清单', () => {
+    const flagged = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: ['f1'], redFlags: ['credential-read:a.js', 'credential-read:b.js'] },
+    })]), [v({ verdict: 'concern',
+      reason: '机械红旗待人工：credential-read:a.js; credential-read:b.js',
+      reasonEn: 'red-flagged — pending human review (LLM draft failed): credential-read:a.js; credential-read:b.js' })])
+    const body = issueBody(flagged[0]!, { repo: 'o/r' })
+    // reason keeps the annotation, drops the enumeration
+    expect(body).toContain('机械红旗待人工')
+    expect(body).toContain('(LLM draft failed)')
+    // flag list appears exactly once — in 红旗清单, not inside the reasons
+    expect(body).toContain('红旗清单（2 条）')
+    expect((body.match(/credential-read:a\.js/g) ?? []).length).toBe(1)
+    expect((body.match(/credential-read:b\.js/g) ?? []).length).toBe(1)
+  })
+  it('stripFlagTail never touches real prose or LLM-draft payloads', () => {
+    // an LLM-draft reason ends in prose, not type:path pairs — must survive intact
+    const t = docketTargets(idx([e()]), [v({ verdict: 'concern',
+      reason: '机械红旗待人工（AI 草稿，LLM 判 concern）：代码存在可疑网络外联行为' })])
+    const body = issueBody(t[0]!)
+    expect(body).toContain('代码存在可疑网络外联行为')
   })
 })
 

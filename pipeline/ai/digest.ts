@@ -22,7 +22,7 @@ import { join } from 'node:path'
 import { CatalogIndex, AiVerdict, DigestState, type PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, loadDigestState, latestVerdicts, latestHumanVerdicts,
   effectiveVerdict, slotVerdict, packageBrake, brakeFor, vkey, akey, atCmp,
-  tombEpochs, epochGoverning, humanPassCovers, candidateSlot } from '../verdicts.ts'
+  tombEpochs, epochGoverning, humanPassCovers, candidateSlot, stripFlagTail } from '../verdicts.ts'
 import { verifyQueued, hostStaleVerify } from '../verify/plan.ts'
 import { unreviewedTargets, candidateHeldAt } from './diagnose.ts'
 import { isMain } from '../main-guard.ts'
@@ -435,7 +435,10 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
   // cells must stay one line — a multi-line verdict reason would break the
   // markdown table row (writers normalize already; this is the belt)
   const escCell = (s: string) => escMd(s.replace(/\s*\n\s*/g, ' ')).replaceAll('|', '\\|')
-  const reasonOf = (v: AiVerdict) => escCell(v.reason ?? '') + (v.reasonEn ? ` / ${escCell(v.reasonEn)}` : '')
+  // stripFlagTail: mechanical-flag reasons carry the raw flag list as a tail —
+  // in a one-line table cell it reads as noise (the flag detail belongs to
+  // the issue's 红旗清单 / index.json, not a digest row)
+  const reasonOf = (v: AiVerdict) => escCell(stripFlagTail(v.reason ?? '')) + (v.reasonEn ? ` / ${escCell(stripFlagTail(v.reasonEn))}` : '')
   const repo = repoUrl()
   const reviewLink = (v: AiVerdict) => {
     const q = encodeURIComponent(`is:issue in:title "[review] ${v.name.replaceAll('"', '')}"`)
