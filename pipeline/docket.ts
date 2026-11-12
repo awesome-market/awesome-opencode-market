@@ -896,18 +896,28 @@ export async function main(
   }
 
   // bounded concurrency: serial gh calls made large backlogs brush the 10min
-  // timeout; 6-wide stays far under GitHub's secondary rate limits while the
-  // job-level review-docket group still serializes whole runs. A failed op
-  // doesn't cancel siblings — independent issues still converge this tick —
-  // but failures are collected and thrown AFTER the summary so the alert job
-  // still sees a red run (no silent partial sync).
-  const GH_POOL = 6
+  // timeout; 4-wide keeps mutation bursts under GitHub's secondary rate
+  // limits ("was submitted too quickly" fires on rapid write bursts even
+  // when primary quota is nowhere near) while the job-level review-docket
+  // group still serializes whole runs. A failed op doesn't cancel siblings —
+  // independent issues still converge this tick — but failures are collected
+  // and thrown AFTER the summary so the alert job still sees a red run (no
+  // silent partial sync).
+  const GH_POOL = 4
   const failures: string[] = []
   let cursor = 0
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
   await Promise.all(Array.from({ length: Math.min(GH_POOL, ops.length) }, async () => {
     while (cursor < ops.length) {
       const op = ops[cursor++]!
       try { await op.run() } catch (err) {
+        // secondary-rate-limit bursts are transient pacing, not real
+        // failures — back off once and retry before recording, or a single
+        // burst fails a whole close batch the next tick has to redo
+        if (/too quickly|rate.?limit|secondary/i.test(String(err))) {
+          await sleep(20_000)
+          try { await op.run(); continue } catch (e2) { err = e2 }
+        }
         failures.push(`${op.kind} ${op.title}`)
         console.error(`[docket] ${op.kind} failed: ${op.title}`, err)
       }
