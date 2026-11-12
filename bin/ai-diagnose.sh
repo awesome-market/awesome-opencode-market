@@ -1,5 +1,7 @@
 #!/bin/bash
-# ai-diagnose 定时入口 — launchd 每小时调用。
+# ai-diagnose 单轮诊断入口 —— 由守护循环 bin/ai-diagnose-agent.sh 反复调用，
+# 也可手动单独跑一轮。历史形态是 launchd 每小时 tick，现模型是常驻前台进程：
+# 守护按退出码选间隔（0 → TICK，非零 → RETRY 自动重试）。
 # 流程:同步 catalog 分支 worktree → diagnose 写临时 verdict 文件 → 重放式推送。
 # 推送循环每轮 fetch+reset 后重新 append 同一批 verdict——任何远端并发变更
 # (catalog/verify/digest/人工 verdict)都不会丢本地裁决,也不会撞 append-only
@@ -284,7 +286,7 @@ git -C "$CODE" remote get-url origin >/dev/null 2>&1 || git -C "$CODE" remote ad
 # 浅抓取即可——两个 checkout 只读 tip,持久克隆全历史会无限膨胀(catalog
 # 每次提交 ~14MB)。forced refspec 也让压缩/重写过的远端历史不会把同步卡死。
 git -C "$CODE" fetch -q --depth=1 origin +refs/heads/main:refs/remotes/origin/main \
-  || { log "code fetch failed (offline?) — silent, retry next tick"; exit 0; }
+  || { log "code fetch failed (offline?) — exit 1, supervisor retries in RETRY"; exit 1; }
 git -C "$CODE" reset -q --hard origin/main || { log "code checkout reset failed"; exit 1; }
 LOCKHASH=$(shasum -a 256 "$CODE/package-lock.json" | cut -d' ' -f1)
 if [ "$(cat "$CODE/.deps-stamp" 2>/dev/null)" != "$LOCKHASH" ]; then
@@ -301,7 +303,7 @@ if ! git -C "$CAT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   # review). The old code reported every failure as branch-not-found.
   if ! git ls-remote --exit-code --heads "$URL" refs/heads/catalog >/dev/null 2>&1; then
     git ls-remote "$URL" >/dev/null 2>&1 \
-      || { log "cannot reach remote $URL (auth/network) — silent, retry next tick"; exit 0; }
+      || { log "cannot reach remote $URL (auth/network) — exit 1, supervisor retries in RETRY"; exit 1; }
     log "catalog branch not found on remote — nothing to review"; exit 0
   fi
   git clone --depth=1 --single-branch --branch catalog "$URL" "$CAT" \
@@ -318,7 +320,7 @@ git -C "$CAT" config user.email "market-bot@users.noreply.github.com"
 cd "$CAT"
 # 拿不到远端状态就不审:离线跑完 push 必败,verdict 只会被下一轮 reset 丢弃
 git fetch -q --depth=1 origin +refs/heads/catalog:refs/remotes/origin/catalog \
-  || { log "fetch failed (offline?) — silent, retry next tick"; exit 0; }
+  || { log "fetch failed (offline?) — exit 1, supervisor retries in RETRY"; exit 1; }
 # reset 失败必须退出——没有 -e,失败会拿陈旧 index 审一遍,产出错配 verdict
 git reset --hard origin/catalog -q || { log "reset failed — refusing to review stale state"; exit 1; }
 # 声明暂停在数据面生效——本机也认它(防止"pause 了但忘了 launchd 还在跑"
