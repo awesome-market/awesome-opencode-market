@@ -34,6 +34,13 @@ if [ -n "${MARKET_GIT_PROXY:-}" ]; then
   export GIT_CONFIG_KEY_0=http.proxy GIT_CONFIG_VALUE_0=$MARKET_GIT_PROXY
 fi
 
+# 与 ai-diagnose.sh 同源的仓库解析：在哪个仓的外壳就盯哪个仓 —
+# 刷新源和 worker 的 MARKET_REPO 都由它定（worker 跑的是 $DST 状态目录副本，
+# 自己的 rev-parse 会落空，靠这里 export）。作为安装副本（$DIR）运行时
+# rev-parse 落空 → 旧默认 fork，行为与之前一致。
+SELF_REPO=$(git -C "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)
+export MARKET_REPO=${MARKET_REPO:-${SELF_REPO:-/Volumes/2t/code/opencode-market}}
+
 log() { printf '%s [agent] %s\n' "$(date '+[%Y-%m-%d %H:%M:%S]')" "$*"; }
 
 # 每行最左补 [yyyy-mm-dd HH:mm:ss] 本地时区戳 —— worker 的 log() 已自带
@@ -59,7 +66,7 @@ trap 'shutdown TERM 143' TERM
 trap 'shutdown INT 130' INT
 
 while :; do
-  for SRC in "${MARKET_REPO:-/Volumes/2t/code/opencode-market}/bin/ai-diagnose.sh" \
+  for SRC in "$MARKET_REPO/bin/ai-diagnose.sh" \
              "$HOME/.local/share/opencode-market-code/bin/ai-diagnose.sh"; do
     cp "$SRC" "$DST" 2>/dev/null && break
   done
