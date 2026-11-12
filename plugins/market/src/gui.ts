@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, indexSnapshot, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, warmIndexCache, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -1450,10 +1450,15 @@ export default Plugin.define({
     // renderer asked for — a second fetch at the default would double-pull
     let lastIndexUrl = resolveIndexUrl(null)
     const urlOrDefault = (u: unknown) => isIndexUrl(u) ? u : lastIndexUrl
+    // start the disk→memIdx warm at host setup — the read overlaps plugin
+    // mount so the first index() call finds the snapshot already in memory
+    void warmIndexCache()
     m.provide(Market, {
-        index: (p: { url?: unknown }) => {
+        index: async (p: { url?: unknown }) => {
           const u = urlOrDefault(p?.url)
           lastIndexUrl = u
+          await warmIndexCache()   // disk → memIdx once per process, so a
+          // restarted opencode still has a snapshot to paint instantly
           const run = fetchIndexCached(u) as Promise<MarketIndex>
           const snap = indexSnapshot(u)
           if (!snap) return run   // nothing cached — cold load, keep blocking

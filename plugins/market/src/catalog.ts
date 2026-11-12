@@ -442,6 +442,27 @@ const readIdxCache = (url: string): CachedIndex | null => {
     return usable(c)
   } catch { return null }
 }
+/** Disk snapshot path — beside market.log under the opencode config dir.
+ *  Node-side only: the webview cache already persists via localStorage. */
+const diskIdxPath = async (): Promise<string | null> => {
+  try {
+    const [{ homedir }, { join }] = await Promise.all([import('node:os'), import('node:path')])
+    const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
+    return join(base, 'opencode', 'market-index.json')
+  } catch { return null }
+}
+
+const persistIdxToDisk = async (c: CachedIndex) => {
+  try {
+    const p = await diskIdxPath()
+    if (!p) return
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    const { dirname } = await import('node:path')
+    await mkdir(dirname(p), { recursive: true })
+    await writeFile(p, JSON.stringify(c))
+  } catch { /* cache write is best-effort — a failure just means a cold fetch */ }
+}
+
 const writeIdxCache = (c: CachedIndex) => {
   const l = lsIdx()
   if (l) {
@@ -451,7 +472,26 @@ const writeIdxCache = (c: CachedIndex) => {
     return
   }
   memIdx = c
+  // the in-memory slot dies with the plugin host process — persist it so a
+  // restarted opencode still paints the last snapshot instantly (SWR then
+  // revalidates against health.json like any other cached entry)
+  void persistIdxToDisk(c)
 }
+
+/** Populate memIdx from the disk snapshot — memoized, so a process pays one
+ *  bounded file read total. Without it every opencode restart cold-fetches
+ *  the index before first paint (the dev catalog is ~15MB). The snapshot
+ *  only fills an EMPTY slot — an index this process already fetched wins. */
+let idxWarm: Promise<void> | null = null
+export const warmIndexCache = (): Promise<void> => idxWarm ??= (async () => {
+  try {
+    const p = await diskIdxPath()
+    if (!p) return
+    const { readFile } = await import('node:fs/promises')
+    const c = JSON.parse(await readFile(p, 'utf8')) as CachedIndex | null
+    if (c && typeof c === 'object' && c.index && typeof c.index === 'object' && !memIdx) memIdx = c
+  } catch { /* absent/corrupt — the normal fetch path rewrites it */ }
+})()
 
 /** SWR snapshot — the last good index for this URL, or null. Reference-
  *  stable while unchanged: a TTL/sha-hit revalidation returns the very

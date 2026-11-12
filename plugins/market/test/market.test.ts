@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fetchIndex, sortEntries, DEFAULT_INDEX_URL } from '../src/catalog.ts'
 import type { MarketEntry, MarketIndex } from '../src/catalog.ts'
+
+// config-dir writes (index disk cache, market.log) must not touch the real
+// ~/.config — point XDG_CONFIG_HOME at a throwaway dir for this file
+process.env.XDG_CONFIG_HOME = mkdtempSync(join(tmpdir(), 'ocm-xdg-'))
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const pkg = JSON.parse(readFileSync(join(dir, '../package.json'), 'utf8'))
