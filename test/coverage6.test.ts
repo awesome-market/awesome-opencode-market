@@ -937,6 +937,39 @@ describe('ornithReview (mocked global fetch)', () => {
       () => ornithReview(held, [])) as { verdict: string }
     expect(r.verdict).toBe('concern')
   })
+  /** queue-based fetch mock capturing request bodies — the thinking retry
+   *  needs to prove the second call dropped the non-thinking kwarg */
+  const withFetchQ = async (responses: Response[], fn: () => Promise<unknown>) => {
+    const orig = globalThis.fetch
+    const calls: { body: Record<string, unknown> }[] = []
+    globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+      calls.push({ body: JSON.parse(init?.body ?? '{}') as Record<string, unknown> })
+      return responses.shift() ?? new Response('', { status: 500 })
+    }) as typeof fetch
+    try { return { out: await fn(), calls } } finally { globalThis.fetch = orig }
+  }
+  it('degenerate non-thinking output → one retry WITH thinking, then parses', async () => {
+    const { out, calls } = await withFetchQ(
+      [chat('```json'), chat('{"verdict":"pass","reason_zh":"好","reason_en":"ok"}')],
+      () => ornithReview(held, [], { think: false }))
+    expect((out as { verdict: string }).verdict).toBe('pass')
+    expect(calls).toHaveLength(2)
+    const kw0 = calls[0]!.body['chat_template_kwargs'] as { enable_thinking?: boolean } | undefined
+    expect(kw0?.enable_thinking).toBe(false)
+    expect(calls[1]!.body['chat_template_kwargs']).toBeUndefined()
+  })
+  it('non-thinking retry also unparseable → throws (attempt streak still applies)', async () => {
+    await expect(withFetchQ([chat(''), chat('still prose')],
+      () => ornithReview(held, [], { think: false }))
+      .then(r => r.out)).rejects.toThrow('unparseable')
+  })
+  it('parseable non-thinking output → no retry (single call)', async () => {
+    const { out, calls } = await withFetchQ(
+      [chat('{"verdict":"concern","reason_zh":"嫌","reason_en":"sus"}')],
+      () => ornithReview(held, [], { think: false }))
+    expect((out as { verdict: string }).verdict).toBe('concern')
+    expect(calls).toHaveLength(1)
+  })
 })
 
 describe('gui deepStub + ctx accessors', () => {
