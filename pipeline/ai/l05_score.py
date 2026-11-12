@@ -72,7 +72,16 @@ def main() -> None:
     # runs WITHOUT the baked truncation and WITHOUT special tokens — each
     # window re-wraps bos/eos itself so every window looks like a complete
     # sequence to the classifier.
-    texts = [" ".join(str(i["text"]).split()) for i in items]
+    #
+    # \ud800-style lone surrogates (broken UTF-8 in package READMEs/code)
+    # survive JSON.stringify → json.load as plain str chars — str() can't
+    # catch them, but Rust's PyUnicode→String conversion rejects them and
+    # the whole batch dies on a misleading TextEncodeInput TypeError.
+    # utf-8/ignore round-trip strips them; they carry no signal.
+    texts = [
+        " ".join(str(i["text"]).split()).encode("utf-8", "ignore").decode("utf-8")
+        for i in items
+    ]
     encs = tok.encode_batch(texts, add_special_tokens=False)
 
     bos = tok.token_to_id("<bos>")
