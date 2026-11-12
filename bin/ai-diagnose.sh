@@ -31,7 +31,11 @@ else
   _fsize() { stat -c %s "$1" 2>/dev/null || echo 0; }
 fi
 
-REPO=${MARKET_REPO:-/Volumes/2t/code/opencode-market}
+# REPO 三层解析：MARKET_REPO env > 脚本所属 checkout（在 upstream clone 里跑
+# bin/ai-diagnose.sh 就审 upstream，在 fork clone 里就审 fork）> 旧默认。
+# 守护 shim 从 $STATED/bin 跑副本时 rev-parse 落空 → 走默认，行为与旧版一致。
+SELF_REPO=$(git -C "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)
+REPO=${MARKET_REPO:-${SELF_REPO:-/Volumes/2t/code/opencode-market}}
 CAT=$HOME/.local/share/opencode-market-catalog   # dedicated catalog-branch checkout
 CODE=$HOME/.local/share/opencode-market-code     # pinned origin/main code checkout
 LOGD=$HOME/Library/Logs/opencode-market
@@ -282,6 +286,7 @@ if [ -z "$URL" ]; then
   log "no remote URL — set MARKET_GIT_URL in $ENVF (dev checkout $REPO unreadable from this context)"
   exit 1
 fi
+log "target: $URL (repo: $REPO)"
 
 # pinned code checkout — the pipeline runs whatever origin/main has, never a
 # dirty dev worktree. Separate dir from $REPO and $CAT. Deps re-install only
