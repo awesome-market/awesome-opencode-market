@@ -88,10 +88,67 @@ describe('review', () => {
   it('findings list folds into <details> — red flags stay visible', async () => {
     const md = renderReview({ name: 'p', exists: true, status: 'ok', evidenceOk: true, scanned: true, scanError: null,
       evidence: ['keyword'], downloads30d: null,
-      repo: null, createdAt: null, version: '1', integrity: null,
+      repo: null, pkgName: null, createdAt: null, version: '1', integrity: null,
       findings: ['r: f — d', 'r2: g — d2'], redFlags: ['rf: x'] })
     expect(md).toContain('<details><summary>### Findings (2)</summary>')
     expect(md).toContain('### ⚠️ Red flags (1)\n- rf: x')
+  })
+})
+
+describe('npm↔repo same-origin precheck (mirrors ingest sec:repo-*)', () => {
+  const fetchFor = (o: { repo?: unknown; pkgName?: string | undefined }) =>
+    (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('registry.npmjs.org') && !url.includes('tgz')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { keywords: ['opencode'], main: 'i.js', repository: o.repo, dist: { tarball: 'https://x/t.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/t.tgz')) return mkRes({}, 500) // scan outcome is irrelevant to the sec:repo-* flags under test
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      if (url.includes('raw.githubusercontent.com')) return o.pkgName === undefined ? mkRes({}, 404) : mkRes({ name: o.pkgName })
+      return mkRes({}, 404)
+    }) as typeof fetch
+
+  it('declared repo ≠ packument repository → sec:repo-declared-mismatch → flagged', async () => {
+    const r = await reviewPackage('p', { fetchFn: fetchFor({ repo: 'https://github.com/o/real', pkgName: 'p' }), declaredRepo: 'https://github.com/o/grafted' })
+    const flag = r.redFlags.find(f => f.startsWith('sec:repo-declared-mismatch'))
+    expect(flag).toBeTruthy()
+    expect(flag).toContain('o/grafted')
+    expect(flag).toContain('o/real')
+    expect(r.repo).toBe('o/real')           // packument stays the authority
+    expect(verdict(r)).toBe('flagged')       // not 'clean' — a human must look at the disagreement
+  })
+
+  it('repo package.json name ≠ npm name → sec:repo-mismatch + flagged', async () => {
+    const r = await reviewPackage('p', { fetchFn: fetchFor({ repo: 'https://github.com/o/real', pkgName: 'totally-different' }) })
+    expect(r.redFlags.some(f => f.startsWith('sec:repo-mismatch'))).toBe(true)
+    expect(r.pkgName).toBe('totally-different')
+    expect(renderReview(r)).toContain('package.json: `totally-different`')
+    expect(verdict(r)).toBe('flagged')
+  })
+
+  it('matching repo package.json name → no sec flags, pkgName recorded', async () => {
+    const r = await reviewPackage('p', { fetchFn: fetchFor({ repo: 'https://github.com/o/real', pkgName: 'p' }) })
+    expect(r.redFlags.filter(f => f.startsWith('sec:'))).toHaveLength(0)
+    expect(r.pkgName).toBe('p')
+    // scoped basename allowance: @sc/p ↔ repo package.json 'p' is the same artifact
+    const s = await reviewPackage('@sc/p', { fetchFn: fetchFor({ repo: 'https://github.com/o/real', pkgName: 'p' }) })
+    expect(s.redFlags.filter(f => f.startsWith('sec:repo-mismatch'))).toHaveLength(0)
+  })
+
+  it('packument repository absent → declared repo becomes the anchor (no declared-mismatch)', async () => {
+    const r = await reviewPackage('p', { fetchFn: fetchFor({ repo: undefined, pkgName: 'p' }), declaredRepo: 'o/declared' })
+    expect(r.repo).toBe('o/declared')
+    expect(r.redFlags.filter(f => f.startsWith('sec:repo-declared-mismatch'))).toHaveLength(0)
+    expect(r.pkgName).toBe('p')
+  })
+
+  it('escaping repository.directory → sec:repo-dir-traversal, repo fetch skipped', async () => {
+    const r = await reviewPackage('p', { fetchFn: fetchFor({ repo: { url: 'https://github.com/o/real', directory: '../../etc' }, pkgName: 'p' }) })
+    expect(r.redFlags.some(f => f.startsWith('sec:repo-dir-traversal'))).toBe(true)
+    expect(r.pkgName).toBeNull()
+    expect(verdict(r)).toBe('flagged')
   })
 })
 

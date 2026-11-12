@@ -121,7 +121,7 @@ describe('review.ts render edge branches', () => {
       name: 'pkg', exists: true, status: 'ok' as const, evidenceOk: false, evidence: ['keywords'],
       scanned: true, scanError: null, findings: Array.from({ length: 35 }, (_, i) => `f${i}`),
       redFlags: Array.from({ length: 35 }, (_, i) => `r${i}`),
-      downloads30d: null, repo: null, createdAt: null, version: '1.0.0', integrity: null,
+      downloads30d: null, repo: null, pkgName: null, createdAt: null, version: '1.0.0', integrity: null,
     }
     const md = renderReview(base)
     expect(md).toContain('证据不足')

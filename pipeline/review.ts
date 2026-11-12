@@ -1,6 +1,7 @@
 /** Submission review: package/repo → markdown review report (scan findings, evidence, metrics). Human decides. */
 import { fetchPackument, fetchTarball, fetchDownloads30d } from './fetch/npm.ts'
-import { fetchRepoMeta, fetchRepoTree, fetchRepoPackage, type RepoMetaStatus } from './fetch/github.ts'
+import { fetchRepoMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
+import { normalizeRepoUrl } from './discover/github.ts'
 import { scanTarball } from './scan/scan.ts'
 import { hasPluginEvidence, hasRepoEvidence } from './discover/filter.ts'
 import { isMain } from './main-guard.ts'
@@ -22,17 +23,43 @@ export interface Review {
   redFlags: string[]
   downloads30d: number | null
   repo: string | null
+  pkgName: string | null          // resolved repo's own package.json name — npm↔repo audit link
   createdAt: string | null        // packument time.created — name-squat heuristics
   version: string | null          // the version the tarball scan covered — a human
   integrity: string | null        // pass must land on THIS version, not whatever
 }                                 // dist-tags.latest resolves to at click time
 
-export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch } = {}): Promise<Review> {
-  const base = { name, exists: false, evidenceOk: false, evidence: [] as string[], scanned: false, scanError: null as string | null, findings: [] as string[], redFlags: [] as string[], downloads30d: null as number | null, repo: null as string | null, createdAt: null as string | null, version: null as string | null, integrity: null as string | null }
+export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch; declaredRepo?: string | null } = {}): Promise<Review> {
+  const base = { name, exists: false, evidenceOk: false, evidence: [] as string[], scanned: false, scanError: null as string | null, findings: [] as string[], redFlags: [] as string[], downloads30d: null as number | null, repo: null as string | null, pkgName: null as string | null, createdAt: null as string | null, version: null as string | null, integrity: null as string | null }
   const { pk, status } = await fetchPackument(name, opts)
   if (!pk) return { ...base, status: status === 'not-found' ? 'not-found' : 'error' }
   const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
   let findings: string[] = [], redFlags: string[] = []
+  // npm↔repo same-origin checks, same rules run.ts applies at ingest — but
+  // run HERE so a grafted declaration can't wear a 'clean' issue label into
+  // the queue (the ingest-side sec:repo-* flags only fire after the seed has
+  // already landed). redFlag tier: run.ts escalates the same signals via
+  // sec:* findings → flaggedAt → human review, so 'flagged' matches the
+  // disposition the entry would get anyway.
+  const pkRepo = normalizeRepoUrl(pk.repository ?? null)
+  const declared = normalizeRepoUrl(opts.declaredRepo ?? null)
+  const repo = pkRepo ?? declared
+  if (declared && pkRepo && declared.toLowerCase() !== pkRepo.toLowerCase())
+    redFlags.push(`sec:repo-declared-mismatch: submitted ${declared} ≠ packument repository ${pkRepo}`)
+  let pkgName: string | null = null
+  if (repo) {
+    const dir = pk.repositoryDir ?? undefined
+    if (unsafeRepoDir(dir)) {
+      // repository.directory is package-author-controlled — an escaping
+      // path isn't just odd metadata, it's a probe; flag like ingest does
+      redFlags.push(`sec:repo-dir-traversal: repository.directory "${String(dir).slice(0, 120)}"`)
+    } else {
+      const rp = await fetchRepoPackageName(repo, { dir, ...(opts.fetchFn ? { fetchFn: opts.fetchFn } : {}) })
+      pkgName = rp.pkgName
+      if (rp.status === 'ok' && rp.pkgName && rp.pkgName !== name && rp.pkgName !== name.split('/').pop())
+        redFlags.push(`sec:repo-mismatch: repo package.json name "${rp.pkgName.slice(0, 120)}" ≠ npm ${name}`)
+    }
+  }
   let scanned = false, scanError: string | null = null
   if (pk.tarballUrl) {
     try {
@@ -52,7 +79,8 @@ export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch
     exists: true, status: 'ok', evidenceOk: ev.ok, evidence: ev.via,
     scanned, scanError, findings, redFlags,
     downloads30d: await fetchDownloads30d(name, opts),
-    repo: pk.repository,
+    repo,
+    pkgName,
     createdAt: pk.createdAt,
     version: pk.latest,
     integrity: pk.latest ? pk.integrityOf[pk.latest] ?? null : null,
@@ -171,8 +199,9 @@ export function renderReview(r: Review): string {
   if (r.status === 'error' || r.status === 'rate-limited')
     return `**${r.name}** — 审查失败：npm registry 暂时不可用（${r.status}）。这不是投稿内容的问题——请稍后在本 issue 回复任意评论即可重新审查。${markers}`
   if (!r.exists) return `**${r.name}** — package not found on npm.${markers}`
+  const pkgShow = typeof r.pkgName === 'string' ? r.pkgName.replace(/[`\r\n]/g, '').slice(0, 120) : null
   const lines = [
-    `**${r.name}** — found on npm${r.repo ? `, repo: ${r.repo}` : ''}`,
+    `**${r.name}** — found on npm${r.repo ? `, repo: ${r.repo}${pkgShow ? ` (package.json: \`${pkgShow}\`)` : ''}` : ''}`,
     `Reviewed: ${r.name}@${r.version ?? 'unknown'}${r.integrity ? ` (\`${r.integrity}\`)` : ''}`,
     `Evidence signals: ${r.evidence.length ? r.evidence.join(', ') : 'none'}`,
     `Downloads (30d): ${r.downloads30d ?? 'unknown'}`,
@@ -228,5 +257,5 @@ export function renderRepoReview(r: RepoReview): string {
 if (isMain(import.meta.url)) {
   const argv = process.argv
   if (argv[2] === '--repo') console.log(renderRepoReview(await reviewRepo(argv[3]!, { token: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN })))
-  else console.log(renderReview(await reviewPackage(argv[2]!)))
+  else console.log(renderReview(await reviewPackage(argv[2]!, { declaredRepo: process.env.DECLARED_REPO ?? null })))
 }

@@ -164,7 +164,7 @@ describe('renderReview edge matrix', () => {
   const base: Review = {
     name: 'p', exists: true, status: 'ok', evidenceOk: true, evidence: ['main'],
     scanned: true, scanError: null, findings: [], redFlags: [],
-    downloads30d: null, repo: null, createdAt: null, version: null, integrity: null,
+    downloads30d: null, repo: null, pkgName: null, createdAt: null, version: null, integrity: null,
   }
   it('scanError / not-scanned / findings>30 / redFlags>30 / evidence-fail / all-null fields', () => {
     const se = renderReview({ ...base, scanned: false, scanError: 'boom' })

@@ -135,6 +135,62 @@ describe('L3 mount: window-side behavior', () => {
     localStorage.clear()
   })
 
+  it('settings controls ride mousedown dispatch — export/import/devlog/clearlogs', async () => {
+    localStorage.clear()
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x')
+    const clearDevlog = vi.fn(async () => 'ok')
+    const { root, mounted, api } = await mount({ clearDevlog })
+    find(root, 'settings')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const root2 = await remount(mounted)
+    // export — status line reports the downloaded filename
+    ;(root2.querySelector('[data-act=export]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(root2.textContent).toContain('opencode-market-backup.json')
+    // import — valid state JSON lands in localStorage; garbage is rejected
+    const ta = root2.querySelector('textarea')!
+    ta.value = '{"favorites":{"x":true}}'
+    ;(root2.querySelector('[data-act=import]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').favorites).toEqual({ x: true })
+    ta.value = 'not-json'
+    ;(root2.querySelector('[data-act=import]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').favorites).toEqual({ x: true })  // unchanged
+    // devlog toggle — click the INNER '[ ]' glyph span: only closest('[data-act]')
+    // dispatch reaches the row (ev.target.dataset alone would miss it)
+    const drow = root2.querySelector('[data-act=devlog]') as HTMLElement
+    drow.querySelector('span')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(JSON.parse(localStorage.getItem('opencode-market.state.v1') ?? '{}').devlog).toBe(true)
+    expect(drow.textContent).toContain('[x]')
+    // clear logs → clears host file AND renderer buffer
+    ;(root2.querySelector('[data-act=clearlogs]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(clearDevlog).toHaveBeenCalled()
+    localStorage.clear()
+  })
+
+  it('skill permission buttons write via mousedown dispatch', async () => {
+    localStorage.clear()
+    localStorage.setItem('opencode-market.state.v1', JSON.stringify({ devUnlocked: true }))
+    const skillPermission = vi.fn(async () => ({}))
+    const { root, mounted } = await mount({
+      skillPermission,
+      installed: vi.fn(async () => ({ versions: { '__skill_myskill': '1.0.0' }, extras: [], features: {} })),
+    })
+    find(root, 'settings')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const root2 = await remount(mounted)
+    await flush()                       // remount rebuilds the panel — paintPerms resolves async after it
+    const btn = [...root2.querySelectorAll('[data-act=perm]')].find(b => (b as HTMLElement).dataset.permId === 'myskill' && (b as HTMLElement).dataset.permMode === 'deny') as HTMLElement
+    expect(btn).toBeTruthy()
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flush()
+    expect(skillPermission).toHaveBeenCalledWith({ id: 'myskill', mode: 'deny' })
+    // the row's current-mode span echoes the applied mode (children[1])
+    expect((btn.parentElement?.children[1] as HTMLElement).textContent).toBe('deny')
+    localStorage.clear()
+  })
+
   it('language switch persists and re-renders labels in zh', async () => {
     localStorage.clear()
     const { root, mounted } = await mount()

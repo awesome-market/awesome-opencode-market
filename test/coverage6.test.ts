@@ -1463,7 +1463,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(r.issues).toEqual([])
   })
   it('renderReview: repo + evidence + unknown downloads arms', () => {
-    const md = renderReview({ name: 'p', exists: true, status: 'ok', evidenceOk: true, scanned: true, scanError: null, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
+    const md = renderReview({ name: 'p', exists: true, status: 'ok', evidenceOk: true, scanned: true, scanError: null, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', pkgName: null, createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
     expect(md).toContain('repo: o/r')
     expect(md).toContain('keyword, entry')
     expect(md).toContain('unknown')

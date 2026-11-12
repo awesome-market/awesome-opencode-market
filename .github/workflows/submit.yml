@@ -89,6 +89,10 @@ jobs:
           KIND: ${{ steps.parse.outputs.kind }}
           PNAME: ${{ steps.parse.outputs.name }}
           PREPO: ${{ steps.parse.outputs.repo }}
+          # npm↔repo same-origin precheck inside review.ts — the declared repo
+          # is compared against the packument's own repository field so a
+          # grafted repo can't ride a 'clean' verdict into the queue
+          DECLARED_REPO: ${{ steps.parse.outputs.repo }}
           ACTION: ${{ github.event.action }}
           GH_REPO: ${{ github.repository }}
           ISSUE_BODY: ${{ github.event.issue.body }}

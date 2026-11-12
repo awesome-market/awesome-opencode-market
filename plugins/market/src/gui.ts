@@ -1110,18 +1110,48 @@ export default Plugin.define({
       // button-level handlers don't fire in this webview (clicks bubble to
       // root though) — dispatch from the root listener instead
       root.onmousedown = (ev) => {
-        const t = ev.target as HTMLElement
-        const hit = t?.dataset?.act === 'refresh'
-        void safe.devlog?.(`md root <${t?.tagName}> ${(t?.textContent ?? '').slice(0, 16)} hit=${hit}`).catch(() => {})
-        if (hit) void doRefresh()
+        // 'tgt' not 't' — t is the imported i18n fn; shadowing it makes every
+        // label call inside this handler a type error
+        const tgt = ev.target as HTMLElement
+        // closest() not target.dataset — clicking the '[x]' glyph inside a
+        // data-act row hits the inner span, and target.dataset would miss it
+        const actEl = (tgt?.closest?.('[data-act]') ?? null) as HTMLElement | null
+        const act = actEl?.dataset?.act
+        void safe.devlog?.(`md root <${tgt?.tagName}> ${(tgt?.textContent ?? '').slice(0, 16)} act=${act ?? '-'}`).catch(() => {})
+        if (act === 'refresh') void doRefresh()
         // the version-tap easter egg MUST dispatch from here too — element-level
         // onclick never fires in this webview, so ver.onclick silently dropped
         // every tap (devUnlocked could never toggle from the GUI)
-        const act = t?.dataset?.act
-        if (act === 'devtap') devTap()
+        else if (act === 'devtap') devTap()
         else if (act === 'devsrc' || act === 'devpick') devToggle(act)
         else if (act === 'skillsrc') void safe.skillSource?.({ url: skillsEndpoint(), enable: !ssOn }).then(ssRefresh).catch(() => {})
-        const lm = t?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
+        else if (act === 'export') {
+          const blob = new Blob([JSON.stringify(state(), null, 2)], { type: 'application/json' })
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(blob); a.download = 'opencode-market-backup.json'; a.click()
+          status.textContent = tf('exportedN', { file: 'opencode-market-backup.json' })
+        }
+        else if (act === 'import') {
+          try {
+            // field-shape validation — a crafted paste must not corrupt state
+            put(sanitizeState(JSON.parse(ta.value)))
+            status.textContent = t('restored')
+          } catch { status.textContent = t('restoreInvalid') }
+        }
+        else if (act === 'clear') { if (confirm(t('confirmClear'))) { put(EMPTY_STATE); status.textContent = t('cleared') } }
+        else if (act === 'devlog') { put({ devlog: !devlog() }); paintDvc() }
+        else if (act === 'clearlogs') { clearLog(); void safe.clearDevlog?.().then(refresh).catch(() => {}) }
+        else if (act === 'perm') {
+          const ds = actEl?.dataset
+          const id = ds?.permId
+          const mode = (ds?.permMode || null) as 'allow' | 'ask' | 'deny' | null
+          if (id) void safe.skillPermission?.({ id, mode }).then(() => {
+            // row layout: [name span, current-mode span, buttons...]
+            const cur = actEl?.parentElement?.children[1] as HTMLElement | undefined
+            if (cur) cur.textContent = mode ?? ''
+          }).catch(() => {})
+        }
+        const lm = tgt?.dataset?.lang as 'auto' | 'zh' | 'en' | undefined
         if (lm) { put({ lang: lm }); setLangMode(lm); remounts.forEach(r => r()) }
       }
       // language picker — persisted in localStorage; remount so once-built
@@ -1170,39 +1200,30 @@ export default Plugin.define({
       root.appendChild(desc)
       const status = el('div', 'font-size:11px;opacity:.6;margin-top:8px')
       const exp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-right:8px', t('exportBackup')) as HTMLButtonElement
-      exp.onclick = () => {
-        const blob = new Blob([JSON.stringify(state(), null, 2)], { type: 'application/json' })
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob); a.download = 'opencode-market-backup.json'; a.click()
-        status.textContent = tf('exportedN', { file: 'opencode-market-backup.json' })
-      }
+      exp.dataset.act = 'export'
       const ta = document.createElement('textarea')
       ta.placeholder = t('pasteBackup')
       ta.style.cssText = 'width:100%;height:80px;margin-top:8px;font-size:11px;box-sizing:border-box;background:var(--v2-background-bg-layer-01,Canvas);color:inherit;border:1px solid rgba(128,128,128,.3);border-radius:6px;padding:6px'
       const imp = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', t('restore')) as HTMLButtonElement
-      imp.onclick = () => {
-        try {
-          // field-shape validation — a crafted paste must not corrupt state
-          put(sanitizeState(JSON.parse(ta.value)))
-          status.textContent = t('restored')
-        } catch { status.textContent = t('restoreInvalid') }
-      }
+      imp.dataset.act = 'import'
       const clr = el('button', 'font-size:12px;cursor:pointer;padding:4px 14px;border:1px solid rgba(200,50,50,.5);border-radius:6px;background:transparent;color:#c55;margin-top:6px;margin-left:8px', t('clearData')) as HTMLButtonElement
-      clr.onclick = () => { if (confirm(t('confirmClear'))) { put(EMPTY_STATE); status.textContent = t('cleared') } }
+      clr.dataset.act = 'clear'
       root.append(exp, ta, imp, clr, status)
       // 开发日志开关（默认关）
       const dv = el('h4', 'margin:20px 0 6px;font-weight:600', t('devlogLabel'))
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = devlog()
-      cb.onchange = () => put({ devlog: cb.checked })
-      const cbL = el('label', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
-      cbL.append(cb, document.createTextNode(t('devlogDesc')))
+      const dvc = el('span', 'font-family:monospace;user-select:none')
+      const paintDvc = () => { dvc.textContent = devlog() ? '[x]' : '[ ]' }
+      paintDvc()
+      const cbL = el('div', 'font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer')
+      cbL.dataset.act = 'devlog'
+      cbL.append(dvc, document.createTextNode(t('devlogDesc')))
       const logBox = el('pre', 'font-size:10px;max-height:160px;overflow:auto;margin-top:8px;padding:8px;border:1px solid rgba(128,128,128,.25);border-radius:6px;white-space:pre-wrap;user-select:text;-webkit-user-select:text;cursor:text')
       const refresh = () => { void safe.readDevlog?.().then(txt => { logBox.textContent = txt || t('noLogs') }).catch(() => {}) }
       refresh()
       const clrL = el('button', 'font-size:11px;cursor:pointer;padding:2px 10px;border:1px solid rgba(128,128,128,.4);border-radius:6px;background:transparent;color:inherit;margin-top:6px', t('clearLogs')) as HTMLButtonElement
       // logBox renders the HOST file (readDevlog) — clearing only the renderer
       // localStorage buffer made the button a no-op (P0 bug)
-      clrL.onclick = () => { clearLog(); void safe.clearDevlog?.().then(refresh).catch(() => {}) }
+      clrL.dataset.act = 'clearlogs'
       root.append(dv, cbL, logBox, clrL)
       // dev catalog source — the maintainer fork's Pages, used while the
       // upstream catalog isn't being published (pre-release development).
@@ -1271,7 +1292,7 @@ export default Plugin.define({
             r.appendChild(cur)
             for (const [mode, key] of [['allow', 'permAllow'], ['ask', 'permAsk'], ['deny', 'permDeny'], [null, 'permOff']] as const) {
               const mb = el('button', 'font-size:10px;cursor:pointer;padding:1px 8px;border:1px solid rgba(128,128,128,.35);border-radius:5px;background:transparent;color:inherit', t(key)) as HTMLButtonElement
-              mb.onclick = ev => { ev.stopPropagation(); void safe.skillPermission({ id, mode }).then(() => { cur.textContent = mode ?? '' }).catch(() => {}) }
+              mb.dataset.act = 'perm'; mb.dataset.permId = id; mb.dataset.permMode = mode ?? ''
               r.appendChild(mb)
             }
             permBox.appendChild(r)
