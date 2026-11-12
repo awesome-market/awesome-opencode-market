@@ -34,7 +34,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
-import { vkey, akey, atCmp, candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning } from './verdicts.ts'
+import { vkey, akey, atCmp, candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, loadDigestState, brakeFor, tombEpochs, epochGoverning, stripFlagTail } from './verdicts.ts'
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 import { isMain } from './main-guard.ts'
@@ -80,6 +80,14 @@ export interface DocketTarget {
   /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
    *  without opening the detail page */
   scanPreview?: string[]
+  /** full red-flag enumeration (bounded at render, not here) — the flags are
+   *  the substance of a mechanical-flag issue; a 4-item excerpt can't carry
+   *  the case and the reason text's embedded copy triples it into noise */
+  redFlagList?: string[]
+  /** entry renders a site detail page (mirrors site build's isVisible:
+   *  approval !== 'pending') — the 详情页 link must only be emitted for
+   *  pages that will actually exist, or every pending-entry issue 404s */
+  sitePage?: boolean
   /** aggregate backlog — a per-entry standing issue per target floods the
    *  tracker (hundreds of rows and growing); the aggregate carries the queue
    *  in ONE issue whose body regenerates. Versioned 'none' rows carry
@@ -177,7 +185,11 @@ export function docketTargets(
     // reading the ENTRY's own fields, matching the `ver` key below
     const slot = candidateSlot(e) ?? e
     const held = heldStamp(e)
-    const preview = [...slot.capabilities.redFlags.slice(0, 2), ...slot.capabilities.findings.slice(0, 2)]
+    // findings-only excerpt with flag-listed items removed: the red flags
+    // render their own complete section (红旗清单) — a signal printed in
+    // both sections is the same triplication this file exists to kill
+    const flagSet = new Set(slot.capabilities.redFlags)
+    const preview = [...new Set(slot.capabilities.findings.filter(f => !flagSet.has(f)))].slice(0, 4)
     const meta: SlotMeta = {
       findings: slot.capabilities.findings.length,
       redFlags: slot.capabilities.redFlags.length,
@@ -189,6 +201,8 @@ export function docketTargets(
       ...(held ? { heldAt: held } : {}),
       ...(slot.publishedAt ? { publishedAt: slot.publishedAt } : {}),
       ...(slot.integrity ? { integrity: slot.integrity } : {}),
+      ...(slot.capabilities.redFlags.length ? { redFlagList: slot.capabilities.redFlags } : {}),
+      ...(e.approval !== 'pending' ? { sitePage: true } : {}),
       ...(preview.length ? { scanPreview: preview.map(s => s.slice(0, 160)) } : {}),
     }
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
@@ -226,6 +240,8 @@ export function docketTargets(
           verification: e.verification.status,
           findings: e.capabilities.findings.length,
           redFlags: e.capabilities.redFlags.length,
+          redFlagList: e.capabilities.redFlags,
+          sitePage: true, // flag targets exist only on non-pending entries
           ...(e.capabilities.scannedAt === null ? { unscanned: true } : {}),
           ...(e.slug ? { slug: e.slug } : {}),
           ...(e.publishedAt ? { publishedAt: e.publishedAt } : {}),
@@ -502,8 +518,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
           : '信号首次观察时点无记录（flaggedAt 缺失）——无法确认该判词是否覆盖此信号，需就该信号再判一次'))
     }
   } else {
-    L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
-    if (t.reasonEn) L.push(`  - ${clean(t.reasonEn)}`)
+    // stripFlagTail: mechanical-flag reasons embed the raw flag enumeration —
+    // the body renders that list once (红旗清单 below), so drop the stored
+    // tail and keep the annotation in front of it (LLM draft context etc.)
+    const reasonZh = t.reason ? clean(stripFlagTail(t.reason)) : ''
+    L.push(`- 当前 AI 判定：**${t.verdict}**${reasonZh ? ` — ${reasonZh}` : ''}`)
+    const reasonEn = t.reasonEn ? clean(stripFlagTail(t.reasonEn)) : ''
+    if (reasonEn) L.push(`  - ${reasonEn}`)
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
       // a standing human pass COVERS the flag exemption (§7 humanPassCovers):
       // the gate releases under that authority — "只能人工放行" would tell the
@@ -563,8 +584,17 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   } else if ((t.redFlags ?? 0) > 0 || (t.findings ?? 0) > 0) {
     L.push(`- 静态扫描：redFlags ${t.redFlags ?? 0} / findings ${t.findings ?? 0}`)
   }
+  const detailPage = t.slug && opts.pagesBase && t.sitePage
+  // the flags ARE the case file for a flagged target — show the whole list
+  // (bounded for tracker sanity), not a 4-item excerpt + a truncated copy
+  // embedded twice inside the bilingual reason text
+  if (t.redFlagList?.length) {
+    L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
+    for (const f of t.redFlagList.slice(0, 20)) L.push(`  - ${clean(f, 160)}`)
+    if (t.redFlagList.length > 20) L.push(`  - …另 ${t.redFlagList.length - 20} 条见 index.json`)
+  }
   if (t.scanPreview?.length) {
-    L.push('- 扫描摘录（前几条，完整清单见详情页）：')
+    L.push(`- 扫描摘录（前几条，完整清单见${detailPage ? '详情页' : 'index.json'}）：`)
     for (const s of t.scanPreview) L.push(`  - ${clean(s, 160)}`)
   }
   if (t.verdictSha && t.integrity && t.verdictSha !== t.integrity) {
@@ -579,7 +609,10 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     // per-target views INTO it; without this link the objection window has
     // no readable entry point (G1)
     L.push(`- 预告面：[最新日报](https://github.com/${opts.repo}/tree/catalog/digest)（所有将放行版本在此公示）`)
-    if (t.slug && opts.pagesBase) L.push(`- 详情页：${opts.pagesBase}/p/${t.slug}.html`)
+    // pending entries never render on the site — linking them here 404s
+    // (systematic, every concern/none issue); the flag-list/excerpt above
+    // already carries the evidence when there is no page to point at
+    if (detailPage) L.push(`- 详情页：${opts.pagesBase}/p/${t.slug}.html`)
   } else {
     L.push('- 数据：catalog 分支 `index.json` / `ai-verdicts.jsonl`')
   }

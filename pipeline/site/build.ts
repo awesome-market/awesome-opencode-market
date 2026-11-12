@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { join, dirname, relative } from 'node:path'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import type { PluginEntry } from '../../src/schema.ts'
-import { loadVerdicts, atCmp } from '../verdicts.ts'
+import { loadVerdicts, atCmp, stripFlagTail } from '../verdicts.ts'
 import { readJsonCapped } from '../fetch/npm.ts'
 import { isMain } from '../main-guard.ts'
 
@@ -368,7 +368,7 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[], landed?: Set<
       mine.map(x => `<tr><td class=meta>${esc(x.at.slice(0, 10))}</td>` +
         `<td><b>${x.verdict}</b>${x.version ? ` <code>@${esc(x.version)}</code>` : ''}</td>` +
         `<td>${esc(x.source)}${x.by ? ` · ${esc(x.by)}` : ''}${x.issue ? ` · <a href="${siteRepoUrl()}/issues/${x.issue}">#${x.issue}</a>` : ''}</td>` +
-        `<td>${x.reasonEn ? bi(trunc(x.reasonEn), trunc(x.reason)) : esc(trunc(x.reason))}</td></tr>`).join('') +
+        `<td>${x.reasonEn ? bi(trunc(stripFlagTail(x.reasonEn ?? '')), trunc(stripFlagTail(x.reason ?? ''))) : esc(trunc(stripFlagTail(x.reason ?? '')))}</td></tr>`).join('') +
       `</table><p class=meta>${bi('full log:', '完整流水：')}<a href="${siteRepoUrl()}/blob/catalog/ai-verdicts.jsonl">ai-verdicts.jsonl</a> · ${bi('maturity digest:', '成熟度公告：')}<a href="${siteRepoUrl()}/tree/catalog/digest">digest</a></p></details>`
     : ''
   return page(e.name, `<h1>${esc(e.name)}${approvalBadge(e)}${e.deprecated ? ` <span class=bad data-en="deprecated" data-zh="已弃用">deprecated</span>` : ''}</h1><p>${esc(e.description.en ?? '')}${e.description.zh ? `<br><span class=meta>${esc(e.description.zh)}</span>` : ''}</p>
