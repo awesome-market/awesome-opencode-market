@@ -413,7 +413,7 @@ if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileS
 cp "$PAY" "$SPOOL" 2>/dev/null \
   || log "WARN: spool sync failed ($SPOOL) — a failed push would lose this run's verdicts and re-burn the LLM next run"
 
-[ -s "$PAY" ] || [ -s "$RMF" ] || { log "no new verdicts"; exit 0; }
+[ -s "$PAY" ] || [ -s "$RMF" ] || { log "no new verdicts — idle (常驻等待请跑 bin/ai-diagnose-agent.sh)"; exit 0; }
 
 # Replay push: verdicts live in $PAY, not the worktree — a failed push just
 # means re-append onto the newest origin/catalog next attempt.
