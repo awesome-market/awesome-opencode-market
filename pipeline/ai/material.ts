@@ -44,6 +44,10 @@ export async function main(argv: string[] = process.argv.slice(2),
   const limit = Number(arg('--limit') ?? 500)
   if (!Number.isFinite(limit) || limit < 0) { console.error(usage); return 1 }
   const dry = argv.includes('--dry')
+  // CI downloads the tarballs the daemon can't: runner RAM/disk is free, so
+  // the transport cap lifts to 512MB (konoha-mcp's 201MB class). The REVIEW
+  // budgets inside contentMaterial stay — output bundles stay tiny either way.
+  const transportCap = Number(process.env.MATERIAL_TARBALL_CAP ?? 512 * 1024 * 1024)
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const verdicts = loadVerdicts(verdictsPath)
@@ -78,14 +82,22 @@ export async function main(argv: string[] = process.argv.slice(2),
       if (existsSync(cur)) {
         try {
           const old = JSON.parse(readFileSync(cur, 'utf8')) as MaterialBundle
-          if (old.sourceSha === sha) { kept++; continue } // still fresh — nothing to rebuild
+          // contentFailed bundles are never "fresh": a transient fetch failure
+          // or an over-cap tarball would otherwise pin a contentless shell for
+          // that sha forever
+          if (old.sourceSha === sha && !old.contentFailed) { kept++; continue } // still fresh — nothing to rebuild
         } catch { /* malformed → rebuild */ }
       }
-      const content = await contentMaterial(e.name, ver, pk?.tarballOf[ver] ?? null, deps.fetchFn).catch(() => [] as Material[])
+      // a 'content-error' block (or a thrown failure) = degraded extraction —
+      // distinct from an empty [] which is a legitimate "no whitelist files"
+      // package. The flag keeps degraded builds out of the freshness check.
+      const content = await contentMaterial(e.name, ver, pk?.tarballOf[ver] ?? null, deps.fetchFn, transportCap).catch(() => null)
+      const degraded = content === null || content.some(b => b.id === 'content-error')
       const bundle: MaterialBundle = {
         name: e.name, version: ver, sourceSha: sha,
         builtAt: new Date().toISOString(),
-        material: [...reviewMaterial(e), ...content],
+        ...(degraded ? { contentFailed: true } : {}),
+        material: [...reviewMaterial(e), ...(content ?? [])],
       }
       const json = JSON.stringify(bundle)
       if (json.length > BUNDLE_CAP) { oversized++; continue }

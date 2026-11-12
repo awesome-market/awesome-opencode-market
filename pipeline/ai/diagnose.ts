@@ -109,6 +109,10 @@ export interface MaterialBundle {
   version: string
   sourceSha?: string | undefined
   builtAt?: string | undefined
+  /** producer-side extraction failure (oversized even at the CI cap, or a
+   *  transient fetch error) — such a bundle must not satisfy the producer's
+   *  freshness check, or a degraded build would persist forever */
+  contentFailed?: boolean | undefined
   material: Material[]
 }
 
@@ -135,6 +139,7 @@ export function readMaterialBundle(dir: string, name: string, ver: string): { pa
       version: typeof j.version === 'string' ? j.version : ver,
       sourceSha: typeof j.sourceSha === 'string' ? j.sourceSha : undefined,
       builtAt: typeof j.builtAt === 'string' ? j.builtAt : undefined,
+      contentFailed: j.contentFailed === true ? true : undefined,
       material: mat,
     } }
   } catch { return null }
@@ -275,7 +280,8 @@ function binaryKind(path: string, mode: number | undefined, head: Buffer | null)
   return null
 }
 
-export async function contentMaterial(name: string, ver: string, tarballUrl: string | null, fetchFn?: typeof fetch): Promise<Material[]> {
+export async function contentMaterial(name: string, ver: string, tarballUrl: string | null,
+  fetchFn?: typeof fetch, transportCap = CONTENT_TRANSPORT_CAP): Promise<Material[]> {
   if (!tarballUrl) return []
   const picked = new Map<string, string>()
   const binaries: { path: string; size: number; kind: string }[] = []
@@ -290,7 +296,10 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
     // to process.cwd() ($CODE in production): untrusted package trees landing
     // in the pinned checkout, plus a compressed bomb inflating to unbounded
     // disk writes. The onentry contract is identical.
-    const tgz = await fetchTarball(tarballUrl, { maxBytes: CONTENT_TRANSPORT_CAP, ...(fetchFn ? { fetchFn } : {}) })
+    // transport cap differs by side: the daemon stays at 32MB (RAM-bounded),
+    // the CI producer raises it — the whole point of branch staging is that
+    // >32MB packages keep their text review surface (runner RAM is free)
+    const tgz = await fetchTarball(tarballUrl, { maxBytes: transportCap, ...(fetchFn ? { fetchFn } : {}) })
     await new Promise<void>((resolve, reject) => {
       const parser = tarList({
         onentry(entry) {
@@ -352,7 +361,10 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
     })
   } catch (x) {
     console.warn(`[diagnose] ${name}@${ver} content fetch skipped (metadata-only review): ${String(x).slice(0, 120)}`)
-    return []
+    // degraded-but-honest: the extraction failure itself is review evidence
+    // ("not scanned" ≠ safe), and the id doubles as the producer's failure
+    // marker so a degraded bundle is rebuilt rather than kept
+    return [{ id: 'content-error', text: `包内容提取失败：${String(x).slice(0, 200)}——本次评审仅能依赖元数据/扫描/装测证据，未见包内原文，此点本身需人工留意` }]
   }
   const depth = (p: string) => p.split('/').length
   const ordered = [...picked.keys()]
@@ -869,7 +881,10 @@ export async function main(
     const t = sha ? bySha.get(`${e.name.toLowerCase()}\0${sha}`) : undefined
     const twin = t && t.version !== verOf(e) ? t : undefined
     const staged = ver !== '?' ? readMaterialBundle(matDir, e.name, ver) : null
-    const stagedHit = staged && sha && staged.bundle.sourceSha === sha
+    // contentFailed bundles are a miss, not a hit: the CI fetch failed (blip
+    // or >CI-cap), and the daemon's own fetch may still succeed — consuming
+    // the empty shell would permanently meta-only a package we could read
+    const stagedHit = staged && sha && staged.bundle.sourceSha === sha && !staged.bundle.contentFailed
     if (staged && sha && staged.bundle.sourceSha && staged.bundle.sourceSha !== sha)
       rmFiles.add(staged.path) // proven stale — tarball moved under the bundle
     if (stagedHit) rmFiles.add(staged!.path) // consumed this run
@@ -916,7 +931,7 @@ export async function main(
   // 'pending' ('candidate vX.Y') and 'content-coverage' (our own generated
   // coverage note) are machine prose like meta/verify/scan — scoring them
   // can only FP into a mechanical concern on text the package never wrote
-  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest'])
+  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest', 'content-error'])
   const reviewWorks = works.filter(w => !w.twin && !terminalFailed(w.vf))
   const l05Top = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'

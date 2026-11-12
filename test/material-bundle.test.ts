@@ -126,6 +126,23 @@ describe('material bundles — diagnose consumer', () => {
     expect(cap.got?.some(b => b.id === 'manifest')).toBe(true)
     expect(readFileSync(rmf, 'utf8')).toContain('pkg@2.0.0.json')
   })
+  it('contentFailed bundle → miss (daemon retries its own fetch), not deleted', async () => {
+    const { d, ip, vp } = files([held])
+    const matdir = materialDirOf(ip)
+    writeBundle(matdir, 'pkg', '2.0.0', {
+      ...bundle('sha-X'), contentFailed: true,
+    })
+    const rmf = join(d, 'rm.list')
+    const cap: { got?: Material[] } = {}
+    await diagnoseMain(argv(ip, vp, join(d, 'out.jsonl'), ['--material-rm', rmf]), {
+      l05: () => l05Map({ 'pkg\0manifest': 0.1 }),
+      ornith: passOrnith(cap),
+      sha: async () => 'sha-X',
+      tarball: async () => null,
+    })
+    expect(cap.got?.every(b => b.text !== 'BUNDLED-TEXT')).toBe(true)
+    if (existsSync(rmf)) expect(readFileSync(rmf, 'utf8')).not.toContain('pkg@2.0.0.json')
+  })
   it('malformed bundle → treated as a miss (live path), NOT deleted (key still pending)', async () => {
     const { d, ip, vp } = files([held])
     const matdir = materialDirOf(ip)
@@ -219,6 +236,27 @@ describe('material bundles — CI producer', () => {
     expect(existsSync(f)).toBe(true)
     await materialMain(margv(ip, vp, matdir), { fetchFn: fetchFn(pkDoc('1.0.0', 'x', 'https://r.test/p.tgz'), Buffer.alloc(0)) })
     expect(existsSync(f)).toBe(false)
+  })
+  it('MATERIAL_TARBALL_CAP env lifts/lowers the producer transport cap', async () => {
+    const { d, ip, vp } = files([held])
+    const matdir = join(d, 'material')
+    const tgz = await makeTgz(d, { 'package.json': '{"name":"pkg"}', 'SKILL.md': '# hello' })
+    const fetch = fetchFn(pkDoc('2.0.0', 'sha512-AAA', 'https://r.test/p.tgz'), tgz)
+    const f = join(matdir, 'pkg@2.0.0.json')
+    // cap below the fixture size → tarball rejected → bundle degrades to a
+    // content-error block + contentFailed flag (no real file blocks)
+    process.env.MATERIAL_TARBALL_CAP = '10'
+    await materialMain(margv(ip, vp, matdir), { fetchFn: fetch })
+    let b = JSON.parse(readFileSync(f, 'utf8'))
+    expect(b.material.some((x: Material) => x.id.startsWith('content:'))).toBe(false)
+    expect(b.material.some((x: Material) => x.id === 'content-error')).toBe(true)
+    expect(b.contentFailed).toBe(true)
+    // default CI cap (env cleared) → degraded bundle rebuilt, content extracted
+    delete process.env.MATERIAL_TARBALL_CAP
+    await materialMain(margv(ip, vp, matdir), { fetchFn: fetch })
+    b = JSON.parse(readFileSync(f, 'utf8'))
+    expect(b.material.some((x: Material) => x.id.startsWith('content:'))).toBe(true)
+    expect(b.contentFailed).toBeUndefined()
   })
   it('github-kind entry → no bundle (no npm tarball surface)', async () => {
     const gh = e({ source: { kind: 'github', id: 'o/r' }, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })

@@ -364,10 +364,16 @@ describe('audit: content material (§5/§6 package contents reach the reviewer)'
     expect(ids.some(i => i.includes('index.js'))).toBe(false)
     expect(m.find(x => x.id === 'content:SKILL.md')!.text).toContain('ignore all previous')
   })
-  it('fetch failure degrades to [] — never blocks review', async () => {
+  it('fetch failure degrades to a content-error block — never blocks review', async () => {
     const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
     const fetchFn = (async () => { throw new Error('offline') }) as unknown as typeof fetch
-    expect(await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)).toEqual([])
+    // degradation is honest evidence now ("not scanned" ≠ safe): one block
+    // naming the failure, and the id doubles as the bundle producer's rebuild
+    // marker — a silent [] was indistinguishable from an empty package
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)
+    expect(m).toHaveLength(1)
+    expect(m[0]!.id).toBe('content-error')
+    expect(m[0]!.text).toContain('offline')
     expect(await contentMaterial('p', '1.0.0', null)).toEqual([])
   })
 })
