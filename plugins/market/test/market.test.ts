@@ -96,7 +96,7 @@ describe('catalog helpers', () => {
     const { categoriesOf, allCategories, sortEntries, search } = await import('../src/catalog.ts')
     const mk = (name: string, cat: string[], st: string, dl = 0, stars = 0): MarketEntry => ({
       name, slug: name, type: 'plugin', category: cat,
-      verification: { status: st }, metrics: { npmDownloads30d: dl, stars },
+      verification: { status: st }, metrics: { npmDownloads30d: dl, stars, downloadsMonth: dl, starsDelta30d: null },
     })
     const es = [mk('a', ['x'], 'failed', 1, 9), mk('b', ['y'], 'verified', 5, 1), mk('c', ['x', 'z'], 'skipped', 3, 5)]
     expect(categoriesOf(es[0]!)).toEqual(['x'])
@@ -152,9 +152,9 @@ describe('catalog helpers', () => {
   it('sortKey metric fallbacks when metrics missing', async () => {
     const { sortEntries } = await import('../src/catalog.ts')
     const mk = (n: string, m?: MarketEntry['metrics']): MarketEntry => ({ name: n, slug: n, type: 'p', category: [], metrics: m })
-    const r = sortEntries([mk('a'), mk('b', { npmDownloads30d: null, stars: null }), mk('c', { npmDownloads30d: 5, stars: 0 })], 'downloads')
+    const r = sortEntries([mk('a'), mk('b', { npmDownloads30d: null, stars: null, downloadsMonth: null, starsDelta30d: null }), mk('c', { npmDownloads30d: 5, stars: 0, downloadsMonth: 5, starsDelta30d: null })], 'downloads')
     expect(r[0]!.name).toBe('c')
-    const r2 = sortEntries([mk('a'), mk('b', { npmDownloads30d: 0, stars: 3 })], 'stars')
+    const r2 = sortEntries([mk('a'), mk('b', { npmDownloads30d: 0, stars: 3, downloadsMonth: 0, starsDelta30d: null })], 'stars')
     expect(r2[0]!.name).toBe('b')
   })
   it('redactLog windows path + key with colon', async () => {
