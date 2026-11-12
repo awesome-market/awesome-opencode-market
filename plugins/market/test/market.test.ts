@@ -123,6 +123,26 @@ describe('catalog helpers', () => {
     expect(search(es, 'find')).toHaveLength(1)
     expect(search(es, 'nomatch')).toHaveLength(0)
   })
+  it('search: space-separated tokens AND-match; category names participate', async () => {
+    const { search } = await import('../src/catalog.ts')
+    const mk = (name: string, extra: Partial<MarketEntry> = {}): MarketEntry => ({ name, slug: name, type: 'p', category: [], ...extra })
+    const es = [
+      mk('opencode-market'),                                  // infers 'other'
+      mk('plain-pkg', { category: ['tools'] }),               // explicit category
+      mk('desc-cat', { category: ['tools'], description: { en: 'x' } }),
+    ]
+    // token AND — 'opencode mar' must find opencode-market even though the
+    // literal string contains a hyphen, not the space-separated text
+    expect(search(es, 'opencode mar').map(e => e.name)).toEqual(['opencode-market'])
+    // a token that hits nowhere excludes the entry — AND, not OR
+    expect(search(es, 'opencode wat')).toHaveLength(0)
+    // category id participates
+    expect(search(es, 'tools').map(e => e.name)).toEqual(['desc-cat', 'plain-pkg'])
+    // and its localized zh label too (tools → 工具与能力), language-independent
+    expect(search(es, '工具').map(e => e.name)).toEqual(['desc-cat', 'plain-pkg'])
+    // multi-token mixing name + category keeps AND semantics
+    expect(search(es, 'desc tools').map(e => e.name)).toEqual(['desc-cat'])
+  })
   it('sortKey verified-order covers unverified/unknown', async () => {
     const { sortEntries } = await import('../src/catalog.ts')
     const mk = (n: string, st?: string): MarketEntry => ({ name: n, slug: n, type: 'p', category: [], verification: st ? { status: st } : undefined })

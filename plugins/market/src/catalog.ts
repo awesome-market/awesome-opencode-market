@@ -298,17 +298,48 @@ export async function sha256Hex(text: string): Promise<string | null> {
   } catch { return null }
 }
 
-/** Client-side search — name hits rank above alias hits above description hits
- *  (a "session" query should surface the packages CALLED session first);
- *  aliases cover renamed packages. Case-insensitive substring. */
+/** Client-side search — space-separated tokens AND-match (EVERY token must
+ *  hit somewhere; 'opencode mar' finds 'opencode-market'). Per token the
+ *  best field wins: name > alias/slug > description/category — the entry's
+ *  rank is its WORST token rank, so a query mixing a name token with a
+ *  description token still ranks below a pure name hit. Category matches
+ *  cover the raw id plus both language labels (searching '工具' should find
+ *  the tools-category entries regardless of UI language). Case-insensitive
+ *  substring — deliberately no fuzzy matching. */
 export function search(entries: MarketEntry[], q: string): MarketEntry[] {
-  const needle = q.trim().toLowerCase()
-  if (!needle) return entries
-  const rank = (e: MarketEntry): number =>
-    e.name.toLowerCase().includes(needle) ? 0
-    : (e.aliases ?? []).some(a => a.toLowerCase().includes(needle)) || (e.slug ?? '').toLowerCase().includes(needle) ? 1
-    : (e.description?.en ?? '').toLowerCase().includes(needle) || (e.description?.zh ?? '').toLowerCase().includes(needle) ? 2
+  const tokens = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (!tokens.length) return entries
+  // per-entry category haystack, lazily built once per call — categoriesOf
+  // runs regex rules, and re-running it per token multiplies that cost
+  const hayCache = new Map<MarketEntry, string>()
+  const catHay = (e: MarketEntry): string => {
+    let h = hayCache.get(e)
+    if (h === undefined) {
+      h = categoriesOf(e)
+        .flatMap(c => {
+          const d = catDict[c] ?? CAT_NAMES[c] ?? CAT_NAMES[ZH_TO_ID[c] ?? '']
+          return [c, d?.en ?? '', d?.zh ?? '']
+        })
+        .join(' ')
+        .toLowerCase()
+      hayCache.set(e, h)
+    }
+    return h
+  }
+  const rankTok = (e: MarketEntry, t: string): number =>
+    e.name.toLowerCase().includes(t) ? 0
+    : (e.aliases ?? []).some(a => a.toLowerCase().includes(t)) || (e.slug ?? '').toLowerCase().includes(t) ? 1
+    : (e.description?.en ?? '').toLowerCase().includes(t) || (e.description?.zh ?? '').toLowerCase().includes(t) || catHay(e).includes(t) ? 2
     : 3
+  const rank = (e: MarketEntry): number => {
+    let worst = 0
+    for (const t of tokens) {
+      const r = rankTok(e, t)
+      if (r === 3) return 3   // every token must hit somewhere — AND
+      worst = Math.max(worst, r)
+    }
+    return worst
+  }
   return entries
     .map(e => [rank(e), e] as const)
     .filter(([r]) => r < 3)

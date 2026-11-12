@@ -664,10 +664,10 @@ export default Plugin.define({
         sel.onclick = ev => ev.stopPropagation()
         sel.onchange = () => { verPicks.set(e.name, sel.value); setPickTick(pickTick() + 1) }
         meta.appendChild(sel)
-        const rest = [dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : ''].filter(Boolean).join(' · ')
+        const rest = [dl != null ? `⤓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : ''].filter(Boolean).join(' · ')
         if (rest) meta.appendChild(document.createTextNode(` · ${rest}`))
       } else {
-        meta.textContent = [verText, dl != null ? `↓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
+        meta.textContent = [verText, dl != null ? `⤓${fmtN(dl)}` : '', st != null ? `★${fmtN(st)}` : '']
           .filter(Boolean).join(' · ')
       }
       // desc clamps at 2 lines; ⌄ sits at the end of the last visible line and flips to ⌃ once expanded

@@ -1148,7 +1148,7 @@ export default Plugin.define({
                       }}>{actionLabel(e)}</text>
               </box>
             </box>
-            <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : ''].filter(Boolean).join(' · ')}</text>
+            <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `⤓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : ''].filter(Boolean).join(' · ')}</text>
             <For each={wrap2(descOf(e), descW())}>{(line) => <text fg={theme.text.muted}>{line}</text>}</For>
             {/* catalog-declared feature parts — same signal the GUI chips show;
                 without them a dual entry's plugin half was invisible on cards */}
@@ -1210,7 +1210,7 @@ export default Plugin.define({
                 <box backgroundColor={chromeFocused(2, 1) ? theme.background.action.primary.focused : undefined}>
                   <text fg={chromeFocused(2, 1) ? theme.text.action.primary.focused : theme.text.muted}
                         onMouseOver={() => { setZone('chrome'); setChromeRow(2); setChromeSel(1) }}
-                        onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]{t('filter')} {[sortKey(), asc() ? '↑' : '↓', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
+                        onMouseDown={(ev) => { ev.stopPropagation(); pickFilter() }}> [f]{t('filter')} {[sortKey(), asc() ? '▲' : '▼', days() ? `${days()}d` : ''].filter(Boolean).join('·')} </text>
                 </box>
               </box>
               <box flexDirection="row" paddingLeft={1}>
@@ -1276,7 +1276,7 @@ export default Plugin.define({
                       <box flexGrow={1} />
                       <text fg={verOf(e) ? theme.text.base : theme.text.muted}>{actionLabel(e)}</text>
                     </box>
-                    <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `↓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
+                    <text fg={theme.text.muted}>{[dispVer(e), e.metrics?.npmDownloads30d ? `⤓${fmtN(e.metrics.npmDownloads30d)}` : '', e.metrics?.stars ? `★${fmtN(e.metrics.stars)}` : '', categoriesOf(e).map(catLabel).join(' ')].filter(Boolean).join(' · ')}</text>
                     <Show when={e.pendingUpdate?.version}><text fg={theme.text.muted}>{tf('heldReview', { v: e.pendingUpdate!.version! })}</text></Show>
                     <Show when={e.pendingUpdate?.heldAt}><text fg={theme.text.muted}>  {t('heldAtLabel')}: {e.pendingUpdate!.heldAt!.slice(0, 10)}</text></Show>
                     <Show when={e.pendingUpdate?.reason}><text fg={theme.text.muted}>  {t('heldReason')}: {e.pendingUpdate!.reason}</text></Show>
