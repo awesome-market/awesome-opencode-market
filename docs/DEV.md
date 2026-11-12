@@ -207,6 +207,22 @@ steps:
 
 merge 幂等（verifiedAt 新鲜度守卫 + name@version+verifiedAt 去重），多轮 dispatch/中断重跑安全。
 
+### ai-diagnose 守护 runbook
+
+`bin/ai-diagnose-agent.sh` 是前台常驻守护循环（第三方保活程序监督的进程），每轮：`刷新脚本副本 → 跑一轮 ai-diagnose.sh → 按退出码睡眠`。启动：
+
+```bash
+cd <repo> && ./bin/ai-diagnose-agent.sh
+```
+
+- 节拍：`DIAGNOSE_TICK`（默认 3600s，成功/无事轮次）/`DIAGNOSE_RETRY`（默认 300s，失败自动重试）；`DIAGNOSE_LIMIT=50`、`DIAGNOSE_BUDGET=45min` 控单轮规模
+- 脚本三级刷新源：`$REPO` → `$CODE`（钉 origin/main）→ 本地缓存——外置卷未挂载/开发树脏都照跑
+- 网络隔离环境 git 走 `MARKET_GIT_PROXY`（如 `http://127.0.0.1:7890`）——shim 翻译成 `GIT_CONFIG_*` 环境注入覆盖 `~/.gitconfig`
+- 远端默认取 repo 的 origin，`MARKET_GIT_URL` 可覆盖
+- TERM/INT 转发给当前子进程（轮次或 sleep）后退出——supervisor 可干净重启
+- 日志无自带目标，由启动方重定向（`>> ~/Library/Logs/opencode-market/ai-diagnose.log`）
+- 数据面开关照旧：catalog 分支 `diagnose.paused` 一落，守护每轮自跳过
+
 ---
 
 ## 4.5 收录门槛与身份去重（discover 的去水规则）
@@ -369,7 +385,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | E1 | 规则集公开 = 恶意作者可针对性绕过 | 分层：扫描+装测+人工高危审；诚实标"未检出≠安全" |
 | E2 | typosquatting/改名包冒充知名插件 | 名称相似度检测 + 官方 ecosystem 名单锚定 |
 | E3 | fork 包冒名原插件身份 | §4.5 去重规则：无自有提交的 fork 不收 |
-| E4 | catalog 分支写通道不止 CI：maintainer Mac 的 launchd 常驻任务（`bin/ai-diagnose.sh`、`bin/publish-digest.sh`）以本地 git 凭证推送，无 egress/permissions 护栏——Mac 失陷或恶意 merge 到 main，下一周期即带写权限执行 | 与 CI secret 同级信任根：`$CODE` 钉 `origin/main` 独立 checkout（脏树不会被跑）；视为数据面第三信任根纳入威胁模型（另两根：GITHUB_TOKEN、GitHub Pages 账号） |
+| E4 | catalog 分支写通道不止 CI：maintainer Mac 的常驻守护（`bin/ai-diagnose-agent.sh` 前台循环拉起 `bin/ai-diagnose.sh`，第三方保活监督；另有手动 `bin/publish-digest.sh`）以本地 git 凭证推送，无 egress/permissions 护栏——Mac 失陷或恶意 merge 到 main，下一周期即带写权限执行 | 与 CI secret 同级信任根：`$CODE` 钉 `origin/main` 独立 checkout（脏树不会被跑）；视为数据面第三信任根纳入威胁模型（另两根：GITHUB_TOKEN、GitHub Pages 账号） |
 
 ### F. 治理卡点
 | # | 卡点 | 应对 |
