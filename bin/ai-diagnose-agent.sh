@@ -34,7 +34,21 @@ if [ -n "${MARKET_GIT_PROXY:-}" ]; then
   export GIT_CONFIG_KEY_0=http.proxy GIT_CONFIG_VALUE_0=$MARKET_GIT_PROXY
 fi
 
-log() { printf '%s [agent] %s\n' "$(date '+%F %T')" "$*"; }
+log() { printf '%s [agent] %s\n' "$(date '+[%y-%m-%d %H:%M:%S]')" "$*"; }
+
+# 每行最左补 [yy-mm-dd HH:mm:ss] 本地时区戳 —— worker 的 log() 已自带
+# 该格式（透传不双标），diagnose.ts 的 '[diagnose] …' 控制台行和杂项输出
+# （npm 警告/tsx 错误）在这里补齐。bash 3.2 无 %(...)T，date 每行一次 fork
+# 对日志量级无所谓。
+stamp() {
+  local l
+  while IFS= read -r l; do
+    case $l in
+      \[?[0-9]*) printf '%s\n' "$l" ;;
+      *) printf '%s %s\n' "$(date '+[%y-%m-%d %H:%M:%S]')" "$l" ;;
+    esac
+  done
+}
 
 CHILD=
 shutdown() {
@@ -56,7 +70,8 @@ while :; do
     continue
   fi
 
-  bash "$DST" & CHILD=$!
+  # >(stamp) 进程替换保留直接子进程关系 —— $! 仍是 worker，rc/信号转发不变
+  bash "$DST" > >(stamp) 2> >(stamp >&2) & CHILD=$!
   wait "$CHILD"; rc=$?; CHILD=
   if [ "$rc" -eq 0 ]; then S=$TICK; else S=$RETRY; fi
   log "sweep finished (rc=$rc) — next in ${S}s"
