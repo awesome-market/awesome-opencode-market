@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""L0.5 prompt-injection scorer — Galvanize-2 (ModernBERT classifier).
+"""L0.5 prompt-injection scorer — local ModernBERT classifier.
 
 Reads JSON array [{id, text}] on stdin, prints [{id, score}] on stdout.
-Model resolves from $GALVANIZE_DIR or the HF cache ($HF_HOME or
-~/.cache/huggingface). Threshold lives in thresholds.json (benign_max ≈
+Model dir comes from $GALVANIZE_DIR (required — the classifier's identity
+stays in the operator's env, never in the published code: a named judge
+invites targeted evasion). Threshold lives in thresholds.json (benign_max ≈
 0.662): score ≥ threshold → injection signal.
 
 transformers 4.57's AutoTokenizer chokes on this repo's backend:tokenizers
@@ -21,7 +22,6 @@ missing score as unscored — same as before).
 import json
 import os
 import sys
-import glob
 
 WIN = 512          # model context window (matches thresholds.json protocol)
 STRIDE = 448       # 64-token overlap so boundary-spanning payloads still land inside a window
@@ -32,13 +32,9 @@ GLOBAL_BUDGET = 6000  # total windows per run; ~64/batch → ~95 forwards ≈ 2-
 
 def model_dir() -> str:
     d = os.environ.get("GALVANIZE_DIR")
-    if d:
-        return d
-    hf = os.environ.get("HF_HOME") or os.path.expanduser("~/.cache/huggingface")
-    snaps = glob.glob(os.path.join(hf, "hub", "models--usezn--Galvanize-2", "snapshots", "*"))
-    if not snaps:
-        sys.exit("Galvanize-2 not found — set GALVANIZE_DIR or HF_HOME")
-    return sorted(snaps)[-1]  # newest snapshot wins when several exist
+    if not d or not os.path.isdir(d):
+        sys.exit("GALVANIZE_DIR unset or missing — point it at the L0.5 classifier snapshot dir (source ai.env)")
+    return d
 
 
 def windows_for(ids, bos, eos):
@@ -82,7 +78,7 @@ def main() -> None:
     bos = tok.token_to_id("<bos>")
     eos = tok.token_to_id("<eos>")
     if bos is None or eos is None:
-        sys.exit("Galvanize-2 tokenizer lacks <bos>/<eos> — cannot window safely")
+        sys.exit("L0.5 tokenizer lacks <bos>/<eos> — cannot window safely")
     plan = [windows_for(e.ids, bos, eos) for e in encs]
 
     # global budget in input order; the boundary item keeps a head+tail mix

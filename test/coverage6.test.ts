@@ -1,7 +1,7 @@
 /** Branch coverage: ai/diagnose+digest mains, docket main, notify main,
  *  checkTui, verifyPackage feature routes, fetch/github+npm uncovered arms,
  *  run.ts reuse/hold/gone-check branches. */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -881,6 +881,8 @@ describe('verdicts + merge + misc uncovered arms', () => {
 
 describe('ornithReview (mocked global fetch)', () => {
   const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  beforeAll(() => { process.env.AI_MODEL = 'test/judge' }) // judge id is env-required now
+  afterAll(() => { delete process.env.AI_MODEL })
   const withFetch = async (res: () => Response | Promise<Response>, fn: () => Promise<unknown>) => {
     const orig = globalThis.fetch
     globalThis.fetch = (async () => res()) as typeof fetch
