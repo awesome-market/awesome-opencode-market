@@ -181,9 +181,10 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   AGE=$(( $(date +%s) - $(_mtime "$LOCK") ))
   OLD_PID=$(cat "$LOCK/pid" 2>/dev/null || true)
   OWNER_DEAD=0
+  PROVEN_DEAD=0     # owner provably gone → reclaim now, no age gate
   case $OLD_PID in
-    '') OWNER_DEAD=1 ;;                          # pre-pid-era lock, or crash before the write
-    *[!0-9]*) OWNER_DEAD=1 ;;                    # corrupt pid file — treat as dead
+    '') OWNER_DEAD=1 ;;                          # pre-pid-era lock, or crash before the write — unverifiable, age is the only evidence
+    *[!0-9]*) OWNER_DEAD=1 ;;                    # corrupt pid file — unverifiable, age gates
     *)
       if kill -0 "$OLD_PID" 2>/dev/null; then
         # pid alive — but is it still OUR owner? kill -0 can't tell a live
@@ -210,13 +211,13 @@ if ! mkdir "$LOCK" 2>/dev/null; then
             *ai-diagnose.sh*)
               case $OWNER_COMM in
                 *sh) : ;;
-                *) OWNER_DEAD=1 ;;
+                *) OWNER_DEAD=1; PROVEN_DEAD=1 ;;   # pid recycled by a non-shell — original owner gone
               esac ;;
-            *) OWNER_DEAD=1 ;;
+            *) OWNER_DEAD=1; PROVEN_DEAD=1 ;;       # pid recycled by something else — original owner gone
           esac
         fi
       else
-        OWNER_DEAD=1
+        OWNER_DEAD=1; PROVEN_DEAD=1                # kill -0 ESRCH — a dead pid cannot hold a lock
       fi
       ;;
   esac
@@ -226,8 +227,13 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   # a loser's mv hits ENOENT after the winner's rename and falls through to
   # the skip branch like any live lock. The fresh mkdir is re-verified too:
   # a new contender can slip in between mv and mkdir and legitimately win.
+  # Two staleness classes: PROVEN_DEAD reclaims immediately — a dead/recycled
+  # pid provably holds nothing, so the old blanket 2h wait bought nothing but
+  # 2h of skipped ticks after every killed run. Unverifiable owners (absent/
+  # corrupt pid file) still need the age gate: a fresh lock's pid file may
+  # simply not be written yet, and age is the only evidence there.
   RECLAIMED=0
-  if [ "$AGE" -gt 7200 ] && [ "$OWNER_DEAD" = 1 ] \
+  if { [ "$PROVEN_DEAD" = 1 ] || { [ "$AGE" -gt 900 ] && [ "$OWNER_DEAD" = 1 ]; } } \
      && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null && mkdir "$LOCK" 2>/dev/null; then
     RECLAIMED=1
     log "reclaimed stale lock (${AGE}s old${OLD_PID:+, owner pid $OLD_PID gone})"
