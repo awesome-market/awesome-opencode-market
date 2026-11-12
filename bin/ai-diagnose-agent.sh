@@ -28,6 +28,16 @@ mkdir -p "$DIR"
 ENVF=$HOME/.config/opencode-market/ai.env
 [ -f "$ENVF" ] && bash -n "$ENVF" 2>/dev/null && { set -a; . "$ENVF"; set +a; }
 
+# 用法: ai-diagnose-agent.sh [devin] —— devin 参数把 judge 切到 devin -p
+# 单次会话后端（export AI_BACKEND 透传给 worker，ai.env 里没有该变量时
+# 继承值生效）；不传参走 ai.env/环境里的默认（本地 ornith）。参数优先于
+# ai.env 同名变量。
+case ${1:-} in
+  ''|--) ;;
+  devin|--devin) export AI_BACKEND=devin ;;
+  *) echo "usage: $0 [devin]" >&2; exit 2 ;;
+esac
+
 TICK=${DIAGNOSE_TICK:-1800}     # 正常节拍：30min——对齐 hourly catalog + 事件驱动 verify 后的判词时延目标
 RETRY=${DIAGNOSE_RETRY:-300}    # 失败重试间隔
 
@@ -47,6 +57,7 @@ SELF_REPO=$(git -C "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)" rev-pa
 export MARKET_REPO=${MARKET_REPO:-${SELF_REPO:-/Volumes/2t/code/opencode-market}}
 
 log() { printf '%s [agent] %s\n' "$(date '+[%Y-%m-%d %H:%M:%S]')" "$*"; }
+log "judge backend: ${AI_BACKEND:-omlx (local ornith)}"
 
 # 每行最左补 [yyyy-mm-dd HH:mm:ss] 本地时区戳 —— worker 的 log() 已自带
 # 该格式（透传不双标），diagnose.ts 的 '[diagnose] …' 控制台行和杂项输出
