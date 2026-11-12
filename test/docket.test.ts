@@ -367,11 +367,13 @@ describe('issueBody', () => {
     expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'failed' })).toContain('装不上或加载失败')
     expect(issueBody({ name: 'p', version: '1', verdict: 'pass', verification: 'unverified' })).toContain('还没验')
   })
-  it('AI audit metadata (model + L0.5) renders for reviewer traceability', () => {
-    const body = issueBody({ name: 'p', version: '1', verdict: 'pass', model: 'ornith-35b', l05Score: 0.71 })
-    expect(body).toContain('AI 审计：ornith-35b')
-    expect(body).toContain('L0.5 0.71')
-    expect(issueBody({ name: 'p', version: '1', verdict: 'pass' })).not.toContain('AI 审计')
+  it('AI verdict model/L0.5 metadata never reaches the issue body — publishing the judge invites targeted evasion', () => {
+    const t = docketTargets(idx([e()]), [v({ model: 'Ornith-1.5-35B-x', l05: { model: 'Galvanize-2', score: 0.71 } })])
+    const body = issueBody(t[0]!)
+    expect(body).not.toContain('AI 审计')
+    expect(body).not.toContain('Ornith')
+    expect(body).not.toContain('Galvanize')
+    expect(body).not.toContain('0.71')
   })
   it('verdict sha vs slot integrity mismatch warns the release gate will refuse', () => {
     const drift = issueBody({ name: 'p', version: '1', verdict: 'pass', verdictSha: 'sha-new', integrity: 'sha-old' })

@@ -77,9 +77,6 @@ export interface DocketTarget {
    *  the body pairs it with a pre-signal human verdict so the maintainer
    *  sees "the bytes were judged, the signal arrived later" explicitly */
   flaggedAt?: string
-  /** AI audit trail for the reviewer — judging model + L0.5 classifier score */
-  model?: string
-  l05Score?: number
   /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
    *  without opening the detail page */
   scanPreview?: string[]
@@ -291,8 +288,6 @@ export function docketTargets(
       ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
       ...(hv ? { humanVerdict: hv } : {}),
       ...(rec.sha ? { verdictSha: rec.sha } : {}),
-      ...(rec.model ? { model: rec.model } : {}),
-      ...(rec.l05 ? { l05Score: rec.l05.score } : {}),
       maturity: !announced.has(akey(rec)) ? 'pending-announce'
         : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
       ...meta,
@@ -509,9 +504,6 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   } else {
     L.push(`- 当前 AI 判定：**${t.verdict}**${t.reason ? ` — ${clean(t.reason)}` : ''}`)
     if (t.reasonEn) L.push(`  - ${clean(t.reasonEn)}`)
-    if (t.model || t.l05Score !== undefined) {
-      L.push(`- AI 审计：${t.model ?? '模型未记录'}${t.l05Score !== undefined ? ` · L0.5 ${t.l05Score.toFixed(2)}` : ''}`)
-    }
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
       // a standing human pass COVERS the flag exemption (§7 humanPassCovers):
       // the gate releases under that authority — "只能人工放行" would tell the
