@@ -44,7 +44,7 @@ HEALTHF=$STATED/diagnose-health.json
 SPOOL=$STATED/pending-verdicts.jsonl
 mkdir -p "$LOGD" "$STATED"
 
-log() { printf '%s [diagnose] %s\n' "$(date '+[%y-%m-%d %H:%M:%S]')" "$*"; }
+log() { printf '%s [diagnose] %s\n' "$(date '+[%Y-%m-%d %H:%M:%S]')" "$*"; }
 
 # merge a field into the health stamp — advisory, runs from $CODE so npx
 # resolves tsx against the pinned checkout's node_modules
