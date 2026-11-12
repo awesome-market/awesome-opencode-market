@@ -591,6 +591,18 @@ const execFileP = promisify(execFile)
  *  kept EMPTY of repo content: the agent's only input is the prompt, and an
  *  empty cwd means there is nothing for it to wander into and edit. */
 const DEVIN_REVIEW_DIR = join(tmpdir(), 'opencode-market-devin-review')
+// 审核会话用独立最小 config：--config 整体替换用户配置，关掉对其他工具
+// 配置的导入（windsurf/claude 等 rules、skills、MCP）和 hooks——每个
+// devin -p 都重发全量 agent 上下文与启动钩子，能省则省。内置系统提示、
+// 工具定义、技能清单是 agent 本体，config 关不掉。
+const DEVIN_REVIEW_CONFIG_JSON = JSON.stringify({
+  version: 1,
+  read_config_from: {
+    agents_standard: false, cursor: false, windsurf: false, claude: false,
+    copilot: false, opencode: false, zed: false, cloud: false,
+  },
+  subagents_enabled: false,
+})
 
 /** Is the devin CLI installed and runnable? --version is free (no session,
  *  no credits); auth/model failures surface on the first real call and feed
@@ -612,12 +624,14 @@ export async function devinReview(e: CatalogIndex['plugins'][number], material: 
   const model = env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high'
   const { system, user } = reviewPrompt(e, material, opts)
   mkdirSync(DEVIN_REVIEW_DIR, { recursive: true })
+  const cfg = join(DEVIN_REVIEW_DIR, 'devin-config.json')
+  writeFileSync(cfg, DEVIN_REVIEW_CONFIG_JSON)
   const pf = join(DEVIN_REVIEW_DIR, `prompt-${process.pid}-${Date.now()}.txt`)
   writeFileSync(pf, `${system}\n\n${user}\n\nThis is a text-only review task — do not use any tools, do not read or modify any files. Reply with ONLY the JSON object.`)
   const run = async (): Promise<string> => {
     try {
       const { stdout } = await execFileP('devin',
-        ['-p', '--model', model, '--prompt-file', pf,
+        ['--config', cfg, '-p', '--model', model, '--prompt-file', pf,
           '--respect-workspace-trust', 'false'],
         { cwd: DEVIN_REVIEW_DIR, timeout: 300_000, maxBuffer: 8 * 1024 * 1024 })
       return stdout
