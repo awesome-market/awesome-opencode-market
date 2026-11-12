@@ -615,11 +615,17 @@ export async function devinReview(e: CatalogIndex['plugins'][number], material: 
   const pf = join(DEVIN_REVIEW_DIR, `prompt-${process.pid}-${Date.now()}.txt`)
   writeFileSync(pf, `${system}\n\n${user}\n\nThis is a text-only review task — do not use any tools, do not read or modify any files. Reply with ONLY the JSON object.`)
   const run = async (): Promise<string> => {
-    const { stdout } = await execFileP('devin',
-      ['-p', '--model', model, '--prompt-file', pf,
-        '--respect-workspace-trust', 'false'],
-      { cwd: DEVIN_REVIEW_DIR, timeout: 300_000, maxBuffer: 8 * 1024 * 1024 })
-    return stdout
+    try {
+      const { stdout } = await execFileP('devin',
+        ['-p', '--model', model, '--prompt-file', pf,
+          '--respect-workspace-trust', 'false'],
+        { cwd: DEVIN_REVIEW_DIR, timeout: 300_000, maxBuffer: 8 * 1024 * 1024 })
+      return stdout
+    } finally {
+      // 节流：相邻 devin 会话至少隔 1s（成败都算一次执行）——批量审核是
+      // 对托管服务的连续调用，留喘息比抠单次延迟重要
+      await new Promise(r => setTimeout(r, 1000))
+    }
   }
   try {
     const out = await run()
