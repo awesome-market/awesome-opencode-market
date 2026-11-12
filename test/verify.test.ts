@@ -2,9 +2,31 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadedSignal, xdgEnv, verifyPackage } from '../pipeline/verify/verify.ts'
+import { loadedSignal, xdgEnv, verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
 import type { CatalogIndex } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). A silent serve is now classified
+ *  as a HARNESS failure (boot never happened ⇒ plugin never loaded ⇒ the
+ *  package can't be at fault) — tests that want the api-poll path use
+ *  liveSpawn below. */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
+/** Fake serve that announces a listener — the boot lines verify.ts scrapes —
+ *  then idles. Exercises the post-boot api poll path. */
+const liveSpawn = (() => ({
+  stdout: { on: (_e: 'data', cb: (d: unknown) => void) => {
+    cb('server listening on http://127.0.0.1:4567\nserver password pw\n')
+  } },
+  stderr: { on: () => {} },
+  on: () => {},
+  kill: () => {},
+})) as unknown as SpawnFn
 
 describe('verify', () => {
   it('loadedSignal matches the A3-verified log format', () => {
@@ -36,7 +58,7 @@ describe('verify/merge', () => {
       source: { kind: 'npm', id: 'p' }, description: { en: '' }, category: [],
       license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: 't', latestVersion: '1', publishedAt: null,
-      metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, compat: {},
       approval: 'approved',
@@ -45,7 +67,7 @@ describe('verify/merge', () => {
       source: { kind: 'npm', id: 'q' }, description: { en: '' }, category: [],
       license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: 't', latestVersion: '1', publishedAt: null,
-      metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'unverified' }, compat: {},
       approval: 'approved',
@@ -68,6 +90,17 @@ describe('verify/merge', () => {
     expect(merged.plugins[0]!.verification.logExcerpt).toBe('boom')
     expect(merged.plugins[0]!.verification.runUrl).toBeUndefined()
   })
+  it('failure streak counts retries; any non-failed result clears it (V-3)', () => {
+    const fail = { name: 'p' as const, version: '1', status: 'failed' as const, level: 'load' as const, opencodeVersion: '2.2.5', verifiedAt: 'v' }
+    const once = mergeResults(idx, [fail])
+    expect(once.plugins[0]!.verification.retries).toBe(1)                       // first failure
+    const twice = mergeResults(once, [fail])
+    expect(twice.plugins[0]!.verification.retries).toBe(2)                      // streak grows
+    const cleared = mergeResults(twice, [
+      { name: 'p', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+    ])
+    expect(cleared.plugins[0]!.verification.retries).toBeUndefined()            // verified clears
+  })
 })
 
 describe('verifyPackage (injected exec)', () => {
@@ -78,20 +111,19 @@ describe('verifyPackage (injected exec)', () => {
       if (args[1] === 'add') throw Object.assign(new Error('boom'), { stderr: 'NpmInstallFailedError 404' })
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('x', { home: vHome(), execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('x', { home: vHome(), execFn: fake, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('install')
     expect(r.opencodeVersion).toBe('2.2.5')
     expect(r.logExcerpt).toContain('404')
   })
-  it('load signal present → verified/load', async () => {
+  it('api plugin entry present+active → verified/load', async () => {
     const home = vHome()
-    mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
-      'ts INFO msg="loading plugin" id=goodpkg entrypoint=file:///x')
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'goodpkg' }, state: { status: 'active' } }]))
     const fake = (async (_c: string, args: string[]) =>
       ({ stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake, spawnFn: liveSpawn })
     expect(r.status).toBe('verified')
     expect(r.logExcerpt).toBeUndefined()
   })
@@ -102,20 +134,52 @@ describe('verifyPackage (injected exec)', () => {
       if (args[0] === '-c') throw new Error('serve boot failed') // tolerated
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('gone', { home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 30 })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('absent from /api/plugin')
+  })
+  it('serve boot silence → harness THROW, not a package verdict (G2)', async () => {
+    // a serve that never announces a listener means the plugin code never ran
+    // — blaming the package fed diagnose's concern short-circuit. Throwing
+    // lands it in verifyShard's harness:true lane where merge drops the row.
+    const home = vHome()
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    await expect((await import('../pipeline/verify/verify.ts'))
+      .verifyPackage('gone', { home, execFn: fake, spawnFn: deadSpawn, bootWaitMs: 30 }))
+      .rejects.toThrow('serve did not announce a listener')
+  })
+  it('server-reported failed state → excerpt says so (V-4 deterministic vs timeout)', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'badpkg' }, state: { status: 'failed' } }]))
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('badpkg', { home, execFn: fake, spawnFn: liveSpawn })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+    expect(r.logExcerpt).toContain('serve reports the plugin failed to load')
   })
 
-  it('loading signal present → verified', async () => {
+  it('a forged log line alone does NOT verify — server api evidence required', async () => {
+    // V-1: the log file is writable by plugin code; only the /api/plugin
+    // response counts. A fake "loading plugin" line without the api entry fails.
     const home = vHome()
     mkdirSync(join(home, 'data', 'opencode', 'log'), { recursive: true })
     writeFileSync(join(home, 'data', 'opencode', 'log', 'opencode.log'),
       'ts level=INFO msg="loading plugin" id=goodpkg entrypoint=file:///x\n')
     const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 30 })
+    expect(r.status).toBe('failed')
+    expect(r.level).toBe('load')
+  })
+
+  it('api entry matching name@version spec → verified', async () => {
+    const home = vHome()
+    writeFileSync(join(home, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'goodpkg@2.3.4' }, state: { status: 'active' } }]))
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('goodpkg', { version: '2.3.4', home, execFn: fake, spawnFn: liveSpawn })
     expect(r.status).toBe('verified')
-    expect(r.logExcerpt).toBeUndefined()
   })
 
   it('ocVersion failure → opencodeVersion "unknown"', async () => {
@@ -124,7 +188,7 @@ describe('verifyPackage (injected exec)', () => {
       if (args[0] === '--version') throw new Error('no version')
       return { stdout: '', stderr: '' }
     }) as unknown as import('../pipeline/verify/verify.ts').ExecFn
-    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('p', { home, execFn: fake })
+    const r = await (await import('../pipeline/verify/verify.ts')).verifyPackage('p', { home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 30 })
     expect(r.opencodeVersion).toBe('unknown')
   })
 })

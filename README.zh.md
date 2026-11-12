@@ -47,6 +47,8 @@ Market 面板、TUI 和网站读的是同一份目录——所有界面背后同
 - 技能文件目录：
   `https://awesome-market.github.io/awesome-opencode-market/skills/`
 - [在网页上浏览目录](https://awesome-market.github.io/awesome-opencode-market/)
+- [每日日报](https://github.com/awesome-market/awesome-opencode-market/tree/catalog/digest)
+  ——上架预告面：每个将放行的版本先在这里公示，异议可在放行前提出
 
 ## 推荐插件或技能
 

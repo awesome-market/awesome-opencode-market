@@ -1,58 +1,149 @@
 name: catalog
+# scope: prod-only — scheduled catalog automation (fork runs produce the dev catalog)
 on:
-  schedule: [{ cron: '17 3 * * *' }, { cron: '0 11 * * *' }]
+  # hourly — the publish step is a no-op when the index is unchanged, so an
+  # empty crawl costs one fast generate cycle and zero commits/dispatches.
+  # Fresh pendings meet an event-driven verify dispatch (below), and mature
+  # verdicts fold into the index within the hour instead of ~12h.
+  schedule: [{ cron: '7 * * * *' }]
   workflow_dispatch:
-concurrency: catalog-branch   # shared with verify.yml — serializes all writers of the catalog branch
+    inputs:
+      force_publish:
+        description: '绕过 corruptionGate 强制发布（仅用于大规模合理下架等已知场景；正常手动重跑留 false）'
+        type: boolean
+        default: false
+        required: false
 permissions: {}               # job-level grants below
 jobs:
   generate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     permissions: {}             # processes untrusted npm metadata — no write token (WF-3)
+    # no concurrency lock: generate only READS the catalog branch — holding
+    # catalog-branch for ~30-60min would block every verify/digest/ingest
+    # merge behind a reader. Writers serialize on the publish job below (C-3).
     steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          # generate parses untrusted registry/codeload bytes — same egress
+          # whitelist posture as verify/digest. npm registry + downloads
+          # telemetry + github api/raw/codeload covers every fetch surface.
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            codeload.github.com:443
+            raw.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - name: fetch old index + aux files (merge base)
         run: |
-          # WF-1: distinguish "remote branch exists" (→ fetch MUST succeed and
-          # index MUST be present+valid) from "first run ever" (branch absent).
-          # A failed fetch or empty/corrupt index must hard-fail, never run blind.
-          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
-            git fetch origin catalog
-            git show origin/catalog:index.json > /tmp/old-index.json
+          # WF-1: three-way — "remote branch exists" (→ fetch MUST succeed and
+          # index MUST be present+valid) vs "first run ever" (branch absent)
+          # vs "can't reach origin". ls-remote exit 2 means the ref is truly
+          # absent; any other failure means origin is unreachable and running
+          # blind would publish a re-pended catalog over a network hiccup.
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0)
+            # --depth=1: only the tip's files are read below (index/verdicts/
+            # digest-state/submissions/blocklist) — index.json is ~14MB per
+            # commit, so fetching the whole catalog history every run was an
+            # unbounded download. Same posture site.yml already takes. The
+            # '+' forced refspec also survives a rewritten catalog branch —
+            # a non-FF tracking update would otherwise fail and leave
+            # origin/catalog stale (every consumer below reads that ref).
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
+            git show origin/catalog:index.json > /tmp/old-index.json \
+              || { echo "catalog branch exists but index.json is unreadable — refusing to run blind (WF-1)" >&2; exit 1; }
             if [ ! -s /tmp/old-index.json ]; then
               echo "catalog branch exists but index.json is empty — refusing to run blind (WF-1)"
               exit 1
             fi
             npx tsx -e "import { CatalogIndex } from './src/schema.ts'; import { readFileSync } from 'node:fs'; CatalogIndex.parse(JSON.parse(readFileSync('/tmp/old-index.json','utf8'))); console.log('old index valid')"
-            git show origin/catalog:submissions.txt > /tmp/submissions.txt 2>/dev/null || touch /tmp/submissions.txt
-            git show origin/catalog:blocklist.json > /tmp/blocklist.json 2>/dev/null || touch /tmp/blocklist.json
-            git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null || touch /tmp/ai-verdicts.jsonl
+            # absent-vs-unreadable: `git show || touch/rm` conflates "file was
+            # never created" (legitimate bootstrap) with "blob exists but the
+            # read failed" (transient corruption). cat-file -e splits them —
+            # an unreadable aux file hard-fails instead of silently running on
+            # partial state (dropped seeds / disabled blocklist / frozen passes
+            # with no trace). Same pattern as concern/submit (D-Z).
+            if git cat-file -e origin/catalog:submissions.txt 2>/dev/null; then
+              git show origin/catalog:submissions.txt > /tmp/submissions.txt || { echo "submissions.txt exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              touch /tmp/submissions.txt
+            fi
+            # absent blocklist → optional, run without it; PRESENT-but-corrupt
+            # must hard-fail inside run.ts (fail-open would silently unblock, C-4)
+            if git cat-file -e origin/catalog:blocklist.json 2>/dev/null; then
+              git show origin/catalog:blocklist.json > /tmp/blocklist.json || { echo "blocklist.json exists but is unreadable — refusing to run unprotected" >&2; exit 1; }
+            else
+              rm -f /tmp/blocklist.json
+            fi
+            if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+              git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || { echo "ai-verdicts.jsonl exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              touch /tmp/ai-verdicts.jsonl
+            fi
             # missing digest-state = -∞: all pass verdicts stay frozen until the
             # first daily digest publishes (fail-closed bootstrap, AI-DIAGNOSIS §4)
-            git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null || rm -f /tmp/digest-state.json
-          else
-            touch /tmp/submissions.txt /tmp/blocklist.json /tmp/ai-verdicts.jsonl   # first run ever
-          fi
+            if git cat-file -e origin/catalog:digest-state.json 2>/dev/null; then
+              git show origin/catalog:digest-state.json > /tmp/digest-state.json || { echo "digest-state.json exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              rm -f /tmp/digest-state.json
+            fi
+            # metrics history: absent = feature off / cold start; present-but-
+            # unreadable hard-fails like every other aux file (a silent empty
+            # history would zero starsDelta30d for a month before anyone noticed)
+            if git cat-file -e origin/catalog:metrics-history.json 2>/dev/null; then
+              git show origin/catalog:metrics-history.json > /tmp/metrics-history.json || { echo "metrics-history.json exists but is unreadable — refusing to run on partial state" >&2; exit 1; }
+            else
+              rm -f /tmp/metrics-history.json
+            fi
+            ;;
+            2) touch /tmp/submissions.txt /tmp/ai-verdicts.jsonl ;;   # first run ever — no blocklist yet (absent = disabled, not corrupt)
+            *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc}) — refusing to run blind (WF-1)" >&2; exit 1 ;;
+          esac
       - name: run pipeline
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
           GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --max 2000
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out
           path: |
             /tmp/index.json
+            /tmp/seed-outcomes.json
+            /tmp/metrics-history.json
           retention-days: 1
 
   publish:
     needs: generate
     runs-on: ubuntu-latest
-    permissions: { contents: write, issues: write }   # contents: the only catalog writer; issues: submission notification (WF-3)
+    # bounded like every other writer job — a hung gh api/git push inside the
+    # retry loops must not burn the default 6h budget behind the writer lock
+    timeout-minutes: 20
+    concurrency: catalog-branch   # writer lock shared with verify/digest/ingest — only the write phase holds it (C-3)
+    permissions: { contents: write, issues: write, actions: write }   # contents+issues: catalog writer + submission notify (WF-3); actions: dispatches site.yml (V-8)
     steps:
+      # write-side job — same eBPF egress posture as verify/digest writers.
+      # Covers git fetch/push (github.com), gh api/issue/dispatch calls
+      # (api.github.com), and npm ci (registry.npmjs.org); artifact download
+      # uses GitHub-internal endpoints like every other hardened job.
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -69,86 +160,286 @@ jobs:
           git config user.name "market-bot"
           # catalog branch is data-only (no pipeline sources) — use a worktree so
           # the main checkout keeps pipeline/*.ts runnable throughout the loop.
-          if git ls-remote --exit-code origin catalog >/dev/null 2>&1; then
-            git fetch origin catalog
-            git worktree add /tmp/cat origin/catalog
-          else
+          # stray worktree from a crashed prior run must not fail the add below
+          # (verify/digest hit this for real — V-T / D-Z)
+          git worktree remove /tmp/cat --force 2>/dev/null || true
+          # same three-way as generate: exit 2 = truly absent → orphan bootstrap;
+          # any other failure = unreachable → fail now instead of building an
+          # orphan whose every push gets rejected anyway
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0)
+            # --depth=1: the worktree commits on top of the tip and pushes —
+            # shallow push is fine (verified: detached-HEAD worktree commit +
+            # HEAD:catalog push + refetch-after-move all work under depth=1).
+            # Full history would be ~14MB × every index commit, per run.
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog'
+            git worktree add --detach /tmp/cat origin/catalog
+            ;;
+            2)
             # first run ever: no catalog branch — create it as an ORPHAN so the
             # data-only branch never inherits the whole main source tree
             git worktree add --detach /tmp/cat
             git -C /tmp/cat checkout --orphan catalog
             git -C /tmp/cat rm -rf . >/dev/null 2>&1 || true
-          fi
+            ;;
+            *) echo "cannot reach origin for the catalog branch (ls-remote exit ${rc})" >&2; exit 1 ;;
+          esac
           ok=0
+          RELEASE_FAILED=0
           for i in 1 2 3 4; do
-            git fetch origin catalog 2>/dev/null || true
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' 2>/dev/null || true
             git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
             # race happened → re-merge our fresh scan against the fresh remote index
             # (preserves remote's verification/removed state instead of clobbering it)
             git show origin/catalog:index.json > /tmp/remote-index.json 2>/dev/null || true
             if [ -s /tmp/remote-index.json ]; then
-              npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json
+              # a failed remerge leaves an EMPTY or partial merged file — an
+              # unconditional mv would clobber our good index with it, and the
+              # cp+commit below would then push an empty index to the catalog
+              # branch. Fail the run instead: remerge failures are bugs or
+              # resource faults, both worth an alert, never a silent publish.
+              npx tsx pipeline/remerge.ts /tmp/index.json /tmp/remote-index.json > /tmp/index.merged.json \
+                || { echo "remerge failed — refusing to publish a clobbered index" >&2; exit 1; }
+              [ -s /tmp/index.merged.json ] || { echo "remerge produced empty output" >&2; exit 1; }
               mv /tmp/index.merged.json /tmp/index.json
             fi
+            # catch-up verdict apply on the merged index: a human brake / new
+            # verdict / digest announcement that landed BETWEEN generate's
+            # fetch and this commit must not be clobbered by publishing our
+            # stale snapshot over it — re-derive state from the freshest
+            # remote jsonl + digest-state (idempotent; a brake that arrived
+            # mid-run stays a brake, our own mature release still releases).
+            # stderr carries the released/held line — keep the LAST attempt's
+            # output for the step summary below (each retry truncates it)
+            # an exit-0-with-empty-output is the same failure mode as the
+            # remerge guard above — never mv an empty file over the merged index.
+            # The JSON.parse check additionally rejects a truncated-but-nonempty
+            # emit (killed mid-write) that -s alone would pass through.
+            if npx tsx pipeline/release.ts /tmp/index.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json 2>/tmp/release-fold.log \
+                && [ -s /tmp/index.released.json ] \
+                && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' /tmp/index.released.json; then
+              mv /tmp/index.released.json /tmp/index.json
+              RELEASE_FAILED=0
+            else
+              # non-fatal but tracked: a failed fold leaves brakes/releases
+              # unapplied until the next run — the post-loop check below
+              # turns a persistent failure into a pipeline-alert issue
+              RELEASE_FAILED=1
+              echo "::warning::release.ts failed during publish attempt $i — verdict apply skipped (next catalog run re-derives)"
+            fi
             cp /tmp/index.json /tmp/cat/index.json
+            # metrics history sidecar — written by generate whenever the flag is
+            # passed; absent on cold bootstrap only until the first run writes it
+            [ -f /tmp/metrics-history.json ] && cp /tmp/metrics-history.json /tmp/cat/metrics-history.json || true
+            # stage review-material bundles for fresh pendings — CI unpacks
+            # the tarballs once so the diagnose daemon reviews from ≤32KB
+            # bundles instead of re-downloading (huge packages keep their
+            # text review surface). Best-effort: a build failure must not
+            # block the index publish.
+            npx tsx pipeline/ai/material.ts --index /tmp/cat/index.json \
+              --verdicts /tmp/cat/ai-verdicts.jsonl --outdir /tmp/cat/material --limit 500 \
+              || echo "::warning::material bundle build failed — daemon falls back to live tarball collection"
             git -C /tmp/cat add index.json
-            git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            [ -f /tmp/cat/metrics-history.json ] && git -C /tmp/cat add metrics-history.json || true
+            [ -d /tmp/cat/material ] && git -C /tmp/cat add -A material || true
+            # staged-diff precheck: distinguish "nothing to commit" (remote head
+            # already carries this content → success) from a real commit failure,
+            # which `commit || echo` would mask into a false-success push (C-2)
+            if git -C /tmp/cat diff --cached --quiet; then
+              echo "index unchanged vs remote head — nothing to publish"
+              ok=1; break
+            fi
+            git -C /tmp/cat commit -m "catalog: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; echo "PUBLISHED=1" >> "$GITHUB_ENV"; break; }
             echo "push rejected (attempt $i) — re-fetching remote head and re-merging"
           done
           [ "$ok" = 1 ] || { echo "catalog publish failed after retries"; exit 1; }
-          # notify+close submission issues whose package just landed (best-effort:
-          # the index is already published; a failed comment must not fail the run)
+          # surface the release fold's outcome — "what released this run" is
+          # the single most-asked question and today it sits inside a megabyte
+          # of discovery logs (the run.ts line is in the generate job; this is
+          # the publish-time re-apply that actually lands)
+          if [ -s /tmp/release-fold.log ]; then
+            { echo '## 放行折叠 (release fold)'
+              echo ''
+              grep -E '^release: ' /tmp/release-fold.log | tail -1
+              echo ''
+            } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          fi
+          # G10: the publish succeeded but the verdict fold failed on the
+          # last attempt — brakes/releases are deferred ~12h while the index
+          # shows stale approval state. The workflow alert job can't see this
+          # (publish itself was green), so file a deduped pipeline-alert.
+          if [ "$RELEASE_FAILED" = 1 ]; then
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "release apply failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            RBODY="catalog publish landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$GH_REPO" --body "$RBODY" || true
+            else
+              gh issue create --repo "$GH_REPO" \
+                --title "release apply failed during catalog publish (run ${GITHUB_RUN_ID})" \
+                --body "$RBODY" --label pipeline-alert || true
+            fi
+          fi
+          # notify+close submission issues whose package just landed. Flag the
+          # seeds BEFORE commenting (and retry the flag push): a lost flag push
+          # would re-notify the same issues next run (C-6). Comments themselves
+          # are best-effort — the index is already published.
           if [ -f /tmp/cat/submissions.txt ]; then
-            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt > /tmp/notify.list
+            npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
+            # stamp per-seed rejection reasons from generate — a rejected
+            # submission's status comment must say WHY, not sit at '排队中'
+            npx tsx pipeline/seed-outcome.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/seed-outcomes.json
+            git -C /tmp/cat add submissions.txt
+            flagPushed=0
+            for i in 1 2 3; do
+              if git -C /tmp/cat diff --cached --quiet; then flagPushed=1; break; fi
+              # a failed commit followed by a push of an unchanged HEAD exits 0
+              # ("Everything up-to-date") — `|| true` would report flagPushed=1,
+              # send comments+closes, and lose notified:true entirely. Retry
+              # the commit instead; a still-staged diff means it never landed.
+              git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" || continue
+              git -C /tmp/cat push origin HEAD:catalog && { flagPushed=1; break; }
+              git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' 2>/dev/null || true
+              git -C /tmp/cat reset --hard origin/catalog 2>/dev/null || true
+              npx tsx pipeline/notify-published.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/stale.list /tmp/dead.list > /tmp/notify.list
+              npx tsx pipeline/seed-outcome.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/seed-outcomes.json
+              git -C /tmp/cat add submissions.txt
+            done
+            # gate on the flag push: commenting without persisting notified:true
+            # means the next run re-marks and re-comments — and a close that
+            # races a lost push leaves the seed marked-but-uncommented. When
+            # the push fails we skip the whole block; it self-heals next run.
+            if [ "$flagPushed" = 1 ]; then
+            # issues[] is already deduped per issue inside markNotified — one
+            # comment+close per submission no matter how many seed rows match
+            sort -un /tmp/notify.list -o /tmp/notify.list
+            # project sites live at <owner>.github.io/<repo> — but a repo named
+            # <owner>.github.io IS the root domain (org page); appending its
+            # name produces a 404 detail link.
+            SITE="https://${GITHUB_REPOSITORY_OWNER}.github.io"
+            [ "${GITHUB_REPOSITORY#*/}" = "${GITHUB_REPOSITORY_OWNER}.github.io" ] || SITE="$SITE/${GITHUB_REPOSITORY#*/}"
+            # notify/dead/stale calls below are || true by design — but a FAILED
+            # call must not silently drop: the seed row is already terminal
+            # (notified/dead pushed above), so no later run will ever re-emit
+            # the comment or close the issue. Collect the failures and alert
+            # with the issue numbers — a maintainer sees "what needs a manual
+            # close" instead of an author left permanently uninformed.
+            NOTIFY_FAIL=""
+            while IFS=$'\t' read -r N SLUG; do
+              [ -n "$N" ] || continue
+              LINK=""; [ -n "$SLUG" ] && LINK="——详情：$SITE/p/$SLUG.html"
+              ok=1
+              gh issue comment "$N" --body "✅ 已收录进插件目录$LINK（run ${GITHUB_RUN_ID}）。感谢投稿！" || ok=0
+              gh issue close "$N" || ok=0
+              if [ "$ok" = 1 ]; then echo "notified + closed issue #$N"; else NOTIFY_FAIL="$NOTIFY_FAIL #$N"; fi
+            done < /tmp/notify.list
+            # approved-but-never-landed: seed aged 14d+ without becoming visible.
+            # Honest status comment, once per seed (staleWarned flag); the issue
+            # is NOT closed — a pipeline-side delay is not author abandonment.
+            touch /tmp/stale.list /tmp/dead.list
             while read -r N; do
               [ -n "$N" ] || continue
-              gh issue comment "$N" --body "✅ 已收录进插件目录（run ${GITHUB_RUN_ID}）。感谢投稿！" || true
-              gh issue close "$N" || true
-              echo "notified + closed issue #$N"
-            done < /tmp/notify.list
-            git -C /tmp/cat add submissions.txt
-            git -C /tmp/cat commit -m "submissions: mark notified (run ${GITHUB_RUN_ID})" 2>/dev/null && git -C /tmp/cat push origin HEAD:catalog || true
+              # closed issues get no status noise — the sweep may have already
+              # posted its own close comment on the same 30d horizon
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
+              gh issue comment "$N" --body "📋 投稿通过初审已超过两周，但条目尚未出现在目录中——可能仍在评审队列，或被收录过滤器拦截。暂不需要你操作；如需跟进请在本 issue 回复。" || NOTIFY_FAIL="$NOTIFY_FAIL #$N"
+              echo "stale-warned issue #$N"
+            done < /tmp/stale.list
+            # dead = terminal: seed aged 30d+ without landing — same horizon as
+            # the submit.yml abandonment sweep. Close so approved-but-stuck
+            # submissions can't hang open forever (F-11); resubmit = new issue.
+            while read -r N; do
+              [ -n "$N" ] || continue
+              [ "$(gh issue view "$N" --json state --jq .state 2>/dev/null || echo OPEN)" = "OPEN" ] || continue
+              ok=1
+              gh issue comment "$N" --body "⌛ 投稿超过 30 天仍未能进入目录（可能在评审队列被拦截或一直未通过评审）。本单视为结束自动关闭——修复后欢迎重新投稿。" || ok=0
+              gh issue close "$N" || ok=0
+              if [ "$ok" = 1 ]; then echo "dead-closed issue #$N"; else NOTIFY_FAIL="$NOTIFY_FAIL #$N"; fi
+            done < /tmp/dead.list
+            # loud failure path: seeds above are already terminal on the data
+            # branch — a lost comment/close will never self-heal, so escalate
+            # the affected issue numbers instead of letting them go silent
+            if [ -n "$NOTIFY_FAIL" ]; then
+              gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+              EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "submission notify failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+              BODY="catalog pushed the notified/dead seed marks, but these issue notify/close calls FAILED (the seeds are terminal — no later run retries them):${NOTIFY_FAIL}. Please close/comment manually. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+              else gh issue create -R "$GITHUB_REPOSITORY" --title "submission notify failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+            fi
+            # progress visibility: refresh the pinned status comment on every
+            # submission issue that still has a live seed — edit-in-place, one
+            # comment per issue, best-effort (never fails the publish). The
+            # verdicts arg lets a human/AI concern on the submitted package
+            # surface as "已被拦截" instead of a misleading "评审中".
+            GH_TOKEN="${{ secrets.GITHUB_TOKEN }}" GH_REPO="$GH_REPO" \
+              npx tsx pipeline/submission-status.ts /tmp/index.json /tmp/cat/submissions.txt /tmp/cat/ai-verdicts.jsonl || true
+            else
+              echo "submissions flag push failed — skipping issue notify/close this run (self-heals next run)"
+            fi
           fi
-
-  site:
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions: { pages: write, id-token: write }
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      # B-5: site always builds from the catalog branch's current index —
-      # never from a possibly-stale artifact produced hours earlier.
-      # Stay on the main checkout (pipeline sources) and pull just index.json
-      # from the data-only catalog branch.
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: |
-          git fetch origin catalog
-          git show origin/catalog:index.json > index.json
-      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - uses: actions/deploy-pages@v4
-        id: deploy
+      # V-8: site.yml is the single Pages publisher — dispatch it so this push's
+      # index lands on the site now instead of at the next scheduled rebuild.
+      # Only on a real index push: hourly ticks with no change must not rebuild
+      # Pages 24x/day for nothing.
+      - name: trigger site rebuild
+        if: env.PUBLISHED == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Retry once, then escalate: a silent double-fail leaves published
+          # changes off the public site for ~12h+ — the digest watchdog's 36h
+          # leg is the backstop, not the detector. Deduped like the alert job.
+          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || {
+            echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            BODY="site.yml dispatch failed twice — published catalog changes may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          }; }
+      # event-driven verify: a real index push may carry fresh pendings —
+      # dispatch verify now so install evidence lands within the hour, not at
+      # the next scheduled tick. Best-effort: the 4x/day crons are the backstop,
+      # so a missed dispatch self-heals in ~6h.
+      - name: dispatch verify for fresh pendings
+        if: env.PUBLISHED == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run verify.yml || echo "::warning::verify dispatch failed — next scheduled verify covers it (~6h)"
 
   alert:
-    needs: [generate, publish, site]
-    if: failure()
+    needs: [generate, publish]
+    # cancelled() included: publish shares the catalog-branch writer lock — a
+    # queued publish can be evicted by a later writer (verify-merge/digest/
+    # ingest), which drops the whole run's compute AND index update silently.
+    # verify.yml hardened the same shape in G-1.
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
     permissions: { issues: write }
     steps:
+      # only gh api calls — the narrowest allowlist (same as verify/digest alert)
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "catalog workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the catalog workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          # dedupe (same S-6 pattern as site.yml): a failing streak comments on
+          # the one open alert issue instead of opening one per run. in:title —
+          # an unrelated pipeline-alert issue whose BODY mentions "catalog
+          # workflow failed" must not swallow this alert's dedupe slot
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "catalog workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "catalog workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the catalog workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

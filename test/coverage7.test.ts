@@ -12,12 +12,23 @@ vi.mock('node:child_process', () => ({
     execCalls.push({ cmd, args, env: opts.env, input: opts.input })
     if (cmd === 'python3') return JSON.stringify([{ id: 'a', score: 0.5 }, { id: 'b', score: 0.9 }])
     if (cmd === 'gh') return '[]'
+    if (cmd === 'npm' && args.some(a => a.includes('missing-pkg'))) throw new Error('E404')
+    if (cmd === 'npm') return 'sha512-abc\n'
     throw new Error(`unexpected exec ${cmd}`)
   },
-  execFile: () => { throw new Error('unused') },
+  execFile: (cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv },
+    cb: (err: Error | null, result?: { stdout: string; stderr?: string }) => void) => {
+    // docket's gh wrapper is async execFile (promisify) — record it the same
+    // way so the env-mapping assertion keeps covering the real call shape.
+    // The mock has no promisify.custom, so default-promisify resolves the
+    // callback's 2nd arg verbatim — hand it the {stdout} shape gh expects.
+    execCalls.push({ cmd, args, env: opts.env })
+    if (cmd === 'gh') cb(null, { stdout: '[]' })
+    else cb(new Error(`unexpected exec ${cmd}`))
+  },
 }))
 
-import { l05Score } from '../pipeline/ai/diagnose.ts'
+import { l05Score, makeIntegrityOf } from '../pipeline/ai/diagnose.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
@@ -27,7 +38,7 @@ const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {},
   approval: 'pending',
@@ -37,7 +48,7 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
   version: '1', generatedAt: 'x', categories: {}, plugins, removed: [],
 })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
-  name: 'pkg', version: '1.0.0', verdict: 'pass', at: 't', source: 'ai', ...over,
+  name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 
 describe('l05Score', () => {
@@ -48,6 +59,36 @@ describe('l05Score', () => {
     const call = execCalls.find(c => c.cmd === 'python3')!
     expect(call.args[0]).toContain('l05_score.py')
     expect(JSON.parse(call.input!)).toHaveLength(2)
+  })
+})
+
+describe('makeIntegrityOf (D-10 packument-backed)', () => {
+  it('one packument fetch per name covers every version; lookups share the cache', async () => {
+    let fetches = 0
+    const fetchFn = (async () => {
+      fetches++
+      return new Response(JSON.stringify({
+        'dist-tags': { latest: '1.0.0' },
+        versions: {
+          '1.0.0': { dist: { integrity: 'sha512-aaa' } },
+          '2.0.0': { dist: { integrity: 'sha512-bbb' } },
+        },
+      }))
+    }) as unknown as typeof fetch
+    const io = makeIntegrityOf(fetchFn)
+    expect(await io('pkg', '1.0.0')).toBe('sha512-aaa')
+    expect(await io('pkg', '2.0.0')).toBe('sha512-bbb')
+    expect(await io('pkg', '9.9.9')).toBeUndefined()
+    expect(fetches).toBe(1)
+  })
+  it('null version → no fetch at all (github-kind); registry error → undefined', async () => {
+    let fetches = 0
+    const fetchFn = (async () => { fetches++; return new Response('x', { status: 500 }) }) as unknown as typeof fetch
+    const io = makeIntegrityOf(fetchFn)
+    expect(await io('o/r', null)).toBeUndefined()
+    expect(fetches).toBe(0)
+    expect(await io('gone', '1.0.0')).toBeUndefined()
+    expect(fetches).toBe(1)
   })
 })
 

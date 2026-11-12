@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { searchByKeyword, discoverNpm } from '../pipeline/discover/npm.ts'
 import { searchTopic, discoverGithub } from '../pipeline/discover/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
-import { fetchRepoMeta, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta } from '../pipeline/fetch/github.ts'
 import { scanTarball } from '../pipeline/scan/scan.ts'
 import { mergeEntries } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
@@ -18,7 +18,7 @@ const mkEntry = (name: string, v = '1'): PluginEntry => ({
   source: { kind: 'npm', id: name }, description: { en: '' }, category: [],
   license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: '2020-01-01', latestVersion: v, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: null, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',
@@ -66,12 +66,6 @@ describe('branches round 2', () => {
     const { meta: r } = await fetchRepoMeta('o/r', { token: 'tok', fetchFn: f as typeof fetch })
     expect(r).toMatchObject({ archived: true, license: null })
   })
-  it('repoFileExists: branch param in query', async () => {
-    let seen = ''
-    const f = async (input: RequestInfo | URL) => { seen = String(input); return new Response('', { status: 200 }) }
-    await repoFileExists('o/r', 'SKILL.md', { branch: 'dev', token: 't', fetchFn: f as typeof fetch })
-    expect(seen).toContain('ref=dev')
-  })
   it('scanTarball: AppleDouble ._ files skipped', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'sc3-'))
     mkdirSync(join(dir, 'pkg'))
@@ -81,6 +75,13 @@ describe('branches round 2', () => {
     execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'])
     const r = await scanTarball(readFileSync(dir + '/p.tgz'))
     expect(r.findings.filter(f => f.rule === 'binary-blob')).toHaveLength(0)
+  })
+  it('scanTarball: member-count cap aborts (tar-bomb guard, F-1)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sc4-'))
+    mkdirSync(join(dir, 'pkg'))
+    for (const n of ['a.txt', 'b.txt', 'c.txt']) writeFileSync(join(dir, 'pkg', n), 'x')
+    execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    await expect(scanTarball(readFileSync(dir + '/p.tgz'), 2)).rejects.toThrow('file count exceeds')
   })
   it('mergeEntries: aliases + discoveredVia union', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
@@ -93,6 +94,7 @@ describe('branches round 2', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rtgz-'))
     mkdirSync(join(dir, 'pkg'))
     writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'evil', scripts: { postinstall: 'x' } }))
+    writeFileSync(join(dir, 'pkg', 'SKILL.md'), '---\nname: s\n---\n')   // dual-nature needs the skill IN the tarball
     execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
     const tgz = readFileSync(dir + '/p.tgz')
     const f = (async (input: RequestInfo | URL) => {
@@ -114,6 +116,35 @@ describe('branches round 2', () => {
     const e = idx.plugins[0]!
     expect(e.verification.status).toBe('skipped')
     expect(e.capabilities.redFlags.length).toBeGreaterThan(0)
-    expect(e.contains).toEqual(['skill'])
+    // dual-nature: an npm package IS a plugin artifact, and its SKILL.md adds
+    // the skill part — contains now lists both, not just 'skill'
+    expect(e.contains).toEqual(['plugin', 'skill'])
+  })
+  it('run: repo-tree SKILL.md alone does not make an npm entry a skill (V-P install-truth)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rtgz-'))
+    mkdirSync(join(dir, 'pkg'))
+    writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'good' }))
+    execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    const tgz = readFileSync(dir + '/p.tgz')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return mkRes({ objects: [
+        { package: { name: 'repo-skill', version: '1', description: '', keywords: ['opencode'], links: { repository: 'https://github.com/o/e' }, date: 't' } }] })
+      if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+      if (url.includes('registry.npmjs.org/repo-skill')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { repository: 'https://github.com/o/e', keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } }, time: {} })
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      // the repo ships a SKILL.md, but the published tarball does NOT —
+      // installSkill extracts tarball bytes, so claiming 'skill' here sells
+      // an artifact users cannot install
+      if (url.includes('/git/trees/')) return mkRes({ tree: [{ path: 'SKILL.md' }] })
+      if (url.includes('api.github.com/repos/')) return mkRes({ stargazers_count: 1, archived: false, pushed_at: 't', default_branch: 'main' })
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const out = join(mkdtempSync(join(tmpdir(), 'ro-')), 'i.json')
+    const idx = await run({ outPath: out, fetchFn: f, now: 't' })
+    expect(idx.plugins[0]!.contains).toEqual(['plugin'])
   })
 })

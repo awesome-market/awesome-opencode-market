@@ -1,8 +1,17 @@
 name: review-docket
+# scope: prod-only — review queue automation
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: '只打印动作，不建/改/关 issue'
+        type: boolean
+        default: false
   workflow_run:
-    workflows: [catalog, verify]
+    # digest included: a pass verdict's announce flips its maturity phase —
+    # waiting for the hourly tick would leave the objection-window wording
+    # stale for up to an hour after every digest
+    workflows: [catalog, verify, digest]
     types: [completed]
   schedule:
     - cron: '40 * * * *'   # hourly catch-up (after verify/catalog land)
@@ -12,12 +21,33 @@ jobs:
   # maintainer can rule by tapping a label from a phone. Labels bootstrapped
   # here so the flow works on a fresh repo.
   docket:
+    # a partially-failed verify still left valid catalog data — syncing the
+    # docket against it is safe; only a cancelled run means "nothing landed".
+    # Scope guard: a fork's hourly cron OR a fork's catalog/verify/digest
+    # workflow_run would churn labels/issues against a catalog branch it
+    # doesn't have — the whitelist covers every non-dispatch trigger the
+    # same way (org prod + terry2010 current prod).
     if: >-
-      github.event_name != 'workflow_run'
-      || github.event.workflow_run.conclusion == 'success'
+      (github.event_name != 'workflow_run'
+        || github.event.workflow_run.conclusion != 'cancelled')
+      && (github.event_name == 'workflow_dispatch'
+        || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # K-1: three trigger sources (cron / workflow_run / dispatch) can overlap —
+    # two parallel runs both see an empty open-set and double-create issues
+    concurrency: review-docket
     permissions: { issues: write, contents: read }
     steps:
+      # renders model/plugin-controlled text into issues; also npm ci + git
+      # fetch + gh issue writes — same egress posture as other write jobs
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
@@ -40,8 +70,94 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          # repo variable (Settings → Secrets and variables → Variables):
+          # comma-separated logins to ASSIGN flag/concern review issues to —
+          # the phone-decision push notification. Unset = quiet (no assigns).
+          DOCKET_ASSIGNEE: ${{ vars.DOCKET_ASSIGNEE }}
         run: |
-          git fetch origin catalog
-          git show origin/catalog:index.json > /tmp/index.json
-          git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl || touch /tmp/ai-verdicts.jsonl
-          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl
+          # K-6 three-way probe (same as verify/catalog/digest): absent branch
+          # (fork/dev) defers quietly, but a fetch/auth failure must go red —
+          # a blind `fetch || exit 0` would freeze the review queue silently
+          # forever while the alert job only watches job failures.
+          rc=0
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0) git fetch --depth=1 origin catalog -q || { echo "catalog fetch failed — retry next tick"; exit 1; } ;;
+            2) echo "no catalog branch — nothing to sync"; exit 0 ;;
+            *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
+          esac
+          # same absent-vs-unreadable split as the aux files below: an
+          # index-less catalog branch = nothing to sync → defer, not red
+          if git show origin/catalog:index.json > /tmp/index.json 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:index.json 2>/dev/null; then
+            echo "index.json exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else echo "no index.json on origin/catalog yet — nothing to sync"; exit 0; fi
+          # verdicts/digest-state legitimately ABSENT pre-first-run → empty is
+          # correct. But "exists yet unreadable" (transient git failure) must
+          # defer, not downgrade to empty: an empty verdict file strips every
+          # ai:* label and rewrites every body to 'none' for a tick, and an
+          # empty digest-state regresses every announced pass's maturity.
+          if git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            echo "ai-verdicts.jsonl exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else touch /tmp/ai-verdicts.jsonl; fi
+          if git show origin/catalog:digest-state.json > /tmp/digest-state.json 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:digest-state.json 2>/dev/null; then
+            echo "digest-state.json exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else touch /tmp/digest-state.json; fi
+          # diagnose.paused declares the local AI queue stopped on PURPOSE
+          # (bin/ai-diagnose.sh pause) — docket.ts looks for it next to the
+          # index file; absent = normal queue. Without this fetch the paused
+          # surface never reaches the workflow and every aged hold still
+          # reads as "queue looks dead".
+          # Existence IS the signal here, so the bare `git show > file || true`
+          # is a trap: the redirect creates /tmp/diagnose.paused even when the
+          # path is absent on the branch → existsSync reads a phantom pause
+          # forever (every aged hold aggregates + bodies claim 声明暂停). Same
+          # stray-file hazard ai-diagnose.sh's cat-file -e probe documents —
+          # gate on existence first, and defer like the aux files when the
+          # blob exists but won't read.
+          rm -f /tmp/diagnose.paused
+          if git cat-file -e origin/catalog:diagnose.paused 2>/dev/null; then
+            git show origin/catalog:diagnose.paused > /tmp/diagnose.paused 2>/dev/null \
+              || { echo "diagnose.paused exists on origin/catalog but git show failed — defer to next tick"; exit 0; }
+          fi
+          # inputs.* is TYPED for workflow_dispatch (boolean → real bool);
+          # github.event.inputs.* is always a string, so `== true` coerces
+          # 'true'→NaN vs 1 and NEVER matched — a dry-run dispatch would
+          # silently run live issue writes (fail-open on the safety flag)
+          npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ inputs.dry && '--dry' || '' }} \
+            --digest-state /tmp/digest-state.json
+
+  # the ONLY failure surface for the review-issue sync — without it a broken
+  # docket silently leaves stale [review] issues open while the digest keeps
+  # linking maintainers to them
+  alert:
+    needs: [docket]
+    # a 10-min timeout kill reports 'cancelled', not 'failure' — and a
+    # cancelled sync is exactly the silent-stale case this job exists for
+    if: failure() || cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { issues: write }
+    steps:
+      # gh api only — same egress posture as every other alert job
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
+      - name: open failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "docket workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create \
+              --title "docket workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the review-docket workflow failed. [review] issues may be stale."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi

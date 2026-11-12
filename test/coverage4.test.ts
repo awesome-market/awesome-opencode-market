@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fetchRepoMeta, fetchMarketMeta, repoFileExists } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchMarketMeta, fetchRepoPackage } from '../pipeline/fetch/github.ts'
 import { fetchPackument } from '../pipeline/fetch/npm.ts'
 import { run, replacementOf } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
@@ -17,7 +17,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',
@@ -63,14 +63,29 @@ describe('fetchMarketMeta (.opencode-market.json)', () => {
   })
 })
 
-describe('repoFileExists + fetchPackument statuses', () => {
-  it('repoFileExists: ok→true, 404/500/throw→false', async () => {
-    const yes = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({})) as typeof fetch })
-    const no = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })
-    const err = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })
-    const thr = await repoFileExists('o/r', 'SKILL.md', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })
-    expect([yes, no, err, thr]).toEqual([true, false, false, false])
+describe('fetchRepoPackage (repo-root package.json)', () => {
+  it('ok → name/main/exports parsed', async () => {
+    const { pkg, status } = await fetchRepoPackage('o/r', {
+      fetchFn: (async () => mkRes({ name: 'p', main: 'i.js', exports: { '.': './d.js' }, extra: 1 })) as typeof fetch,
+    })
+    expect(status).toBe('ok')
+    expect(pkg).toEqual({ name: 'p', main: 'i.js', exports: { '.': './d.js' } })
   })
+  it('404 → not-found; throw → error; 429 → rate-limited', async () => {
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => mkRes({}, 404)) as typeof fetch })).status).toBe('not-found')
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => { throw new Error('net') }) as typeof fetch })).status).toBe('error')
+    expect((await fetchRepoPackage('o/r', { fetchFn: (async () => mkRes({}, 429)) as typeof fetch })).status).toBe('rate-limited')
+  })
+  it('dir traversal rejected without a fetch call; clean dir prefixed into URL', async () => {
+    expect((await fetchRepoPackage('o/r', { dir: '../x' })).status).toBe('error')
+    expect((await fetchRepoPackage('o/r', { dir: 'a/../b' })).status).toBe('error')
+    let seen = ''
+    await fetchRepoPackage('o/r', { dir: 'pkgs/core/', fetchFn: (async (i: RequestInfo | URL) => { seen = String(i); return mkRes({ name: 'p' }) }) as typeof fetch })
+    expect(seen).toContain('/HEAD/pkgs/core/package.json')
+  })
+})
+
+describe('fetchPackument statuses', () => {
   it('packument: 500 → error; exception → error; ok parses identity fields', async () => {
     expect((await fetchPackument('x', { fetchFn: (async () => mkRes({}, 500)) as typeof fetch })).status).toBe('error')
     expect((await fetchPackument('x', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })).status).toBe('error')
@@ -107,6 +122,9 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     if (url.includes('/-/v1/search'))
       return mkRes({ objects: alive.map(e => ({ package: { name: e.name, version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } })) })
     if (url.includes('api.github.com/search')) return mkRes({ items: [] })
+    if (url.includes('/git/trees/')) return mkRes({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+    ] })
     if (url.includes('api.npmjs.org/downloads')) return mkRes({ downloads: 1 })
     return mkRes('{}', 404)
   }) as typeof fetch
@@ -129,16 +147,22 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([]), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     expect(idx.plugins.map(e => e.name)).not.toContain('blocked-cand')
   })
-  it('cap → missing old entry gets capped tombstone', async () => {
+  it('cap bounds NEW candidates only — existing entries bypass it', async () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
-    // zzz-last must be a discovered candidate so it lands in cappedOut (sorted last)
+    // 5 alive + zzz-last are already indexed and get re-discovered → all bypass
+    // the cap. tail-new is a NEW candidate beyond the budget → truncated away,
+    // and never tombstoned (it was never in the index).
     const fetch = baseFetch(url => url.includes('/-/v1/search')
       ? mkRes({ objects: [...alive.map(e => ({ package: { name: e.name, version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } })),
-        { package: { name: 'zzz-last', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } }] })
+        { package: { name: 'zzz-last', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } },
+        { package: { name: 'tail-new', version: '1.0.0', description: 'd', keywords: ['opencode'], links: {}, date: 't' } }] })
       : null)
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([mkEntry('zzz-last')]), outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 5 })
-    expect(idx.plugins).toHaveLength(5)
-    expect(idx.removed.find(r => r.name === 'zzz-last')?.reason).toBe('capped')
+    const names = idx.plugins.map(e => e.name)
+    expect(names).toContain('zzz-last')            // old entry survives the cap
+    expect(names).not.toContain('tail-new')        // over-budget new candidate truncated
+    expect(idx.removed.find(r => r.name === 'zzz-last')).toBeUndefined()
+    expect(idx.removed.find(r => r.name === 'tail-new')).toBeUndefined()
   })
   it('github-topic-only candidate becomes github-kind entry', async () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
@@ -148,6 +172,9 @@ describe('replacementOf + blocklist + capped (run branches)', () => {
     const idx = await run({ fetchFn: fetch, oldIndexPath: mkOld([]), outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     const gh = idx.plugins.find(e => e.name === 'solo/gh-plug')
     expect(gh?.source.kind).toBe('github')
-    expect(gh?.verification.status).toBe('skipped')
+    // the mock tree carries a plugin artifact (.opencode/plugin/x.ts) — a
+    // payload verify.ts can install via `plugin add owner/repo#sha`, so the
+    // entry queues as 'unverified' rather than the old blanket 'skipped'
+    expect(gh?.verification.status).toBe('unverified')
   })
 })

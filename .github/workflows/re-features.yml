@@ -1,4 +1,5 @@
 name: re-features
+# scope: fork-only — manual one-off data repair experiment
 # One-off data repair: recompute every entry's `features` under the
 # Host.resolve-aligned rules (classification logic changed; dormant packages
 # never hit the version-bump rescan path). npm packument fetches only —
@@ -38,24 +39,9 @@ jobs:
           done
           [ "$ok" = 1 ] || { echo "catalog push failed after retries"; exit 1; }
 
+  # single Pages publisher — site.yml via workflow_call gets the skill cache,
+  # deploy gate and alert job for free; an inline copy drifted out of all three
   site:
     needs: recompute
-    runs-on: ubuntu-latest
-    permissions: { pages: write, id-token: write }
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      # same as catalog.yml — site always builds from the catalog branch head
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: |
-          git fetch origin catalog
-          git show origin/catalog:index.json > index.json
-      - run: npx tsx pipeline/site/build.ts index.json /tmp/site
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - uses: actions/deploy-pages@v4
-        id: deploy
+    permissions: { pages: write, id-token: write, contents: read, actions: write, issues: write }   # called workflow's perms are capped by this grant — site.yml needs actions (cache prune) + issues (failure alert) too
+    uses: ./.github/workflows/site.yml

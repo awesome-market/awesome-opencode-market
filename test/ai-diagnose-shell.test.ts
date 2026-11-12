@@ -1,0 +1,397 @@
+/** Shell-level integration tests for bin/ai-diagnose.sh — the audit found
+ *  ZERO coverage of the wrapper's reliability paths (lock, spool replay,
+ *  comm dedup, push retry, schema gate, pause/resume, health publish).
+ *
+ *  Harness: a local bare repo plays "origin" (main = this repo's committed
+ *  HEAD, catalog = minimal data branch). $CODE is a real clone whose
+ *  node_modules is a symlink farm into the real repo's, except .bin/tsx
+ *  which is a SHIM: it stubs `tsx pipeline/ai/diagnose.ts` (canned verdicts
+ *  via CANNED_* env) and delegates everything else — including the real
+ *  `tsx -e` schema gate — to the genuine tsx. .deps-stamp is pre-seeded so
+ *  npm ci is skipped. Nothing touches the real repo or network. */
+import { describe, it, expect, beforeAll } from 'vitest'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, symlinkSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const REPO = join(__dirname, '..')
+const SCRIPT = join(REPO, 'bin', 'ai-diagnose.sh')
+const REAL_TSX = join(REPO, 'node_modules', '.bin', 'tsx')
+
+let root: string, remote: string, home: string, code: string, cat: string, stated: string
+
+const git = (cwd: string, ...a: string[]) =>
+  execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf8' }).trim()
+
+function catalogFile(name: string): string {
+  try { return execFileSync('git', ['-C', remote, 'show', `catalog:${name}`], { encoding: 'utf8' }) }
+  catch { return '' }
+}
+
+function runScript(...args: string[]): { code: number; out: string } {
+  const r = spawnSync('bash', [SCRIPT, ...args], {
+    env: { ...process.env, HOME: home, MARKET_GIT_URL: remote, ...((globalThis as any).__canned ?? {}) },
+    encoding: 'utf8', timeout: 240_000,
+  })
+  return { code: r.status ?? 1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` }
+}
+const withCanned = (env: Record<string, string>, fn: () => void) => {
+  ;(globalThis as any).__canned = env
+  try { fn() } finally { delete (globalThis as any).__canned }
+}
+
+const VERDICT_A = JSON.stringify({ name: 'pkg-a', version: '1.0.0', verdict: 'pass', at: '2025-06-01T00:00:00Z', source: 'ai' })
+const VERDICT_B = JSON.stringify({ name: 'pkg-b', version: '2.0.0', verdict: 'concern', reason: 'test', at: '2025-06-01T00:00:01Z', source: 'ai' })
+const freshHealth = (extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ at: new Date().toISOString(), wrote: 1, l05: 'ok', omlx: 'ok', ...extra })
+
+beforeAll(() => {
+  root = mkdtempSync(join(tmpdir(), 'aid-'))
+  remote = join(root, 'remote.git')
+  home = join(root, 'home')
+  code = join(home, '.local', 'share', 'opencode-market-code')
+  cat = join(home, '.local', 'share', 'opencode-market-catalog')
+  stated = join(home, '.local', 'share', 'opencode-market')
+  mkdirSync(stated, { recursive: true })
+  mkdirSync(join(home, '.config', 'opencode-market'), { recursive: true })
+  writeFileSync(join(home, '.config', 'opencode-market', 'ai.env'), 'AI_BASE_URL=http://localhost:1/v1\n')
+
+  // bare "origin": main = committed HEAD content of this repo. `git archive`
+  // + commit inside seed — the checkout may be SHALLOW (actions/checkout
+  // fetch-depth:1) which can't push history at all (remote rejects 'shallow
+  // update not allowed'); archive only needs the HEAD tree, which a shallow
+  // clone still has complete.
+  execFileSync('git', ['init', '--bare', '-q', remote])
+  execFileSync('git', ['-C', remote, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  const seed = join(root, 'seed')
+  execFileSync('git', ['clone', '-q', remote, seed])
+  execFileSync('git', ['-C', seed, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
+  execFileSync('bash', ['-c', `git -C "${REPO}" archive HEAD | tar -x -C "${seed}"`])
+  git(seed, 'add', '-A')
+  git(seed, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed main')
+  git(seed, 'push', '-q', 'origin', 'main')
+  execFileSync('git', ['-C', seed, 'checkout', '-q', '--orphan', 'catalog'])
+  execFileSync('git', ['-C', seed, 'rm', '-rfq', '.'])
+  writeFileSync(join(seed, 'index.json'), '{}\n')
+  writeFileSync(join(seed, 'ai-verdicts.jsonl'), '')
+  git(seed, 'add', '-A')
+  git(seed, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init')
+  git(seed, 'push', '-q', 'origin', 'catalog')
+
+  // $CODE: real clone of main + node_modules symlink farm + tsx shim +
+  // pre-seeded .deps-stamp so the wrapper skips npm ci entirely
+  execFileSync('git', ['clone', '-q', remote, code])
+  const nm = join(code, 'node_modules')
+  mkdirSync(join(nm, '.bin'), { recursive: true })
+  const realNm = join(REPO, 'node_modules')
+  for (const e of execFileSync('bash', ['-c', `ls -A "${realNm}"`], { encoding: 'utf8' }).trim().split('\n')) {
+    if (e === '.bin') continue
+    symlinkSync(join(realNm, e), join(nm, e))
+  }
+  writeFileSync(join(nm, '.bin', 'tsx'), `#!/bin/bash
+# test shim — stub the diagnose run, delegate everything else to real tsx
+if [ "\${1:-}" = "pipeline/ai/diagnose.ts" ]; then
+  [ -n "\${CANNED_ARGV:-}" ] && printf '%s\n' "$@" > "$CANNED_ARGV"
+  OUT=""; HEALTH=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --out) OUT="$2"; shift 2 ;;
+      --health) HEALTH="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [ -n "$OUT" ] && printf '%s' "\${CANNED_VERDICTS:-}" > "$OUT"
+  if [ -n "$HEALTH" ]; then
+    if [ -n "\${CANNED_HEALTH_JSON:-}" ]; then
+      printf '%s\\n' "$CANNED_HEALTH_JSON" > "$HEALTH"
+    else
+      printf '{"at":"%s","wrote":0,"l05":"ok","omlx":"ok"}\\n' "$(date -u +%FT%TZ)" > "$HEALTH"
+    fi
+  fi
+  exit "\${CANNED_RC:-0}"
+fi
+exec "${REAL_TSX}" "$@"
+`, { mode: 0o755 })
+  const lockhash = execFileSync('shasum', ['-a', '256', join(code, 'package-lock.json')], { encoding: 'utf8' }).split(' ')[0]!
+  writeFileSync(join(code, '.deps-stamp'), lockhash + '\n')
+}, 120_000)
+
+describe('ai-diagnose.sh — pause/resume', () => {
+  it('pause writes diagnose.paused to catalog; a paused run skips; resume clears', () => {
+    withCanned({}, () => {
+      expect(runScript('pause').code).toBe(0)
+      expect(catalogFile('diagnose.paused')).toContain('diagnose paused')
+      const r = runScript()
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('declared pause')
+      expect(runScript('resume').code).toBe(0)
+      expect(catalogFile('diagnose.paused')).toBe('')
+    })
+  }, 60_000)
+})
+
+describe('ai-diagnose.sh — single-instance lock', () => {
+  it('fresh lock → skip; stale (>2h) lock → reclaimed and run proceeds', () => {
+    withCanned({ CANNED_VERDICTS: `${VERDICT_A}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      mkdirSync(join(stated, 'diagnose.lock'))
+      const skip = runScript()
+      expect(skip.code).toBe(0)
+      expect(skip.out).toContain('another run in progress')
+      // age the lock past the 2h reclaim window (touch -t: YYYYMMDDhhmm)
+      const old = new Date(Date.now() - 3 * 3600 * 1000)
+      const stamp = old.toISOString().replace(/[-:T]/g, '').slice(0, 12)
+      execFileSync('touch', ['-t', stamp, join(stated, 'diagnose.lock')])
+      const run = runScript()
+      expect(run.out).not.toContain('another run in progress')
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-a')
+      expect(existsSync(join(stated, 'diagnose.lock'))).toBe(false) // released on exit
+    })
+  }, 120_000)
+
+  it('audit#4: stale lock — live diagnose owner kept, recycled pid reclaimed, dead pid reclaimed', () => {
+    withCanned({ CANNED_VERDICTS: `${VERDICT_A}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const lockDir = join(stated, 'diagnose.lock')
+      const old = new Date(Date.now() - 3 * 3600 * 1000)
+      const stamp = old.toISOString().replace(/[-:T]/g, '').slice(0, 12)
+      const setup = (pid: number) => {
+        rmSync(lockDir, { recursive: true, force: true })
+        mkdirSync(lockDir)
+        writeFileSync(join(lockDir, 'pid'), `${pid}\n`)
+        execFileSync('touch', ['-t', stamp, lockDir])
+      }
+      // live owner: a SHELL whose args name ai-diagnose.sh → NOT reclaimed.
+      // kill -0 alone can't distinguish it from a recycled pid, and stealing
+      // a live run's lock lets its EXIT trap rmdir the new owner's lock.
+      // `bash -c 'loop' ai-diagnose.sh` puts the name in argv ($0) with
+      // comm='bash' — the same ps shape a real `bash bin/ai-diagnose.sh` has.
+      const owner = spawn('bash', ['-c', 'while :; do sleep 1; done', 'ai-diagnose.sh'])
+      try {
+        setup(owner.pid!)
+        const skip = runScript()
+        expect(skip.out).toContain('another run in progress')
+        expect(existsSync(lockDir)).toBe(true)   // lock preserved for the live owner
+      } finally { owner.kill('SIGKILL') }
+      // recycled pid onto an UNRELATED process whose args still mention the
+      // filename (vim/tail/git-diff shape) — args match alone must NOT count
+      // as owner; comm='tail' proves the pid isn't a shell running the script
+      const decoy = join(root, 'ai-diagnose.sh')
+      writeFileSync(decoy, '')
+      const other = spawn('tail', ['-f', decoy])
+      try {
+        setup(other.pid!)
+        const run = runScript()
+        expect(run.out).not.toContain('another run in progress')
+        expect(existsSync(lockDir)).toBe(false)
+      } finally { other.kill('SIGKILL') }
+      // dead owner: pid above pid_max can never exist → reclaim proceeds
+      setup(99999999)
+      const run = runScript()
+      expect(run.out).not.toContain('another run in progress')
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-a')
+      expect(existsSync(lockDir)).toBe(false)
+    })
+  }, 120_000)
+})
+
+describe('ai-diagnose.sh — verdict push + health publish', () => {
+  it('canned verdicts land on catalog once; degraded health stamp is published', () => {
+    withCanned({ CANNED_VERDICTS: `${VERDICT_B}\n`, CANNED_HEALTH_JSON: freshHealth({ l05: 'failed' }) }, () => {
+      const before = catalogFile('ai-verdicts.jsonl')
+      const r = runScript()
+      expect(r.code).toBe(0)
+      const after = catalogFile('ai-verdicts.jsonl')
+      expect(after.split('\n').filter(l => l.includes('pkg-b'))).toHaveLength(1)
+      expect(after.length).toBeGreaterThan(before.length)
+      const health = JSON.parse(catalogFile('diagnose-health.json'))
+      expect(health.l05).toBe('failed')
+      expect(health.at).toBeTruthy()
+    })
+  }, 120_000)
+})
+
+describe('ai-diagnose.sh — already-landed replay', () => {
+  it('payload fully on the branch → remote-content check exits clean, no dup append', () => {
+    // the "already landed" decision reads origin/catalog's file — NOT the
+    // local staged diff (a concurrent reset --hard on this shared worktree
+    // could fake an empty diff and silently drop the payload + spool)
+    const verdictE = VERDICT_A.replace('pkg-a', 'pkg-e')
+    withCanned({ CANNED_VERDICTS: `${verdictE}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)                       // first run lands it
+      const r = runScript()                                  // identical payload again
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('already on origin/catalog')
+      const landed = catalogFile('ai-verdicts.jsonl')
+      expect(landed.split('\n').filter(l => l.includes('"pkg-e"'))).toHaveLength(1)
+    })
+  }, 240_000)
+})
+
+describe('ai-diagnose.sh — schema gate', () => {
+  it('malformed payload lines are dropped; only schema-valid verdicts land', () => {
+    const bad1 = '{"name":"broken",'
+    const bad2 = '{"verdict":"pass"}' // missing name/at/source
+    const good = VERDICT_A.replace('pkg-a', 'pkg-schema')
+    withCanned({ CANNED_VERDICTS: `${bad1}\n${bad2}\n${good}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = runScript()
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('dropped 2 malformed payload line(s)')
+      const landed = catalogFile('ai-verdicts.jsonl')
+      expect(landed).toContain('pkg-schema')
+      expect(landed).not.toContain('"broken"')
+      expect(landed.split('\n').filter(l => l.includes('pkg-schema'))).toHaveLength(1)
+    })
+  }, 120_000)
+
+  it('malformed spool lines are purged from the replay file — not carried forever', () => {
+    // spool holds ONLY a corrupt line: the gate drops it from PAY, and the
+    // spool sync must drop it from SPOOL too — otherwise it re-enters every
+    // run, gets dropped every run, and never lands nor clears
+    writeFileSync(join(stated, 'pending-verdicts.jsonl'), '{"name":"broken",\n')
+    withCanned({ CANNED_VERDICTS: '', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = runScript()
+      expect(r.code).toBe(0)
+      expect(r.out).toContain('no new verdicts')
+      expect(readFileSync(join(stated, 'pending-verdicts.jsonl'), 'utf8')).toBe('')
+    })
+    rmSync(join(stated, 'pending-verdicts.jsonl'), { force: true })
+  }, 120_000)
+})
+
+describe('ai-diagnose.sh — spool replay dedup', () => {
+  it('lines already on the branch are not appended twice; spool+payload dedup via sort -u', () => {
+    // seed: branch already has VERDICT_A; spool holds A+B; this run emits A+B+C
+    const verdictC = VERDICT_B.replace('pkg-b', 'pkg-c')
+    const seed2 = join(root, 'seed2')
+    execFileSync('git', ['clone', '-q', '-b', 'catalog', remote, seed2])
+    writeFileSync(join(seed2, 'ai-verdicts.jsonl'), `${VERDICT_A}\n`)
+    git(seed2, 'add', 'ai-verdicts.jsonl')
+    git(seed2, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed A')
+    git(seed2, 'push', '-q', 'origin', 'catalog')
+    rmSync(seed2, { recursive: true, force: true })
+    writeFileSync(join(stated, 'pending-verdicts.jsonl'), `${VERDICT_A}\n${VERDICT_B}\n`)
+    withCanned({ CANNED_VERDICTS: `${VERDICT_A}\n${VERDICT_B}\n${verdictC}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = runScript()
+      expect(r.code).toBe(0)
+      const landed = catalogFile('ai-verdicts.jsonl')
+      // A already on branch → comm -13 drops it; B (spool∩payload) dedups
+      // via sort -u; C is new → exactly one copy of each on the branch
+      expect(landed.split('\n').filter(l => l.includes('"pkg-a"'))).toHaveLength(1)
+      expect(landed.split('\n').filter(l => l.includes('"pkg-b"'))).toHaveLength(1)
+      expect(landed.split('\n').filter(l => l.includes('"pkg-c"'))).toHaveLength(1)
+    })
+  }, 120_000)
+})
+
+describe('ai-diagnose.sh — push failure spools for replay', () => {
+  it('unwritable remote → verdicts spooled + exit 1; restored → next run replays them', () => {
+    const verdictD = VERDICT_A.replace('pkg-a', 'pkg-d')
+    chmodSync(remote, 0o555)
+    chmodSync(join(remote, 'objects'), 0o555)
+    chmodSync(join(remote, 'refs'), 0o555)
+    try {
+      withCanned({ CANNED_VERDICTS: `${verdictD}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+        const r = runScript()
+        expect(r.code).toBe(1)
+        expect(r.out).toContain('NOT pushed')
+        expect(readFileSync(join(stated, 'pending-verdicts.jsonl'), 'utf8')).toContain('pkg-d')
+      })
+    } finally {
+      chmodSync(join(remote, 'refs'), 0o755)
+      chmodSync(join(remote, 'objects'), 0o755)
+      chmodSync(remote, 0o755)
+    }
+    // remote writable again → next run replays the spool (canned emits nothing)
+    withCanned({ CANNED_VERDICTS: '', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = runScript()
+      expect(r.code).toBe(0)
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-d')
+      // successful push truncates the spool (`: > SPOOL`) — file exists but empty
+      expect(readFileSync(join(stated, 'pending-verdicts.jsonl'), 'utf8')).toBe('')
+    })
+  }, 240_000)
+})
+
+describe('audit #4 re-do — append normalization, arg passthrough, shallow sync', () => {
+  it('remote file without trailing newline does NOT fuse the first appended verdict', () => {
+    // seed ai-verdicts.jsonl missing its final '\n' — cat >> would glue the
+    // first new line onto the last remote line, losing BOTH inside one
+    // malformed blob. The append path now normalizes the last byte first.
+    const seed3 = join(root, 'seed3')
+    execFileSync('git', ['clone', '-q', '-b', 'catalog', remote, seed3])
+    const orphan = JSON.stringify({ name: 'pkg-nonl', version: '1.0.0', verdict: 'pass', at: '2025-01-01T00:00:00Z', source: 'ai' })
+    writeFileSync(join(seed3, 'ai-verdicts.jsonl'), `${orphan}\n${VERDICT_A.replace('pkg-a', 'pkg-tail')}`)  // no trailing \n
+    git(seed3, 'add', 'ai-verdicts.jsonl')
+    git(seed3, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'no trailing newline')
+    git(seed3, 'push', '-q', 'origin', 'catalog')
+    rmSync(seed3, { recursive: true, force: true })
+    const verdictN = VERDICT_B.replace('pkg-b', 'pkg-appended')
+    withCanned({ CANNED_VERDICTS: `${verdictN}\n`, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      const lines = catalogFile('ai-verdicts.jsonl').split('\n').filter(Boolean)
+      // every line must parse as a verdict — no fused blob
+      expect(() => lines.forEach(l => JSON.parse(l))).not.toThrow()
+      expect(lines.filter(l => l.includes('"pkg-tail"'))).toHaveLength(1)
+      expect(lines.filter(l => l.includes('"pkg-appended"'))).toHaveLength(1)
+    })
+  }, 120_000)
+
+  it('DIAGNOSE_NAME reaches diagnose as ONE --name arg even with spaces/commas', () => {
+    // ${DIAGNOSE_NAME:+--name "$v"} word-split 'a, b' into "--name a," + a
+    // stray "b" positional — only 'a' was reviewed, 'b' silently dropped.
+    // The arg array keeps the whole value as a single argument.
+    const argvFile = join(stated, 'argv.dump')
+    withCanned({ CANNED_VERDICTS: '', CANNED_ARGV: argvFile, DIAGNOSE_NAME: 'pkg-x, pkg-y', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      const argvLines = readFileSync(argvFile, 'utf8').split('\n')
+      const i = argvLines.indexOf('--name')
+      expect(i).toBeGreaterThan(-1)
+      expect(argvLines[i + 1]).toBe('pkg-x, pkg-y')   // single arg, not split
+    })
+  }, 120_000)
+
+  it('catalog + code checkouts stay shallow after a run (bounded history)', () => {
+    // persistent $CAT grew ~14MB per catalog commit forever — the fetches
+    // now bound history at --depth=1 and an existing full clone converts
+    withCanned({ CANNED_VERDICTS: '', CANNED_HEALTH_JSON: freshHealth() }, () => {
+      expect(runScript().code).toBe(0)
+      expect(git(cat, 'rev-parse', '--is-shallow-repository')).toBe('true')
+      expect(git(code, 'rev-parse', '--is-shallow-repository')).toBe('true')
+    })
+  }, 120_000)
+
+  it('audit#4-r2: plain run under /bin/bash 3.2 (launchd shebang) survives empty ARGS', () => {
+    // launchd execs the script via #!/bin/bash = macOS bash 3.2.57 — where
+    // `set -u` + an EMPTY array's "${ARGS[@]}" is a FATAL 'unbound variable'.
+    // Every hourly run (no DIAGNOSE_NAME/FORCE → empty ARGS) died at the
+    // diagnose invocation after all the prep work. The ${arr[@]+…} guard
+    // expands to zero args on empty. Tests must exercise /bin/bash — the
+    // harness's `bash` resolves to homebrew 5 where the bug is invisible.
+    const argvFile = join(stated, 'argv-32.dump')
+    const v32 = VERDICT_A.replace('pkg-a', 'pkg-b32')
+    withCanned({ CANNED_VERDICTS: `${v32}\n`, CANNED_ARGV: argvFile, CANNED_HEALTH_JSON: freshHealth() }, () => {
+      const r = spawnSync('/bin/bash', [SCRIPT], {
+        env: { ...process.env, HOME: home, MARKET_GIT_URL: remote, ...((globalThis as any).__canned ?? {}) },
+        encoding: 'utf8', timeout: 240_000,
+      })
+      expect(r.status, `${r.stdout}${r.stderr}`).toBe(0)
+      expect(`${r.stdout}${r.stderr}`).not.toContain('unbound variable')
+      // diagnose.ts was actually invoked — and got NO stray empty arg
+      const argvLines = readFileSync(argvFile, 'utf8').split('\n').filter(Boolean)
+      expect(argvLines).toContain('--index')
+      expect(argvLines).not.toContain('')
+      expect(argvLines.filter(a => a === '--name' || a === '--force')).toHaveLength(0)
+      // and the canned verdict really landed on the catalog branch
+      expect(catalogFile('ai-verdicts.jsonl')).toContain('pkg-b32')
+    })
+  }, 240_000)
+})
+
+describe('audit #4 r6 — publish_health wrote compares bool-to-bool', () => {
+  it('the published stamp\'s raw wrote count normalizes to >0 like the live signal', () => {
+    // published stores wrote:7 (int), the live sig writes wrote>0 (bool) —
+    // `7 == True` is False in python, so every writing run republished.
+    const src = readFileSync(join(REPO, 'bin', 'ai-diagnose.sh'), 'utf8')
+    expect(src).toContain("( (p.get(k,0) or 0) > 0 ) == v if k=='wrote'")
+  })
+})

@@ -106,11 +106,11 @@ describe('branch coverage', () => {
   it('run: old index merge via oldIndexPath', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'run3-'))
     const oldPath = join(dir, 'old.json')
-    writeFileSync(oldPath, JSON.stringify({ version: '1', generatedAt: 'x', categories: { c: { en: 'C' } },
+    writeFileSync(oldPath, JSON.stringify({ version: '1', generatedAt: 'x', categories: { tools: { en: 'Custom' } },
       plugins: [{ name: 'evid', slug: 'o/e', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
         source: { kind: 'npm', id: 'evid' }, description: { en: '' }, category: [], license: null,
         deprecated: false, replacement: null, firstSeenAt: '2020-01-01', latestVersion: '1', publishedAt: null,
-        metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+        metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
         capabilities: { scannedAt: 's', findings: ['f'], redFlags: [] },
         verification: { status: 'verified' }, compat: {} }] }))
     const f = (async (input: RequestInfo | URL) => {
@@ -128,7 +128,9 @@ describe('branch coverage', () => {
     const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
     expect(idx.plugins[0]!.verification.status).toBe('verified') // merged from old
     expect(idx.plugins[0]!.firstSeenAt).toBe('2020-01-01')
-    expect(idx.categories.c!.en).toBe('C')
+    // only canonical taxonomy ids survive the merge — and their names are
+    // rewritten to CAT_NAMES canonical labels (author strings can't mint)
+    expect(idx.categories.tools!.zh).toBe('工具与能力')
   })
 
   it('run: archived github repo filtered by preAdmit', async () => {

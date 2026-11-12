@@ -53,6 +53,7 @@
 
 **关键约束**
 - 无服务器、无数据库——index.json 是唯一数据面
+- **两段式数据面**：生产端点固定为上游 org Pages（`awesome-market.github.io/.../index.json`，README 与客户端默认值一致）；开发期 catalog 流水线只跑在维护者 fork（`terry2010.github.io`），避免测试 run 污染上游 catalog 分支。客户端通过设置里的"开发目录源"开关切到 fork 源（`devSource`），显式 `indexUrl`/`OPENCODE_MARKET_INDEX` 始终优先于开关；发布时 org 侧启用流水线后默认值无需改动
 - 所有验证执行都在一次性 CI runner；runner 内不放任何 secret
 - **GITHUB_TOKEN 按 job 分权**：verify/scan job `permissions: {}`（全空，连读都不给——恶意 postinstall 拿不到 token）；publish job 单独 `contents: write` 且**不和 verify 共用 job**（防执行环境与写权限同处）
 - pipeline 全程产物公开：workflow YAML、run 日志、index.json diff——可审计是卖点
@@ -182,8 +183,45 @@ steps:
 - **按类型分级验证**：plugin → install + load（执行）；skill/agent/command → `level: structure`，只校验 SKILL.md/frontmatter 合法性（**不执行**）；mcp → manifest 结构校验；theme → 结构校验
 - **高危件不执行**：scan 命中 redFlag → `status: skipped`（§3 已定，这里呼应）
 - **增量验证**（防全量重跑超时）：缓存 key = `name@version + opencodeVersion`，只有新版本或宿主升级才重验；全量重验只在缓存失效时发生
-- **matrix 分片**：GH matrix 上限 256 job，按 50 包/片分批串行；每片超时 5min/包
+- **matrix 分片**：GH matrix 上限 256 job，默认 12 目标/片；片内 `VERIFY_LANES` 条并行 lane（默认 4，上限 8）——lane 是等待型并发（装/serve/轮询烧墙钟不吃 CPU），加宽它是在不增 matrix job 数的前提下提吞吐的主杠杆；`VERIFY_SHARD_SIZE` 可调片大小（默认 12，上限 64）——片大则 job 少但单 job 时长变长（timeout-minutes 要匹配）
 - **激活信号取日志文件**（A3 定案）：`opencode run` 后 grep `$XDG_DATA_HOME/opencode/log/opencode.log` 的 `msg="loading plugin" id=<name>`；`plugin check` 只查更新不是激活信号，不用它；失败写 `logExcerpt`（≤2KB）+ `runUrl`
+- **本地运行 = 本机执行不可信代码**：`VERIFY_SANDBOX_USER` 未设时，`plugin add`/`serve`/TUI/gui 评估全部以当前 uid 跑（gui 的 `node:vm` 不是安全边界）。shard 驱动对此打印显式警告——verify 是 CI-only 操作；本地只验你已经信任的包。CI 侧边界 = nobody uid + eBPF egress 白名单 + `permissions:{}`。**目录裁决必须产自 CI**——merge 把 `runUrl` 写进 verification 作为可审计出处，本地产出的结果没有可链接出处，不进信任链。
+
+### OPENCODE_VERSION 升版 runbook
+
+宿主大版本升级使**全部** `verified`（hostStale）与**旧宿主 terminal-failed**（hostStaleFail，每次升版一次赦免测量）同时回队——这是结构性爆发，规模 = 可算的 stale 计数。操作流程：
+
+1. `pipeline/publish/merge.ts`：`OPENCODE_VERSION` 改为新版本（verify.yml 的 shard job 从该常量反解析安装宿主版本——两 pin 永不漂移）
+2. 量 stale 深度（决定 cap）：
+   ```bash
+   curl -s <indexUrl> | jq '[.plugins[] | select(
+     (.verification.status=="verified" or .verification.status=="failed")
+     and .verification.level != "structure"
+     and .verification.opencodeVersion != "unknown"
+     and .verification.opencodeVersion != "<新版本>")] | length'
+   ```
+3. `Actions → verify → Run workflow`：`cap` 填 stale 数 + 缓冲 → N/VERIFY_SHARD_SIZE 个 shard job 自动出矩阵
+4. 需要更急时设仓库变量：`VERIFY_LANES`（默认 4，上限 8）/ `VERIFY_SHARD_SIZE`（默认 12，片大 = job 少 = 对共享并发更友好，单 job 时长相应变长）
+5. 排干窗口期：`verified` 徽章挂的是**旧宿主上的声明**——详情页 `(opencode x.y)` 明示测量宿主；staleHost 层在队列里仅次 submission，优先排干
+6. 验收：digest backlog 的 staleHost 计数归零
+
+merge 幂等（verifiedAt 新鲜度守卫 + name@version+verifiedAt 去重），多轮 dispatch/中断重跑安全。
+
+### ai-diagnose 守护 runbook
+
+`bin/ai-diagnose-agent.sh` 是前台常驻守护循环（第三方保活程序监督的进程），每轮：`刷新脚本副本 → 跑一轮 ai-diagnose.sh → 按退出码睡眠`。启动：
+
+```bash
+cd <repo> && ./bin/ai-diagnose-agent.sh
+```
+
+- 节拍：`DIAGNOSE_TICK`（默认 3600s，成功/无事轮次）/`DIAGNOSE_RETRY`（默认 300s，失败自动重试）；`DIAGNOSE_LIMIT=50`、`DIAGNOSE_BUDGET=45min` 控单轮规模
+- 脚本三级刷新源：`$REPO` → `$CODE`（钉 origin/main）→ 本地缓存——外置卷未挂载/开发树脏都照跑
+- 网络隔离环境 git 走 `MARKET_GIT_PROXY`（如 `http://127.0.0.1:7890`）——shim 翻译成 `GIT_CONFIG_*` 环境注入覆盖 `~/.gitconfig`
+- 远端默认取 repo 的 origin，`MARKET_GIT_URL` 可覆盖
+- TERM/INT 转发给当前子进程（轮次或 sleep）后退出——supervisor 可干净重启
+- 日志无自带目标，由启动方重定向（`>> ~/Library/Logs/opencode-market/ai-diagnose.log`）
+- 数据面开关照旧：catalog 分支 `diagnose.paused` 一落，守护每轮自跳过
 
 ---
 
@@ -336,7 +374,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | # | 卡点 | 应对 |
 |---|---|---|
 | D1 | quarantine 积压无人兜底 → 合法件永 pending | 申诉通道（issue 模板）+ 每月人工清队 |
-| D2 | AI 诊断需 LLM API key（P4 才引入 secret） | key 只进 P4 job，verify job 永无 secret。**本地开发端点**：`http://localhost:8001`，key 放 `~/.config/opencode-market/ai.env`（不入库），模型 `Ornith-1.5-35B-A3B-BigBang-MTP-mlx-4bit`（仅本地可达，用户授权记录；CI 无法访问，上线需另配托管 key） |
+| D2 | AI 诊断需 LLM API key（P4 才引入 secret） | key 只进 P4 job，verify job 永无 secret。**本地开发端点**：`http://localhost:8001`，key/模型名放 `~/.config/opencode-market/ai.env`（不入库——判官身份公开=邀请针对性规避） |
 | D3 | 官方市场（dobord PR）落地时点未知 | P5 已解冻（用户裁定必做）；catalog 按 source 格式设计，官方落地时可转为其数据源而非废弃 |
 | D5 | ~~GUI SDK 第三方加载~~ ✅ 已实证可行 | 剩风险：`experimental` 面随上游变 + 依赖必须全打进 bundle（白名单 require） |
 | D4 | spam/恶意投稿 | P4 才开投稿；此前目录全由爬虫决定 |
@@ -347,6 +385,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | E1 | 规则集公开 = 恶意作者可针对性绕过 | 分层：扫描+装测+人工高危审；诚实标"未检出≠安全" |
 | E2 | typosquatting/改名包冒充知名插件 | 名称相似度检测 + 官方 ecosystem 名单锚定 |
 | E3 | fork 包冒名原插件身份 | §4.5 去重规则：无自有提交的 fork 不收 |
+| E4 | catalog 分支写通道不止 CI：maintainer Mac 的常驻守护（`bin/ai-diagnose-agent.sh` 前台循环拉起 `bin/ai-diagnose.sh`，第三方保活监督；另有手动 `bin/publish-digest.sh`）以本地 git 凭证推送，无 egress/permissions 护栏——Mac 失陷或恶意 merge 到 main，下一周期即带写权限执行 | 与 CI secret 同级信任根：`$CODE` 钉 `origin/main` 独立 checkout（脏树不会被跑）；视为数据面第三信任根纳入威胁模型（另两根：GITHUB_TOKEN、GitHub Pages 账号） |
 
 ### F. 治理卡点
 | # | 卡点 | 应对 |

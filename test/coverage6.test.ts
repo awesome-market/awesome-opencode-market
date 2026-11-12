@@ -1,23 +1,23 @@
 /** Branch coverage: ai/diagnose+digest mains, docket main, notify main,
  *  checkTui, verifyPackage feature routes, fetch/github+npm uncovered arms,
  *  run.ts reuse/hold/gone-check branches. */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, truncateSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
-import { main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
+import { main as diagnoseMain, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { main as digestMain } from '../pipeline/ai/digest.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
-import { verifyPackage } from '../pipeline/verify/verify.ts'
+import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
-import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, repoFileExists, fetchMarketMeta } from '../pipeline/fetch/github.ts'
+import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
 import { run } from '../pipeline/run.ts'
-import { latestVerdicts, applyMatureVerdicts, vkey } from '../pipeline/verdicts.ts'
+import { latestVerdicts, applyMatureVerdicts, vkey, akey } from '../pipeline/verdicts.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import { mergeEntries, versionCmp } from '../pipeline/publish/merge.ts'
 import { ornithReview } from '../pipeline/ai/diagnose.ts'
@@ -32,13 +32,32 @@ import { detailPage, buildSkillCatalog } from '../pipeline/site/build.ts'
 import { detectFeatures } from '../src/features.ts'
 import { backfill } from '../pipeline/backfill.ts'
 
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). Boot silence now throws
+ *  (harness lane) — tests exercising post-boot stages use liveSpawn. */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
+
+/** Fake serve that announces its listener — exercises the post-boot path. */
+const liveSpawn = (() => ({
+  stdout: { on: (_e: 'data', cb: (d: unknown) => void) => {
+    cb('server listening on http://127.0.0.1:4567\nserver password pw\n')
+  } },
+  stderr: { on: () => {} },
+  on: () => {},
+  kill: () => {},
+})) as unknown as SpawnFn
+
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
   source: { kind: 'npm', id: 'pkg' }, description: { en: 'a pkg' }, category: [],
   license: null, deprecated: false, replacement: null, deprecatedMessage: null,
   createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
   firstSeenAt: 't', latestVersion: '1.0.0', publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
   capabilities: { scannedAt: 't', findings: [], redFlags: [] },
   verification: { status: 'verified' }, compat: {},
   approval: 'pending',
@@ -51,6 +70,11 @@ const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p))
+/** canary-aware l05 mock — the batch always carries the two self-check
+ *  blocks; a map that omits them trips "classifier untrusted" and every
+ *  real score gets dropped (that's the point of the canary). */
+const l05Map = (fixed: Record<string, number> = {}) =>
+  new Map<string, number>([[L05_CANARY_BENIGN.id, 0.1], [L05_CANARY_HOSTILE.id, 0.9], ...Object.entries(fixed)])
 
 describe('ai/diagnose.main', () => {
   const files = (plugins: PluginEntry[], verdicts: AiVerdict[] = []) => {
@@ -62,13 +86,15 @@ describe('ai/diagnose.main', () => {
   }
   const argv = (ip: string, vp: string, op: string, extra: string[] = []) =>
     ['tsx', 'diagnose.ts', '--index', ip, '--verdicts', vp, '--out', op, ...extra]
-  const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
 
+  const noSha = () => undefined
   it('l05 clean + ornith pass → pass verdict written', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['manifest', 0.1]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.1 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('pass')
@@ -79,28 +105,35 @@ describe('ai/diagnose.main', () => {
   it('l05 flag + ornith pass → composite concern (layering wins)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['finding:x', 0.9]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.9 }),
       ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('concern')
     expect(got.reason).toContain('L0.5')
     expect(got.reason).toContain('没问题')
     expect(got.reasonEn).toContain('injection')
+    // classifier/judge metadata stays LOCAL — a published score/model pair
+    // tells an attacker exactly which judge to evade and how close they got
+    expect(got.l05).toBeUndefined()
+    expect(got.model).toBeUndefined()
   })
   it('l05 throws → ornith still runs', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
       l05: () => { throw new Error('python gone') },
       ornith: async () => ({ verdict: 'concern', reasonZh: '可疑', reasonEn: 'sus' }),
+      sha: noSha,
     })
     expect((JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict).verdict).toBe('concern')
   })
   it('ornith fails + l05 flag → concern still written (fail-closed via L0.5)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map([['m', 0.99]]),
+      l05: () => l05Map({ 'pkg\0manifest': 0.99 }),
       ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
     expect(got.verdict).toBe('concern')
@@ -109,10 +142,90 @@ describe('ai/diagnose.main', () => {
   it('ornith fails + no l05 → NO verdict (stays held, retried next run)', async () => {
     const { ip, vp, op } = files([held])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
     })
     expect(readFileSync(op, 'utf8')).toBe('')
+  })
+  it('verify-failed → direct concern with excerpt, LLM never called', async () => {
+    const failed = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
+    const { ip, vp, op } = files([failed])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { called = true; throw new Error('must not be called') },
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('装测失败')
+    expect(got.reason).toContain('boom on load')
+    expect(got.model).toBeUndefined()
+    expect(called).toBe(false)
+  })
+  it('red-flagged entry → concern draft even when LLM says pass', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const { ip, vp, op } = files([flagged])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => ({ verdict: 'pass', reasonZh: '没问题', reasonEn: 'fine' }),
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('草稿')
+    expect(got.reason).toContain('没问题')
+  })
+  it('red-flagged + ornith down → still concern (fail-safe), flags as reason', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const { ip, vp, op } = files([flagged])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    expect(got.reason).toContain('sec:exec:a.js')
+  })
+  it('same-sha twin verdict reused — no LLM, no L0.5', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: '之前判过', sha: 'sha512-same' })])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => { called = true; return new Map() },
+      ornith: async () => { called = true; throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.version).toBe('2.0.0')
+    expect(got.reason).toContain('复用')
+    expect(got.sha).toBe('sha512-same')
+    expect(called).toBe(false)
+  })
+  it('sha drift on a verdicted version → auto re-review', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-old' })])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => ({ verdict: 'pass', reasonZh: '重审', reasonEn: 're' }),
+      sha: () => 'sha512-new',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.reason).toBe('重审')
+    expect(got.sha).toBe('sha512-new')
+  })
+  it('--budget 0 → LLM never called, candidates stay held', async () => {
+    const { ip, vp, op } = files([held])
+    let called = false
+    await diagnoseMain(argv(ip, vp, op, ['--budget', '0']), {
+      l05: () => l05Map(),
+      ornith: async () => { called = true; throw new Error('x') },
+      sha: noSha,
+    })
+    expect(readFileSync(op, 'utf8')).toBe('')
+    expect(called).toBe(false)
   })
   it('--dry prints instead of writing; --name + --limit narrow candidates', async () => {
     const other = e({ name: 'other', slug: 'o/other' })
@@ -120,40 +233,66 @@ describe('ai/diagnose.main', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       await diagnoseMain(argv(ip, vp, op, ['--dry', '--name', 'pkg']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+        sha: noSha,
       })
       expect(existsSync(op)).toBe(false)
       expect(log.mock.calls.flat().join(' ')).toContain('"name":"pkg"')
       // --limit 1 slices candidates
       await diagnoseMain(argv(ip, vp, op, ['--limit', '1']), {
-        l05: () => new Map(),
+        l05: () => l05Map(),
         ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+        sha: noSha,
       })
       expect(readFileSync(op, 'utf8').trim().split('\n')).toHaveLength(1)
     } finally { log.mockRestore() }
   })
-  it('existing verdict (any source) excludes the target', async () => {
-    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0' })])
+  it('existing verdict (any source) excludes the target; matching sha = no drift', async () => {
+    const { ip, vp, op } = files([held], [v({ name: 'pkg', version: '2.0.0', sha: 'sha512-x' })])
     await diagnoseMain(argv(ip, vp, op), {
-      l05: () => new Map(),
+      l05: () => l05Map(),
       ornith: async () => ({ verdict: 'pass', reasonZh: 'z', reasonEn: 'e' }),
+      sha: () => 'sha512-x',
     })
     expect(readFileSync(op, 'utf8')).toBe('')
   })
 })
 
 describe('ai/digest.main', () => {
-  it('writes digest/<day>.md + digest-state.json; --date pins the day', async () => {
+  it('writes digest/<day>.md + digest-state.json; --date backfills md only', async () => {
     const d = tmp('dig-')
     const ip = join(d, 'index.json'), vp = join(d, 'v.jsonl'), sp = join(d, 'state.json')
     writeFileSync(ip, JSON.stringify(idx([e()])))
     writeFileSync(vp, JSON.stringify(v({ at: '2026-02-01T00:00:00Z' })) + '\n')
-    await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    // --date backfill render: md lands but state stays untouched (see below)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d, '--date', '2026-02-02'])
+    } finally { log.mockRestore() }
     const md = readFileSync(join(d, 'digest', '2026-02-02.md'), 'utf8')
     expect(md).toContain('marketplace digest 2026-02-02')
     expect(md).toContain('pkg')
-    expect(JSON.parse(readFileSync(sp, 'utf8')).lastDigestAt).toContain('2026-02-02')
+    // the maturity anchor is left alone — a backdated day/dayAnnounced would
+    // wedge same-day accumulation, and the skipped announcements re-enter at
+    // the next real render anyway
+    expect(existsSync(sp)).toBe(false)
+    // consequence of md-only backfill: with NO prior state ever written, the
+    // next real render sees digest/*.md history + missing state → the
+    // state-loss refusal (fail-closed mass-announce guard) fires. A catalog
+    // that already has state doesn't hit this — provide it and the render
+    // announces the verdict normally
+    writeFileSync(sp, JSON.stringify({ lastDigestAt: '2026-02-01T21:00:00Z', announced: [], day: '2026-02-01', dayAnnounced: [] }))
+    const log2 = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      await digestMain(['x', 'digest.ts', '--index', ip, '--verdicts', vp, '--state', sp, '--out-dir', d])
+    } finally { log2.mockRestore() }
+    const st = JSON.parse(readFileSync(sp, 'utf8'))
+    // real render: anchor is monotonic from prev (never regresses) AND the
+    // seen verdict line lands in `announced` — maturity is membership, not
+    // the timestamp
+    expect(st.lastDigestAt).toBe('2026-02-01T21:00:00Z')
+    expect(st.announced).toEqual([akey(v({ at: '2026-02-01T00:00:00Z' }))])
   })
   it('existing state anchors the window; --dry prints without writing', async () => {
     const d = tmp('dig2-')
@@ -233,7 +372,7 @@ describe('notify-published.main', () => {
       expect(JSON.parse(out[0]!).notified).toBe(true)
       expect(JSON.parse(out[1]!).notified).toBe(false)
       expect(out[2]).toBe('not-json')
-      expect(log.mock.calls.flat().join('')).toBe('42')
+      expect(log.mock.calls.flat().join('')).toBe('42\to/pkg')
     } finally { log.mockRestore() }
   })
 })
@@ -241,7 +380,9 @@ describe('notify-published.main', () => {
 describe('verify/checkTui', () => {
   const run = (behaviour: Record<string, 'ok' | 'fail' | string>) =>
     (async (_c: string, args: string[]) => {
-      const key = args[0]!
+      // new-session carries a leading `-f /dev/null` (config-sourcing guard) —
+      // the subcommand sits at index 2 there, index 0 for the rest
+      const key = args[0] === '-f' ? args[2]! : args[0]!
       const b = behaviour[key]
       if (b === 'fail' || b === undefined) throw new Error(`${key} failed`)
       return { stdout: b === 'ok' ? '' : b, stderr: '' }
@@ -256,7 +397,7 @@ describe('verify/checkTui', () => {
     const calls: string[] = []
     const f = (async (_c: string, args: string[]) => {
       calls.push(args[0]!)
-      if (args[0] === 'new-session') return { stdout: '', stderr: '' }
+      if (args.includes('new-session')) return { stdout: '', stderr: '' }
       throw new Error('no session')
     }) as never
     const r = await checkTui(env, f, { settleMs: 1 })
@@ -282,8 +423,8 @@ describe('verify/checkTui', () => {
 describe('verifyPackage feature routes', () => {
   const home = () => {
     const h = tmp('vf-')
-    mkdirSync(join(h, 'data', 'opencode', 'log'), { recursive: true })
-    writeFileSync(join(h, 'data', 'opencode', 'log', 'opencode.log'), 'msg="loading plugin" id=pkg')
+    writeFileSync(join(h, 'plugins.json'), JSON.stringify(
+      [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
     return h
   }
   const okExec = (over: Record<string, 'fail' | string> = {}) =>
@@ -304,14 +445,14 @@ describe('verifyPackage feature routes', () => {
       } })`)
   }
   it('tui feature: tmux survives → level interactive', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), features: ['tui'], tuiOpts: { settleMs: 1 } })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec({ 'capture-pane': 'x'.repeat(200) }), spawnFn: liveSpawn, features: ['tui'], tuiOpts: { settleMs: 1 } })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('interactive')
   })
   it('tui feature: session dies → failed/interactive', async () => {
     const r = await verifyPackage('pkg', {
       home: home(), features: ['tui'], tuiOpts: { settleMs: 1 },
-      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }),
+      execFn: okExec({ 'has-session': 'fail', 'capture-pane': 'fail' }), spawnFn: liveSpawn,
     })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('interactive')
@@ -319,12 +460,12 @@ describe('verifyPackage feature routes', () => {
   it('gui feature: bundle renders → level render', async () => {
     const h = home()
     guiFixture(h)
-    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: h, execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
   })
   it('gui feature: bundle dir missing → failed/render', async () => {
-    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), features: ['gui'] })
+    const r = await verifyPackage('pkg', { home: home(), execFn: okExec(), spawnFn: liveSpawn, features: ['gui'] })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('render')
   })
@@ -374,6 +515,16 @@ describe('verify/gui remaining branches', () => {
     mkdirSync(join(h3, 'cache', 'opencode', 'npm', 'other@1', '1'), { recursive: true })
     expect(findGuiBundle(h3, 'pkg')).toMatchObject({ error: expect.stringContaining('not found') })
   })
+  it('findGuiBundle: oversize gui entrypoint refused before read (shard OOM guard)', () => {
+    const h = tmp('fg-big-')
+    const dir = join(h, 'cache', 'opencode', 'npm', 'pkg@9', '1', 'node_modules', 'pkg')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui': './g.js' } }))
+    const g = join(dir, 'g.js')
+    writeFileSync(g, 'x')
+    truncateSync(g, 8 * 1024 * 1024 + 1)   // sparse — statSync sees the cap breach
+    expect(findGuiBundle(h, 'pkg')).toMatchObject({ error: expect.stringContaining('too large') })
+  })
 })
 
 describe('fetch/github uncovered arms', () => {
@@ -413,16 +564,6 @@ describe('fetch/github uncovered arms', () => {
     expect(err.status).toBe('error')
     const noname = await fetchRepoPackageName('o/r', { fetchFn: (async () => res(200, { name: 42 })) as typeof fetch })
     expect(noname.pkgName).toBeNull()
-  })
-  it('repoFileExists: branch query param; !ok → false; throw → false', async () => {
-    let seen = ''
-    const f = (async (u: RequestInfo | URL) => { seen = String(u); return res(200) }) as typeof fetch
-    expect(await repoFileExists('o/r', 'SKILL.md', { branch: 'dev', fetchFn: f })).toBe(true)
-    expect(seen).toContain('?ref=dev')
-    const nf = await repoFileExists('o/r', 'x', { fetchFn: (async () => res(404)) as typeof fetch })
-    expect(nf).toBe(false)
-    const boom = await repoFileExists('o/r', 'x', { fetchFn: (async () => { throw new Error('x') }) as typeof fetch })
-    expect(boom).toBe(false)
   })
   it('fetchMarketMeta: bad category filtered; desc partial; empty → null; !ok → null', async () => {
     const f = (b: unknown, s = 200) => (async () => res(s, b)) as typeof fetch
@@ -528,16 +669,18 @@ describe('run.ts uncovered arms', () => {
     expect(idx.plugins.map(p => p.name)).toEqual(['good-pkg'])
   })
 
-  it('gone-check: npm-404 → tombstone; error → keep stale; github → filtered; capped → capped', async () => {
+  it('gone-check: 404 → tombstone; error/undiscovered-but-alive → keep; rejected → filtered', async () => {
     const tgz = mkTgz()
     const d = tmp('rg-')
-    // old index carries only the entries that will go missing; the 16 keep-*
+    // old index carries only the entries that will go missing; the keep-*
     // candidates land fresh — fresh count > old count, gate stays green
     const oldIdx = idx([
       e({ name: 'gone404', slug: 'gone404' }),
       e({ name: 'gone500', slug: 'gone500' }),
       e({ name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' }, latestVersion: null, verification: { status: 'skipped' } }),
+      e({ name: 'bad/gh', slug: 'bad/gh', source: { kind: 'github', id: 'bad/gh', repo: 'bad/gh' }, latestVersion: null, verification: { status: 'skipped' } }),
       e({ name: 'z-capped', slug: 'z-capped' }),
+      e({ name: 'filtered-pkg', slug: 'filtered-pkg' }),
     ])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -550,9 +693,17 @@ describe('run.ts uncovered arms', () => {
         return new Response(JSON.stringify({ objects: [
           { package: { name: 'good-pkg', version: '1.0.0', keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } },
           { package: { name: 'z-capped', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } },
+          { package: { name: 'filtered-pkg', version: '1.0.0', keywords: ['opencode'], links: {}, date: 't' } },
           ...keeps,
         ] }))
       }
+      // discovered but zero installable artifact → evidence gate rejects → filtered
+      if (url.includes('registry.npmjs.org/filtered-pkg'))
+        return new Response(JSON.stringify({ 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': { keywords: ['opencode'] } }, time: {} }))
+      if (url.includes('api.github.com/search'))
+        // bad/gh is discovered but its repo shows no opencode evidence → filtered;
+        // o/gh is NOT returned — outside the search surface
+        return new Response(JSON.stringify({ items: [{ full_name: 'bad/gh', description: '', archived: false, fork: false, pushed_at: 't', stargazers_count: 1, default_branch: 'main' }] }))
       if (url.includes('registry.npmjs.org/gone404')) return new Response('', { status: 404 })
       if (url.includes('registry.npmjs.org/gone500')) return new Response('', { status: 500 })
       if (url.includes('registry.npmjs.org/')) return new Response(packument('x'))
@@ -561,11 +712,13 @@ describe('run.ts uncovered arms', () => {
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't', maxEntries: 16 })
     const names = out.plugins.map(p => p.name)
     expect(names).toContain('gone500')     // transient error keeps the stale entry
+    expect(names).toContain('o/gh')        // live repo missed by the search surface → kept, not tombstoned (R-3)
+    expect(names).toContain('z-capped')    // existing entry bypasses the cap (C-1)
     expect(names).toContain('good-pkg')
     const reasons = Object.fromEntries(out.removed.map(r => [r.name, r.reason]))
     expect(reasons['gone404']).toBe('npm-404')
-    expect(reasons['o/gh']).toBe('filtered')
-    expect(reasons['z-capped']).toBe('capped')
+    expect(reasons['filtered-pkg']).toBe('filtered')   // discovered AND evidence-rejected → real filter
+    expect(reasons['bad/gh']).toBe('filtered')
   })
 
   it('seed name past the alphabetical cap still gets processed', async () => {
@@ -595,7 +748,7 @@ describe('run.ts uncovered arms', () => {
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '1.0.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01T00:00:00Z' }, // stale → refreshMeta
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01T00:00:00Z' }, // stale → refreshMeta
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -618,15 +771,24 @@ describe('run.ts uncovered arms', () => {
     expect(g.source.repoId).toBe(777)
   })
 
-  it('repo tree with .opencode/skills path → contains:[skill]; rate-limited meta tolerated', async () => {
-    const tgz = mkTgz()
+  it('skill payload in the tarball → contains:[skill]; rate-limited meta tolerated', async () => {
+    // install-truth: 'skill' must ship in the published tarball — repo-tree
+    // evidence alone doesn't count (V-P). Build a tarball carrying the
+    // .opencode/skills layout rather than relying on the repo-tree mock.
+    const sd = tmp('rt-skill-')
+    mkdirSync(join(sd, 'pkg', '.opencode', 'skills', 'x'), { recursive: true })
+    writeFileSync(join(sd, 'pkg', 'package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+    writeFileSync(join(sd, 'pkg', '.opencode', 'skills', 'x', 'SKILL.md'), '---\nname: x\n---\n')
+    execFileSync('tar', ['-czf', join(sd, 'p.tgz'), '-C', sd, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    const tgz = readFileSync(join(sd, 'p.tgz'))
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('api.github.com') && url.includes('/git/trees/')) {
-        return new Response(JSON.stringify({ tree: [{ path: '.opencode/skills/x/SKILL.md' }] }))
-      }
       if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', default_branch: 'main' }))
-      return mkFetch(tgz)(input)
+      return mkFetch(tgz, {
+        // mkFetch's packument ships dist:{} — a tarball URL is required or the
+        // scan (and with it the skill file list) never happens
+        'registry.npmjs.org/good-pkg': new Response(packument('good-pkg', { dist: { tarball: 'https://x/t.tgz' } })),
+      })(input)
     }) as typeof fetch
     const out = await run({ outPath: join(tmp('rh-'), 'i.json'), fetchFn: f, now: 't' })
     expect(out.plugins[0]!.contains).toContain('skill')
@@ -638,7 +800,7 @@ describe('run.ts uncovered arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '0.9.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good', version: '0.9.0' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -688,13 +850,14 @@ describe('verdicts + merge + misc uncovered arms', () => {
     expect(r.held).toEqual([])
   })
   it('applyMatureVerdicts: concern with same reason does not double-hold', () => {
-    const en = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't', reason: 'bad' } })
+    const en = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't', reason: 'bad' } })
     const r = applyMatureVerdicts(idx([en]), [v({ version: '2.0.0', verdict: 'concern', reason: 'bad' })], null)
     expect(r.held).toEqual([])
   })
   it('mergeEntries: flagged + verified → skipped demotion both layers', () => {
     const prev = e({ verification: { status: 'verified' } })
     const fresh = [e({
+      approval: 'approved',   // a pendingUpdate only lives on a displayed entry (R-9)
       verification: { status: 'verified' },
       capabilities: { scannedAt: 't', findings: [], redFlags: ['x:y'] },
       pendingUpdate: {
@@ -717,7 +880,9 @@ describe('verdicts + merge + misc uncovered arms', () => {
 })
 
 describe('ornithReview (mocked global fetch)', () => {
-  const held = e({ pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
+  beforeAll(() => { process.env.AI_MODEL = 'test/judge' }) // judge id is env-required now
+  afterAll(() => { delete process.env.AI_MODEL })
   const withFetch = async (res: () => Response | Promise<Response>, fn: () => Promise<unknown>) => {
     const orig = globalThis.fetch
     globalThis.fetch = (async () => res()) as typeof fetch
@@ -753,6 +918,57 @@ describe('ornithReview (mocked global fetch)', () => {
       () => ornithReview(held, [])) as { reasonZh: string; reasonEn: string }
     expect(r.reasonZh).toBe('')
     expect(r.reasonEn).toBe('')
+  })
+  it('nested JSON (signals array) parses — the old flat regex could not', async () => {
+    const r = await withFetch(
+      () => chat('{"verdict":"concern","reason_zh":"嵌套","reason_en":"nested","signals":[{"finding":"x","tp":true}]}'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('concern')
+  })
+  it('verdict buried mid-think after other braces → span scan finds it', async () => {
+    const r = await withFetch(
+      () => chat('thinking {"partial":1} hmm {"verdict":"pass","reason_zh":"可","reason_en":"ok"} done'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('pass')
+  })
+  it('code-fenced whole-body response parses', async () => {
+    const r = await withFetch(
+      () => chat('```json\n{"verdict":"concern","reason_zh":"栏","reason_en":"f"}\n```'),
+      () => ornithReview(held, [])) as { verdict: string }
+    expect(r.verdict).toBe('concern')
+  })
+  /** queue-based fetch mock capturing request bodies — the thinking retry
+   *  needs to prove the second call dropped the non-thinking kwarg */
+  const withFetchQ = async (responses: Response[], fn: () => Promise<unknown>) => {
+    const orig = globalThis.fetch
+    const calls: { body: Record<string, unknown> }[] = []
+    globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+      calls.push({ body: JSON.parse(init?.body ?? '{}') as Record<string, unknown> })
+      return responses.shift() ?? new Response('', { status: 500 })
+    }) as typeof fetch
+    try { return { out: await fn(), calls } } finally { globalThis.fetch = orig }
+  }
+  it('degenerate non-thinking output → one retry WITH thinking, then parses', async () => {
+    const { out, calls } = await withFetchQ(
+      [chat('```json'), chat('{"verdict":"pass","reason_zh":"好","reason_en":"ok"}')],
+      () => ornithReview(held, [], { think: false }))
+    expect((out as { verdict: string }).verdict).toBe('pass')
+    expect(calls).toHaveLength(2)
+    const kw0 = calls[0]!.body['chat_template_kwargs'] as { enable_thinking?: boolean } | undefined
+    expect(kw0?.enable_thinking).toBe(false)
+    expect(calls[1]!.body['chat_template_kwargs']).toBeUndefined()
+  })
+  it('non-thinking retry also unparseable → throws (attempt streak still applies)', async () => {
+    await expect(withFetchQ([chat(''), chat('still prose')],
+      () => ornithReview(held, [], { think: false }))
+      .then(r => r.out)).rejects.toThrow('unparseable')
+  })
+  it('parseable non-thinking output → no retry (single call)', async () => {
+    const { out, calls } = await withFetchQ(
+      [chat('{"verdict":"concern","reason_zh":"嫌","reason_en":"sus"}')],
+      () => ornithReview(held, [], { think: false }))
+    expect((out as { verdict: string }).verdict).toBe('concern')
+    expect(calls).toHaveLength(1)
   })
 })
 
@@ -800,7 +1016,7 @@ describe('verifyShard + writeDummyProvider arms', () => {
       calls.push(args)
       return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
     }) as never
-    const rs = await verifyShard(['p'], join(d, 'res.json'), { execFn: fake })
+    const rs = await verifyShard(['p'], join(d, 'res.json'), { execFn: fake, spawnFn: deadSpawn })
     // execFn is shared, but home is mkdtemp — the log above isn't read here;
     // assert the shard wrote results for the bare target
     expect(rs).toHaveLength(1)
@@ -846,6 +1062,9 @@ describe('run.ts remaining arms', () => {
     if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
     if (url.includes('registry.npmjs.org/')) return new Response(pack({ repository: 'https://github.com/o/good' }))
     if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' },
+    ] }))
     if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't' }))
     if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
     return new Response('', { status: 404 })
@@ -874,7 +1093,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '0.9.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },   // no version field → 326#1 arm
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
       pendingUpdate: { version: '1.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })])
     const oldPath = join(d, 'old.json')
@@ -900,7 +1119,7 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx([e({
       name: 'good-pkg', slug: 'o/good', approval: 'pending', approvalReason: 'concern-x',
       latestVersion: '0.9.0', source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2026-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -914,7 +1133,7 @@ describe('run.ts remaining arms', () => {
       name: 'good-pkg', slug: 'o/good', approval: 'approved', latestVersion: '1.0.0',
       source: { kind: 'npm', id: 'good-pkg', repo: 'o/good' },
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01T00:00:00Z' },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01T00:00:00Z' },
     })])
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
@@ -929,7 +1148,7 @@ describe('run.ts remaining arms', () => {
     expect(g.deprecated).toBe(false)
     expect(g.metrics.checkedAt).toBe('2026-01-01T00:00:00Z')
   })
-  it('rate-limited tree → no hasSkill, warn counted; npm missing-but-found → filtered', async () => {
+  it('rate-limited tree → no hasSkill, warn counted; npm missing-but-found → kept', async () => {
     const tgz = mkTgz()
     const d = tmp('rl2-')
     const oldIdx = idx([e({ name: 'filtered-out', slug: 'filtered-out' })])
@@ -942,8 +1161,11 @@ describe('run.ts remaining arms', () => {
       return base(tgz, {})(input)
     }) as typeof fetch
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
-    expect(out.removed.find(r => r.name === 'filtered-out')!.reason).toBe('filtered')
-    expect(out.plugins[0]!.contains).toBeUndefined()
+    // 'filtered-out' was never discovered this run and still exists on npm —
+    // absence from the search surface is not evidence of filtering (R-3)
+    expect(out.plugins.map(p => p.name)).toContain('filtered-out')
+    expect(out.removed.find(r => r.name === 'filtered-out')).toBeUndefined()
+    expect(out.plugins.find(p => p.name === 'good-pkg')!.contains).toEqual(['plugin'])   // parts list is explicit now
   })
   it('publish gate: mass disappearance → run() throws', async () => {
     const tgz = mkTgz()
@@ -951,7 +1173,9 @@ describe('run.ts remaining arms', () => {
     const oldIdx = idx(Array.from({ length: 10 }, (_, i) => e({ name: `old-${i}`, slug: `old-${i}` })))
     const oldPath = join(d, 'old.json')
     writeFileSync(oldPath, JSON.stringify(oldIdx))
-    await expect(run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: base(tgz, {}), now: 't' }))
+    // probes must 404 for the drop to be real — ok responses keep entries now (R-3)
+    await expect(run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: base(tgz, { 'registry.npmjs.org/old-': new Response('', { status: 404 }) }), now: 't' }))
       .rejects.toThrow('publish gate')
   })
   it('github-kind via seed repo: zh marketMeta + no repoId arms', async () => {
@@ -973,6 +1197,246 @@ describe('run.ts remaining arms', () => {
     expect(g.description.zh).toBe('只有中文')
     expect(g.category).toEqual(['integrations'])   // zh marketMeta label normalized to id at merge
     expect(g.source.repoId).toBeUndefined()
+  })
+  it('reuse path backfills missing integrity from the packument (R-1)', async () => {
+    const tgz = mkTgz()
+    const d = tmp('ib-')
+    // entry predates the integrity field: reuse-matched (version + ruleset) and
+    // metrics fresh → would normally skip the network entirely; needsIntegrity
+    // forces one packument fetch to fill the SRI
+    const oldIdx = idx([e({
+      name: 'good-pkg', slug: 'o/good', latestVersion: '1.0.0', integrity: null,
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
+    })])
+    const oldPath = join(d, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(oldIdx))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(pack({ dist: { integrity: 'sha512-BACKFILL' } }))
+      return base(tgz, {})(input)
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: 't' })
+    expect(out.plugins[0]!.integrity).toBe('sha512-BACKFILL')
+  })
+  it('remerge: remote already released our held version → adopt its display, no resurrected hold (R-8)', () => {
+    const ours = e({
+      name: 'pkg', latestVersion: '1.0.0', approval: 'approved',
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
+    })
+    const remote = e({
+      name: 'pkg', latestVersion: '2.0.0', approval: 'approved',
+      verification: { status: 'verified' }, integrity: 'sha512-NEW',
+    })
+    const [out] = mergeEntries([ours], idx([remote]), '2.2.5')
+    expect(out!.latestVersion).toBe('2.0.0')          // remote's released display wins
+    expect(out!.pendingUpdate).toBeUndefined()         // hold is NOT resurrected
+    expect(out!.integrity).toBe('sha512-NEW')
+    // symmetric case: remote released a DIFFERENT version → our hold stays
+    const remote2 = e({ name: 'pkg', latestVersion: '3.0.0', approval: 'approved' })
+    const [out2] = mergeEntries([ours], idx([remote2]), '2.2.5')
+    expect(out2!.pendingUpdate?.version).toBe('2.0.0')
+    // remote saw the version but is still pending → hold kept (adopt-gate false arm)
+    const remote3 = e({ name: 'pkg', latestVersion: '2.0.0', approval: 'pending' })
+    const [out3] = mergeEntries([ours], idx([remote3]), '2.2.5')
+    expect(out3!.pendingUpdate?.version).toBe('2.0.0')
+  })
+  it('corrupt blocklist → run() refuses rather than running unprotected (C-4)', async () => {
+    const d = tmp('bl-')
+    const bl = join(d, 'blocklist.json')
+    writeFileSync(bl, 'not-json{')
+    await expect(run({ outPath: join(d, 'i.json'), blocklistPath: bl, fetchFn: base(mkTgz(), {}), now: 't' }))
+      .rejects.toThrow('blocklist unreadable')
+    // absent blocklist file → still optional
+    const ok = await run({ outPath: join(d, 'i2.json'), blocklistPath: join(d, 'absent.json'), fetchFn: base(mkTgz(), {}), now: 't' })
+    expect(ok.plugins.length).toBeGreaterThan(0)
+  })
+  it('seed metadata caps: desc ≤4k/lang, category ≤8×80 chars (F-4)', async () => {
+    const tgz = mkTgz()
+    const d = tmp('sc-')
+    const seed = join(d, 'seed.txt')
+    writeFileSync(seed, JSON.stringify({
+      name: 'good-pkg',
+      category: Array.from({ length: 20 }, (_, i) => `cat-${i}-${'x'.repeat(200)}`),
+      desc: { en: 'e'.repeat(5000), zh: '中'.repeat(5000) },
+    }))
+    const out = await run({ outPath: join(d, 'i.json'), seedPath: seed, fetchFn: base(tgz, {}), now: 't' })
+    const p = out.plugins.find(x => x.name === 'good-pkg')!
+    expect(p.category!.length).toBeLessThanOrEqual(8)
+    expect(p.category!.every(c => c.length <= 80)).toBe(true)
+    expect(p.description.en!.length).toBeLessThanOrEqual(4000)
+    expect(p.description.zh!.length).toBeLessThanOrEqual(4000)
+  })
+  it('searchTopic requests fork:false server-side (F-2)', async () => {
+    let seen = ''
+    const f = (async (input: RequestInfo | URL) => {
+      seen = String(input)
+      return new Response(JSON.stringify({ items: [] }))
+    }) as typeof fetch
+    await searchTopic('opencode', { fetchFn: f, maxPages: 1 })
+    // q is encoded wholesale (created: slices join it) — assert the
+    // qualifier semantically, not its wire encoding
+    expect(decodeURIComponent(seen)).toContain('fork:false')
+  })
+
+  it('searchTopic: missing optional item fields → null/[] arms', async () => {
+    const f = (async () => new Response(JSON.stringify({ items: [
+      { full_name: 'o/min', html_url: 'u', description: null, pushed_at: 't', stargazers_count: 0, default_branch: 'main' },
+      { full_name: 'o/mit', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', license: { spdx_id: 'MIT' }, topics: ['opencode-plugin'], id: 9, created_at: 'c' },
+    ] }))) as typeof fetch
+    const rs = await searchTopic('t', { fetchFn: f, maxPages: 1 })
+    expect(rs[0]!.id).toBeNull()
+    expect(rs[0]!.license).toBeNull()
+    expect(rs[0]!.topics).toEqual([])
+    expect(rs[0]!.createdAt).toBeNull()
+    expect(rs[1]!.license).toBe('MIT')
+    expect(rs[1]!.id).toBe(9)
+  })
+
+  it('seed edge cases: non-string desc/category values filtered; repo-only seed; discoveredVia merge', async () => {
+    const tgz = mkTgz()
+    const d = tmp('se-')
+    const seed = join(d, 'seed.txt')
+    writeFileSync(seed, [
+      JSON.stringify({ name: 'declared-pkg', category: ['tools', 5, 'x'.repeat(100)], desc: { en: '', zh: 5, ok: 'v' } }),
+      JSON.stringify({ repo: 'o/seedskill', desc: { zh: '技能' } }),
+      JSON.stringify({ name: 'good-pkg' }),
+    ].join('\n') + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/')) return new Response(pack({ repository: 'https://github.com/o/good' }))
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [{ path: '.opencode/skills/x/SKILL.md' }, { path: 'package.json' }], sha: 'abc' }))
+      if (url.includes('api.github.com/repos/o/seedskill')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', id: 7, topics: ['opencode-skill'], license: { spdx_id: 'MIT' } }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't' }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    const gp = out.plugins.find(p => p.name === 'good-pkg')!
+    expect(gp.discoveredVia).toContain('submission')
+    const dp = out.plugins.find(p => p.name === 'declared-pkg')!
+    // the 80-char claim isn't a canonical taxonomy id — whitelisted out
+    expect(dp.category).toEqual(['tools'])
+    const gh = out.plugins.find(p => p.name === 'o/seedskill')!
+    expect(gh.source.kind).toBe('github')
+    expect(gh.source.version).toBe('abc')
+  })
+
+  it('stale metrics (>7d) → refreshMeta re-fetch; sparse packument falls back to entry values', async () => {
+    const tgz = mkTgz()
+    const d = tmp('st-')
+    const oldIdx = idx([e({
+      name: 'good-pkg', slug: 'o/good',
+      capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
+      metrics: { stars: null, npmDownloads30d: 42, downloadsMonth: null, starsDelta30d: null, checkedAt: '2000-01-01T00:00:00.000Z' },
+    })])
+    const oldPath = join(d, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(oldIdx))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(JSON.stringify({ versions: {}, 'dist-tags': {}, time: {}, maintainers: [] }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 5, archived: false, pushed_at: 't' }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: oldPath, fetchFn: f, now: '2026-06-01T00:00:00.000Z' })
+    const p = out.plugins[0]!
+    expect(p.metrics.checkedAt).toBe('2026-06-01T00:00:00.000Z')
+    expect(p.metrics.npmDownloads30d).toBe(42)
+    expect(p.maintainers).toEqual([])
+  })
+
+  it('gh: tree 500 → keep prev (treeTransient); tree 404 → rejected → gone-check filtered; ev-reject arm', async () => {
+    const tgz = mkTgz()
+    const ghEntry = () => e({ name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' }, latestVersion: null, verification: { status: 'unverified' } })
+    const item = JSON.stringify({ items: [{ full_name: 'o/gh', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', id: 1, created_at: 't', license: null, topics: ['opencode-plugin'] }] })
+    const run1 = async (treeRes: Response) => {
+      const d = tmp('gt-')
+      writeFileSync(join(d, 'old.json'), JSON.stringify(idx([ghEntry()])))
+      const b = base(tgz, {})
+      const f = (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('api.github.com/search')) return new Response(item)
+        if (url.includes('git/trees/')) return treeRes.clone()
+        return b(input)
+      }) as typeof fetch
+      return run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    }
+    // transient tree error → keep old entry, no tombstone
+    let out = await run1(new Response('', { status: 500 }))
+    expect(out.plugins.map(p => p.name)).toContain('o/gh')
+    expect(out.removed).toHaveLength(0)
+    // tree genuinely gone (404) → positive rejection → repo meta ok → 'filtered'
+    out = await run1(new Response('', { status: 404 }))
+    expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('filtered')
+    // tree present but no opencode evidence → evidenceRejected → also 'filtered'
+    out = await run1(new Response(JSON.stringify({ tree: [{ path: 'README.md' }] })))
+    expect(out.removed.find(r => r.name === 'o/gh')!.reason).toBe('filtered')
+  })
+
+  it('gh entry rebuild: repoId/sha spreads, zh description, ghPrev approvalReason', async () => {
+    const tgz = mkTgz()
+    const d = tmp('gr-')
+    const prev = e({
+      name: 'o/gh', slug: 'o/gh', source: { kind: 'github', id: 'o/gh', repo: 'o/gh' },
+      latestVersion: null, verification: { status: 'unverified' },
+      approval: 'approved', approvalReason: 'human-ok',
+    })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [
+        { full_name: 'o/gh', html_url: 'u', description: 'd', pushed_at: 't', stargazers_count: 1, default_branch: 'main', id: 42, created_at: 't', license: { spdx_id: 'MIT' }, topics: ['opencode-plugin'] },
+      ] }))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }], truncated: true, sha: 'sha9' }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, archived: false, pushed_at: 't', topics: ['opencode-plugin'] }))
+      if (url.includes('.opencode-market.json')) return new Response(JSON.stringify({ description: { zh: '中文描述' } }))
+      if (url.includes('raw.githubusercontent.com')) return new Response('', { status: 404 })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.source.repoId).toBe(42)
+    expect(p.source.version).toBe('sha9')
+    expect(p.approval).toBe('approved')
+    expect(p.approvalReason).toBe('human-ok')
+    expect(p.description.zh).toBe('中文描述')
+  })
+
+  it('run.ts: non-pending prev + version bump → hold surgery carries prev.source.version', async () => {
+    const tgz = mkTgz()
+    const d = tmp('nl-')
+    const prev = e({
+      name: 'good-pkg', slug: 'o/good', approval: 'approved', approvalReason: 'ok',
+      latestVersion: '0.9.0',
+      source: { kind: 'npm', id: 'good-pkg', repo: 'o/good', version: 'v-pin' },
+      pendingUpdate: { version: '1.5.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' }, heldAt: 't' },
+    })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([prev])))
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(search([{ name: 'good-pkg', repo: 'o/good' }]))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org/good-pkg')) return new Response(pack({ repository: 'https://github.com/o/good' }))
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1 }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 1 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins[0]!
+    expect(p.source.version).toBe('v-pin')
+    expect(p.latestVersion).toBe('0.9.0')
+    // R-1: the live hold's pinned target is not redirected by upstream churn
+    expect(p.pendingUpdate?.version).toBe('1.5.0')
   })
 })
 
@@ -1008,6 +1472,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
   it('sec-delta on a held entry attaches to pendingUpdate.capabilities', () => {
     const prev = e({ capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] } })
     const fresh = e({
+      approval: 'approved',   // a pendingUpdate only lives on a displayed entry (R-9)
       pendingUpdate: {
         version: '2.0.0', heldAt: 't',
         capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: ['prepare-script:p/package.json'], redFlags: [] },
@@ -1038,7 +1503,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(r.issues).toEqual([])
   })
   it('renderReview: repo + evidence + unknown downloads arms', () => {
-    const md = renderReview({ name: 'p', exists: true, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', createdAt: 'c', findings: [], redFlags: [] })
+    const md = renderReview({ name: 'p', exists: true, status: 'ok', evidenceOk: true, scanned: true, scanError: null, evidence: ['keyword', 'entry'], downloads30d: null, repo: 'o/r', pkgName: null, createdAt: 'c', findings: [], redFlags: [], version: null, integrity: null })
     expect(md).toContain('repo: o/r')
     expect(md).toContain('keyword, entry')
     expect(md).toContain('unknown')
@@ -1082,14 +1547,14 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     const noLog = detailPage(e({ approval: 'approved' }))
     expect(noLog).not.toContain('failure log')
   })
-  it('buildSkillCatalog: same basename → namespaced ids; tarballOf injected', () => {
+  it('buildSkillCatalog: same basename → namespaced ids; tarballOf injected', async () => {
     const d = tmp('sc-')
     const skills = [
       e({ name: 'a/test', slug: 'a/test', contains: ['skill'], latestVersion: '1.0.0' }),
       e({ name: 'b/test', slug: 'b/test', contains: ['skill'], latestVersion: '1.0.0' }),
       e({ name: 'c/solo', slug: 'c/solo', contains: ['skill'], latestVersion: null }),
     ]
-    buildSkillCatalog(idx(skills), d, () => null)   // tarballOf null → skip all
+    await buildSkillCatalog(idx(skills), d, () => null)   // tarballOf null → skip all
     const out = JSON.parse(readFileSync(join(d, 'skills', 'index.json'), 'utf8')) as { skills: unknown[] }
     expect(out.skills).toEqual([])
   })

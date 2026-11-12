@@ -14,7 +14,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
 import { detectFeatures } from '../src/features.ts'
 import { scanTarball } from './scan/scan.ts'
-import { fetchTarball, withTimeout } from './fetch/npm.ts'
+import { fetchTarball, withTimeout, readJsonCapped } from './fetch/npm.ts'
+import { isMain } from './main-guard.ts'
 
 interface VerDoc { main?: string; exports?: unknown; dist?: { tarball?: string } }
 interface PkDoc { versions?: Record<string, VerDoc> }
@@ -34,7 +35,7 @@ export async function main(file: string, opts: { dry?: boolean; fetchFn?: typeof
     if (docCache.has(name)) return docCache.get(name)!
     try {
       const res = await f(`https://registry.npmjs.org/${name.replace('/', '%2f')}`)
-      const doc = res.ok ? await res.json() as PkDoc : null
+      const doc = res.ok ? await readJsonCapped<PkDoc>(res, 64 * 1024 * 1024) : null
       docCache.set(name, doc)
       return doc
     } catch { docCache.set(name, null); return null }
@@ -98,7 +99,7 @@ export async function main(file: string, opts: { dry?: boolean; fetchFn?: typeof
 }
 
 /* v8 ignore next 6 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const file = process.argv[2]
   if (!file) { console.error('usage: re-features <index.json> [--dry]'); process.exit(2) }
   main(file, { dry: process.argv.includes('--dry') }).catch(e => { console.error(e); process.exit(1) })

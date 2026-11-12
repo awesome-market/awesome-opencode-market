@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { CatalogIndex } from '../src/schema.ts'
 import { fetchPackument, withTimeout } from './fetch/npm.ts'
 import { fetchRepoMeta } from './fetch/github.ts'
+import { isMain } from './main-guard.ts'
 
 export async function backfill(index: CatalogIndex, opts: { ghToken?: string | undefined; fetchFn?: typeof fetch | undefined } = {}): Promise<CatalogIndex> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
@@ -36,7 +37,7 @@ export async function backfill(index: CatalogIndex, opts: { ghToken?: string | u
 }
 
 /* v8 ignore next 7 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(process.argv[2]!, 'utf8')))
   const out = await backfill(idx, { ghToken: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN })
   process.stdout.write(JSON.stringify(out, null, 2))

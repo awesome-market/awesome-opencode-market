@@ -4,13 +4,26 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { run, loadOldIndex } from '../pipeline/run.ts'
+import { run, loadOldIndex, anchorIntegrity, DRIFT_FLAG } from '../pipeline/run.ts'
+import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 
 function mkTgz(): Buffer {
   const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
   mkdirSync(join(dir, 'pkg'), { recursive: true })
   writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
   writeFileSync(join(dir, 'pkg/index.js'), 'export default { id: "p", setup() {} }')
+  const out = join(dir, 'p.tgz')
+  execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+  return readFileSync(out)
+}
+
+/** Same shape as mkTgz plus a nested skill payload — dual-nature tarball. */
+function mkTgzSkill(): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
+  mkdirSync(join(dir, 'pkg/skills/x'), { recursive: true })
+  writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+  writeFileSync(join(dir, 'pkg/index.js'), 'export default { id: "p", setup() {} }')
+  writeFileSync(join(dir, 'pkg/skills/x/SKILL.md'), '---\nname: x\n---\n# skill\n')
   const out = join(dir, 'p.tgz')
   execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
   return readFileSync(out)
@@ -45,6 +58,10 @@ function mkFetch(tgz: Buffer) {
       }))
     }
     if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+    // repo tree: evidence-bearing paths so github-kind candidates pass the gate
+    if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+      { path: '.opencode/plugin/x.ts' }, { path: 'package.json' }, { path: 'README.md' },
+    ] }))
     if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 3, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } }))
     if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 7 }))
     if (url.includes('/contents/')) return new Response('', { status: 404 })
@@ -77,7 +94,8 @@ describe('pipeline/run', () => {
     expect(loadOldIndex(good)!.plugins).toEqual([])
     const bad = join(dir, 'bad.json')
     writeFileSync(bad, '{"version":"9"}')
-    expect(loadOldIndex(bad)).toBeNull()
+    // present-but-corrupt hard-fails — running blind would re-pend the catalog
+    expect(() => loadOldIndex(bad)).toThrow()
   })
 })
 
@@ -122,6 +140,135 @@ describe('pipeline/run seed injection', () => {
   })
 })
 
+describe('github-kind hardening', () => {
+  const ghItem = (full_name: string) => ({
+    full_name, description: 'd', archived: false, fork: false,
+    pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin'],
+  })
+  const ghBase = (trees: (url: string) => Response | null, codeload: () => Response) =>
+    (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(JSON.stringify({ objects: [] }))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [ghItem('o/r')] }))
+      const t = trees(url); if (t) return t
+      if (url.includes('codeload')) return codeload()
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1 }))
+      return new Response('{}', { status: 404 })
+    }) as typeof fetch
+
+  it('stale search default_branch — tree probes HEAD, repo still admitted', async () => {
+    // the repo renamed its branch after the search index snapshot: trees/main
+    // 404s, but the HEAD ref still resolves — admission must not depend on the
+    // stale name
+    const f = ghBase(
+      url => url.includes('/git/trees/main')
+        ? new Response('{}', { status: 404 })
+        : url.includes('/git/trees/HEAD')
+          ? new Response(JSON.stringify({ tree: [{ path: 'SKILL.md' }] }))
+          : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'rb-')), 'i.json'), fetchFn: f, now: 't' })
+    expect(idx.plugins.find(p => p.name === 'o/r')?.source.kind).toBe('github')
+  })
+
+  it('nested skills/<x>/SKILL.md marks contains:[skill]', async () => {
+    // repos keep skills in a skills/ dir as often as at the root or
+    // .opencode/skills — a nested SKILL.md must still tag the entry
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: 'skills/x/SKILL.md' }] }))
+        : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'sk-')), 'i.json'), fetchFn: f, now: 't' })
+    // 'plugin' too — the repo ships a root package.json alongside the skill
+    expect(idx.plugins.find(p => p.name === 'o/r')?.contains).toEqual(['plugin', 'skill'])
+  })
+
+  it('skill-only evidence derives type:skill; package.json present stays plugin', async () => {
+    const withTree = (tree: { path: string }[]) => ghBase(
+      url => url.includes('/git/trees/') ? new Response(JSON.stringify({ tree })) : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const d = mkdtempSync(join(tmpdir(), 'ty-'))
+    const skillOnly = await run({ outPath: join(d, 'a.json'), fetchFn: withTree([{ path: 'skills/x/SKILL.md' }]), now: 't' })
+    expect(skillOnly.plugins.find(p => p.name === 'o/r')?.type).toBe('skill')
+    const withPkg = await run({ outPath: join(d, 'b.json'), fetchFn: withTree([{ path: 'skills/x/SKILL.md' }, { path: 'package.json' }]), now: 't' })
+    expect(withPkg.plugins.find(p => p.name === 'o/r')?.type).toBe('plugin')
+  })
+
+  it('hold surgery splits contains per version — candidate parts on pendingUpdate, displayed parts stay on entry', async () => {
+    // v1.0.0 plugin-only → v2.0.0 adds a skill payload: install routing reads
+    // entry.contains for the DISPLAYED version, so the held candidate's parts
+    // must live on pendingUpdate.contains — the dual-nature boundary case
+    let ver = '1.0.0'
+    const tgzA = mkTgz()        // plugin only
+    const tgzB = mkTgzSkill()   // plugin + SKILL.md
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) {
+        return new Response(JSON.stringify({ objects: [
+          { package: { name: 'good-pkg', version: ver, description: 'd',
+            keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } }] }))
+      }
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org') && url.includes('good-pkg')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: ver },
+          versions: { [ver]: { repository: 'https://github.com/o/good', license: 'MIT',
+            dist: { tarball: `https://x/t-${ver}.tgz` }, keywords: ['opencode'], main: 'index.js' } },
+          time: { [ver]: 't' },
+        }))
+      }
+      if (url.includes('x/t-1.0.0.tgz')) return new Response(new Uint8Array(tgzA))
+      if (url.includes('x/t-2.0.0.tgz')) return new Response(new Uint8Array(tgzB))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+        { path: '.opencode/plugin/x.ts' }, { path: 'package.json' }, { path: 'README.md' }] }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 3, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 7 }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'hold-'))
+    const out1 = join(d, 'i1.json')
+    await run({ outPath: out1, fetchFn: f, now: '2026-11-02T00:00:00Z' })
+    // approve the displayed entry so the bump triggers hold surgery
+    // (pending entries move their candidate in place — nothing to protect)
+    const first = JSON.parse(readFileSync(out1, 'utf8'))
+    first.plugins[0].approval = 'approved'
+    delete first.plugins[0].approvalReason
+    writeFileSync(out1, JSON.stringify(first))
+    ver = '2.0.0'
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: '2026-11-03T00:00:00Z' })
+    const e = idx2.plugins.find(p => p.name === 'good-pkg')!
+    expect(e.latestVersion).toBe('1.0.0')
+    expect(e.pendingUpdate?.version).toBe('2.0.0')
+    expect(e.contains).toEqual(['plugin'])                          // displayed v1's parts
+    expect(e.pendingUpdate?.contains).toEqual(['plugin', 'skill'])   // candidate v2's parts
+  })
+
+  it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {
+    let codeloadHits = 0
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }], sha: 'commitA' }))
+        : null,
+      () => { codeloadHits++; return new Response('', { status: 200, headers: { 'content-length': '70000000' } }) },
+    )
+    const d = mkdtempSync(join(tmpdir(), 'big-'))
+    const out1 = join(d, 'i1.json')
+    const idx1 = await run({ outPath: out1, fetchFn: f, now: 't' })
+    const e = idx1.plugins.find(p => p.name === 'o/r')!
+    expect(e.capabilities.scannedAt).toBeNull()
+    expect(e.capabilities.rulesetVersion).toBe(RULESET_VERSION)
+    expect(codeloadHits).toBe(1)
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2' })
+    expect(codeloadHits).toBe(1)   // incremental reuse — oversize repo not re-fetched
+    expect(idx2.plugins.find(p => p.name === 'o/r')?.capabilities.scannedAt).toBeNull()
+  })
+})
+
 describe('classify', () => {
   it('assigns english category ids by keywords, declared fallback other', async () => {
     const { classify } = await import('../src/categories.ts')
@@ -129,5 +276,41 @@ describe('classify', () => {
     expect(classify('x', 'x', 'git commit review')).toContain('workflow')
     expect(classify('x', 'x', 'zzz nothing')).toEqual(['other'])
     expect(classify('tok', 'x', 'llm pricing token').length).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('anchorIntegrity — same-version byte drift (re-tag guard)', () => {
+  const caps = { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: [] }
+  it('same sha → anchor kept, no flag', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', 'sha512-a')
+    expect(r.integrity).toBe('sha512-a')
+    expect(r.capabilities.redFlags).toEqual([])
+  })
+  it('no prior anchor → backfill (field predates this entry)', () => {
+    const r = anchorIntegrity(caps, null, 'sha512-a')
+    expect(r.integrity).toBe('sha512-a')
+    expect(r.capabilities.redFlags).toEqual([])
+  })
+  it('registry sha missing → keep the old anchor (absence proves nothing)', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', null)
+    expect(r.integrity).toBe('sha512-a')
+    const r2 = anchorIntegrity(caps, 'sha512-a', undefined)
+    expect(r2.integrity).toBe('sha512-a')
+  })
+  it('DIFFERENT sha under the same version → freeze old anchor + sec flag', () => {
+    // unpublish+republish is the signal — the index must NOT start certifying
+    // the new bytes as the reviewed artifact
+    const r = anchorIntegrity(caps, 'sha512-old', 'sha512-new')
+    expect(r.integrity).toBe('sha512-old')
+    expect(r.capabilities.redFlags).toContain(DRIFT_FLAG)
+  })
+  it('drift flag is deduped — repeated refresh does not stack it', () => {
+    const flagged = { ...caps, redFlags: [DRIFT_FLAG] }
+    const r = anchorIntegrity(flagged, 'sha512-old', 'sha512-new')
+    expect(r.capabilities.redFlags.filter(f => f === DRIFT_FLAG)).toHaveLength(1)
+  })
+  it('capabilities object untouched on no-drift (same reference → no churn)', () => {
+    const r = anchorIntegrity(caps, 'sha512-a', 'sha512-a')
+    expect(r.capabilities).toBe(caps)
   })
 })

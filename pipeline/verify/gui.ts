@@ -10,10 +10,12 @@
  *    contribution factory → { render(): HTMLElement }
  *  Whitelisted requires: @opencode/plugin/gui (stub), effect, solid-js* (real,
  *  renderer-side modules the host provides). Anything else → load failure. */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, statSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
+import { isMain } from '../main-guard.ts'
 
 export interface GuiCheck {
   ok: boolean
@@ -40,6 +42,12 @@ const HOST_GLOBALS = [
 
 const EVAL_TIMEOUT = 5_000
 const STAGE_TIMEOUT = 8_000
+/** Untrusted bundle size bound: nothing upstream caps an individual gui
+ *  entrypoint — a multi-MB file can hang `new vm.Script` compilation (the
+ *  eval timeout only covers runInContext, not compile) or OOM the shard.
+ *  Real gui bundles are far smaller; refuse honestly instead of dying
+ *  mid-shard and taking the lane's remaining targets with it. */
+const GUI_BUNDLE_MAX = 8 * 1024 * 1024
 
 /** Reject if `p` doesn't settle within `ms` — bounds async hangs inside
  *  untrusted setup()/render() (sync loops are already bound by the vm timeout). */
@@ -71,6 +79,10 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     const effectModule = await import('effect').catch(() => null)
     const solidModule = await import('solid-js').catch(() => null)
     const solidWeb = await import('solid-js/web').catch(() => null)
+    // the store API is a SEPARATE module from the reactive root — mapping it to
+    // solidModule leaves createStore/produce/reconcile/unwrap undefined and a
+    // legit store-using bundle fails setup() for a harness mistake
+    const solidStore = await import('solid-js/store').catch(() => null)
     const reqmap: Record<string, unknown> = {
       '@opencode/plugin/gui': {
         Plugin, Ipc, Panel, SettingsPage, Command, MenuItem, Tab,
@@ -80,7 +92,7 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     if (solidModule) {
       reqmap['solid-js'] = solidModule
       if (solidWeb) reqmap['solid-js/web'] = solidWeb
-      reqmap['solid-js/store'] = solidModule
+      if (solidStore) reqmap['solid-js/store'] = solidStore
     }
     const req = (name: string): unknown => {
       if (name in reqmap) return reqmap[name]
@@ -100,10 +112,17 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     // ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING (fire-and-forget import() would
     // otherwise surface as a stray unhandled rejection — see verifyShard's
     // process-level guard)
-    const script = new vm.Script(bundleSrc, {
-      filename: 'gui-bundle.cjs',
-      importModuleDynamically: () => Promise.reject(new Error('module not in gui host whitelist: (dynamic import)')),
-    })
+    let script: vm.Script
+    try {
+      script = new vm.Script(bundleSrc, {
+        filename: 'gui-bundle.cjs',
+        importModuleDynamically: () => Promise.reject(new Error('module not in gui host whitelist: (dynamic import)')),
+      })
+    } catch (e) {
+      // a syntactically broken bundle must record 'failed', not crash the
+      // whole verify shard — compile errors land here, evaluate errors below
+      return { ok: false, stage: 'evaluate', error: (e as Error).message }
+    }
     let def: { setup?: (ctx: unknown) => unknown } | undefined
     try {
       script.runInContext(vctx, { timeout: EVAL_TIMEOUT })
@@ -188,24 +207,120 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
   }
 }
 
+/** opencode's npm-cache key for a git spec — mirrors the host's install
+ *  layout (util/npm.ts `key()`): `git-<basename>-<sha256(spec).hex[0:12]>`.
+ *  Compute it so `plugin add owner/repo#sha` installs are found — the
+ *  name@version dirs only ever cover registry specs. */
+function gitSpecDir(spec: string): string {
+  let target = spec.split('#')[0] ?? spec
+  try { target = decodeURIComponent(target) } catch { /* keep raw */ }
+  const slug = target.replace(/\.git$/i, '').split(/[/:\\]/).at(-1)
+    ?.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'repository'
+  return `git-${slug}-${createHash('sha256').update(spec).digest('hex').slice(0, 12)}`
+}
+
+/** Under an installed tree's node_modules, find packages carrying a gui
+ *  export — a git install nests under the package's OWN package.json name,
+ *  which needn't equal the repo name the entry is catalogued under. */
+function scanForGuiPackage(nm: string): string[] {
+  if (!existsSync(nm)) return []
+  const roots: string[] = []
+  // every readdirSync is inside the installed tree — plugin-influenced
+  // content (a file named '@scope', a deleted dir raced mid-read) throwing
+  // ENOTDIR/ENOENT would escape findGuiBundle as a shard-level crash, which
+  // the lane records as harness:true — the package is then unverifiable
+  // forever (every retry crashes identically) instead of failing honestly
+  const safeReaddir = (d: string): string[] => {
+    try { return readdirSync(d) } catch { return [] }
+  }
+  for (const top of safeReaddir(nm)) {
+    if (top.startsWith('.')) continue
+    if (top.startsWith('@')) for (const s of safeReaddir(join(nm, top))) roots.push(join(top, s))
+    else roots.push(top)
+  }
+  return roots.filter(r => {
+    try {
+      const pj = JSON.parse(readFileSync(join(nm, r, 'package.json'), 'utf8')) as { exports?: Record<string, unknown> }
+      return Object.keys(pj.exports ?? {}).some(k => /gui/.test(k))
+    } catch { return false }
+  }).map(r => join(nm, r))
+}
+
+/** Resolve a conditional-exports target to a runnable file. The naive pick
+ *  (Object.values(target)[0]) breaks two real layouts: "types"-first objects
+ *  resolve to a .d.ts declaration (guaranteed vm compile failure), and NESTED
+ *  conditions ({import:{default:"./x.js"}}) yield a non-string value that
+ *  crashes path.join entirely — the slot then re-queues forever because merge
+ *  never sees a result for it. Prefer the runtime conditions, skip 'types'
+ *  (compile-time metadata, never the executable bundle), recurse into nested
+ *  condition objects and fallback arrays. */
+export function resolveExportTarget(t: unknown, depth = 0): string | null {
+  if (typeof t === 'string') return /\.d\.[cm]?ts$/.test(t) ? null : t
+  if (depth > 4 || !t || typeof t !== 'object') return null
+  if (Array.isArray(t)) {
+    for (const v of t) { const r = resolveExportTarget(v, depth + 1); if (r) return r }
+    return null
+  }
+  const o = t as Record<string, unknown>
+  for (const k of ['browser', 'import', 'default', 'node', 'require', 'worker']) {
+    const r = resolveExportTarget(o[k], depth + 1)
+    if (r) return r
+  }
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'types') continue
+    const r = resolveExportTarget(v, depth + 1)
+    if (r) return r
+  }
+  return null
+}
+
 /** Locate the installed package dir under XDG_CACHE_HOME/opencode/npm and read
- *  its gui entrypoint (package.json exports key matching /gui/). */
-export function findGuiBundle(home: string, name: string): { path: string; src: string } | { error: string } {
+ *  its gui entrypoint (package.json exports key matching /gui/). `spec` is
+ *  the install spec actually given to `plugin add` — for git targets the
+ *  cache dir keys on it, not on the entry name. */
+export function findGuiBundle(home: string, name: string, spec?: string): { path: string; src: string } | { error: string } {
   const npmRoot = join(home, 'cache', 'opencode', 'npm')
   if (!existsSync(npmRoot)) return { error: `no plugin cache at ${npmRoot}` }
   // spec dirs are named by the bare package segment — a scoped '@s/p@ver'
   // spec dir can't exist ('/' isn't a valid path segment), it's 'p@ver'
   const norm = name.split('/').pop() ?? name
+  const gitDir = spec ? gitSpecDir(spec) : null
   let pkgDir: string | null = null
-  for (const spec of readdirSync(npmRoot)) {
-    if (!spec.startsWith(`${name}@`) && !spec.startsWith(`${norm}@`)) continue
-    for (const ts of readdirSync(join(npmRoot, spec))) {
-      const cand = join(npmRoot, spec, ts, 'node_modules', name)
-      if (existsSync(join(cand, 'package.json'))) pkgDir = cand
-      // scoped npm dir: node_modules/@scope/name
-      const scoped = join(npmRoot, spec, ts, 'node_modules', ...name.split('/'))
-      if (!pkgDir && existsSync(join(scoped, 'package.json'))) pkgDir = scoped
+  const safeReaddir = (d: string): string[] => {
+    try { return readdirSync(d) } catch { return [] }
+  }
+  for (const dir of safeReaddir(npmRoot)) {
+    // name-prefix dirs pin the package name — a 'p@x' dir that turns out to
+    // hold package 'p' must NOT vouch for '@s/p'. The any-package scan only
+    // applies inside the git spec dir, where the installed package name
+    // legitimately differs from the entry name.
+    const isGit = gitDir !== null && dir === gitDir
+    if (!dir.startsWith(`${name}@`) && !dir.startsWith(`${norm}@`) && !isGit) continue
+    for (const ts of safeReaddir(join(npmRoot, dir))) {
+      const nm = join(npmRoot, dir, ts, 'node_modules')
+      const cand = join(nm, name)
+      if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }
+      if (isGit) {
+        // every gui-export package under the install tree is a candidate —
+        // including DEPENDENCIES, which can carry a gui export and sort ahead
+        // of the real one. Prefer the package whose name matches the repo's
+        // basename; several non-matching candidates = unprovable which one is
+        // the plugin — honest error over measuring the wrong bundle.
+        const hits = scanForGuiPackage(nm)
+        if (hits.length > 1) {
+          const repoBase = spec?.split('#')[0]?.split('/').pop()?.toLowerCase()
+          const hit = repoBase
+            ? hits.find(h => h.split('/').pop()?.toLowerCase() === repoBase)
+            : undefined
+          pkgDir = hit ?? null
+          if (!pkgDir) return { error: `ambiguous gui bundle under ${dir}: ${hits.map(h => h.split('/').pop()).join(', ')} — cannot identify the plugin's own` }
+        } else {
+          pkgDir = hits[0] ?? null
+        }
+        if (pkgDir) break
+      }
     }
+    if (pkgDir) break
   }
   if (!pkgDir) return { error: `installed package dir not found under ${npmRoot}` }
   let exportsMap: Record<string, unknown> = {}
@@ -217,11 +332,32 @@ export function findGuiBundle(home: string, name: string): { path: string; src: 
   }
   const guiKey = Object.keys(exportsMap).find(k => /gui/.test(k))
   if (!guiKey) return { error: 'no gui export key in package.json' }
-  const target = exportsMap[guiKey]
-  const rel = typeof target === 'string' ? target
-    : typeof target === 'object' && target ? (Object.values(target)[0] as string) : null
+  const rel = resolveExportTarget(exportsMap[guiKey])
   if (!rel) return { error: `gui export ${guiKey} has no file target` }
   const file = join(pkgDir, rel)
+  // exports targets are package-relative — a crafted "../" must not read
+  // outside the installed package dir (the host wouldn't resolve it either)
+  if (!file.startsWith(`${pkgDir}/`)) return { error: `gui export ${guiKey} escapes the package dir` }
   if (!existsSync(file)) return { error: `gui entrypoint missing: ${rel}` }
+  const bytes = statSync(file).size
+  if (bytes > GUI_BUNDLE_MAX) {
+    return { error: `gui entrypoint too large to evaluate (${bytes} bytes > ${GUI_BUNDLE_MAX}-byte cap)` }
+  }
   return { path: file, src: readFileSync(file, 'utf8') }
+}
+
+/* v8 ignore next 14 — subprocess entry: sandboxed gui eval prints one JSON line */
+if (isMain(import.meta.url)) {
+  // The parent takes the LAST stdout line as the verdict. Untrusted bundle
+  // code shares this process's console/setTimeout (HOST_GLOBALS) — a pending
+  // timer could print a forged '{"ok":true}' AFTER our result and win the
+  // `.at(-1)` parse, or keep the process alive to the 90s urun timeout.
+  // Synchronous write + hard exit leaves no async gap: the harness result is
+  // always the final line and leftover untrusted timers never fire.
+  const out = (r: unknown) => {
+    writeSync(1, JSON.stringify(r) + '\n')
+    process.exit(0)
+  }
+  checkGuiBundle(readFileSync(process.argv[2]!, 'utf8'))
+    .then(out, e => out({ ok: false, stage: 'evaluate', error: String(e) }))
 }

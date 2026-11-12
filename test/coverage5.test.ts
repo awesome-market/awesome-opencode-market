@@ -6,11 +6,19 @@ import { filterByStars, repoToNpm, buildSeedList } from '../pipeline/discover/se
 import { fetchRepoMeta, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchDownloads30d } from '../pipeline/fetch/npm.ts'
 import { reviewPackage, verdict, renderReview } from '../pipeline/review.ts'
-import { verifyPackage } from '../pipeline/verify/verify.ts'
+import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { versionCmp } from '../pipeline/publish/merge.ts'
 import { run } from '../pipeline/run.ts'
 import { RULESET_VERSION } from '../pipeline/scan/rules.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 const mkRes = (body: unknown, status = 200) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), { status })
@@ -27,7 +35,7 @@ describe('seed.ts branches', () => {
       return mkRes({}, 404)
     }) as typeof fetch
     const out = await filterByStars(['a', 'b', 'c', 'd', 'e'], 50, { fetchFn: f })
-    expect(out).toEqual([{ repo: 'a', stars: 100 }])
+    expect(out).toEqual([{ repo: 'a', stars: 100, branch: null }])
   })
   it('repoToNpm: main 404 → master hit; non-json tolerated; both miss → null', async () => {
     const masterHit = (async (input: RequestInfo | URL) =>
@@ -73,7 +81,9 @@ describe('fetch/npm.ts + review.ts branches', () => {
   })
   it('renderReview: >30 flags truncated, clean verdict on empty', () => {
     const r = {
-      name: 'p', exists: true, evidence: ['keyword'], downloads30d: 5, repo: null, createdAt: null,
+      name: 'p', exists: true, status: 'ok' as const, evidenceOk: true, scanned: true, scanError: null,
+      evidence: ['keyword'], downloads30d: 5, repo: null, pkgName: null, createdAt: null,
+      version: null, integrity: null,
       findings: Array.from({ length: 35 }, (_, i) => `f${i}`),
       redFlags: Array.from({ length: 35 }, (_, i) => `r${i}`),
     }
@@ -86,7 +96,7 @@ describe('fetch/npm.ts + review.ts branches', () => {
 describe('verify.ts exec branches', () => {
   const execAllFail = (async () => { throw new Error('boom') }) as never
   it('plugin add fails → failed/install, ocVersion catch → unknown', async () => {
-    const r = await verifyPackage('x', { execFn: execAllFail })
+    const r = await verifyPackage('x', { execFn: execAllFail, spawnFn: deadSpawn })
     expect(r.status).toBe('failed')
     expect(r.level).toBe('install')
     expect(r.opencodeVersion).toBe('unknown')
@@ -111,7 +121,7 @@ describe('run.ts remaining branches', () => {
     license: 'MIT', deprecated: false, replacement: null,
     deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['a'], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
-    metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+    metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
@@ -131,12 +141,12 @@ describe('run.ts remaining branches', () => {
     return mkRes('{}', 404)
   }) as typeof fetch
 
-  it('malformed blocklist file → treated as absent (no crash)', async () => {
+  it('malformed blocklist file → hard-fail (corrupt must not silently unblock, C-4)', async () => {
     const bl = join(mkdtempSync(join(tmpdir(), 'bl-')), 'blocklist.json')
     writeFileSync(bl, '{not json')
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
-    const idx = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
-    expect(idx.plugins).toHaveLength(5)
+    await expect(run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 }))
+      .rejects.toThrow('blocklist unreadable')
   })
   it('blocklist with non-array fields → filters to empty lists', async () => {
     const bl = join(mkdtempSync(join(tmpdir(), 'bl-')), 'blocklist.json')
@@ -144,6 +154,11 @@ describe('run.ts remaining branches', () => {
     const out = join(mkdtempSync(join(tmpdir(), 'out-')), 'index.json')
     const idx = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl, outPath: out, now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
     expect(idx.plugins).toHaveLength(5)
+    // non-string elements inside arrays are dropped per-element
+    const bl2 = join(mkdtempSync(join(tmpdir(), 'bl2-')), 'blocklist.json')
+    writeFileSync(bl2, JSON.stringify({ names: [1, 'ok-name'], slugs: [] }))
+    const idx2 = await run({ fetchFn: baseFetch, oldIndexPath: mkOld(), blocklistPath: bl2, outPath: join(mkdtempSync(join(tmpdir(), 'o2-')), 'i.json'), now: '2026-06-01T00:00:00.000Z', maxEntries: 10 })
+    expect(idx2.plugins).toHaveLength(5)
   })
 })
 
@@ -160,7 +175,7 @@ describe('backfill + refreshMeta remaining branches', () => {
   it('run: stale reused entry refreshes repoId + deprecated via refreshMeta', async () => {
     const e = mkEntryX('stale-pkg', {
       source: { kind: 'npm', id: 'stale-pkg', repo: 'o/r' },
-      metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01' },   // very stale → refresh path
+      metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01' },   // very stale → refresh path
     })
     const old = join(mkdtempSync(join(tmpdir(), 'old-')), 'index.json')
     writeFileSync(old, JSON.stringify({ version: '1', generatedAt: 'x', categories: {}, plugins: alive2(), removed: [] }))
@@ -190,7 +205,7 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
     license: 'MIT', deprecated: false, replacement: null,
     deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
     firstSeenAt: '2026-01-01', latestVersion: '1.0.0', publishedAt: null,
-    metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+    metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
     capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
     verification: { status: 'unverified' }, compat: {},
     approval: 'approved',
@@ -200,6 +215,6 @@ function mkEntryX(name: string, over: Partial<PluginEntry> = {}): PluginEntry {
 function alive2() {
   return [...Array.from({ length: 4 }, (_, i) => mkEntryX(`alive-${i}`)), mkEntryX('stale-pkg', {
     source: { kind: 'npm', id: 'stale-pkg', repo: 'o/r' },
-    metrics: { stars: 1, npmDownloads30d: 1, checkedAt: '2020-01-01' },
+    metrics: { stars: 1, npmDownloads30d: 1, downloadsMonth: null, starsDelta30d: null, checkedAt: '2020-01-01' },
   })]
 }

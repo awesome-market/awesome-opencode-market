@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseSubmission, seedLine } from '../pipeline/submission.ts'
 import { markNotified } from '../pipeline/notify-published.ts'
+import { submissionStatuses, concernOn } from '../pipeline/submission-status.ts'
+import { latestVerdicts, latestHumanVerdicts } from '../pipeline/verdicts.ts'
+import { AiVerdict } from '../src/schema.ts'
+import { applySeedOutcomes, main as seedOutcomeMain } from '../pipeline/seed-outcome.ts'
 import { run } from '../pipeline/run.ts'
 import { CatalogIndex } from '../src/schema.ts'
 
@@ -71,6 +75,15 @@ describe('submission parser', () => {
     expect(s.name).toBe('opencode-bar')
   })
 
+  it('repo field: github: shorthand + bare owner/repo parse; traversal rejected', () => {
+    // audit#2 — the repo value feeds api.github.com URL paths at review time;
+    // it must pass the same normalizeRepoUrl gate run.ts applies to seeds
+    expect(parseSubmission('### GitHub 仓库地址\n\ngithub:Owner/Repo\n').repo).toBe('owner/repo')
+    expect(parseSubmission('### GitHub 仓库地址\n\nOwner/Repo\n').repo).toBe('owner/repo')
+    expect(parseSubmission('### GitHub 仓库地址\n\nhttps://github.com/../repos/o/r\n').repo).toBeNull()
+    expect(parseSubmission('### GitHub 仓库地址\n\nhttps://github.com/a b/c\n').repo).toBeNull()
+  })
+
   it('rejects non-package names in the package field', () => {
     const s = parseSubmission('### npm 包名\n\nnot a package!!!\n')
     expect(s.name).not.toBe('not a package!!!')
@@ -80,13 +93,47 @@ describe('submission parser', () => {
     const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
     expect(l).toMatchObject({ name: 'opencode-foo', repo: 'o/foo', type: 'skill', issue: 42, notified: false })
     expect(l.desc).toMatchObject({ en: 'Does the thing.', zh: '做那件事' })
+    expect(l.at).toBeTruthy()   // submission timestamp — stale-seed detection
+  })
+
+  it('seedLine extra: reviewed version + repo pkg name ride the line', () => {
+    const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42, { version: '2.3.0', pkg: 'oc-foo' }))
+    expect(l.version).toBe('2.3.0')
+    expect(l.pkg).toBe('oc-foo')
+    const bare = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
+    expect('version' in bare).toBe(false)
+  })
+
+  it('seedLine author: issue author rides the seed for provenance/abuse gates', () => {
+    const l = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42, { author: 'alice' }))
+    expect(l.author).toBe('alice')
+    const bare = JSON.parse(seedLine(parseSubmission(FORM_BODY), 42))
+    expect('author' in bare).toBe(false)
+  })
+
+  it('descEn keeps the full multi-line answer (collapsed), not just line 1', () => {
+    const s = parseSubmission(`### 英文描述\n\nFirst line.\nSecond line with details.\nThird.`)
+    expect(s.descEn).toBe('First line. Second line with details. Third.')
+  })
+
+  it('descOther en: line cannot override the dedicated English description', () => {
+    const s = parseSubmission(`### 英文描述\n\nReal English desc.\n\n### 其他语言描述（可选）\n\nen: impostor\nzh: 中文`)
+    const l = JSON.parse(seedLine(s, 1))
+    expect(l.desc.en).toBe('Real English desc.')
+    expect(l.desc.zh).toBe('中文')
+  })
+
+  it('descOther en: survives only when the dedicated field is empty', () => {
+    const s = parseSubmission(`### 其他语言描述（可选）\n\nen: fallback en\nzh: 中文`)
+    const l = JSON.parse(seedLine(s, 1))
+    expect(l.desc.en).toBe('fallback en')
   })
 })
 
 describe('markNotified', () => {
   const idx = CatalogIndex.parse({
     version: '1', generatedAt: 't', categories: {},
-    plugins: [{ name: 'opencode-foo', slug: 'x', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'x' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {} }],
+    plugins: [{ name: 'opencode-foo', slug: 'x', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'x' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {} }],
     removed: [],
   })
   const lines = [
@@ -105,7 +152,7 @@ describe('markNotified', () => {
   it('repo-only seeds match the github-kind entry by repo, not name', () => {
     const ghIdx = CatalogIndex.parse({
       version: '1', generatedAt: 't', categories: {},
-      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'approved' }],
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'approved' }],
       removed: [],
     })
     const seed = ['{"repo":"o/r","issue":11,"notified":false}',
@@ -118,11 +165,61 @@ describe('markNotified', () => {
   it('repo seed stays quiet while the entry is still pending', () => {
     const ghIdx = CatalogIndex.parse({
       version: '1', generatedAt: 't', categories: {},
-      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'pending' }],
+      plugins: [{ name: 'o/r', slug: 'o/r', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'github', id: 'o/r', repo: 'o/r' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'skipped' }, compat: {}, approval: 'pending' }],
       removed: [],
     })
     const { issues } = markNotified(ghIdx, ['{"repo":"o/r","issue":11,"notified":false}'])
     expect(issues).toEqual([])
+  })
+
+  it('stale: approved seed aged past staleDays without landing warns once', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const old = '2026-10-16T00:00:00Z'   // 20d ago — past staleDays(14), under deadDays(30)
+    const lines = [
+      `{"name":"opencode-foo","issue":7,"notified":false,"at":"${old}"}`,          // landed → notify not stale
+      `{"name":"not-in-index","issue":8,"notified":false,"at":"${old}"}`,          // aged, absent → stale
+      `{"name":"also-missing","issue":9","notified":false,"at":"${old}","staleWarned":true}`, // already warned
+      `{"name":"fresh-one","issue":10,"notified":false,"at":"2026-11-04T00:00:00Z"}`,        // too young
+      '{"name":"legacy-no-at","issue":11,"notified":false}',                                 // no timestamp → skip
+    ]
+    const { issues, stale, dead, lines: out } = markNotified(idx, lines, { now: NOW })
+    expect(issues).toEqual([7])
+    expect(stale).toEqual([8])
+    expect(dead).toEqual([])
+    expect(JSON.parse(out[1]!).staleWarned).toBe(true)
+    expect(JSON.parse(out[3]!).staleWarned).toBeUndefined()
+  })
+
+  it('stale: pending entry still counts as not-landed', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const pendIdx = CatalogIndex.parse({
+      version: '1', generatedAt: 't', categories: {}, removed: [],
+      plugins: [{ ...idx.plugins[0]!, approval: 'pending' }],
+    })
+    const { stale } = markNotified(pendIdx,
+      ['{"name":"opencode-foo","issue":7,"notified":false,"at":"2026-10-16T00:00:00Z"}'], { now: NOW })
+    expect(stale).toEqual([7])
+  })
+
+  it('dead: seed aged past deadDays without landing is terminal + deduped', () => {
+    const NOW = Date.parse('2026-11-05T00:00:00Z')
+    const ancient = '2026-09-01T00:00:00Z'   // 65d ago
+    const lines = [
+      `{"name":"not-in-index","issue":8,"notified":false,"at":"${ancient}"}`,       // → dead
+      `{"name":"also-missing","issue":9,"notified":false,"at":"${ancient}","staleWarned":true}`, // warned then died → dead
+      `{"name":"opencode-foo","issue":7,"notified":false,"at":"${ancient}"}`,       // landed → notify wins over dead
+      `{"name":"gone","issue":12,"notified":false,"at":"${ancient}","dead":true}`,  // already dead → untouched
+      `{"name":"dup-a","issue":5,"notified":false,"at":"${ancient}"}`,
+      `{"name":"dup-b","issue":5,"notified":false,"at":"${ancient}"}`,               // same issue twice → one dead entry
+    ]
+    const { issues, stale, dead, lines: out } = markNotified(idx, lines, { now: NOW })
+    expect(issues).toEqual([7])
+    expect(stale).toEqual([])
+    expect(dead.sort()).toEqual([5, 8, 9])
+    expect(JSON.parse(out[0]!).dead).toBe(true)
+    expect(JSON.parse(out[4]!).dead).toBe(true)
+    expect(JSON.parse(out[5]!).dead).toBe(true)
+    expect(JSON.parse(out[3]!).dead).toBe(true)   // pre-dead line passes through
   })
 })
 
@@ -165,12 +262,222 @@ describe('run: JSONL seed declared metadata', () => {
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('/git/trees/')) return mkRes({ tree: [
+        { path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' },
+      ], sha: 'tree-head-1' })
       return mkRes({}, 404)
     }) as typeof fetch
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'o/repo-skill')!
     expect(e.source.kind).toBe('github')
     expect(e.discoveredVia).toContain('submission')
+    expect(e.type).toBe('skill')   // declared type honored for repo-only seeds
+  })
+
+  it('repo seed: tree moved since review → redFlag + skipped, not silent re-scan', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seed-'))
+    const seed = join(dir, 'submissions.txt')
+    // version = the commit sha the submission REVIEW scanned
+    writeFileSync(seed, JSON.stringify({ name: null, repo: 'o/drift', type: 'skill', version: 'tree-at-review', issue: 7, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('/git/trees/')) return mkRes({ tree: [
+        { path: '.opencode/skills/x/SKILL.md' }, { path: 'README.md' },
+      ], sha: 'tree-head-2' })   // HEAD moved since the review
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'o/drift')!
+    // identity-level signal → redFlag (flag surface + skipIfFlagged), not a
+    // buried finding — the moved bytes fail-closed into human review; the
+    // embedded sha makes each subsequent move a NEW flag set
+    expect(e.capabilities.redFlags.some(x => x.startsWith('sec:repo-moved-since-review:'))).toBe(true)
+    expect(e.capabilities.findings.some(x => x.startsWith('sec:repo-moved-since-review'))).toBe(false)
+    expect(e.verification.status).toBe('skipped')
+  })
+
+  it('dead seeds are skipped — no candidate injection, no scan budget', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'seed-'))
+    const seed = join(dir, 'submissions.txt')
+    writeFileSync(seed,
+      JSON.stringify({ name: 'dead-pkg', repo: null, issue: 8, notified: false, dead: true }) + '\n' +
+      JSON.stringify({ name: 'live-pkg', repo: null, issue: 9, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('registry.npmjs.org/dead-pkg')) throw new Error('dead seed must never be fetched')
+      if (url.includes('registry.npmjs.org/live-pkg')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/t.tgz')) return mkRes({}, 404)
+      if (url.includes('api.github.com')) return mkRes({}, 404)
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
+    expect(idx.plugins.find(p => p.name === 'dead-pkg')).toBeUndefined()
+    expect(idx.plugins.find(p => p.name === 'live-pkg')).toBeDefined()
+  })
+
+  it('--seed-outcomes writes per-seed rejection codes (S-7 receipt pipeline)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'so-'))
+    const seed = join(dir, 'submissions.txt')
+    const outcomesPath = join(dir, 'outcomes.json')
+    writeFileSync(seed,
+      JSON.stringify({ name: 'gone-pkg', repo: null, issue: 10, notified: false }) + '\n' +
+      JSON.stringify({ name: 'live-pkg', repo: null, issue: 11, notified: false }) + '\n')
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search') || url.includes('api.github.com/search')) return mkRes({ objects: [], items: [] })
+      if (url.includes('registry.npmjs.org/gone-pkg')) return mkRes({}, 404)
+      if (url.includes('registry.npmjs.org/live-pkg')) return mkRes({
+        'dist-tags': { latest: '1' },
+        versions: { '1': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/t.tgz' } } },
+        time: {},
+      })
+      if (url.includes('x/t.tgz')) return mkRes({}, 404)
+      if (url.includes('api.github.com')) return mkRes({}, 404)
+      if (url.includes('api.npmjs.org')) return mkRes({ downloads: 1 })
+      return mkRes({}, 404)
+    }) as typeof fetch
+    await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't', seedOutcomesPath: outcomesPath })
+    const outcomes = JSON.parse(readFileSync(outcomesPath, 'utf8'))
+    expect(outcomes['gone-pkg']).toBe('pkg-not-found')
+    expect(outcomes['live-pkg']).toBeUndefined()
+  })
+})
+
+describe('submissionStatuses', () => {
+  const basePlugin = { name: 'p1', slug: 'p1', aliases: [], type: 'plugin' as const, discoveredVia: [], source: { kind: 'npm' as const, id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: null, publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' as const }, compat: {} }
+  const mkIdx = (plugins: unknown[]) => CatalogIndex.parse({ version: '1', generatedAt: 't', categories: {}, plugins, removed: [] })
+
+  it('phases: queued (no entry) / review (pending); landed is skipped (notified already covers it)', () => {
+    const idx = mkIdx([
+      { ...basePlugin, name: 'pend-pkg', approval: 'pending' },
+      { ...basePlugin, name: 'live-pkg', approval: 'approved' },
+    ])
+    const rows = submissionStatuses(idx, [
+      '{"name":"queued-pkg","issue":1,"notified":false}',
+      '{"name":"pend-pkg","issue":2,"notified":false}',
+      '{"name":"live-pkg","issue":3,"notified":false}',
+      '{"name":"done-pkg","issue":4,"notified":true}',     // terminal — skipped
+      '{"name":"dead-pkg","issue":5,"notified":false,"dead":true}', // terminal — skipped
+      '{"name":"noissue","notified":false}',               // no issue — skipped
+    ])
+    expect(rows.map(r => [r.issue, r.phase])).toEqual([
+      [1, 'queued'], [2, 'review'],
+    ])
+    expect(rows[0]!.phaseLabel).toBe('排队中')
+  })
+
+  it('rejected phase renders the stamped reason (S-7: the "届时会说明原因" promise)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending' }])
+    const rows = submissionStatuses(idx, [
+      '{"name":"blocked-pkg","issue":7,"notified":false,"rejected":"blocklisted"}',
+      '{"name":"gone-pkg","issue":8,"notified":false,"rejected":"pkg-not-found"}',
+      // entry exists → 'review' wins over a stale rejected stamp
+      '{"name":"pend-pkg","issue":9,"notified":false,"rejected":"no-plugin-evidence"}',
+    ])
+    expect(rows.map(r => [r.issue, r.phase])).toEqual([
+      [7, 'rejected'], [8, 'rejected'], [9, 'review'],
+    ])
+    expect(rows[0]!.phaseLabel).toBe('未通过收录规则')
+    expect(rows[0]!.detail).toContain('黑名单')
+    expect(rows[1]!.detail).toContain('找不到')
+  })
+
+  it('one row per issue — newest seed wins; repo seeds match by repo', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'o/r', source: { kind: 'github', id: 'o/r', repo: 'o/r' }, approval: 'pending' }])
+    const rows = submissionStatuses(idx, [
+      '{"name":"old-name","issue":9,"notified":false}',
+      '{"repo":"o/r","issue":9,"notified":false}',   // same issue, later line wins
+      '{"repo":"o/other","issue":10,"notified":false}',
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows.find(r => r.issue === 9)!.key).toBe('o/r')
+    expect(rows.find(r => r.issue === 9)!.phase).toBe('review')
+    expect(rows.find(r => r.issue === 10)!.phase).toBe('queued')
+  })
+
+  // verdict-aware phases: a human concern landing via ANY channel (submit
+  // verdict job / [concern] form / [review] label) must surface as "已被拦截"
+  // on the seed's issue — not "评审中" for weeks (HV: submission-status)
+  const hv = (over: Partial<AiVerdict>): AiVerdict => AiVerdict.parse({
+    name: 'p', verdict: 'concern', at: '2026-01-01T00:00:00Z', source: 'human', ...over,
+  })
+  it('human concern on the pending slot → blocked; AI concern → review annotation', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const seeds = ['{"name":"pend-pkg","issue":2,"notified":false}']
+    const human = submissionStatuses(idx, seeds, [hv({ name: 'pend-pkg', version: '1.0.0', reason: 'steals data' })])
+    expect(human[0]!.phase).toBe('blocked')
+    expect(human[0]!.phaseLabel).toBe('已被拦截')
+    expect(human[0]!.detail).toContain('steals data')
+    const ai = submissionStatuses(idx, seeds, [hv({ name: 'pend-pkg', version: '1.0.0', source: 'ai' })])
+    expect(ai[0]!.phase).toBe('review')
+    expect(ai[0]!.detail).toContain('concern')
+  })
+  it('package-level brake (name@null human concern) covers a pending entry AND a queued seed', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const brake = [hv({ name: 'pend-pkg', version: null }), hv({ name: 'ghost-pkg', version: null })]
+    const rows = submissionStatuses(idx, [
+      '{"name":"pend-pkg","issue":2,"notified":false}',
+      '{"name":"ghost-pkg","issue":3,"notified":false,"version":"9.9.9"}',  // not in index yet — brake still applies on landing
+    ], brake)
+    expect(rows.find(r => r.issue === 2)!.phase).toBe('blocked')
+    expect(rows.find(r => r.issue === 3)!.phase).toBe('blocked')
+  })
+  it('a NEWER human pass on the slot lifts the package brake → back to review', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const rows = submissionStatuses(idx, ['{"name":"pend-pkg","issue":2,"notified":false}'], [
+      hv({ name: 'pend-pkg', version: null, at: '2026-01-01T00:00:00Z' }),
+      hv({ name: 'pend-pkg', version: '1.0.0', verdict: 'pass', at: '2026-01-02T00:00:00Z' }),
+    ])
+    expect(rows[0]!.phase).toBe('review')
+  })
+  it('github-kind entry: a human concern on the null slot key → blocked (the slot IS null, not a package brake)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'o/r', source: { kind: 'github', id: 'o/r', repo: 'o/r' }, approval: 'pending', latestVersion: null }])
+    const rows = submissionStatuses(idx, ['{"repo":"o/r","issue":7,"notified":false}'],
+      [hv({ name: 'o/r', version: null, reason: 'dead repo' })])
+    expect(rows[0]!.phase).toBe('blocked')
+  })
+  it('a human concern also wins over a stale rejected stamp (maintainer decision is more informative)', () => {
+    const rows = submissionStatuses(mkIdx([]),
+      ['{"name":"gone-pkg","issue":8,"notified":false,"rejected":"pkg-not-found","version":"1.0.0"}'],
+      [hv({ name: 'gone-pkg', version: '1.0.0' })])
+    expect(rows[0]!.phase).toBe('blocked')
+  })
+  it('no verdicts arg → verdict-free behavior (queued/review/rejected only)', () => {
+    const idx = mkIdx([{ ...basePlugin, name: 'pend-pkg', approval: 'pending', latestVersion: '1.0.0' }])
+    const rows = submissionStatuses(idx, ['{"name":"pend-pkg","issue":2,"notified":false}'])
+    expect(rows[0]!.phase).toBe('review')
+  })
+})
+
+describe('concernOn — package-brake precedence (mirrors applyMatureVerdicts)', () => {
+  const hv2 = (over: Partial<AiVerdict>): AiVerdict => AiVerdict.parse({
+    name: 'p', verdict: 'concern', at: '2026-01-01T00:00:00Z', source: 'human', ...over,
+  })
+  const maps = (vs: AiVerdict[]) => ({ latest: latestVerdicts(vs), human: latestHumanVerdicts(vs) })
+  it('null-version github slot: its own concern is found without brake lookup', () => {
+    const { latest, human } = maps([hv2({ name: 'o/r', version: null })])
+    expect(concernOn('o/r', null, latest, human)?.verdict).toBe('concern')
+  })
+  it('an ai pass does NOT lift a package brake (R-4 stickiness in status too)', () => {
+    const { latest, human } = maps([
+      hv2({ name: 'p', version: null }),
+      hv2({ name: 'p', version: '1.0.0', verdict: 'pass', source: 'ai', at: '2026-01-02T00:00:00Z' }),
+    ])
+    expect(concernOn('p', '1.0.0', latest, human)?.source).toBe('human')
+    expect(concernOn('p', '1.0.0', latest, human)?.version).toBeNull()  // the brake verdict itself
+  })
+  it('no verdicts → null; ai concern on the slot → that verdict', () => {
+    const empty = maps([])
+    expect(concernOn('p', '1.0.0', empty.latest, empty.human)).toBeNull()
+    const { latest, human } = maps([hv2({ name: 'p', version: '1.0.0', source: 'ai' })])
+    expect(concernOn('p', '1.0.0', latest, human)?.source).toBe('ai')
   })
 })
 
@@ -182,14 +489,78 @@ describe('notify-published main', () => {
     const seedPath = join(dir, 'subs.txt')
     writeFileSync(idxPath, JSON.stringify({
       version: '1', generatedAt: 't', categories: {}, removed: [],
-      plugins: [{ name: 'p1', slug: 'p1', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: '1', publishedAt: null, metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {}, approval: 'approved' }],
+      plugins: [{ name: 'p1', slug: 'p1', aliases: [], type: 'plugin', discoveredVia: [], source: { kind: 'npm', id: 'p1' }, description: { en: '' }, features: [], category: [], license: null, deprecated: false, deprecatedMessage: null, replacement: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {}, firstSeenAt: 't', latestVersion: '1', publishedAt: null, metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' }, capabilities: { scannedAt: null, findings: [], redFlags: [] }, verification: { status: 'unverified' }, compat: {}, approval: 'approved' }],
     }))
     writeFileSync(seedPath, '{"name":"p1","issue":3,"notified":false}\n')
     const logs: string[] = []
     const orig = console.log
     console.log = (...a: unknown[]) => { logs.push(String(a[0])) }
     try { main(['x', 'y', idxPath, seedPath]) } finally { console.log = orig }
-    expect(logs).toEqual(['3'])
+    expect(logs).toEqual(['3\tp1'])
     expect(readFileSync(seedPath, 'utf8')).toContain('"notified":true')
+  })
+})
+
+describe('applySeedOutcomes', () => {
+  const idx = {
+    plugins: [
+      { name: 'landed-pkg', source: { repo: 'o/landed' } },
+      { name: 'npm-twin', source: { kind: 'npm', id: 'npm-twin', repo: 'o/twin' } },
+    ],
+  }
+
+  it('stamps the rejection code; a landed entry clears the stamp; repo seeds match source.repo', () => {
+    const out = applySeedOutcomes([
+      '{"name":"rejected-pkg","issue":1}',
+      '{"name":"landed-pkg","issue":2,"rejected":"no-plugin-evidence"}',
+      '{"repo":"o/twin","issue":3,"rejected":"repo-not-found"}',   // covered by the npm twin entry
+      '{"repo":"o/stuck","issue":4,"rejected":"repo-not-found"}', // no entry, no outcome → stamp stays
+      'plain-name-legacy-line',
+    ], {
+      'rejected-pkg': 'no-plugin-evidence',
+    }, idx)
+    expect(JSON.parse(out[0]!).rejected).toBe('no-plugin-evidence')
+    expect(JSON.parse(out[1]!).rejected).toBeUndefined()
+    expect(JSON.parse(out[2]!).rejected).toBeUndefined()
+    expect(JSON.parse(out[3]!).rejected).toBe('repo-not-found')
+    expect(out[4]).toBe('plain-name-legacy-line')
+  })
+
+  it('re-stamp with a new code replaces the old one; identical stamp is a no-op', () => {
+    const line = '{"name":"p","issue":1,"rejected":"fetch-error"}'
+    const [a] = applySeedOutcomes([line], { p: 'pkg-not-found' }, { plugins: [] })
+    expect(JSON.parse(a!).rejected).toBe('pkg-not-found')
+    const [b] = applySeedOutcomes([line], { p: 'fetch-error' }, { plugins: [] })
+    expect(b).toBe(line)
+  })
+
+  it('main(): usage error exits; missing/unparseable outcomes = empty; valid run rewrites the seed file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'som-'))
+    const ip = join(dir, 'i.json'), sp = join(dir, 's.txt'), op = join(dir, 'o.json')
+    writeFileSync(ip, JSON.stringify({ plugins: [{ name: 'landed', source: {} }] }))
+    writeFileSync(sp, '{"name":"rej","issue":1}\n{"name":"landed","issue":2,"rejected":"x"}\n')
+
+    // missing args → usage error exit
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit1') }) as never)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => seedOutcomeMain(['node', 'x', ip])).toThrow('exit1')
+    exitSpy.mockRestore(); errSpy.mockRestore()
+
+    // outcomes path missing entirely → treated as empty → only the landed clear applies
+    seedOutcomeMain(['node', 'x', ip, sp, join(dir, 'nonexistent.json')])
+    expect(readFileSync(sp, 'utf8')).not.toContain('"rejected"')
+
+    // unparseable outcomes → warn + still writes (rejections all dropped)
+    writeFileSync(sp, '{"name":"rej","issue":1}\n')
+    writeFileSync(op, '{not json')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    seedOutcomeMain(['node', 'x', ip, sp, op])
+    warnSpy.mockRestore()
+    expect(readFileSync(sp, 'utf8')).toBe('{"name":"rej","issue":1}\n')
+
+    // valid outcomes → stamps; keys normalize to lowercase
+    writeFileSync(op, JSON.stringify({ 'REJ': 'blocklisted', '': '', num: 5 }))
+    seedOutcomeMain(['node', 'x', ip, sp, op])
+    expect(JSON.parse(readFileSync(sp, 'utf8').split('\n')[0]!).rejected).toBe('blocklisted')
   })
 })

@@ -3,10 +3,18 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { verifyShard, type ExecFn } from '../pipeline/verify/verify.ts'
+import { verifyShard, type ExecFn, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { reviewPackage, renderReview } from '../pipeline/review.ts'
 import { listPage, detailPage } from '../pipeline/site/build.ts'
 import type { PluginEntry } from '../src/schema.ts'
+
+/** serve reports dead on arrival — a test must never boot a real `opencode`
+ *  binary (dev boxes may have one installed). */
+const deadSpawn = (() => ({
+  stdout: { on: () => {} }, stderr: { on: () => {} },
+  on: (_ev: string, cb: (a?: unknown) => void) => { cb() },
+  kill: () => {},
+})) as unknown as SpawnFn
 
 const mkRes = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s })
 
@@ -27,7 +35,7 @@ describe('coverage round 3', () => {
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
     const out = join(mkdtempSync(join(tmpdir(), 'vs-')), 'r.json')
-    const r = await verifyShard(['p1', 'p2'], out, { execFn: fake })
+    const r = await verifyShard(['p1', 'p2'], out, { execFn: fake, spawnFn: deadSpawn })
     expect(r).toHaveLength(2)
     expect(r[0]!.status).toBe('failed')
     expect(JSON.parse(readFileSync(out, 'utf8'))).toHaveLength(2)
@@ -56,7 +64,7 @@ describe('coverage round 3', () => {
       source: { kind: 'npm', id: 'p', repo: 'o/p' }, description: { en: 'd' }, category: [],
       license: 'MIT', deprecated: true, replacement: 'other', deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1', publishedAt: null,
-      metrics: { stars: 1, npmDownloads30d: 2, checkedAt: 't' },
+      metrics: { stars: 1, npmDownloads30d: 2, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: [] },
       verification: { status: 'failed', logExcerpt: 'boom', runUrl: 'https://run/1', opencodeVersion: '2.2.5' },
       compat: {},
@@ -81,7 +89,7 @@ describe('coverage round 4', () => {
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
     const { verifyPackage } = await import('../pipeline/verify/verify.ts')
-    const r = await verifyPackage('x', { execFn: fake })
+    const r = await verifyPackage('x', { execFn: fake, spawnFn: deadSpawn })
     expect(r.opencodeVersion).toBe('unknown')
   })
   it('writeDummyProvider writes parseable config', async () => {

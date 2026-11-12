@@ -5,14 +5,29 @@
  *  skills are lifted to the source root preserving author IDs, prefixed with
  *  the package basename only on foreign collision. A .market-skills.json
  *  manifest records lifted paths so uninstall removes exactly what we made. */
-import { assertSkillId, skillId } from './hostx.js'
+import { assertSkillId, skillId, skillsRoot } from './hostx.js'
+
+/** Windows device names are reserved in EVERY directory — `CON`, `NUL`,
+ *  `COM1`…`LPT9` — with or without an extension (`con.txt` is still the
+ *  console device). A tarball shipping `CON/SKILL.md` extracts fine on
+ *  POSIX but fails or misbehaves on Windows; reject up front so the error
+ *  is honest on every platform. */
+const WIN_DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
 
 /** A tar entry path must stay inside `dest`: reject absolute paths, `.`/`..`
  *  segments (incl. after ./ or package/ prefix stripping), and backslashes
- *  (path separator on Windows — a crafted `..\` name must not survive). */
+ *  (path separator on Windows — a crafted `..\` name must not survive).
+ *  Windows-hostile names go too: device names above, and segments ending in
+ *  `.`/space — Windows silently strips them, so `foo.` and `foo` would
+ *  collide into one dir the manifest never modeled. */
 export function safeTarRel(raw: string): string | null {
   const rel = raw.replace(/\\/g, '/').replace(/^(\.\/)?(package\/)?/, '')
-  if (!rel || rel.startsWith('/') || rel.split('/').some(p => p === '..' || p === '.' || p === '')) return null
+  // control chars (C0/DEL/C1) are legal POSIX filename bytes but hostile in
+  // every terminal that lists the skills dir — the site mirror rejects the
+  // same class via SAFE_MEMBER; skip the member rather than fail the install
+  if (!rel || rel.startsWith('/') || /[\x00-\x1f\x7f-\x9f]/.test(rel)
+    || rel.split('/').some(p => p === '..' || p === '.' || p === ''
+      || /[. ]$/.test(p) || WIN_DEVICE.test(p))) return null
   return rel
 }
 
@@ -23,11 +38,42 @@ export const MAX_SKILL_TGZ = 48 * 1024 * 1024
  *  zlib throw instead of OOMing the host process (zip-bomb guard). */
 export const MAX_SKILL_TAR = 256 * 1024 * 1024
 
+/** pax extended-header records that declare a SPARSE member — the data area
+ *  is then sparse-map encoded, not a plain file body, and extracting it as
+ *  one would write corrupt bytes silently. npm/codeload never emit these;
+ *  a crafted index tarball might. Reject instead of half-extracting. */
+const PAX_SPARSE_RE = /\b\d+\s+[^\s=]*\.sparse[^\s=]*=/i
+
+/** ustar header checksum @148 (8 bytes): the stored value is the sum of all
+ *  512 header bytes with the chksum field itself counted as SPACES. Stored
+ *  octal (6 digits + NUL + space) — some old tars used a SIGNED-byte sum,
+ *  so both are accepted (GNU tar does the same). gzip CRC already proves
+ *  the bytes arrived intact; this catches headers that were corrupt BEFORE
+ *  compression or crafted to disagree with their own metadata. */
+function verifyTarChecksum(tar: Buffer, off: number): void {
+  const ck = tar.subarray(off + 148, off + 156)
+  // base-256 checksum fields essentially never occur for a 512B header sum
+  // (< 2^18) — treat as corrupt rather than guess an encoding
+  if (ck[0]! & 0x80) throw new Error('corrupt tarball: binary checksum field')
+  const field = tar.toString('utf8', off + 148, off + 156)
+    .replace(/[\0 ]+$/, '').replace(/^ +/, '')
+  if (!/^[0-7]+$/.test(field)) throw new Error('corrupt tarball: bad checksum field')
+  const stored = parseInt(field, 8)
+  let unsigned = 0, signed = 0
+  for (let i = 0; i < 512; i++) {
+    const b = i >= 148 && i < 156 ? 0x20 : tar[off + i]!
+    unsigned += b
+    signed += b & 0x80 ? b - 256 : b
+  }
+  if (stored !== unsigned && stored !== signed)
+    throw new Error('corrupt tarball: header checksum mismatch')
+}
+
 export async function installSkillTar(opts: { name: string; gzipped: Uint8Array; root: string }): Promise<string> {
   const { gunzipSync } = await import('node:zlib')
   const fs = await import('node:fs')
   const { join, dirname, resolve, sep } = await import('node:path')
-  const { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync } = fs
+  const { writeFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, existsSync, realpathSync, lstatSync } = fs
   if (opts.gzipped.byteLength > MAX_SKILL_TGZ) throw new Error(`skill tarball too large (${opts.gzipped.byteLength} bytes)`)
   const tar = gunzipSync(Buffer.from(opts.gzipped), { maxOutputLength: MAX_SKILL_TAR })
   const base = assertSkillId(opts.name)
@@ -52,118 +98,309 @@ export async function installSkillTar(opts: { name: string; gzipped: Uint8Array;
   }
   const dest = join(opts.root, id)
   if (!resolve(dest).startsWith(resolve(opts.root) + sep)) throw new Error(`dest escapes skills root: ${dest}`)
-  mkdirSync(dest, { recursive: true })
-  let off = 0, wrote = 0
-  // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
-  // ustar stores paths ≤255B as prefix(155B @345) + '/' + name(100B @0).
-  let pendingLong: string | null = null
-  const paxPath = (rec: string): string | null => {
-    let i = 0
-    while (i < rec.length) {
-      const sp = rec.indexOf(' ', i)
-      if (sp < 0) return null
-      const len = parseInt(rec.slice(i, sp), 10)
-      if (!len || i + len > rec.length) return null
-      const kv = rec.slice(sp + 1, i + len - 1)
-      const eq = kv.indexOf('=')
-      if (eq > 0 && kv.slice(0, eq) === 'path') return kv.slice(eq + 1)
-      i += len
-    }
-    return null
+  // A dir we didn't create (or one created under another package's ownership)
+  // is foreign. Unscoped names have no namespaced fallback at all, and even
+  // scoped ones never merge into a foreign dir at the namespaced path — refuse
+  // rather than drop a manifest into it (uninstall would delete user files).
+  if (existsSync(dest) && manifestOwner(dest) !== opts.name) {
+    // An EMPTY dir holds no user files — it is a leftover from an install
+    // that died between mkdir and manifest write, not foreign data. Sweep it
+    // so retry isn't wedged; a non-empty manifest-less dir still refuses.
+    let empty = false
+    try { empty = readdirSync(dest).length === 0 } catch { /* unreadable → foreign */ }
+    if (!empty)
+      throw new Error(`skill dir '${id}' already exists and is not managed by market — delete ${dest} manually to reinstall`)
+    rmSync(dest, { recursive: true, force: true })
   }
-  while (off + 512 <= tar.length) {
-    let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
-    if (!f) break
-    const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
-    const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
-    const type = tar.toString('utf8', off + 156, off + 157)
-    const body = off + 512
-    const next = body + Math.ceil(size / 512) * 512
-    if (type === 'L') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
-    if (type === 'x') { pendingLong = paxPath(tar.toString('utf8', body, body + size)) ?? pendingLong; off = next; continue }
-    if (pendingLong) { f = pendingLong; pendingLong = null }
-    else if (prefix) f = `${prefix}/${f}`
-    const rel = safeTarRel(f)
-    if (rel === null || rel.split('/').pop()!.startsWith('._')) { off = next; continue }  // unsafe name or macOS AppleDouble junk
-    if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
-    if (type === '0' || type === '' || type === ' ') {
-      const fp = join(dest, rel)
-      if (!resolve(fp).startsWith(resolve(dest) + sep)) { off = next; continue }
-      mkdirSync(dirname(fp), { recursive: true })
-      writeFileSync(fp, tar.subarray(body, body + size)); wrote++
-    }
-    off = next
-  }
-  if (!wrote) throw new Error('empty tarball')
-  const root = dirname(dest)
-  // paths we created on a previous install may be overwritten in place;
-  // a foreign dir at the same name forces the <id>- prefix instead
+  // createdDest decides whether a failure may remove dest — only a dir THIS
+  // call made. A pre-existing dir keeps its previous version's files and
+  // manifest on a failed upgrade instead of being destroyed.
+  const createdDest = !existsSync(dest)
+  // paths the PREVIOUS install recorded — must be captured BEFORE extraction:
+  // read after, a tarball-shipped .market-skills.json would pass as ours and
+  // its paths[] would drive rmSync over arbitrary sibling dirs. `files` is
+  // the same idea one level down: every file path WE wrote into dest, so a
+  // reinstall can drop files the new version no longer ships WITHOUT
+  // touching anything the user added themselves.
   const owned = new Set<string>()
+  const prevFiles = new Set<string>()
   try {
-    const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[] }
+    const prev = JSON.parse(readFileSync(join(dest, '.market-skills.json'), 'utf8')) as { paths?: string[]; files?: string[] }
     for (const rel of prev.paths ?? []) owned.add(rel)
-  } catch { /* first install */ }
-  const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
-    ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
-  const paths: string[] = []
-  for (const nest of nests) {
-    const nd = join(dest, nest)
-    let subs: string[]
-    try { subs = readdirSync(nd) } catch { continue }
-    for (const sub of subs) {
-      if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
-      // collision → try <id>-<sub>, then <id>-<sub>-2, … — but NEVER rmSync a
-      // path we don't own (a foreign dir that happens to match the prefixed
-      // name would otherwise be deleted). Give up on that skill instead.
-      let rel = sub
-      for (let n = 0; n < 100 && existsSync(join(root, rel)) && !owned.has(rel); n++)
-        rel = `${id}-${sub}${n ? `-${n}` : ''}`
-      if (existsSync(join(root, rel)) && !owned.has(rel)) continue
-      const target = join(root, rel)
-      if (!resolve(target).startsWith(resolve(root) + sep)) continue
-      rmSync(target, { recursive: true, force: true })
-      renameSync(join(nd, sub), target); paths.push(rel)
+    for (const rel of prev.files ?? []) prevFiles.add(rel)
+  } catch { /* first install — or a manifest written before files[] existed */ }
+  mkdirSync(dest, { recursive: true })
+  // realpath of dest for symlink-aware guards below — resolve() is lexical
+  // and can't see a planted `dest/sub -> /elsewhere` link
+  const destReal = realpathSync(dest)
+  let committed = false
+  try {
+    let off = 0, wrote = 0
+    // GNU longname ('L') / pax 'x' carry the REAL name for the NEXT header;
+    // ustar stores paths ≤255B as prefix(155B @345) + '/' + name(100B @0).
+    let pendingLong: string | null = null
+    const paxPath = (rec: string): string | null => {
+      let i = 0
+      while (i < rec.length) {
+        const sp = rec.indexOf(' ', i)
+        if (sp < 0) return null
+        const len = parseInt(rec.slice(i, sp), 10)
+        if (!len || i + len > rec.length) return null
+        const kv = rec.slice(sp + 1, i + len - 1)
+        const eq = kv.indexOf('=')
+        if (eq > 0 && kv.slice(0, eq) === 'path') return kv.slice(eq + 1)
+        i += len
+      }
+      return null
     }
-    rmSync(nd, { recursive: true, force: true })
+    // pass 1 — collect safe entries. Two passes let us detect a wrapper root:
+    // github codeload archives ship every path under `<repo>-<ref>/`, which must
+    // be stripped like npm's `package/` or the skill nests stay one level deep.
+    const items: { type: string; rel: string; body: number; size: number }[] = []
+    while (off + 512 <= tar.length) {
+      let f = tar.toString('utf8', off, off + 100).replace(/\0[\s\S]*$/, '')
+      if (!f) break
+      // every member header — including the metadata kinds skipped below —
+      // must carry a valid chksum; a corrupt/crafted header fails here
+      // before its name/size/type fields can steer extraction
+      verifyTarChecksum(tar, off)
+      const prefix = tar.toString('utf8', off + 345, off + 500).replace(/\0[\s\S]*$/, '')
+      // GNU base-256 size fields set the high bit of byte 124 — parseInt(…,8)
+      // would read them as 0 and desync every following header. >8GB members
+      // can't exist under the decompressed ceiling anyway: refuse honestly.
+      if (tar[off + 124]! & 0x80) throw new Error('corrupt tarball: binary size field')
+      const size = parseInt(tar.toString('utf8', off + 124, off + 136).trim(), 8) || 0
+      const type = tar.toString('utf8', off + 156, off + 157)
+      const body = off + 512
+      // a member whose declared body runs past the buffer is truncated or
+      // crafted — tar.subarray would silently clamp and write a corrupt file
+      if (body + size > tar.length) throw new Error('corrupt tarball: truncated member')
+      const next = body + Math.ceil(size / 512) * 512
+      if (type === 'L' || type === 'N') { pendingLong = tar.toString('utf8', body, body + size).replace(/\0[\s\S]*$/, ''); off = next; continue }
+      if (type === 'x') {
+        const rec = tar.toString('utf8', body, body + size)
+        if (PAX_SPARSE_RE.test(rec)) throw new Error('corrupt tarball: sparse member unsupported')
+        pendingLong = paxPath(rec) ?? pendingLong; off = next; continue
+      }
+      // GNU sparse 'S' carries its map in the header area and a realsize the
+      // plain size field doesn't describe — we can't extract it correctly,
+      // so refuse honestly instead of silently dropping the file
+      if (type === 'S') throw new Error('corrupt tarball: sparse member unsupported')
+      // pax 'g' global headers, GNU longlink 'K', volume 'V', dump 'D',
+      // multivol 'M' are metadata, not members — their header
+      // name fields are fixed placeholders ('pax_global_header', '@LongLink')
+      // that would enter `items`, break the shared-first-segment wrapper
+      // detection, and strand every skill one level too deep (silent
+      // 'wrote N, lifted 0'). Skip them WITHOUT consuming pendingLong —
+      // a pending file name still belongs to the next real header.
+      if (type === 'K' || type === 'g' || type === 'V' || type === 'D' || type === 'M') { off = next; continue }
+      if (pendingLong) { f = pendingLong; pendingLong = null }
+      else if (prefix) f = `${prefix}/${f}`
+      const rel = safeTarRel(f)
+      // unsafe name or macOS AppleDouble junk — and never extract market
+      // bookkeeping files: a shipped .market-skills.json would forge the
+      // ownership manifest that drives the sibling-dir sweep below
+      const leaf = rel?.split('/').pop() ?? ''
+      if (rel === null || leaf.startsWith('._') || leaf === '.market-skills.json' || leaf === '.market-lift') { off = next; continue }
+      items.push({ type, rel, body, size })
+      off = next
+    }
+    // shared leading segment that is not a real skill-nest name = archive wrapper
+    const STRUCT = new Set(['.opencode', '.claude', '.agents', 'skills', 'package'])
+    const first = items[0]?.rel.split('/')[0]
+    const wrap = first && !STRUCT.has(first) && items.every(i => { const s = i.rel.split('/'); return s.length > 1 && s[0] === first })
+      ? `${first}/` : ''
+    // pass 2 — extract. wroteFiles records every file path landing under
+    // dest (post-wrap-strip) so the manifest can distinguish "ours, now
+    // stale" from "user-added, never ours" on the next install.
+    const wroteFiles = new Set<string>()
+    for (const { type, rel: r0, body, size } of items) {
+      const rel = wrap ? r0.slice(wrap.length) : r0
+      if (!rel) continue
+      if (type === '5') mkdirSync(join(dest, rel), { recursive: true })
+      if (type === '0' || type === '' || type === ' ') {
+        const fp = join(dest, rel)
+        if (!resolve(fp).startsWith(resolve(dest) + sep)) continue
+        mkdirSync(dirname(fp), { recursive: true })
+        // lexical resolve() passes a path whose PARENT is a symlink — the
+        // write would land outside the skills root. Verify the real parent
+        // after mkdir; skip the member rather than write through the link.
+        try {
+          const rd = realpathSync(dirname(fp))
+          if (rd !== destReal && !rd.startsWith(destReal + sep)) continue
+        } catch { continue }
+        writeFileSync(fp, tar.subarray(body, body + size)); wrote++; wroteFiles.add(rel)
+      }
+    }
+    if (!wrote) throw new Error('empty tarball')
+    const root = dirname(dest)
+    // paths we created on a previous install may be overwritten in place;
+    // a foreign dir at the same name forces the <id>- prefix instead
+    const nests = ['.opencode/skills', '.claude/skills', '.agents/skills',
+      ...(existsSync(join(dest, 'SKILL.md')) ? ['skills'] : [])]
+    const paths: string[] = []
+    // dest-relative sources the lift MOVES out of the package dir — their
+    // wroteFiles entries must not count as "still in dest" for the manifest
+    const movedSrcs: string[] = []
+    for (const nest of nests) {
+      const nd = join(dest, nest)
+      let subs: string[]
+      try { subs = readdirSync(nd) } catch { continue }
+      for (const sub of subs) {
+        if (sub.startsWith('.') || sub === '..' || sub.includes('/') || sub.includes('\\')) continue
+        // a symlinked sub would be MOVED to the skills root as a live link,
+        // and the .market-lift write below would follow it outside root —
+        // tar can't create symlinks, so this can only be a planted one
+        try { if (lstatSync(join(nd, sub)).isSymbolicLink()) continue } catch { continue }
+        // collision → try <id>-<sub>, then <id>-<sub>-2, … — but NEVER rmSync a
+        // path we don't own (a foreign dir that happens to match the prefixed
+        // name would otherwise be deleted). Give up on that skill instead.
+        let rel = sub
+        for (let n = 0; n < 100 && existsSync(join(root, rel)) && !owned.has(rel); n++)
+          rel = `${id}-${sub}${n ? `-${n}` : ''}`
+        if (existsSync(join(root, rel)) && !owned.has(rel)) continue
+        const target = join(root, rel)
+        if (!resolve(target).startsWith(resolve(root) + sep)) continue
+        rmSync(target, { recursive: true, force: true })
+        renameSync(join(nd, sub), target); paths.push(rel); movedSrcs.push(`${nest}/${sub}`)
+        // mark the lifted dir as market-made — uninstall can then tell a
+        // leftover `<id>-*` dir of ours from a foreign dir with the same name
+        try { writeFileSync(join(target, '.market-lift'), JSON.stringify({ name: opts.name })) } catch { /* cosmetic */ }
+      }
+      // only remove the emptied nest — a sub that couldn't be lifted (all 100
+      // prefixed name variants collided) must survive, not be silently deleted
+      try { if (!readdirSync(nd).length) rmSync(nd, { recursive: true, force: true }) } catch { /* leave */ }
+    }
+    // honesty gate — BEFORE the owned-path sweep so a failure keeps the
+    // previous version fully intact (lifts + manifest). An install that
+    // yields nothing opencode can load must not report success: 'wrote N,
+    // lifted 0' with no SKILL.md at the package root means the tarball is
+    // mis-packaged or its nests weren't recognized — a dead 'installed'
+    // badge is worse than an honest error (AGENTS: 报错三件套).
+    if (!paths.length && !existsSync(join(dest, 'SKILL.md')))
+      throw new Error('no loadable skill in tarball (no SKILL.md found)')
+    // lifts the previous version shipped but this one doesn't must go — left
+    // behind they'd become manifest-less foreign dirs the user can never
+    // uninstall (and the skill would keep silently loading)
+    for (const rel of owned) {
+      if (paths.includes(rel)) continue
+      const t = join(root, rel)
+      if (resolve(t).startsWith(resolve(root) + sep)) rmSync(t, { recursive: true, force: true })
+    }
+    // files the PREVIOUS version wrote into dest that this one no longer
+    // ships must go too — left behind they'd keep loading as stale skill
+    // content forever (the old code only tracked lifted paths, so package-
+    // root files accumulated across upgrades). ONLY manifest-recorded paths
+    // are touched: a file the user added was never in files[] and survives.
+    // Files that moved INTO a nest this version left dest via the lift —
+    // their root copies are owned-lift territory, not stale dest files.
+    const destFiles = [...wroteFiles].filter(f => !movedSrcs.some(m => f === m || f.startsWith(`${m}/`)))
+    const destFileSet = new Set(destFiles)
+    let staleRemoved = 0
+    for (const rel of prevFiles) {
+      if (destFileSet.has(rel)) continue
+      const t = join(dest, rel)
+      if (!resolve(t).startsWith(resolve(dest) + sep)) continue
+      try {
+        // same symlink guard as extraction — an intermediate link inside
+        // dest would turn this rm into a delete outside the package dir
+        const rt = realpathSync(t)
+        if (rt !== destReal && !rt.startsWith(destReal + sep)) continue
+        rmSync(t, { force: true }); staleRemoved++
+      } catch { /* already gone, or a dir — files[] only ever lists files */ }
+    }
+    // drop dirs the sweep emptied (post-order so parents collapse too) —
+    // never dest itself, and only REAL dirs (a symlinked dir is not ours
+    // to remove even when empty)
+    const sweepEmpty = (d: string, isRoot: boolean): void => {
+      try {
+        for (const e of readdirSync(d, { withFileTypes: true }))
+          if (e.isDirectory()) sweepEmpty(join(d, e.name), false)
+      } catch { return }
+      if (isRoot) return
+      try { if (!readdirSync(d).length) rmSync(d, { recursive: true, force: true }) } catch { /* keep */ }
+    }
+    sweepEmpty(dest, true)
+    writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths, files: destFiles }))
+    committed = true
+    return `wrote ${wrote}, lifted ${paths.length}` + (staleRemoved ? `, removed ${staleRemoved} stale` : '')
+  } finally {
+    // A failed FRESH install must not leave a manifest-less dir behind — the
+    // foreign-dir guard would then refuse every retry, permanently wedging
+    // the package until the user deletes the dir by hand. A pre-existing dir
+    // is left alone: a partial overwrite still leaves the previous version's
+    // manifest + files in place.
+    if (!committed && createdDest) { try { rmSync(dest, { recursive: true, force: true }) } catch { /* best effort */ } }
   }
-  writeFileSync(join(dest, '.market-skills.json'), JSON.stringify({ name: opts.name, paths }))
-  return `wrote ${wrote}, lifted ${paths.length}`
+}
+
+/** `<id>-*` dirs at root whose lift marker names this package — leftover
+ *  lifts we made, safe to sweep. Marker-less lookalikes stay foreign. */
+function sweepMarkedStrays(
+  fs: typeof import('node:fs'), rootRes: string, name: string,
+  join: (...p: string[]) => string, rmSync: (p: string, o: { recursive: boolean; force: boolean }) => void,
+): string[] {
+  const ids = [...new Set([skillId(name), name.split('/').pop()!])]
+  let dirents: string[] = []
+  try { dirents = fs.readdirSync(rootRes) } catch { return [] }   // root gone — nothing to sweep
+  const foreign: string[] = []
+  for (const d of dirents) {
+    if (!ids.some(id => d.startsWith(`${id}-`))) continue
+    let markerName: string | undefined
+    try { markerName = (JSON.parse(fs.readFileSync(join(rootRes, d, '.market-lift'), 'utf8')) as { name?: string }).name } catch { markerName = undefined }
+    if (markerName === name) rmSync(join(rootRes, d), { recursive: true, force: true })
+    else foreign.push(d)
+  }
+  return foreign
 }
 
 export async function uninstallSkillDir(name: string, root: string): Promise<string> {
   const fs = await import('node:fs')
-  const { join, resolve, sep } = await import('node:path')
-  const { readdirSync, readFileSync, rmSync, existsSync } = fs
+  const { join, resolve, sep, basename } = await import('node:path')
+  const { readFileSync, rmSync, existsSync } = fs
   const rootRes = resolve(root)
   assertSkillId(name)
-  // conditional ids: a same-basename package lives at the namespaced dir —
-  // check it first so a foreign basename dir is never touched; singletons
-  // live at the bare basename
-  let dest = resolve(root, skillId(name))
-  if (!dest.startsWith(rootRes + sep)) throw new Error(`dest escapes skills root: ${dest}`)
-  if (!existsSync(dest)) {
-    const bare = resolve(root, name.split('/').pop()!)
-    if (bare.startsWith(rootRes + sep) && existsSync(bare)) dest = bare
-  }
-  const mf = join(dest, '.market-skills.json')
-  if (existsSync(mf)) {
-    // manifest of lifted paths — remove exactly what installSkillTar created
-    const m = JSON.parse(readFileSync(mf, 'utf8')) as { paths?: string[] }
+  // Ownership is proven by .market-skills.json — the manifest has existed
+  // since this installer was born, so a manifest-less dir is FOREIGN (user
+  // files, another tool's output), never a "legacy" market install. The old
+  // code rm -rf'd such dirs and swept every `<id>-*` sibling — deleting
+  // unrelated dirs like `test-utils` along the way. installSkillTar already
+  // refuses to merge into foreign dirs for exactly this reason; uninstall
+  // must refuse symmetrically.
+  const cands = [...new Set([skillId(name), name.split('/').pop()!])]
+    .map(id => resolve(root, id))
+    .filter(d => d.startsWith(rootRes + sep))
+  const existing = cands.filter(existsSync)
+  for (const dest of existing) {
+    const mf = join(dest, '.market-skills.json')
+    if (!existsSync(mf)) continue                                  // foreign — not ours
+    let m: { name?: string; paths?: string[] }
+    try { m = JSON.parse(readFileSync(mf, 'utf8')) as typeof m } catch { continue }
+    // ownership is EXACT: a manifest without a matching name field is as
+    // foreign as a missing manifest (install refuses to merge into it too)
+    if (m.name !== name) continue
+    // owned → remove exactly what installSkillTar recorded, then the dir
     for (const rel of m.paths ?? []) {
       const t = resolve(rootRes, rel)
       if (t.startsWith(rootRes + sep)) rmSync(t, { recursive: true, force: true })
     }
-  } else for (const d of readdirSync(rootRes)) {
-    // collision-prefixed lifts were named <installId>-* — same as basename(dest)
-    const destId = dest.slice(rootRes.length + 1)
-    if (d.startsWith(`${destId}-`)) rmSync(join(rootRes, d), { recursive: true, force: true })
+    rmSync(dest, { recursive: true, force: true })
+    const strays = sweepMarkedStrays(fs, rootRes, name, join, rmSync)
+    if (strays.length)
+      throw new Error(`removed — but ${strays.length} foreign '${strays[0]!}-*'-like dir(s) left untouched`)
+    return 'removed'
   }
-  rmSync(dest, { recursive: true, force: true })
+  if (existing.length)
+    throw new Error(`skill dir '${basename(existing[0]!)}' exists but is not managed by market — left untouched (delete it manually if unwanted)`)
+  // no package dir — leftover `<id>-*` lifts (manually deleted package dir)
+  // that carry OUR marker are ours: sweep them. Marker-less lookalikes are
+  // foreign and reported, never deleted.
+  const strays = sweepMarkedStrays(fs, rootRes, name, join, rmSync)
+  if (strays.length)
+    throw new Error(`${strays.length} '${strays[0]!.split('-')[0]}-*' dir(s) found but not managed by market — left untouched`)
   return 'removed'
 }
 
 export async function globalSkillsRoot(): Promise<string> {
-  const { homedir } = await import('node:os')
-  const { join } = await import('node:path')
-  return join(homedir(), '.config', 'opencode', 'skills')
+  return skillsRoot()
 }

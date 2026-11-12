@@ -27,9 +27,50 @@ export function looksLikeTemplateSpam(names: string[]): boolean {
   if (names.length < 6) return false
   const stems = names.map(n => n.replace(/[-_\d]/g, '').toLowerCase())
   const dominant = new Map<string, number>()
-  for (const s of stems) dominant.set(s.slice(0, 6), (dominant.get(s.slice(0, 6)) ?? 0) + 1)
+  for (const s of stems) dominant.set(s, (dominant.get(s) ?? 0) + 1)
   return Math.max(...dominant.values()) >= 6
 }
+
+/** GitHub-side evidence gate: a topic tag alone never admits. The repo tree
+ *  must show an opencode-specific signal AND an installable artifact.
+ *  Path-only (no content fetches) — runs after fetchRepoTree. */
+export function hasRepoEvidence(
+  paths: ReadonlySet<string>,
+  topics: readonly string[] = [],
+): { ok: boolean; via: string[] } {
+  const has = (re: RegExp) => [...paths].some(p => re.test(p))
+  const via: string[] = []
+  // .opencode/ anchored at any depth — monorepo packages keep their host
+  // config under packages/<x>/.opencode/ just as often as at the root
+  if (has(/(^|\/)\.opencode\//)) via.push('opencode-dir')
+  if (has(/(^|\/)opencode\.jsonc?$/)) via.push('opencode-config')
+  const skillFile = has(/(^|\/)SKILL\.md$/)
+  if (skillFile) via.push('skill-file')
+  const pkg = has(/(^|\/)package\.json$/)
+  if (pkg) via.push('package')
+  const pluginArtifact = has(/(^|\/)\.opencode\/(plugin|plugins|skills)\//)
+  if (pluginArtifact) via.push('opencode-artifact')
+  // topic tags are affiliation, not artifact claims — and only the opencode-*
+  // topics say anything about THIS host. 'agent-skill' is a cross-host generic
+  // tag (Claude/Cursor skills wear it too); 'opencode' alone is even weaker (R-4)
+  const opencodeTopic = topics.some(t => /^(opencode-plugin|opencode-skill)$/.test(t))
+  if (opencodeTopic) via.push('opencode-topic')
+
+  // the specific side needs an actual opencode trace: a .opencode/ dir, an
+  // opencode.json config, or an opencode-* topic. A bare SKILL.md is a
+  // cross-ecosystem convention — it proves an artifact exists, not that the
+  // artifact is for opencode (R-4)
+  const specific = via.includes('opencode-dir') || via.includes('opencode-config') || opencodeTopic
+  const artifact = pluginArtifact || skillFile || pkg
+  return { ok: specific && artifact, via }
+}
+
+/** Any SKILL.md in the repo marks a skill artifact — root, skills/<x>/, or
+ *  .opencode/skills/ layouts all count. Shared by the npm↔repo probe and the
+ *  github-kind admission path so `contains` matches the evidence gate's idea
+ *  of a skill. */
+export const hasSkillPath = (paths: ReadonlySet<string>): boolean =>
+  [...paths].some(p => /(^|\/)SKILL\.md$/.test(p) || /(^|\/)\.opencode\/skills\//.test(p))
 
 /** Evidence check post-fetch: does the package actually look like an opencode artifact? */
 export function hasPluginEvidence(pkg: {

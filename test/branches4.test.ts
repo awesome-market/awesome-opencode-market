@@ -38,7 +38,7 @@ describe('branch coverage round 4', () => {
       source: { kind: 'npm', id: 'p' }, description: {}, category: [],
       license: null, deprecated: false, replacement: null, deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
       firstSeenAt: '2026-01-01', latestVersion: null, publishedAt: null,
-      metrics: { stars: null, npmDownloads30d: null, checkedAt: 't' },
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'skipped' }, compat: {},
       approval: 'approved',

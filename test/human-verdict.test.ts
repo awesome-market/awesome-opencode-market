@@ -1,0 +1,482 @@
+/** H-series: pipeline/human-verdict.ts — the parser extracted from concern.yml's
+ *  inline node -e. Covers the label / bare-comment / arg-comment / form
+ *  channels plus the divergence + sanitization rules. */
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolveVerdictEvent, titleTarget, splitSpec, isDupVerdict, amendAt, overriddenHuman, retargetedIssueTarget } from '../pipeline/human-verdict.ts'
+import type { VerdictEvent } from '../pipeline/human-verdict.ts'
+
+const ev = (over: Partial<VerdictEvent> = {}): VerdictEvent => ({
+  event: 'issue_comment', action: 'created',
+  issueTitle: '[review] pkg@1.0.0', issueBody: '', issueNumber: '7',
+  commentBody: '/approve', label: '', actor: 'terry',
+  ...over,
+})
+
+const FORM_BODY = `### npm 包名或 owner/repo
+
+evilpkg
+
+### 版本（可留空）
+
+2.0.0
+
+### 操作 / Action
+
+拦截 (concern)
+
+### 理由 / Reason
+
+sus C# wrapper, see #123
+second line kept`
+
+describe('titleTarget / splitSpec', () => {
+  it('parses plain, scoped, and version-less titles', () => {
+    expect(titleTarget('[review] pkg@1.2.3')).toEqual({ name: 'pkg', ver: '1.2.3' })
+    expect(titleTarget('[review] @s/p@2.0.0')).toEqual({ name: '@s/p', ver: '2.0.0' })
+    expect(titleTarget('[review] @s/p')).toEqual({ name: '@s/p', ver: '' })
+    expect(titleTarget('[review] owner/repo')).toEqual({ name: 'owner/repo', ver: '' })
+    expect(titleTarget('[concern] free text')).toBeNull()
+    expect(titleTarget('random title')).toBeNull()
+  })
+  it('splitSpec: last @ wins; leading @ is scope not version', () => {
+    expect(splitSpec('a@b@c')).toEqual({ name: 'a@b', ver: 'c' })
+    expect(splitSpec('pkg@')).toEqual({ name: 'pkg', ver: '' })
+  })
+})
+
+describe('label channel', () => {
+  const labeled = (label: string, title = '[review] pkg@1.0.0') =>
+    ev({ event: 'issues', action: 'labeled', label, issueTitle: title, commentBody: '' })
+
+  it('verdict:pass → pass on the titled target', () => {
+    const r = resolveVerdictEvent(labeled('verdict:pass'))
+    expect(r).toMatchObject({ name: 'pkg', ver: '1.0.0', verdict: 'pass' })
+    expect(r.reason).toContain('verdict:pass')
+    expect(r.reason).toContain('terry')
+    expect(r.reason).toContain('#7')
+  })
+  it('verdict:concern → concern; repo title → null version path', () => {
+    const r = resolveVerdictEvent(labeled('verdict:concern', '[review] owner/repo'))
+    expect(r).toMatchObject({ name: 'owner/repo', ver: '', verdict: 'concern' })
+  })
+  it('non-review title → noresolve', () => {
+    expect(resolveVerdictEvent(labeled('verdict:pass', '[submit] x')).skip).toBe('submit')
+    expect(resolveVerdictEvent(labeled('verdict:pass', 'hello')).skip).toBe('noresolve')
+  })
+  it('a non-verdict label on a [review] issue → noresolve, never a brake', () => {
+    // the gate whitelists verdict:* labels today; the parser is the contract —
+    // a stray label must not silently degrade to concern
+    expect(resolveVerdictEvent(labeled('review:pending')).skip).toBe('noresolve')
+    expect(resolveVerdictEvent(labeled('bug')).skip).toBe('noresolve')
+  })
+})
+
+describe('comment channel', () => {
+  it('bare /approve on [review] → title target', () => {
+    expect(resolveVerdictEvent(ev())).toMatchObject({ name: 'pkg', ver: '1.0.0', verdict: 'pass' })
+  })
+  it('bare /concern + reason on [review] → title target + reason', () => {
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern steals data' }))
+    expect(r).toMatchObject({ name: 'pkg', ver: '1.0.0', verdict: 'concern', reason: 'steals data' })
+  })
+  it('arg spec on a non-review issue → arg target', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: 'some other issue', commentBody: '/concern evil@2.0.0 malware' }))
+    expect(r).toMatchObject({ name: 'evil', ver: '2.0.0', verdict: 'concern', reason: 'malware' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('arg spec diverging from the [review] title → mismatch flagged', () => {
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern other@9.9.9 oops' }))
+    expect(r).toMatchObject({ name: 'other', ver: '9.9.9', verdict: 'concern' })
+    expect(r.mismatch).toContain('other@9.9.9')
+    expect(r.mismatch).toContain('pkg@1.0.0')
+  })
+  it('arg spec matching the title → no mismatch', () => {
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern pkg@1.0.0 yes' }))
+    expect(r.name).toBe('pkg'); expect(r.mismatch).toBeUndefined()
+  })
+  it('arg version differing from titled version → mismatch', () => {
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern pkg@2.0.0' }))
+    expect(r.mismatch).toBeDefined()
+  })
+  it('repo arg on review issue → owner/repo, version cleared', () => {
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern o/r suspicious' }))
+    expect(r).toMatchObject({ name: 'o/r', ver: '' })
+    expect(r.mismatch).toBeDefined()
+  })
+  it('bare command on [concern] form issue → body package field', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] whatever title', issueBody: FORM_BODY, commentBody: '/approve' }))
+    expect(r).toMatchObject({ name: 'evilpkg', ver: '2.0.0', verdict: 'pass' })
+  })
+  it('arg spec diverging from the [concern] FORM target → mismatch flagged (issue stays open)', () => {
+    // H-4 parity for the form channel: the verdict lands on the arg, but the
+    // form's own target was never judged — the issue must not close silently
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern other@1.0.0 oops' }))
+    expect(r).toMatchObject({ name: 'other', ver: '1.0.0', verdict: 'concern' })
+    expect(r.mismatch).toContain('other@1.0.0')
+    expect(r.mismatch).toContain('evilpkg')
+  })
+  it('arg spec matching the [concern] form target → no mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern evilpkg@2.0.0 yes' }))
+    expect(r.name).toBe('evilpkg'); expect(r.mismatch).toBeUndefined()
+  })
+  it('arg spec same name but different version vs form target → mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern evilpkg@9.9.9' }))
+    expect(r.mismatch).toBeDefined()
+  })
+  it('bare-word arg on a [concern] form issue is a REASON, not a package — the amend path works', () => {
+    // `it` (form target) exists → spec reading requires @/ shape. Before the
+    // fix `!tt` was always true for [concern] titles, so '/concern new reason'
+    // ate 'new' as a package name → exists=0 "not in catalog" — the documented
+    // reason-amend path was unreachable on form issues.
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern found it exfiltrates tokens' }))
+    expect(r).toMatchObject({ name: 'evilpkg', ver: '2.0.0', verdict: 'concern', reason: 'found it exfiltrates tokens' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('bare /concern on a [concern] form inherits the form reason (no amend-wipe)', () => {
+    // re-firing with no comment reason must not overwrite the recorded
+    // rationale with '' — the form's 理由 field is the fallback
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern' }))
+    expect(r).toMatchObject({ name: 'evilpkg', verdict: 'concern' })
+    expect(r.reason).toContain('sus C# wrapper')
+  })
+  it('explicit spec arg on a [concern] form still retargets + flags mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: FORM_BODY, commentBody: '/concern other/repo because' }))
+    expect(r).toMatchObject({ name: 'other/repo', ver: '' })
+    expect(r.mismatch).toBeDefined()
+  })
+  it('bare-word arg on a [concern] form with EMPTY package field keeps spec reading', () => {
+    // no resolvable issue target → the exists-check downstream is the
+    // feedback loop, same as a plain untitled issue
+    const r = resolveVerdictEvent(ev({ issueTitle: '[concern] t', issueBody: '### 操作 / Action\n\n拦截', commentBody: '/concern somepkg because' }))
+    expect(r.name).toBe('somepkg')
+  })
+  it('bare command on a plain issue → noresolve', () => {
+    expect(resolveVerdictEvent(ev({ issueTitle: 'plain issue' })).skip).toBe('noresolve')
+  })
+  it('/concerned (prefix typo) → noresolve, not a verdict', () => {
+    expect(resolveVerdictEvent(ev({ commentBody: '/concerned about this' })).skip).toBe('noresolve')
+  })
+  it('crafted version chars are sanitized → blank → index-first', () => {
+    // `pkg@$(id)`: garbage version cleaned to "" → index resolves the held
+    // version; metachars never survive into a verdict record
+    const r = resolveVerdictEvent(ev({ commentBody: '/concern pkg@$(id) pwn' }))
+    expect(r).toMatchObject({ name: 'pkg', ver: '' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('crafted version in a TITLE is dropped → blank → index-first', () => {
+    const r = resolveVerdictEvent(ev({ event: 'issues', action: 'labeled', label: 'verdict:concern', issueTitle: '[review] pkg@$(cmd)' }))
+    expect(r).toMatchObject({ name: 'pkg', ver: '' })
+  })
+  it('reason-only arg whose first word is package-charset still resolves as spec (documented ambiguity)', () => {
+    // /concern looks bad → "looks" is charset-valid → treated as spec; the
+    // index-exists check downstream is the feedback loop for this case
+    const r = resolveVerdictEvent(ev({ issueTitle: 'x', commentBody: '/concern looks bad' }))
+    expect(r.name).toBe('looks')
+  })
+  it('[submit] title defers to submit.yml', () => {
+    expect(resolveVerdictEvent(ev({ issueTitle: '[submit] pkg' })).skip).toBe('submit')
+  })
+  it('multiline comment reason collapses to one line', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: 'x', commentBody: '/concern e@1 bad\nstuff\nhere' }))
+    expect(r.reason).toBe('bad stuff here')
+    expect(r.reason).not.toContain('\n')
+  })
+})
+
+describe('form channel (issues opened/edited)', () => {
+  const form = (action: 'opened' | 'edited' = 'opened', body = FORM_BODY) =>
+    ev({ event: 'issues', action, issueTitle: '[concern] x', issueBody: body, commentBody: '' })
+
+  it('parses package/version/action/reason from ### sections', () => {
+    const r = resolveVerdictEvent(form())
+    expect(r).toMatchObject({ name: 'evilpkg', ver: '2.0.0', verdict: 'concern' })
+    expect(r.reason).toContain('sus C# wrapper, see #123')   // '#' preserved (H-8)
+    expect(r.reason).toContain('second line kept')           // multi-line kept
+  })
+  it('edited re-parses current body — maintainer can fix a typo', () => {
+    const r = resolveVerdictEvent(form('edited', FORM_BODY.replace('evilpkg', 'fixedpkg')))
+    expect(r.name).toBe('fixedpkg')
+  })
+  it('放行 (pass) action → pass; empty version → blank', () => {
+    const body = FORM_BODY.replace('拦截 (concern)', '放行 (pass)').replace('2.0.0', '_No response_')
+    const r = resolveVerdictEvent(form('opened', body))
+    expect(r).toMatchObject({ verdict: 'pass', ver: '' })
+  })
+  it('repo target in form → version passes through (entry kind decides downstream)', () => {
+    // the parser can't know whether 'o/r' names a github-kind entry or an
+    // npm twin via source.repo — it must carry the typed version to the
+    // index-kind check, which nulls it for true github entries
+    const r = resolveVerdictEvent(form('opened', FORM_BODY.replace('evilpkg', 'o/r')))
+    expect(r).toMatchObject({ name: 'o/r', ver: '2.0.0' })
+  })
+  it('missing package → noresolve', () => {
+    expect(resolveVerdictEvent(form('opened', '### 操作 / Action\n\n拦截 (concern)')).skip).toBe('noresolve')
+  })
+  it('action word-boundary: "compass"/"bypass" → concern, never fail-open', () => {
+    const body = FORM_BODY.replace('拦截 (concern)', 'compass override')
+    expect(resolveVerdictEvent(form('opened', body)).verdict).toBe('concern')
+    const body2 = FORM_BODY.replace('拦截 (concern)', 'bypass now')
+    expect(resolveVerdictEvent(form('opened', body2)).verdict).toBe('concern')
+  })
+  it('action "PASS" uppercase still maps to pass (case-insensitive word)', () => {
+    const body = FORM_BODY.replace('拦截 (concern)', 'PASS')
+    expect(resolveVerdictEvent(form('opened', body)).verdict).toBe('pass')
+  })
+  it('a newline smuggled into the package field is collapsed, not injected', () => {
+    // a multi-line name would inject extra k=v lines into $GITHUB_OUTPUT —
+    // the value lands pre-exists-check, so an unsanitized newline is a
+    // protocol break, not just ugly text
+    const body = FORM_BODY.replace('evilpkg', 'evil\nskip=noresolve')
+    const r = resolveVerdictEvent(form('opened', body))
+    expect(r.name).not.toContain('\n')
+    expect(r.name).toBe('evil skip=noresolve')
+  })
+  it('issues opened/edited on a NON-[concern] title → noresolve (parser is the contract)', () => {
+    // the workflow gate narrows this channel to [concern] titles today, but a
+    // [review] opened event reaching the resolver must not be read as a form —
+    // its body has no ### sections yet the parser is the single source of truth
+    const r = resolveVerdictEvent(ev({ event: 'issues', action: 'opened', issueTitle: '[review] pkg@1.0', issueBody: FORM_BODY, commentBody: '' }))
+    expect(r.skip).toBe('noresolve')
+    const r2 = resolveVerdictEvent(ev({ event: 'issues', action: 'edited', issueTitle: 'plain issue', issueBody: FORM_BODY, commentBody: '' }))
+    expect(r2.skip).toBe('noresolve')
+  })
+})
+
+describe('case-insensitive commands + isrepo output (HV-6/HV-7)', () => {
+  it('/Approve and /CONCERN parse — phone autocapitalize is a real channel', () => {
+    expect(resolveVerdictEvent(ev({ commentBody: '/Approve' }))).toMatchObject({ name: 'pkg', verdict: 'pass' })
+    const r = resolveVerdictEvent(ev({ commentBody: '/CONCERN looks evil' }))
+    expect(r.verdict).toBe('concern')
+    expect(r.reason).toBe('looks evil')
+  })
+  it('isrepo=1 emitted for owner/repo targets; absent for npm names', () => {
+    expect(resolveVerdictEvent(ev({ commentBody: '/concern o/r sus' })).isrepo).toBe('1')
+    expect(resolveVerdictEvent(ev({ commentBody: '/concern pkg sus' })).isrepo).toBeUndefined()
+    // labeled path on a repo-titled review also emits it
+    expect(resolveVerdictEvent(ev({ event: 'issues', action: 'labeled', label: 'verdict:pass', issueTitle: '[review] o/r' })).isrepo).toBe('1')
+  })
+})
+
+describe('isDupVerdict — semantic dedupe (HV-2)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  it('identical latest human line → dup', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'ok', source: 'human', at: 't1' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', 'ok')).toBe(true)
+  })
+  it('latest line is a DIFFERENT verdict → not dup (flip must record)', () => {
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'concern', reason: 'r', source: 'human' }),
+      L({ name: 'p', version: '1', verdict: 'pass', reason: 'ok', source: 'human' }),
+    ]
+    expect(isDupVerdict(lines, 'p', '1', 'concern', 'r')).toBe(false)
+  })
+  it('AI verdict on top does NOT dedupe a human write (source = stickiness signal)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', reason: 'r', source: 'ai' })]
+    expect(isDupVerdict(lines, 'p', '1', 'concern', 'r')).toBe(false)
+  })
+  it('different version key → not dup; malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'p', version: '2', verdict: 'pass', reason: '', source: 'human' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', '')).toBe(false)
+    expect(isDupVerdict(lines, 'p', '2', 'pass', '')).toBe(true)
+  })
+  it('reason-less records (undefined) match empty reason', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human' })]
+    expect(isDupVerdict(lines, 'p', '1', 'pass', '')).toBe(true)
+  })
+  it('reason compared normalized — stored multiline vs collapsed arg text', () => {
+    // a writer that stored raw multiline vs a caller passing the collapsed
+    // reason must still dedupe
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', reason: 'bad\nstuff', source: 'human' })]
+    expect(isDupVerdict(lines, 'p', '1', 'concern', 'bad stuff')).toBe(true)
+  })
+})
+
+describe('amendAt — reason-only amendment keeps maturity (HV-2 counterpart)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  const AT = '2026-01-01T00:00:00.000Z'
+  it('latest human line: same verdict, different reason → reuses its at', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'old reason', source: 'human', at: AT })]
+    expect(amendAt(lines, 'p', '1', 'pass', 'new reason')).toBe(AT)
+  })
+  it('same verdict + same reason → null (isDupVerdict owns that case)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'r', source: 'human', at: AT })]
+    expect(amendAt(lines, 'p', '1', 'pass', 'r')).toBeNull()
+  })
+  it('verdict flip is a new decision, not an amendment → null', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', reason: 'r', source: 'human', at: AT })]
+    expect(amendAt(lines, 'p', '1', 'pass', 'r2')).toBeNull()
+  })
+  it('AI line on top → null: the human verdict must land with a fresh at', () => {
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'pass', reason: 'old', source: 'human', at: AT }),
+      L({ name: 'p', version: '1', verdict: 'pass', reason: 'ai saw x', source: 'ai', at: '2026-01-02T00:00:00.000Z' }),
+    ]
+    expect(amendAt(lines, 'p', '1', 'pass', 'edited reason')).toBeNull()
+  })
+  it('an older matching line under a non-matching latest → null', () => {
+    // amend only reads the LATEST line for the key — an older human line
+    // under a different verdict does not anchor the new write
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'pass', reason: 'old', source: 'human', at: AT }),
+      L({ name: 'p', version: '1', verdict: 'concern', reason: 'brake', source: 'human', at: '2026-01-02T00:00:00.000Z' }),
+    ]
+    expect(amendAt(lines, 'p', '1', 'pass', 'new reason')).toBeNull()
+  })
+  it('malformed/missing at on the matched line → null (never propagate junk)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'old', source: 'human', at: 'not-a-date' })]
+    expect(amendAt(lines, 'p', '1', 'pass', 'new')).toBeNull()
+  })
+  it('key mismatch → null', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', reason: 'old', source: 'human', at: AT })]
+    expect(amendAt(lines, 'p', '2', 'pass', 'new')).toBeNull()
+    expect(amendAt(lines, 'q', '1', 'pass', 'new')).toBeNull()
+  })
+})
+
+describe('overriddenHuman — reversal detection (HV-12)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  const AT = '2026-01-01T00:00:00.000Z'
+  it('latest human line for the key has a DIFFERENT verdict → returns it', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('same verdict → null (that is dup/amend territory, not a reversal)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'concern', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+  })
+  it('no human line for the key → null; AI line on top → null (overriding the robot is routine)', () => {
+    const lines = [
+      L({ name: 'p', version: '1', verdict: 'pass', source: 'human', at: AT }),
+      L({ name: 'p', version: '1', verdict: 'concern', source: 'ai', at: '2026-01-02T00:00:00.000Z' }),
+    ]
+    // writing a NEW pass still reverses the older human pass? no — same
+    // verdict as the human line → null; a concern write overrides the human
+    // pass even with an AI concern stacked on top (the AI is shadowed, the
+    // human decision is what's being reversed)
+    expect(overriddenHuman(lines, 'p', '1', 'pass')).toBeNull()
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('different key → null; malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'p', version: '2', verdict: 'pass', source: 'human', at: AT })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+    expect(overriddenHuman(lines, 'p', '2', 'concern')).toEqual({ verdict: 'pass', at: AT })
+  })
+  it('missing at on the overridden line → null (never emit an unanchored warning)', () => {
+    const lines = [L({ name: 'p', version: '1', verdict: 'pass', source: 'human' })]
+    expect(overriddenHuman(lines, 'p', '1', 'concern')).toBeNull()
+  })
+})
+
+describe('retargetedIssueTarget — form retarget residue (HV-13)', () => {
+  const L = (o: object) => JSON.stringify(o)
+  it('latest human line traced to this issue names a DIFFERENT package → returns it', () => {
+    const lines = [L({ name: 'oldpkg', version: '1', verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(lines, 9, 'newpkg', '1')).toEqual({ name: 'oldpkg', version: '1' })
+  })
+  it('same key → null; other issues → null; AI lines → null', () => {
+    const lines = [
+      L({ name: 'samepkg', version: '1', verdict: 'concern', source: 'human', issue: 9 }),
+      L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'ai', issue: 9 }),
+      L({ name: 'otherpkg', version: '1', verdict: 'concern', source: 'human', issue: 8 }),
+    ]
+    expect(retargetedIssueTarget(lines, 9, 'samepkg', '1')).toBeNull()
+  })
+  it('same package but a DIFFERENT version → stranded keyed verdict surfaces', () => {
+    // a form edit that only changes 版本 retargets the verdict key — the old
+    // version's line still stands; without the version compare this slipped
+    // through name-only detection
+    const lines = [L({ name: 'samepkg', version: '1', verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(lines, 9, 'samepkg', '2')).toEqual({ name: 'samepkg', version: '1' })
+    // package-scope (version:null) line vs a versioned verdict → also a retarget
+    const pkg = [L({ name: 'samepkg', version: null, verdict: 'concern', source: 'human', issue: 9 })]
+    expect(retargetedIssueTarget(pkg, 9, 'samepkg', '2')).toEqual({ name: 'samepkg', version: null })
+  })
+  it('an arg-spec verdict for another package from the same issue is surfaced (documented)', () => {
+    // /concern pkgA then /concern pkgB on one issue → the second write warns
+    // that pkgA's verdict still stands — informative either way
+    const lines = [L({ name: 'pkgA', version: null, verdict: 'concern', source: 'human', issue: 5 })]
+    expect(retargetedIssueTarget(lines, 5, 'pkgB', null)).toEqual({ name: 'pkgA', version: null })
+  })
+  it('malformed lines skipped', () => {
+    const lines = ['{bad', L({ name: 'x', source: 'human', issue: 'not-a-number' })]
+    expect(retargetedIssueTarget(lines, 9, 'newpkg', null)).toBeNull()
+  })
+})
+
+describe('concern.yml workflow contract (audit #5)', () => {
+  const wf = readFileSync(new URL('../.github/workflows/concern.yml', import.meta.url), 'utf8')
+  it('retest fetches index.json via raw media type — the base64 content field is empty >1MB', () => {
+    // index.json is ~14MB: `contents/...?ref=catalog --jq .content` returns
+    // null → base64 -d → JSON.parse throws under set -e → /retest died with
+    // no user-facing comment. Guard the raw-Accept fetch against regression.
+    const m = wf.match(/contents\/index\.json\?ref=catalog[^\n]*(?:\n\s*[^\n]*){0,3}/)
+    expect(m?.[0]).toContain('application/vnd.github.raw')
+    expect(m?.[0]).not.toContain('--jq .content')
+  })
+  it('comment gate covers space-padded commands — parser accepts ^\\s*/cmd', () => {
+    // submit.yml already fires on ' /a'/' /c'; concern.yml's gate was narrower
+    // than its own parser (^
+    const jobIf = wf.slice(wf.indexOf('jobs:'), wf.indexOf('runs-on: ubuntu-latest'))
+    expect(jobIf).toContain("' /c'")
+    expect(jobIf).toContain("' /a'")
+  })
+  it('nobranch probe distinguishes unreachable remote from absent branch', () => {
+    // ls-remote --exit-code fails for BOTH — without the reachability probe a
+    // transient outage mislabels the issue "data plane not initialized"
+    const i = wf.indexOf('ls-remote --exit-code origin catalog')
+    expect(i).toBeGreaterThan(-1)
+    expect(wf.slice(i, i + 600)).toContain('ls-remote origin')
+  })
+})
+
+describe('form-template contract — issue template ⇄ parser field keys', () => {
+  // the parser reads ### sections by LABEL text; a template rename that
+  // drifts from formField()'s lookup keys silently turns the form channel
+  // into noresolve — assert the two sides stay in sync
+  const tpl = readFileSync(new URL('../.github/ISSUE_TEMPLATE/concern.yml', import.meta.url), 'utf8')
+  const labels = [...tpl.matchAll(/label:\s*(.+)/g)].map(m => m[1]!.trim())
+  it('template labels cover every formField lookup key', () => {
+    for (const key of ['npm 包名或 owner/repo', '版本（可留空）', '操作 / Action', '理由 / Reason']) {
+      expect(labels, `missing template label: ${key}`).toContain(key)
+    }
+  })
+  it('template still produces a resolvable form issue', () => {
+    const r = resolveVerdictEvent(ev({
+      event: 'issues', action: 'opened', issueTitle: '[concern] x', commentBody: '',
+      issueBody: `### npm 包名或 owner/repo\n\nsomepkg\n\n### 版本（可留空）\n\n1.0.0\n\n### 操作 / Action\n\n拦截 (concern)\n\n### 理由 / Reason\n\nwhy`,
+    }))
+    expect(r).toMatchObject({ name: 'somepkg', ver: '1.0.0', verdict: 'concern', reason: 'why' })
+  })
+})
+
+describe('sentinel [review] titles (repo-only aggregate issue)', () => {
+  const AGG = '[review] (repo-only backlog)'
+  it('titleTarget → null: a placeholder name can never be a real target', () => {
+    expect(titleTarget(AGG)).toBeNull()
+    expect(titleTarget('[review] (anything)')).toBeNull()
+  })
+  it('labels on the aggregate resolve to noresolve — labels only work on per-target issues', () => {
+    const r = resolveVerdictEvent(ev({ event: 'issues', action: 'labeled',
+      label: 'verdict:pass', issueTitle: AGG, commentBody: '' }))
+    expect(r.skip).toBe('noresolve')
+  })
+  it('/approve owner/repo lands on the arg — no phantom mismatch vs the sentinel', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: AGG, commentBody: '/approve acme/tool' }))
+    expect(r.skip).toBeUndefined()
+    expect(r).toMatchObject({ name: 'acme/tool', verdict: 'pass' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('/concern acme/tool reason → lands with reason, no mismatch', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: AGG, commentBody: '/concern acme/tool looks dead' }))
+    expect(r).toMatchObject({ name: 'acme/tool', verdict: 'concern', reason: 'looks dead' })
+    expect(r.mismatch).toBeUndefined()
+  })
+  it('bare charset name also resolves on an untitled issue', () => {
+    const r = resolveVerdictEvent(ev({ issueTitle: AGG, commentBody: '/approve left-pad' }))
+    expect(r).toMatchObject({ name: 'left-pad', verdict: 'pass' })
+  })
+  it('bare /approve on the aggregate → noresolve (no target to infer)', () => {
+    expect(resolveVerdictEvent(ev({ issueTitle: AGG })).skip).toBe('noresolve')
+  })
+})

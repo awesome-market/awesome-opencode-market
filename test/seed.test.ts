@@ -21,7 +21,7 @@ describe('seed', () => {
         r === 'o2/p2' ? { stargazers_count: 500, archived: true } : { stargazers_count: 200 })
     }) as typeof fetch
     const out = await filterByStars(['o1/p1', 'o2/p2', 'o3/p3'], 50, { fetchFn: f })
-    expect(out).toEqual([{ repo: 'o3/p3', stars: 200 }])
+    expect(out).toEqual([{ repo: 'o3/p3', stars: 200, branch: null }])
   })
   it('repoToNpm reads package.json name; null on fail', async () => {
     const ok = (async () => mkRes({ name: '@x/y' })) as typeof fetch

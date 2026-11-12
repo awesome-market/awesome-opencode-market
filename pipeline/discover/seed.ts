@@ -1,6 +1,7 @@
 /** Seed ingestion: awesome-list README → high-star repos → npm-candidate list → import into pipeline. */
 import { ghHeaders, normalizeRepoUrl } from './github.ts'
-import { withTimeout } from '../fetch/npm.ts'
+import { withTimeout, readJsonCapped } from '../fetch/npm.ts'
+import { isMain } from '../main-guard.ts'
 
 export const AWESOME_URL = 'https://raw.githubusercontent.com/awesome-opencode/awesome-opencode/main/README.md'
 
@@ -14,33 +15,44 @@ export function extractRepos(md: string): string[] {
   return [...out]
 }
 
-/** Fetch repo stars, keep ≥ minStars, return sorted list. */
+/** Fetch repo stars, keep ≥ minStars, return sorted list (default branch carried for repoToNpm). */
 export async function filterByStars(
   repos: string[], minStars: number,
   opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
-): Promise<{ repo: string; stars: number }[]> {
+): Promise<{ repo: string; stars: number; branch: string | null }[]> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  const out: { repo: string; stars: number }[] = []
+  const out: { repo: string; stars: number; branch: string | null }[] = []
   for (const repo of repos) {
     const res = await f(`https://api.github.com/repos/${repo}`, { headers: ghHeaders(opts.token) })
     if (!res.ok) continue
-    const b = (await res.json()) as { stargazers_count?: number; archived?: boolean }
-    if (!b.archived && (b.stargazers_count ?? 0) >= minStars) out.push({ repo, stars: b.stargazers_count! })
+    // same malformed-doc contract — a non-object body skips the repo rather
+    // than TypeError-ing the whole star-filter pass (no per-repo catch here)
+    const b = await readJsonCapped<unknown>(res, 4 * 1024 * 1024)
+    if (!b || typeof b !== 'object' || Array.isArray(b)) continue
+    const m = b as Record<string, unknown>
+    const stars = typeof m.stargazers_count === 'number' && Number.isFinite(m.stargazers_count) ? m.stargazers_count : 0
+    if (m.archived !== true && stars >= minStars)
+      out.push({ repo, stars, branch: typeof m.default_branch === 'string' ? m.default_branch : null })
   }
   return out.sort((a, b) => b.stars - a.stars)
 }
 
 /** Repo → npm name probe: package.json name field from repo root. */
 export async function repoToNpm(
-  repo: string, opts: { token?: string | undefined; fetchFn?: typeof fetch } = {},
+  repo: string,
+  opts: { token?: string | undefined; branch?: string | undefined; fetchFn?: typeof fetch } = {},
 ): Promise<string | null> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
-  for (const br of ['main', 'master']) {
+  for (const br of [...new Set([opts.branch, 'main', 'master'].filter((b): b is string => !!b))]) {
     const res = await f(`https://raw.githubusercontent.com/${repo}/${br}/package.json`)
     if (!res.ok) continue
     try {
-      const pkg = (await res.json()) as { name?: string }
-      if (pkg.name) return pkg.name
+      const pkg = await readJsonCapped<unknown>(res, 2 * 1024 * 1024)
+      // name must be a string — a truthy non-string (42, {}) used to be
+      // returned verbatim as the "npm name" and land in the seed list
+      const nm = pkg && typeof pkg === 'object' && !Array.isArray(pkg)
+        ? (pkg as { name?: unknown }).name : null
+      if (typeof nm === 'string' && nm) return nm
     } catch { /* not json */ }
   }
   return null
@@ -56,15 +68,15 @@ export async function buildSeedList(
   const repos = extractRepos(await res.text())
   const starred = await filterByStars(repos, opts.minStars ?? 50, opts)
   const names: string[] = []
-  for (const { repo } of starred) {
-    const npm = await repoToNpm(repo, opts)
-    names.push(npm ?? `github:${repo}`)
+  for (const { repo, branch } of starred) {
+    const npm = await repoToNpm(repo, { ...opts, ...(branch ? { branch } : {}) })
+    names.push(npm ?? `github:${repo.toLowerCase()}`)
   }
   return names
 }
 
 /* v8 ignore next 6 */
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isMain(import.meta.url)) {
   const minStars = Number(process.argv[3] ?? 50)
   const list = await buildSeedList({ token: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN, minStars, ...(process.argv[2] ? { url: process.argv[2] } : {}) })
   console.log(list.join('\n'))

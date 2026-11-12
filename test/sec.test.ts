@@ -14,7 +14,7 @@ const mkEntry = (name: string, v = '1.0.0', over: Partial<PluginEntry> = {}): Pl
   license: 'MIT', deprecated: false, replacement: null,
   deprecatedMessage: null, createdAt: '2020-01-01', modifiedAt: null, maintainers: ['alice'], distTags: {},
   firstSeenAt: '2026-01-01', latestVersion: v, publishedAt: null,
-  metrics: { stars: null, npmDownloads30d: null, checkedAt: '2026-01-01' },
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: '2026-01-01' },
   capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
   verification: { status: 'unverified' }, compat: {},
   approval: 'approved',
@@ -163,16 +163,19 @@ describe('buildIndex removed + categories (F-2/I-3)', () => {
     const { index } = buildIndex([mkEntry('c')], old, { opencodeVersion: '2.2.5', now })
     expect(index.removed.map(r => r.name)).toEqual(['a'])
   })
-  it('caller tombstones appended; category registry unions', () => {
-    const e = mkEntry('x', '1.0.0', { category: ['new-cat'] })
-    const old = mkIndex([], { categories: { 'old-cat': { en: 'Old', zh: '旧' } } })
+  it('caller tombstones appended; category registry unions whitelisted', () => {
+    const e = mkEntry('x', '1.0.0', { category: ['other'] })
+    const old = mkIndex([], { categories: { tools: { en: 'Old', zh: '旧' }, 'old-cat': { en: 'Gone' } } })
     const { index } = buildIndex([e], old, {
       opencodeVersion: '2.2.5', now: '2026-01-01',
       removed: [{ slug: 'y', name: 'y', disappearedAt: '2026-01-01', reason: 'npm-404' }],
     })
     expect(index.removed).toHaveLength(1)
-    expect(index.categories['old-cat']).toEqual({ en: 'Old', zh: '旧' })
-    expect(index.categories['new-cat']).toEqual({ en: 'new-cat' })
+    // canonical id survives (labels re-canonicalized); unknown ids are
+    // dropped from both dict and entries — author strings can't mint globals
+    expect(index.categories['tools']).toEqual({ en: 'tools & capabilities', zh: '工具与能力' })
+    expect(index.categories['other']).toEqual({ en: 'other', zh: '其他' })
+    expect(index.categories['old-cat']).toBeUndefined()
   })
 })
 
@@ -236,22 +239,42 @@ import { backfill } from '../pipeline/backfill.ts'
 describe('remerge (WF-2 publish retry)', () => {
   it('remote state preserved: verification + removed + categories survive', () => {
     const ours = mkIndex([mkEntry('a', '1.0.0'), mkEntry('new-pkg', '1.0.0')], {
-      categories: { c1: { en: 'C1' } },
+      categories: { tools: { en: 'T' } },
       removed: [{ slug: 'x', name: 'x', disappearedAt: 't', reason: 'npm-404' }],
     })
     const remote = mkIndex([mkEntry('a', '1.0.0', { verification: { status: 'verified', level: 'load' } })], {
-      categories: { c2: { en: 'C2' } },
+      categories: { other: { en: 'O' } },
       removed: [{ slug: 'y', name: 'y', disappearedAt: 't', reason: 'filtered' }],
     })
     const out = remerge(ours, remote)
     expect(out.plugins.find(e => e.name === 'a')!.verification.status).toBe('verified')
     expect(out.plugins.find(e => e.name === 'new-pkg')).toBeTruthy()
     expect(out.removed.map(r => r.name).sort()).toEqual(['x', 'y'])
-    expect(out.categories).toMatchObject({ c1: { en: 'C1' }, c2: { en: 'C2' } })
+    expect(out.categories).toMatchObject({ tools: { en: 'tools & capabilities' }, other: { en: 'other' } })
+  })
+  it('legacy zh categories normalize on the retry path (I-3 follow-through)', () => {
+    // ours-side entry carries a legacy zh value (old run.json / submission-supplied);
+    // remote dict carries a legacy zh key — both must land as english ids
+    const ours = mkIndex([mkEntry('a', '1.0.0', { category: ['主题与外观'] })])
+    const remote = mkIndex([mkEntry('a', '1.0.0')], {
+      categories: { '主题与外观': { en: '主题与外观' } },
+    })
+    const out = remerge(ours, remote)
+    expect(out.categories['主题与外观']).toBeUndefined()
+    expect(out.categories['appearance']).toEqual({ en: 'appearance', zh: '主题与外观' })
+    expect(out.plugins.find(e => e.name === 'a')!.category).toEqual(['appearance'])
   })
   it('null remote → ours returned wholesale', () => {
     const ours = mkIndex([mkEntry('a')])
     expect(remerge(ours, null)).toBe(ours)
+  })
+  it('entry category with unknown id → dropped (whitelist, no mint)', () => {
+    // arbitrary author-declared strings must not mint global category ids —
+    // they fall off the entry AND never enter the dict
+    const ours = mkIndex([mkEntry('a', '1.0.0', { category: ['custom-x'] })])
+    const out = remerge(ours, mkIndex([]))
+    expect(out.categories['custom-x']).toBeUndefined()
+    expect(out.plugins.find(e => e.name === 'a')!.category).toEqual([])
   })
 })
 

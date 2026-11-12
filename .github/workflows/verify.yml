@@ -1,57 +1,150 @@
 name: verify
+# scope: prod-only — scheduled verification automation
 on:
-  schedule: [{ cron: '47 4 * * *' }, { cron: '47 16 * * *' }]   # 2x/day — aligned behind both catalog runs (WF-4)
+  # 4x/day backstop + event-driven dispatch: catalog dispatches this workflow
+  # on every real index push, so fresh entries meet install evidence within
+  # the hour (WF-4). The queue is capped/serialized regardless; extra ticks
+  # only raise daily throughput, they can't multiply shard load.
+  schedule:
+    - { cron: '47 4 * * *' }
+    - { cron: '47 10 * * *' }
+    - { cron: '47 16 * * *' }
+    - { cron: '47 22 * * *' }
   workflow_dispatch:
     inputs:
       targets:
         description: 'comma-separated npm names to verify (empty = plan from index cap 48)'
         required: false
         default: ''
-concurrency: catalog-branch   # shared with catalog.yml — serializes all writers of the catalog branch (I-4)
+      cap:
+        description: 'max targets to plan this run (empty = 48; raise to drain backlog)'
+        required: false
+        default: ''
+      retest:
+        description: 're-verify failed/verified entries too (targets still narrows the set)'
+        required: false
+        type: boolean
+        default: false
 permissions: {}
 jobs:
   plan:
+    # scope: prod-only is real, not a comment — a fork's schedule would burn
+    # 2×N×35min of shard compute daily. Manual dispatch stays open everywhere.
+    # Whitelist = the known data planes: awesome-market org (planned prod) and
+    # terry2010's fork (current prod — client default index + live catalog).
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
+    timeout-minutes: 15                 # npm ci + plan is minutes-scale; a hang must not hold 6h
     outputs: { shards: "${{ steps.shards.outputs.list }}" }
     permissions: { contents: read }
     steps:
+      # plan touches no untrusted code but fetches catalog data — same egress
+      # posture as the verify shards keeps the job from being a quiet hole
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
-      - run: git fetch origin catalog 2>/dev/null || true
-      - run: git show origin/catalog:index.json > /tmp/index.json 2>/dev/null || echo '{"plugins":[]}' > /tmp/index.json
+      - run: |
+          # fetch failure ≠ absent branch: `fetch || echo` silently green-no-ops
+          # a whole day of verification on a network hiccup. ls-remote asks the
+          # remote directly — exit 2 means the ref truly doesn't exist (legal
+          # bootstrap), anything else non-zero is "can't reach origin" → fail.
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            # depth=1: only the tip tree is read. The forced full refspec keeps
+            # origin/catalog tracking even a rewritten/diverged remote.
+            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' ;;
+            2) echo "no catalog branch yet" ;;
+            *) echo "cannot reach origin for catalog — refusing an empty green plan" >&2; exit 1 ;;
+          esac
+      - run: |
+          if git show origin/catalog:index.json > /tmp/index.json 2>/dev/null; then
+            echo "index fetched"
+          elif git rev-parse --verify -q origin/catalog >/dev/null; then
+            # the branch exists but index.json didn't read — that's a fetch
+            # failure or corruption, not "nothing to verify". Green-no-op here
+            # would silently starve a whole day of verification.
+            echo "catalog branch exists but index.json is unreadable" >&2
+            exit 1
+          else
+            echo "no catalog branch — nothing to verify"
+            echo '{"plugins":[]}' > /tmp/index.json
+          fi
       - name: narrow index to requested targets (manual dispatch only)
         if: inputs.targets != ''
         env: { T: "${{ inputs.targets }}" }
         run: |
-          node -e 'const ns=process.env.T.split(",").map(s=>s.trim()).filter(Boolean);
+          node -e 'const ns=process.env.T.split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
             const i=JSON.parse(require("fs").readFileSync("/tmp/index.json","utf8"));
-            i.plugins=i.plugins.filter(p=>ns.includes(p.name));
-            require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i));
-            console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)")'
+            // npm names are case-insensitive — a case typo is not "not found"
+            i.plugins=i.plugins.filter(p=>ns.includes(p.name.toLowerCase()));
+            console.log("targets narrowed to:", i.plugins.map(p=>p.name).join(", ")||"(none)");
+            // a typoed target name must FAIL, not green-no-op — the operator
+            // thinks they verified something that never ran
+            if (!i.plugins.length) { console.error(`none of the requested targets exist in the catalog index: ${ns.join(", ")}`); process.exit(1) }
+            require("fs").writeFileSync("/tmp/index.json",JSON.stringify(i))'
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
+      # node_modules itself is cacheable — npm ci's relink work costs ~20s per
+      # shard job; the lockfile hash in the key keeps the cache honest
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      # verdicts feed the plan's condemned-slot filter — a concern-marked
+      # version shouldn't burn a shard re-measuring a judged verdict
+      - run: |
+          # absent file = legit fresh-catalog state; exists-but-unreadable is
+          # corruption — fail closed (same split as index.json above) rather
+          # than planning without the concern filter
+          if git cat-file -e origin/catalog:ai-verdicts.jsonl 2>/dev/null; then
+            git show origin/catalog:ai-verdicts.jsonl > /tmp/ai-verdicts.jsonl \
+              || { echo "ai-verdicts.jsonl exists but is unreadable" >&2; exit 1; }
+          else
+            echo "no ai-verdicts.jsonl on catalog yet — planning without the concern filter"
+            : > /tmp/ai-verdicts.jsonl
+          fi
       - id: shards
+        env:
+          VERIFY_CAP: "${{ inputs.cap }}"
+          # repo-variable override without a code edit (bump-drain tuning):
+          # unset/empty → the code default (12/shard) applies
+          VERIFY_SHARD_SIZE: "${{ vars.VERIFY_SHARD_SIZE || '' }}"
         run: |
           # targeted dispatch → retest mode: failed/verified slots become eligible
-          # again (otherwise a failed version is terminal — no retry path exists)
-          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp ${{ inputs.targets && '--retest' || '' }} > /tmp/plan.out
-          tail -1 /tmp/plan.out > /tmp/shard-list.json
-          echo "list=$(cat /tmp/shard-list.json)" >> "$GITHUB_OUTPUT"
+          # again (recent failed slots also auto-retry up to 3 attempts — V-3)
+          npx tsx pipeline/verify/plan.ts /tmp/index.json /tmp /tmp/ai-verdicts.jsonl ${{ (inputs.targets != '' || inputs.retest) && '--retest' || '' }} > /tmp/plan.out
+          cat /tmp/plan.out
+          # plan writes the matrix list itself — no stdout tail-scraping
+          echo "list=$(cat /tmp/plan-matrix.json)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with: { name: shards, path: /tmp/shard-*.json, retention-days: 1 }
 
   verify:
     needs: plan
-    if: ${{ fromJSON(needs.plan.outputs.shards) != '[]' && fromJSON(needs.plan.outputs.shards) != 'null' }}
+    # string-compare the output — `fromJSON('[]') != '[]'` compares ARRAY to
+    # string and is truthy, so an empty plan previously ran an empty matrix,
+    # which GitHub fails at expansion ("does not contain any values"), and the
+    # failure then cascaded into merge (ENOENT /tmp/results) + a bogus alert
+    if: ${{ needs.plan.outputs.shards != '[]' && needs.plan.outputs.shards != '' && needs.plan.outputs.shards != 'null' }}
     strategy:
       fail-fast: false
       matrix: { shard: "${{ fromJSON(needs.plan.outputs.shards) }}" }
     runs-on: ubuntu-latest
-    timeout-minutes: 30                 # 12 targets serial ≈ 15min worst-case; 20 was too thin (N-21)
+    timeout-minutes: 35                 # 12 targets ÷ 4 lanes ≈ 15min typical; the 35min ceiling covers VERIFY_SHARD_SIZE=24/VERIFY_LANES=2 drain ops and slow tails (wider API-load window since V-4)
     permissions: {}                     # untrusted package execution — zero token, zero secrets (DEV §1)
     steps:
       # B-4: eBPF egress allowlist — untrusted plugin code can only reach the
       # registries it needs to install. Covers install AND activation phases.
+      # codeload serves the github-kind tarballs (`plugin add owner/repo#sha`
+      # and the repo-skill structure check) — github.com alone doesn't carry it.
       - uses: step-security/harden-runner@v2
         with:
           egress-policy: block
@@ -60,22 +153,40 @@ jobs:
             api.npmjs.org:443
             api.github.com:443
             github.com:443
+            codeload.github.com:443
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
-      # pinned in lockstep with OPENCODE_VERSION in pipeline/publish/merge.ts —
-      # verification results are keyed name@version+host (DEV §4)
-      - run: npm i -g @opencode/cli@2.2.5 && opencode --version
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      # installed version is READ from pipeline/merge.ts's OPENCODE_VERSION —
+      # results are keyed name@version+host (DEV §4), so the two pins must
+      # never drift (a stale install stamps every result with the wrong host
+      # version → every verified slot looks host-stale → infinite re-queue)
+      - run: |
+          OCV=$(sed -nE "s/.*OPENCODE_VERSION = '([^']+)'.*/\1/p" pipeline/publish/merge.ts | head -1)
+          [ -n "$OCV" ] || { echo "cannot resolve OPENCODE_VERSION from pipeline/publish/merge.ts" >&2; exit 1; }
+          npm i -g "@opencode/cli@$OCV" && opencode --version
       - uses: actions/download-artifact@v4
         with: { name: shards, path: /tmp }
+      # V-1: untrusted plugin code must run as a different uid than the shard
+      # writing results-*.json — gate hard on the sandbox user existing so the
+      # job can never silently degrade to in-uid verification.
+      - run: sudo -n -u nobody true
       - name: verify shard
         env:
           XDG_CONFIG_HOME: /tmp/vhome/.config
           XDG_DATA_HOME: /tmp/vhome/data
           XDG_CACHE_HOME: /tmp/vhome/cache
+          VERIFY_SANDBOX_USER: nobody
+          # repo-variable override without a code edit (bump-drain tuning):
+          # unset/empty → the code default (4 lanes) applies
+          VERIFY_LANES: ${{ vars.VERIFY_LANES || '' }}
         run: npx tsx pipeline/verify/verify.ts /tmp/shard-${{ matrix.shard }}.json /tmp/results-${{ matrix.shard }}.json
       # results are flushed per-target inside the shard — a timed-out shard still
       # leaves a partial file worth collecting (N-10)
@@ -92,56 +203,229 @@ jobs:
     # shards' results are still valid — merge whatever landed (N-10)
     if: always() && needs.verify.result != 'cancelled' && needs.verify.result != 'skipped'
     runs-on: ubuntu-latest
-    permissions: { contents: write, pages: write, id-token: write }    # only job that writes — never executes untrusted code
+    # catalog-branch lock lives HERE — the ~30min shard phase never writes, so
+    # holding the workflow-level lock starved catalog/digest/submit for no
+    # reason. Job-level shares the same group namespace.
+    concurrency: catalog-branch
+    # issues: write — a persistent release.ts failure during merge files a
+    # deduped pipeline-alert (G10); the job still never executes untrusted code
+    permissions: { contents: write, actions: write, issues: write }    # only job that writes — never executes untrusted code; actions: dispatches site.yml (V-8)
+    timeout-minutes: 15                 # fetch+merge+push-retry loop is a couple minutes; bound a hung gh api / push
     steps:
+      # no untrusted code here, but the job pushes to catalog and files issues —
+      # the same egress posture keeps a compromised runner image from
+      # exfiltrating the write token to somewhere unlisted
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - run: npm ci
+      - id: nm
+        uses: actions/cache@v4
+        with: { path: node_modules, key: "${{ runner.os }}-nm-${{ hashFiles('package-lock.json') }}" }
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
       - uses: actions/download-artifact@v4
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
+      # cancelled-merge recovery: when the catalog-branch concurrency lock
+      # evicts a PENDING merge (another writer queued in), its verify shards'
+      # results-* artifacts sit unmerged on that run. Sweep up to 3 previous
+      # runs' leftovers — consecutive evictions strand results on EACH run,
+      # not just the last one. merge.ts's verifiedAt freshness guard makes
+      # replay idempotent, so recovered rows land once and never clobber
+      # newer data. Best-effort throughout: artifacts expire after 7d.
+      - id: prev
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          mkdir -p /tmp/results-prev
+          # GITHUB_RUN_ID is numeric — jq compares .id (number) to it UNQUOTED
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?per_page=5" \
+            --jq '[.workflow_runs[] | select(.status == "completed" and .id != '${GITHUB_RUN_ID}')][0:3] | .[].id' \
+            > /tmp/prev-rids.txt || true
+          while read -r rid; do
+            [ -n "$rid" ] || continue
+            dl="/tmp/prev-dl-$rid"
+            gh run download "$rid" -R "$GITHUB_REPOSITORY" -p 'results-*' -D "$dl" 2>/dev/null || continue
+            # gh run download nests each artifact under its own dir; flatten
+            # with the run-id in the name so a shard number that recurs
+            # across runs doesn't collide-and-drop (cp -n on the filename
+            # would lose the other run's distinct target set)
+            find "$dl" -name 'results-*.json' | while read -r f; do
+              cp "$f" "/tmp/results-prev/results-prev-${rid}-$(basename "$f")"
+            done
+          done < /tmp/prev-rids.txt
       - name: "merge results + commit to catalog (rebase-retry: re-merge against fresh head each attempt, WF-2)"
+        id: merge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          # download-artifact only creates the dir when artifacts exist — a
+          # fully-empty shard set must not ENOENT the merge
+          mkdir -p /tmp/results
+          # cancelled-merge recovery: fold prior runs' stranded results in
+          # beside this run's. Filenames are already run-id-namespaced, and
+          # merge.ts dedupes replayed rows by (name,version,verifiedAt) —
+          # the CURRENT run's fresher evidence always wins.
+          if [ -d /tmp/results-prev ]; then
+            cp /tmp/results-prev/results-*.json /tmp/results/ 2>/dev/null || true
+          fi
           git config user.email "market-bot@users.noreply.github.com"
           git config user.name "market-bot"
-          git fetch origin catalog 2>/dev/null || { echo "no catalog branch yet — nothing to merge into"; exit 0; }
-          # catalog branch is data-only — keep pipeline sources reachable via a worktree
+          # same three-way split as the plan job — a fetch hiccup exiting 0
+          # here would strand the whole shard set silently
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            # non-fatal on purpose: a transient blip here must not kill the
+            # job before the retry loop — the loop's own guarded fetch
+            # re-populates origin/catalog, and the worktree fallback below
+            # tolerates the missing ref until then
+            0) git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' \
+                 || echo "::warning::pre-loop catalog fetch failed — retry loop will refetch" ;;
+            2) echo "no catalog branch yet — nothing to merge into"; exit 0 ;;
+            *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
+          esac
+          # catalog branch is data-only — keep pipeline sources reachable via a worktree.
+          # clear a stale worktree first — a crashed run leaves /tmp/cat behind and
+          # bare `add` then fails twice (path exists, branch exists) for the whole job
+          git worktree remove /tmp/cat --force 2>/dev/null || true
+          # ...a stray NON-worktree dir (pruned registration, killed run) breaks
+          # `worktree add` just as hard — /tmp/cat is dedicated scratch, safe to clear
+          rm -rf /tmp/cat
+          # ...and a registration WITHOUT a dir wedges add the same way
+          # ('missing but registered worktree') — prune clears it
+          git worktree prune
+          # a leftover LOCAL 'catalog' branch (crashed run on a persistent
+          # checkout) makes the DWIM add fail AND the -b fallback fail —
+          # the merge dies before the retry loop. Drop the stale branch; the
+          # worktree add recreates it from origin/catalog.
+          git branch -D catalog 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
-          ok=0
+          ok=0; pushed=0
+          RELEASE_FAILED=0
           for i in 1 2 3 4; do
-            git fetch origin catalog
+            # depth=1 + forced refspec: the retry loop's whole point is moving
+            # to the freshest tip — a non-FF remote move must not leave
+            # origin/catalog stale or every remaining attempt burns on the
+            # same rejected push
+            # fetch is the transient-prone step in this loop — a network blip
+            # must consume a retry, not kill the whole merge under bash -e
+            # (the results then wait ~12h for the next run's artifact sweep).
+            git fetch --depth=1 origin '+refs/heads/catalog:refs/remotes/origin/catalog' \
+              || { echo "fetch failed (attempt $i) — retrying"; sleep 3; continue; }
             git -C /tmp/cat reset --hard origin/catalog
             git show origin/catalog:index.json > /tmp/index.json
             npx tsx pipeline/verify/merge.ts /tmp/index.json /tmp/results /tmp/index.new.json
-            npx tsx pipeline/site/build.ts /tmp/index.new.json /tmp/site
+            # fold mature verdicts against the freshest remote state before
+            # committing — a 'verified' result landing on an already-announced
+            # pass (or a human brake that arrived mid-run) applies in THIS
+            # commit instead of waiting for the next catalog generate (~12h).
+            # Non-fatal: the verify results still land; the next catalog run
+            # re-derives the same verdict state.
+            # [ -s ] guard — same failure shape as catalog.yml's release fold
+            # and catalog-append.sh's apply: an exit-0 empty emit must not
+            # truncate index.new.json into a published empty catalog. The
+            # JSON.parse check also rejects a truncated-but-nonempty emit.
+            if npx tsx pipeline/release.ts /tmp/index.new.json /tmp/cat/ai-verdicts.jsonl /tmp/cat/digest-state.json > /tmp/index.released.json \
+                && [ -s /tmp/index.released.json ] \
+                && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' /tmp/index.released.json; then
+              mv /tmp/index.released.json /tmp/index.new.json
+              RELEASE_FAILED=0
+            else
+              RELEASE_FAILED=1
+              echo "::warning::release.ts failed — verify results committed without verdict fold (next catalog run re-derives)"
+            fi
             cp /tmp/index.new.json /tmp/cat/index.json
             git -C /tmp/cat add index.json
-            git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || echo "no changes"
-            git -C /tmp/cat push origin HEAD:catalog && { ok=1; break; }
+            # staged-diff precheck (same C-2 fix as catalog-append): a real
+            # commit failure must not pass as "no changes" — the push that
+            # follows would no-op-succeed and the results would silently vanish
+            if git -C /tmp/cat diff --cached --quiet; then
+              echo "merged results produced no index changes — nothing to publish"
+              ok=1; break
+            fi
+            git -C /tmp/cat commit -m "verify: $(date -u +%F) run ${GITHUB_RUN_ID}" || { echo "commit failed (attempt $i)"; continue; }
+            git -C /tmp/cat push origin HEAD:catalog && { ok=1; pushed=1; break; }
             echo "push rejected (attempt $i) — re-merging against fresh head and retrying"
           done
           [ "$ok" = 1 ] || { echo "verify merge failed after retries"; exit 1; }
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: /tmp/site }
-      - uses: actions/deploy-pages@v4
-        continue-on-error: true
+          # G10: results landed but the verdict fold failed on the last
+          # attempt — brakes/releases deferred ~12h. Publish was green so the
+          # workflow alert job stays silent; file a deduped pipeline-alert.
+          if [ "$RELEASE_FAILED" = 1 ]; then
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "release apply failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            RBODY="verify merge landed but \`pipeline/release.ts\` failed on the final attempt — mature verdicts (releases AND human brakes) are NOT applied to the published index until the next successful fold (~12h). Check the release.ts error in the run log: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$RBODY" || true
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" \
+                --title "release apply failed during verify merge (run ${GITHUB_RUN_ID})" \
+                --body "$RBODY" --label pipeline-alert || true
+            fi
+          fi
+          # only a real push changed the public index — an all-harness-dropped
+          # or no-change merge must not burn a full site rebuild
+          echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
+      # V-8: site.yml is the single Pages publisher — dispatch it so fresh
+      # verification labels land on the site now instead of at the next
+      # catalog run (~8h later). Skipped when the merge changed nothing.
+      - name: trigger site rebuild
+        if: steps.merge.outputs.pushed == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Retry once, then escalate to a deduped pipeline-alert — a silent
+          # double-fail leaves verify results off the public site for ~12h
+          # (the digest watchdog's 36h leg is the backstop, not the detector).
+          gh workflow run site.yml || { sleep 10; gh workflow run site.yml || {
+            echo "::warning::site dispatch failed twice — escalating to pipeline-alert"
+            gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+            EX=$(gh issue list -R "$GITHUB_REPOSITORY" --label pipeline-alert --state open --search "site dispatch failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            BODY="site.yml dispatch failed twice — published verification results may stay stale on the public site until the next catalog/verify dispatch or a manual \`gh workflow run site.yml\`. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GITHUB_REPOSITORY" --body "$BODY" || true
+            else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
+          }; }
 
   alert:
     needs: [plan, verify, merge]
-    if: failure()
+    # cancelled() included: the catalog-branch concurrency lock can evict a
+    # PENDING merge — silently dropping a whole shard set's results. The
+    # leftover sweep above recovers them next run, but only if someone knows
+    # it happened; an evicted merge must page like a failure.
+    if: failure() || cancelled()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: { issues: write }
     steps:
+      # only gh api calls — the narrowest allowlist
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
       - name: open failure issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
-          gh issue create \
-            --title "verify workflow failed (run ${GITHUB_RUN_ID})" \
-            --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --label "pipeline-alert"
+          # dedupe: a persistent failure (npm outage, broken pin) must not open
+          # a fresh issue every 12h — append to the open one instead. in:title
+          # scopes the match — a body mention in an unrelated issue isn't a hit.
+          EXISTING=$(gh issue list --repo "$GH_REPO" --label pipeline-alert --state open --search "verify workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GH_REPO" --body "Failed again: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            gh issue create --repo "$GH_REPO" \
+              --title "verify workflow failed (run ${GITHUB_RUN_ID})" \
+              --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --label "pipeline-alert"
+          fi
