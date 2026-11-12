@@ -128,6 +128,70 @@ describe('contentMaterial — rank selection beats tar ordering', () => {
     expect(skill.text.startsWith('a'.repeat(100))).toBe(true) // head preserved
   })
 
+  it('binary members surface a binary-manifest block — text files still extracted', async () => {
+    // extensionless ELF (platform-binary shape) + .exe extension both sniffed;
+    // the text review surface is unaffected by the binary weight
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { create } = await import('tar')
+    const { chmodSync } = await import('node:fs')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-bin-'))
+    mkdirSync(join(dir, 'package/tui/bin'), { recursive: true })
+    writeFileSync(join(dir, 'package/SKILL.md'), '# skill payload text')
+    const elf = Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.alloc(4096)])
+    writeFileSync(join(dir, 'package/tui/bin/tool'), elf)
+    chmodSync(join(dir, 'package/tui/bin/tool'), 0o755)
+    const pe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(2048)])
+    writeFileSync(join(dir, 'package/tui/bin/tool.exe'), pe)
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, ['package'])
+    const fetchFn = (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)
+    const manifest = m.find(x => x.id === 'binary-manifest')
+    expect(manifest).toBeDefined()
+    expect(manifest!.text).toContain('tui/bin/tool')
+    expect(manifest!.text).toContain('ELF')
+    expect(manifest!.text).toContain('tool.exe')
+    expect(m.find(x => x.id === 'content:SKILL.md')!.text).toContain('skill payload text')
+    // manifest is the FIRST material block — review evidence, not buried
+    expect(m[0]!.id).toBe('binary-manifest')
+  })
+
+  it('exec-bit extensionless binary with no magic still flags via exec+NUL heuristic', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { create } = await import('tar')
+    const { chmodSync } = await import('node:fs')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-exec-'))
+    mkdirSync(join(dir, 'package/bin'), { recursive: true })
+    const opaque = Buffer.concat([Buffer.from([0xde, 0xad]), Buffer.alloc(512)])
+    writeFileSync(join(dir, 'package/bin/blob'), opaque)
+    chmodSync(join(dir, 'package/bin/blob'), 0o755)
+    // exec-bit SCRIPT (shebang) must NOT flag — it is text, not opaque binary
+    writeFileSync(join(dir, 'package/bin/run.sh'), '#!/bin/sh\necho hi\n')
+    chmodSync(join(dir, 'package/bin/run.sh'), 0o755)
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, ['package'])
+    const fetchFn = (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)
+    const manifest = m.find(x => x.id === 'binary-manifest')
+    expect(manifest).toBeDefined()
+    expect(manifest!.text).toContain('bin/blob')
+    expect(manifest!.text).not.toContain('run.sh')
+  })
+
+  it('text-only package emits NO binary-manifest block', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { create } = await import('tar')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-nobin-'))
+    mkdirSync(join(dir, 'package'), { recursive: true })
+    writeFileSync(join(dir, 'package/SKILL.md'), '# skill')
+    writeFileSync(join(dir, 'package/package.json'), '{"name":"p"}')
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, ['package'])
+    const fetchFn = (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn)
+    expect(m.find(x => x.id === 'binary-manifest')).toBeUndefined()
+  })
+
   it('byte-budget overflow is DISCLOSED via a coverage block, never silent', async () => {
     const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
     const { create } = await import('tar')

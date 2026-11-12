@@ -173,6 +173,13 @@ const CONTENT_HEAD_CAP = 16 * 1024    // per-file head kept for files larger tha
 const CONTENT_TAIL_CAP = 8 * 1024     // per-file tail kept alongside the head
 const CONTENT_WHOLE_CAP = 32 * 1024   // files at or under this size are stored whole
 const CONTENT_TOTAL_CAP = 384 * 1024  // total content chars kept per candidate, rank-order fill
+/** transport cap ≠ review-surface cap: plugin packages legitimately ship
+ *  multi-MB bundles (inlined web UIs) and prebuilt platform binaries — an
+ *  8MB whole-tarball cap threw away the TEXT review surface along with the
+ *  binary weight (a >8MB pad could hide a hostile SKILL.md from review).
+ *  Non-whitelisted members are sniffed, not stored — the kept surface stays
+ *  bounded by the per-file/total caps below regardless of tarball size. */
+const CONTENT_TRANSPORT_CAP = 32 * 1024 * 1024
 const CONTENT_BASENAME = /^(package\.json|opencode[^/]*\.json|[^/]*\.plugin\.json|[^/]*skill[^/]*\.md|readme[^/]*\.(md|txt)|agents\.md|claude\.md|instructions?[^/]*\.(md|txt)|prompt[^/]*\.(md|txt)|[^/]*\.(md|txt))$/i
 // the trailing all-md alternative keeps coverage broad — skill poison hides
 // in ANY markdown the agent will read, not just SKILL.md
@@ -202,28 +209,63 @@ const contentRank = (p: string): number => {
 const CONTENT_STUB_CAP = 256 * 1024  // head-only slices for files past the full budget
 const CONTENT_STUB_LEN = 2048       // chars kept per overflow file — nonzero L0.5 coverage beats zero
 
+/** opaque-binary sniffing for the binary-manifest block — first 64 bytes +
+ *  extension + exec bit. Magic wins over extension (a renamed .txt ELF is
+ *  still a binary); exec-bit files with no shebang and NUL bytes in the head
+ *  count as opaque executables (extensionless native binaries like the
+ *  `tui/bin/annotate-tui` shape). Archives/media are NOT flagged — the
+ *  manifest is about executable trust surface, not generic binary data. */
+const BIN_EXT = /\.(exe|dll|so(?:\.\d+)*|dylib|a|o|obj|bin|node|wasm|class|jar|pyd|msi|com|sys|elf|coff)$/i
+function binaryKind(path: string, mode: number | undefined, head: Buffer | null): string | null {
+  if (/(^|\/)\._/.test(path)) return null                 // AppleDouble — not evidence
+  const h = head
+  if (h && h.length >= 4) {
+    if (h[0] === 0x7f && h[1] === 0x45 && h[2] === 0x4c && h[3] === 0x46) return 'ELF'
+    if (h[0] === 0x4d && h[1] === 0x5a) return 'PE'
+    if ((h[0] === 0xcf || h[0] === 0xce) && h[1] === 0xfa && h[2] === 0xed && h[3] === 0xfe) return 'Mach-O'
+    if (h[0] === 0xfe && h[1] === 0xed && h[2] === 0xfa && (h[3] === 0xcf || h[3] === 0xce)) return 'Mach-O'
+    if ((h[0] === 0xca && h[1] === 0xfe && h[2] === 0xba && h[3] === 0xbe)
+      || (h[0] === 0xbe && h[1] === 0xba && h[2] === 0xfe && h[3] === 0xca)) return 'Mach-O fat'
+    if (h[0] === 0x00 && h[1] === 0x61 && h[2] === 0x73 && h[3] === 0x6d) return 'wasm'
+  }
+  const ext = BIN_EXT.exec(path)
+  if (ext) return ext[0]!.slice(1).toLowerCase()
+  if (mode !== undefined && (mode & 0o111) !== 0 && h && h.length >= 2
+    && !(h[0] === 0x23 && h[1] === 0x21) && h.includes(0)) return 'exec'
+  return null
+}
+
 export async function contentMaterial(name: string, ver: string, tarballUrl: string | null, fetchFn?: typeof fetch): Promise<Material[]> {
   if (!tarballUrl) return []
   const picked = new Map<string, string>()
+  const binaries: { path: string; size: number; kind: string }[] = []
   let overflow = 0 // members past CONTENT_MEMBER_CAP — counted for the coverage note
   let dropped = 0  // matched members rejected as binary/empty — also disclosed
   try {
-    // 8MB cap for review material — the reader only sees text files; a big
-    // tarball is binary-heavy anyway and the cap keeps 8-way concurrent
-    // candidate fetches from spiking memory. EVERY matching member is
-    // collected (bounded by member cap + per-file head/tail store), then
-    // ranked — see contentRank. Per-file store: whole file ≤32KB, else
+    // transport cap is the memory bound, not the review bound — every matching
+    // member is collected (bounded by member cap + per-file head/tail store),
+    // then ranked — see contentRank. Per-file store: whole file ≤32KB, else
     // head 16KB + rolling tail 8KB so end-of-file payloads survive.
     // tar.t (list) parses IN MEMORY — tar.x/extract would write every entry
     // to process.cwd() ($CODE in production): untrusted package trees landing
-    // in the pinned checkout, plus an 8MB-compressed zip bomb inflating to
-    // unbounded disk writes. The onentry contract is identical.
-    const tgz = await fetchTarball(tarballUrl, { maxBytes: 8 * 1024 * 1024, ...(fetchFn ? { fetchFn } : {}) })
+    // in the pinned checkout, plus a compressed bomb inflating to unbounded
+    // disk writes. The onentry contract is identical.
+    const tgz = await fetchTarball(tarballUrl, { maxBytes: CONTENT_TRANSPORT_CAP, ...(fetchFn ? { fetchFn } : {}) })
     await new Promise<void>((resolve, reject) => {
       const parser = tarList({
         onentry(entry) {
-          if (entry.type !== 'File' || !isContentFile(entry.path)) {
-            entry.resume(); return
+          if (entry.type !== 'File') { entry.resume(); return }
+          if (!isContentFile(entry.path)) {
+            // non-whitelisted member: sniff the head for the binary manifest —
+            // evidence kept, content discarded (opaque to text review anyway)
+            const rel = entry.path.slice('package/'.length)
+            let head: Buffer | null = null
+            entry.on('data', (c: Buffer) => { head ??= c.subarray(0, 64) })
+            entry.on('end', () => {
+              const kind = binaryKind(rel, entry.mode, head)
+              if (kind) binaries.push({ path: rel, size: entry.size, kind })
+            })
+            return
           }
           if (picked.size >= CONTENT_MEMBER_CAP) { overflow++; entry.resume(); return }
           const whole = entry.size <= CONTENT_WHOLE_CAP
@@ -297,6 +339,22 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
       id: 'content-coverage',
       text: `内容覆盖说明：包内共 ${picked.size + overflow + dropped} 个候选内容文件，本次评审覆盖 ${out.length} 个（完整 ${Math.round(used / 1024)}KB + 摘要 ${Math.round(stubUsed / 1024)}KB）；` +
         `${omitted} 个文件超出预算未进入评审视野——文件数量/体量异常本身即是可疑信号，需人工留意`,
+    })
+  }
+  // binary manifest — emitted FIRST: "ships N opaque binaries" is review
+  // evidence every bit as load-bearing as the text surface (a native blob is
+  // where install-time code can hide that no text reviewer can read). Sorted
+  // largest-first, capped like every other block — the list itself is bounded.
+  if (binaries.length) {
+    binaries.sort((a, b) => b.size - a.size || a.path.localeCompare(b.path))
+    const total = binaries.reduce((s, b) => s + b.size, 0)
+    const shown = binaries.slice(0, 30)
+    out.unshift({
+      id: 'binary-manifest',
+      text: `二进制清单：包内含 ${binaries.length} 个原生/可执行成员（合计 ${(total / 1048576).toFixed(1)}MB）——` +
+        `文本审查不可见，其运行时行为只能由装测观察；与包声明用途不符的二进制是放行前必须人工确认的信号：\n` +
+        shown.map(b => `- ${b.path} (${(b.size / 1048576).toFixed(1)}MB, ${b.kind})`).join('\n') +
+        (binaries.length > shown.length ? `\n… 其余 ${binaries.length - shown.length} 个省略` : ''),
     })
   }
   return out
@@ -771,7 +829,7 @@ export async function main(
   // 'pending' ('candidate vX.Y') and 'content-coverage' (our own generated
   // coverage note) are machine prose like meta/verify/scan — scoring them
   // can only FP into a mechanical concern on text the package never wrote
-  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage'])
+  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest'])
   const reviewWorks = works.filter(w => !w.twin && !terminalFailed(w.vf))
   const l05Top = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'
