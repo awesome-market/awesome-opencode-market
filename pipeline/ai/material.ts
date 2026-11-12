@@ -25,10 +25,10 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path'
 import { exit } from 'node:process'
 import { CatalogIndex } from '../../src/schema.ts'
-import { loadVerdicts, candidateVer } from '../verdicts.ts'
+import { loadVerdicts } from '../verdicts.ts'
 import { isMain } from '../main-guard.ts'
 import {
-  unreviewedTargets, reviewMaterial, contentMaterial, makePackumentOf,
+  unreviewedTargets, reviewVer, reviewMaterial, contentMaterial, makePackumentOf,
   materialFileName, type Material, type MaterialBundle,
 } from './diagnose.ts'
 
@@ -52,10 +52,16 @@ export async function main(argv: string[] = process.argv.slice(2),
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const verdicts = loadVerdicts(verdictsPath)
   // `ahead` selection: bundles are built BEFORE verify lands — install
-  // evidence and review material then arrive at the daemon together
-  const targets = unreviewedTargets(idx, verdicts, null, { ahead: true })
-  const want = new Set(targets.flatMap(e =>
-    candidateVer(e) ? [materialFileName(e.name, candidateVer(e)!)] : []))
+  // evidence and review material then arrive at the daemon together.
+  // includeLegacy mirrors the daemon's first-launch sweep: legacy npm
+  // entries review their displayed latestVersion under the same name@ver
+  // key, so their bundles line up. Self-limiting — once the backfill
+  // drains, legacy targets stop appearing and nothing more is built.
+  const targets = unreviewedTargets(idx, verdicts, null, { ahead: true, includeLegacy: true })
+  const want = new Set(targets.flatMap(e => {
+    const ver = reviewVer(e, true)
+    return ver ? [materialFileName(e.name, ver)] : []
+  }))
 
   // prune pass — files for keys no longer reviewable die here (covers
   // verdicted/braked/removed entries even when the daemon's own deletion
@@ -71,7 +77,7 @@ export async function main(argv: string[] = process.argv.slice(2),
   let built = 0, kept = 0, oversized = 0, failed = 0
   mkdirSync(outdir, { recursive: true })
   for (const e of targets.slice(0, limit)) {
-    const ver = candidateVer(e)
+    const ver = reviewVer(e, true)
     if (!ver || e.source.kind !== 'npm') { kept++; continue } // github-kind has no tarball surface
     const fn = materialFileName(e.name, ver)
     try {

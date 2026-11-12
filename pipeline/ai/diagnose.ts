@@ -1024,7 +1024,7 @@ export async function main(
   // their bundle for a future run's selection. Proven-stale (sha mismatch)
   // files are already in rmFiles from the works pass above.
   const keepKeys = new Set(
-    unreviewedTargets(idx, allVerdicts, null, { ahead: true })
+    unreviewedTargets(idx, allVerdicts, null, { ahead: true, includeLegacy })
       .flatMap(e => verOf(e) ? [materialFileName(e.name, verOf(e)!)] : []))
   if (existsSync(matDir)) for (const f of readdirSync(matDir)) {
     if (f.endsWith('.json') && !keepKeys.has(f)) rmFiles.add(join(matDir, f))
