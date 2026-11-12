@@ -374,6 +374,9 @@ sort -u "$CAT/ai-verdicts.jsonl" "$SPOOL" > "$VVIEW" 2>/dev/null \
 ARGS=()
 if [ -n "${DIAGNOSE_NAME:-}" ]; then ARGS+=(--name "$DIAGNOSE_NAME"); fi
 case ${DIAGNOSE_FORCE:-} in ''|0|false|no) ;; *) ARGS+=(--force) ;; esac
+# DIAGNOSE_LEGACY=1：首发全量扫 —— legacy npm 条目的展示版也进审队列
+# （判词照常 name@version 成熟裁决；排空后从 ai.env 撤掉即回落常规队列）
+case ${DIAGNOSE_LEGACY:-} in ''|0|false|no) ;; *) ARGS+=(--include-legacy) ;; esac
 
 npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" --out "$TMPV" \

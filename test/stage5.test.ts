@@ -344,6 +344,24 @@ describe('unreviewedTargets (diagnose candidate pick)', () => {
     const npm = entry({ name: 'my-pkg', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
     expect(unreviewedTargets(idx([npm]), [], new Set(['MY-PKG']))).toHaveLength(1)
   })
+  it('includeLegacy queues legacy npm displayed versions — opt-in only', () => {
+    const leg = entry({ name: 'old-pkg', approval: 'legacy' })
+    const ghLeg = entry({ name: 'repo-only', approval: 'legacy', latestVersion: null, source: { kind: 'github', id: 'o/r' } })
+    const app = entry({ name: 'kept', approval: 'approved' })
+    // default: legacy stays out — a bare run must not fan incumbents into the LLM
+    expect(unreviewedTargets(idx([leg, ghLeg, app]), [])).toEqual([])
+    // opt-in: legacy npm with a version queues; versionless github legacy cannot key a verdict
+    const t = unreviewedTargets(idx([leg, ghLeg, app]), [], null, { includeLegacy: true })
+    expect(t.map(e => e.name)).toEqual(['old-pkg'])
+  })
+  it('includeLegacy respects existing verdicts and the 48h unverified defer', () => {
+    const verdicted = entry({ name: 'done', approval: 'legacy' })
+    const av = v({ name: 'done', version: '1.0.0' })
+    const young = entry({ name: 'young', approval: 'legacy', verification: { status: 'unverified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
+    const now = '2026-01-10T00:00:00Z'
+    const t = unreviewedTargets(idx([verdicted, young]), [av], null, { includeLegacy: true, now })
+    expect(t).toEqual([])  // verdicted excluded; young unverified still defers
+  })
 })
 
 describe('reviewMaterial', () => {
