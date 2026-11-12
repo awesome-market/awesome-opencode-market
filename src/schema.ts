@@ -198,10 +198,12 @@ export const AiVerdict = z.looseObject({
   source: z.enum(['ai', 'human']),
   /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */
   sha: z.string().optional(),
-  /** reviewer model id (audit metadata, AI-DIAGNOSIS §5 — absent on verdicts
-   *  written without an LLM call, e.g. verify-fail short-circuit / sha reuse) */
+  /** reviewer model id — LEGACY field, parsed for existing records only:
+   *  new verdicts never carry it (a published judge invites targeted
+   *  evasion; sha still pins the judged bytes) */
   model: z.string().optional(),
-  /** L0.5 classifier evidence: which model + its max score over the material */
+  /** L0.5 classifier evidence — LEGACY like `model` above: kept parseable
+   *  for old records, no longer emitted */
   l05: z.looseObject({ model: z.string(), score: z.number() }).optional(),
   /** human verdicts: which maintainer decided (audit — a free-text reason can
    *  omit or spoof this; stamped by the writer from github.actor) */

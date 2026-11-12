@@ -57,7 +57,6 @@ import { isMain } from '../main-guard.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
-const L05_MODEL = 'usezn/Galvanize-2'
 /** Canary self-check blocks — two known-label strings ride every L0.5 batch
  *  (zero extra spawns). A classifier that scores the hostile canary below
  *  threshold — or the benign one above — is producing untrusted output this
@@ -508,7 +507,7 @@ export async function omlxAlive(): Promise<boolean> {
 
 export function verdictRecord(
   e: CatalogIndex['plugins'][number], v: 'pass' | 'concern', reason: string,
-  extra: { sha?: string | undefined; reasonEn?: string | undefined; model?: string | undefined; l05Score?: number | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined } = {},
+  extra: { sha?: string | undefined; reasonEn?: string | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined } = {},
 ): AiVerdict {
   return {
     name: e.name,
@@ -521,8 +520,6 @@ export function verdictRecord(
     ...(extra.reasonEn ? { reasonEn: extra.reasonEn } : {}),
     at: new Date().toISOString(), source: 'ai',
     ...(extra.sha ? { sha: extra.sha } : {}),
-    ...(extra.model ? { model: extra.model } : {}),
-    ...(extra.l05Score !== undefined ? { l05: { model: L05_MODEL, score: extra.l05Score } } : {}),
     // sha-reuse provenance: the judgment was copied from ANOTHER version's
     // verdict line — record which one (and whose: ai/human) so the audit
     // trail shows this run never made its own call on these bytes
@@ -693,7 +690,6 @@ export async function main(
   const seen = latestVerdicts(allVerdicts)
   const human = latestHumanVerdicts(allVerdicts)
   const tomb = tombEpochs(idx.removed)
-  const modelId = env.AI_MODEL ?? DEFAULT_MODEL
   const verOf = (e: CatalogIndex['plugins'][number]) => candidateVer(e) ?? null
 
   // sha lookups are cached per name@ver — the drift sweep and the works build
@@ -956,7 +952,6 @@ export async function main(
       continue
     }
     const l05flag = l05flagOf(w)
-    const l05ScoreField = l05Top.get(w)?.score
     // budget gate wraps only the LLM call — sha/verify verdicts above and the
     // mechanical fallbacks below are free and still emit after the budget is
     // spent (flagged entries blocked unreviewed forever helps no one)
@@ -989,12 +984,12 @@ export async function main(
         // vehicle, the LLM output is a DRAFT reason for the human reviewer
         emit(w, verdictRecord(e, 'concern',
           `机械红旗待人工（AI 草稿，LLM 判 ${r.verdict}）：${r.reasonZh}`,
-          { reasonEn: `red-flagged — AI draft for human review (LLM: ${r.verdict}): ${r.reasonEn}`, sha: w.sha, model: modelId, l05Score: l05ScoreField }))
+          { reasonEn: `red-flagged — AI draft for human review (LLM: ${r.verdict}): ${r.reasonEn}`, sha: w.sha }))
       } else if (l05flag) { // L0.5 red flag outranks the LLM's own call — honest layering
         emit(w, verdictRecord(e, 'concern',
           `${l05flag.zh}；LLM 判 ${r.verdict}：${r.reasonZh}`,
-          { reasonEn: `${l05flag.en} (LLM: ${r.verdict}: ${r.reasonEn})`, sha: w.sha, model: modelId, l05Score: l05ScoreField }))
-      } else emit(w, verdictRecord(e, r.verdict, r.reasonZh, { reasonEn: r.reasonEn, sha: w.sha, model: modelId, l05Score: l05ScoreField }))
+          { reasonEn: `${l05flag.en} (LLM: ${r.verdict}: ${r.reasonEn})`, sha: w.sha }))
+      } else emit(w, verdictRecord(e, r.verdict, r.reasonZh, { reasonEn: r.reasonEn, sha: w.sha }))
     } else {
       // an actual LLM call failing counts toward the streak; a skipped call
       // (omlx down at preflight) is an outage, not target poison (D-3)
@@ -1007,8 +1002,8 @@ export async function main(
         const flags = [...(candidateSlot(e)?.capabilities ?? e.capabilities).redFlags].join('; ').slice(0, 300)
         emit(w, verdictRecord(e, 'concern',
           `机械红旗待人工：${flags}`,
-          { reasonEn: `red-flagged — pending human review (LLM draft failed): ${flags}`, sha: w.sha, l05Score: l05ScoreField }))
-      } else if (l05flag) emit(w, verdictRecord(e, 'concern', l05flag.zh, { reasonEn: l05flag.en, sha: w.sha, l05Score: l05ScoreField })) // L0.5 alone still blocks
+          { reasonEn: `red-flagged — pending human review (LLM draft failed): ${flags}`, sha: w.sha }))
+      } else if (l05flag) emit(w, verdictRecord(e, 'concern', l05flag.zh, { reasonEn: l05flag.en, sha: w.sha })) // L0.5 alone still blocks
       else if (n >= MAX_ATTEMPTS) {
         // D-3: chronic failure → stop retrying, surface as a HUMAN-READABLE
         // concern that is explicit about being a tooling error, not a security
@@ -1016,7 +1011,7 @@ export async function main(
         // verdicted) — --force --name re-reviews when the tooling is fixed.
         emit(w, verdictRecord(e, 'concern',
           `AI 评审连续 ${n} 次失败（工具故障，非安全结论）——需人工复核`,
-          { reasonEn: `AI review failed ${n} times in a row (tooling error, not a security finding) — needs human review`, sha: w.sha, l05Score: l05ScoreField }))
+          { reasonEn: `AI review failed ${n} times in a row (tooling error, not a security finding) — needs human review`, sha: w.sha }))
         attempts.delete(vkey(e.name, ver))
       } else if (!budgetOut) console.log(`[diagnose] ${e.name} stays held (no verdict written)`)
     }

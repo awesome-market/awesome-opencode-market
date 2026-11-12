@@ -114,7 +114,10 @@ describe('ai/diagnose.main', () => {
     expect(got.reason).toContain('L0.5')
     expect(got.reason).toContain('没问题')
     expect(got.reasonEn).toContain('injection')
-    expect(got.l05?.score).toBe(0.9)
+    // classifier/judge metadata stays LOCAL — a published score/model pair
+    // tells an attacker exactly which judge to evade and how close they got
+    expect(got.l05).toBeUndefined()
+    expect(got.model).toBeUndefined()
   })
   it('l05 throws → ornith still runs', async () => {
     const { ip, vp, op } = files([held])
