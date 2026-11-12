@@ -335,7 +335,7 @@ touch ai-verdicts.jsonl
 cd "$CODE"
 # bounded per run — the queue drains over many hours, one launchd tick must not
 # monopolise the LLM (3300 pending × ~1-2min each would run for days)
-DIAGNOSE_LIMIT=${DIAGNOSE_LIMIT:-50}
+DIAGNOSE_LIMIT=${DIAGNOSE_LIMIT:-150}  # clean candidates run non-thinking (~5-15s/call) — 150/run ≈ 25-40min LLM, still under budget
 DIAGNOSE_BUDGET=${DIAGNOSE_BUDGET:-45}   # minutes of LLM time per run
 # BSD `mktemp -t name` appends X's itself; GNU requires ≥3 X's IN the
 # template — a full path ending in X's is the only spelling both accept
