@@ -989,8 +989,10 @@ export async function main(
   // re-tags front-run the queue: "same version, different bytes" is the most
   // suspicious signal this run can see — under a >limit backlog it must not
   // starve behind the FIFO tail (D-9). Set dedupes a --force overlap.
-  const candidates = [...new Set([...drifted, ...targets])].slice(0, limit)
-  console.log(`[diagnose] ${candidates.length} pending candidates (${drifted.length} sha-drifted)`)
+  const queue = [...new Set([...drifted, ...targets])]
+  const backlog0 = queue.length // pre-limit queue depth — the "server still owes" counter
+  const candidates = queue.slice(0, limit)
+  console.log(`[diagnose] ${candidates.length} of ${backlog0} pending candidates (${drifted.length} sha-drifted)`)
 
   // per-target consecutive ornith-failure streak, persisted in --state so a
   // chronically unparseable target stops burning LLM tokens after N tries
@@ -1228,7 +1230,13 @@ export async function main(
   }
   let budgetOut = false // skips LLM calls only — free verdicts still emit
   let consecErr = 0     // D-12 circuit breaker — reset on any successful call
-  for (const w of works) {
+  // per-item progress tag: 批 i/N (this batch's done/total) · 剩 (batch
+  // remaining) · 队剩 (backlog still unverdicted — emit() is what shrinks it,
+  // so held items keep their slot). `projected` counts an emit that runs
+  // after its own log line (the LLM path logs before emit).
+  const tag = (i: number, projected = 0) =>
+    ` [批 ${i + 1}/${works.length} · 剩 ${works.length - i - 1} · 队剩 ${Math.max(0, backlog0 - out.length - projected)}]`
+  for (const [wi, w] of works.entries()) {
     const { e, ver } = w
     // 0. sha reuse
     if (w.twin) {
@@ -1250,7 +1258,7 @@ export async function main(
           { reasonEn: `same tarball sha as ${w.twin.version ?? '?'} — verdict reused${w.twin.reasonEn ? `: ${w.twin.reasonEn}` : ''}`, sha: w.sha,
             reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
       }
-      console.log(`[diagnose] ${e.name}@${ver} verdict reused via sha (${w.twin.version ?? '?'})`)
+      console.log(`[diagnose] ${e.name}@${ver} verdict reused via sha (${w.twin.version ?? '?'})${tag(wi)}`)
       continue
     }
     // 1. verify-failed short-circuit — TERMINAL failures only, no model call,
@@ -1262,7 +1270,7 @@ export async function main(
       emit(w, verdictRecord(e, 'concern',
         `装测失败（verify ${w.vf.level ?? 'install'} 级）：${excerpt}`,
         { reasonEn: `install/load verification failed at ${w.vf.level ?? 'install'}: ${excerpt === '(无日志摘录)' ? 'no log excerpt' : excerpt}`, sha: w.sha }))
-      console.log(`[diagnose] ${e.name}@${ver} verify-failed → concern (no LLM call)`)
+      console.log(`[diagnose] ${e.name}@${ver} verify-failed → concern (no LLM call)${tag(wi)}`)
       continue
     }
     const l05flag = l05flagOf(w)
@@ -1283,7 +1291,7 @@ export async function main(
         r = await ornith(e, w.material, { think: Boolean(w.flagged || l05flag),
           version: w.ver === '?' ? (w.sha ? `commit ${w.sha}` : null) : w.ver })
         consecErr = 0
-        console.log(`[diagnose] ${e.name}@${ver} ${judgeBackend}=${r.verdict} ${r.reasonZh.slice(0, 80)}`)
+        console.log(`[diagnose] ${e.name}@${ver} ${judgeBackend}=${r.verdict} ${r.reasonZh.slice(0, 80)}${tag(wi, 1)}`)
       } catch (x) {
         omlxErr = x
         // D-12: N consecutive real failures = the service died mid-run — open
@@ -1312,7 +1320,7 @@ export async function main(
       // (omlx down at preflight) is an outage, not target poison (D-3)
       const n = omlxErr ? (attempts.get(vkey(e.name, ver === '?' ? null : ver))?.n ?? 0) + 1 : 0
       if (omlxErr) {
-        console.error(`[diagnose] ${judgeBackend} failed for ${e.name}: ${omlxErr}`)
+        console.error(`[diagnose] ${judgeBackend} failed for ${e.name}: ${omlxErr}${tag(wi)}`)
         attempts.set(vkey(e.name, ver === '?' ? null : ver), { n, last: String(omlxErr).slice(0, 120) })
       }
       if (w.flagged) {
@@ -1330,7 +1338,7 @@ export async function main(
           `AI 评审连续 ${n} 次失败（工具故障，非安全结论）——需人工复核`,
           { reasonEn: `AI review failed ${n} times in a row (tooling error, not a security finding) — needs human review`, sha: w.sha }))
         attempts.delete(vkey(e.name, ver === '?' ? null : ver))
-      } else if (!budgetOut) console.log(`[diagnose] ${e.name} stays held (no verdict written)`)
+      } else if (!budgetOut) console.log(`[diagnose] ${e.name} stays held (no verdict written)${tag(wi)}`)
     }
   }
   // a --dry exploratory run must not record streaks — the attempts file is
