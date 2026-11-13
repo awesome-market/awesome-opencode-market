@@ -241899,7 +241899,7 @@
         "peer": "solid-js@1.9.12, @opentui/core@0.5.14, @opentui/solid@0.5.14"
       },
       "approval": "pending",
-      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内虽声明云同步已暂停，但仍附带云认证客户端的网络调用与子进程调用代码，并存在生命周期脚本，扫描红旗未消除，无法排除凭据外泄或恶意网络行为。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "major/opencode-mythos-plugin",
@@ -362015,7 +362015,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包功能描述与代码一致，网络请求仅限 OpenAI 官方域名，未发现凭据外泄、混淆或提示注入；扫描命中的子进程调用与生命周期脚本均属于安装器的正常实现，且 README 明确披露了使用非官方内部 API 的风险。"
     },
     {
       "name": "@shamah/opencode-agentrouter",
@@ -363105,7 +363105,8 @@
         "engines": "opencode >=1.3.13",
         "peer": "typescript@^5"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包明确声明其功能是交互式PTY管理（spawn进程、发送输入、读取输出），代码中的child-process和network-call检测项均与其公开功能一致，未发现凭证窃取、混淆代码或误导性描述。"
     },
     {
       "name": "SHENG5411/grimoire-of-tools",
@@ -363233,7 +363234,7 @@
         "engines": "node >=22.12.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包仅含良性依赖和文档，无安装期执行脚本（唯一 flag 是 prepublishOnly，不在安装时运行），描述与代码功能一致。"
     },
     {
       "name": "@constellationdev/opencode",
@@ -363431,7 +363432,7 @@
         "engines": "node ^22.23.4 || ^24.22.1 || >=26.12.1"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描发现的子进程调用属于该 MCP 服务的既定功能（调用本地 CLI 后端），prepare 脚本仅为 husky，描述与功能一致，无泄密或混淆迹象。"
     },
     {
       "name": "shipstatic/opencode",
@@ -363922,7 +363923,7 @@
         "peer": "solid-js@*, @opentui/core@>=0.4.5, @opentui/solid@>=0.4.5, @opencode-ai/plugin@>=1.18.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件描述与代码功能一致，生命周期脚本仅为发布前构建命令，dist 中的子进程调用无恶意特征或凭证外泄迹象。"
     },
     {
       "name": "opencode-terminal",
@@ -364132,7 +364133,8 @@
         "engines": "node >=18",
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能与描述一致，扫描标记的子进程（lsof）、生命周期脚本（prepublishOnly）和网络引用（README 徽章/链接）均属该终端管理插件的合理范围，未发现注入、凭据窃取或混淆迹象。"
     },
     {
       "name": "shmem-opencode",
@@ -364276,7 +364278,8 @@
         "engines": "node >=22; opencode >=1.17.11",
         "peer": "@opentui/core@>=0.4.3, @opentui/keymap@>=0.4.3"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件核心功能就是后台执行命令、监控输出并投递通知，网络调用与子进程均属预期实现，未发现凭据外泄、混淆代码或虚假功能声明；manifest 描述与代码能力一致。"
     },
     {
       "name": "ShortVideo-AI/manim-video-skill",
@@ -365077,7 +365080,8 @@
         "engines": "node >=20.0.0",
         "peer": "@opencode-ai/plugin@>=1.1.0, ink@>=5.0.0, react@>=18.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描发现网络调用、子进程执行、生命周期脚本等高危行为，且存在 repo-mismatch 红旗，虽无凭证外泄证据但运行时行为风险显著。"
     },
     {
       "name": "hmoc-steward-acp",
@@ -365320,7 +365324,8 @@
       "compat": {
         "peer": "zod@^4.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：虽然描述与插件功能一致、技能文档未见提示注入，但扫描发现16项命中并有2个红旗（package.json生命周期/prepare脚本），且安装级验证被跳过，网络调用与字面IP无法排除恶意外联风险。"
     },
     {
       "name": "sib-swiss/glittr",
@@ -365551,7 +365556,8 @@
       "compat": {
         "engines": "node >=18.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "L0.5 命中注入信号（score 0.702 ≥ 0.662，块 content:docs/PROJECT_REVIEW.md）；LLM 判 concern：包内347个文件仅覆盖211个，且被标记的base64 blob、literal IP及多处child-process/network-call文件内容未纳入本次评审视野，无法排除恶意内容风险。"
     },
     {
       "name": "sidekick-shared",
@@ -366308,7 +366314,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与代码功能一致，无安装生命周期脚本滥用（仅有 prepublishOnly 类型检查），child-process 调用属插件恢复会话的预期行为，未发现凭据外泄、混淆或恶意网络请求。"
     },
     {
       "name": "silvaire-qwq/opencode-context-sidebar",
@@ -366793,7 +366800,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包为 SimpleLLM 提供商的配置 CLI/插件，网络调用均指向其自有 API（api.simplellm.eu），属功能预期；唯一生命周期脚本是 prepublishOnly 的构建命令，安装时不执行；描述与功能一致，无凭据外泄或混淆迹象。"
     },
     {
       "name": "@itssimplereally/opencode-kimicode-auth",
@@ -367210,7 +367218,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.18.0, @opentui/core@>=0.4.5, @opentui/solid@>=0.4.5, solid-js@^1.9.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件为 TUI 计时器工具，描述与实际功能一致，唯一的生命周期脚本仅为发布前的类型检查、测试和构建，无网络外呼、凭据窃取或混淆代码迹象。"
     },
     {
       "name": "siropkin/chrome-bridge",
@@ -367346,7 +367355,7 @@
         "peer": "react@^18.2.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的网络调用、生命周期脚本与子进程执行与该迁移工具的声明功能（预览/应用配置、调用 CLI、构建产物）一致，未见提示注入、凭据外泄或混淆行为，清单描述与代码用途相符。"
     },
     {
       "name": "opencode-claude-code-hooks",
@@ -367613,7 +367622,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能与描述一致，仅有子进程调用本地 Lightpanda 二进制和 prepublishOnly 检查脚本，未见凭证窃取、恶意网络请求或混淆行为。"
     },
     {
       "name": "opencode-vitals-terminal",
@@ -368093,7 +368103,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包是本地 LLM 网关代理，扫描命中的网络调用、子进程和生命周期脚本均符合其预期功能，未见凭证外泄、混淆代码或与描述不符的误导性声明。"
     },
     {
       "name": "@skrobul/opencode-auto-permissions",
@@ -368169,7 +368179,8 @@
       "compat": {
         "engines": "node >=22"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：三个入口文件（server.js、tui.js、v1-server.js）均被标记为读取凭据，且本次材料未提供源码可验证其读取范围或是否存在外泄，无法排除凭据窃取风险。"
     },
     {
       "name": "SkS-Other/opencode-model-fallback",
@@ -368309,7 +368320,8 @@
         "engines": "node >=22",
         "peer": "@opencode-ai/plugin@^1.15.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包描述与代码功能一致；prepare脚本仅为husky安装且带||true兜底，无可疑网络调用或凭证外泄迹象。"
     },
     {
       "name": "@skwid138/opencode-council",
@@ -368382,7 +368394,8 @@
         "engines": "node >=22",
         "peer": "@opencode-ai/plugin@^1.15.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：该插件刻意启用权限放宽的 workaround，使审查子代理在工作区规则之外获得几乎完全的 bash 与外部目录访问权，存在权限提升与数据泄露风险，虽有文档说明但仍属高危设计。"
     },
     {
       "name": "@skwid138/opencode-tui",
@@ -368454,7 +368467,8 @@
         "engines": "node >=22",
         "peer": "@opencode-ai/plugin@>=1.14.50 <3, @opentui/solid@>=0.2.9 <1, solid-js@^1.9.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与代码功能一致，仅有常规构建/测试脚本，无安装钩子、可疑网络调用、混淆或凭据窃取迹象，扫描标记的生命周期脚本经查均为良性。"
     },
     {
       "name": "skyer-now/carlos-flow",
@@ -368746,7 +368760,8 @@
         "verifiedAt": "2026-11-02T00:24:09.876Z"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描存在生命周期脚本、构建期子进程及仓库不匹配红旗，且安装脚本会向用户 OpenCode 配置目录写入插件源码，现有材料不足以排除供应链或凭据风险。"
     },
     {
       "name": "dsh-usage-dock",
@@ -369676,7 +369691,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与内容一致，技能文件为正常的开发工作流指导，无凭据外泄或恶意网络行为；仅存在的 lifecycle/prepare 脚本标记在展示材料中无可疑内容可判定。"
     },
     {
       "name": "opencode-see",
@@ -369748,7 +369764,8 @@
       "compat": {
         "peer": "@opencode/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：网络调用均为预期的 Gemini/Groq/Cerebras 视觉 API，生命周期脚本仅为 prepublishOnly 构建，描述与代码一致，未见凭据外泄、注入或混淆迹象。"
     },
     {
       "name": "smagnuso/hydra-acp",
@@ -369878,7 +369895,7 @@
         "peer": "solid-js@>=1.9.0, @opentui/core@>=0.5.8, @opentui/solid@>=0.5.8"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包为任务清单面板插件，描述与代码一致，未见提示注入、凭据外泄、恶意网络调用或混淆；扫描标记的生命周期脚本在所给 package.json 中不存在对应的安装期脚本。"
     },
     {
       "name": "opencode-autopilot-logbook",
@@ -369949,7 +369966,8 @@
         "engines": "node >=18.0.0",
         "peer": "bun@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：生命周期脚本仅为发布前构建，功能描述与 README/CHANGELOG 所述的本地日报生成一致，未见凭证窃取、恶意网络调用或描述误导证据。"
     },
     {
       "name": "@smart-coders-hq/opencode-model-fallback",
@@ -370383,7 +370401,7 @@
         "engines": "opencode >=2.0.16"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描结果中的子进程与凭据读取标记集中在搜索、路径守卫和工具实现中，未见网络外发、注入或混淆证据，且清单描述与 README 内容一致。"
     },
     {
       "name": "opencode-supercharger",
@@ -370457,7 +370475,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：代码扫描器文件被标记为混淆及 Base64 blob，且 README 含网络调用与子进程执行（含 install.sh 脚本执行方式），虽未见关键源码可直接证实恶意，但已触发多项安全红旗，无法证明安全。"
     },
     {
       "name": "@smykla-skalski/opencode-plugin-comment-judge",
@@ -370541,7 +370559,8 @@
       "compat": {
         "engines": "opencode >=1.18.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中均为子进程调用（git/diff/模型调用等，符合该插件功能）和一条 prepublishOnly 生命周期脚本（npm run build），未见凭证外泄、混淆或恶意网络调用，描述与 README 一致。"
     },
     {
       "name": "smykla-skalski/opencode-plugin-plan-review",
@@ -372394,7 +372413,8 @@
       "compat": {
         "engines": "node >=20"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件描述与实际功能一致，唯一命中是 prepack 构建脚本这一常规生命周期钩子，无凭据窃取、恶意网络调用或混淆迹象。"
     },
     {
       "name": "opencode-sockless-llm-router",
@@ -372466,7 +372486,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与代码功能一致，生命周期脚本仅为常规 tsc 构建，无凭证外泄、混淆或恶意网络调用迹象，网络请求为插件的正常功能。"
     },
     {
       "name": "oficina-opencode",
@@ -373264,7 +373284,7 @@
         "engines": "opencode >=1.18.31 <2 || >=2.0.32 <3"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：唯一的生命周期脚本发现（prepack/prepublishOnly）均为标准构建与测试命令，描述与代码内容一致，未见凭据窃取、网络外发或注入内容。"
     },
     {
       "name": "oc-solomemory",
@@ -373337,7 +373357,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：插件虽宣称持久记忆且描述基本一致，但扫描发现网络调用、子进程、base64 blob 和 prepare 脚本，且会话同步至第三方服务，存在未验证的数据外泄与安装期执行风险。"
     },
     {
       "name": "solplum/agent-git-workflow-skills",
@@ -374427,7 +374448,7 @@
         "peer": "@opencode-ai/plugin@>=1.0.85"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：唯一标记的生命周期脚本仅为prepublishOnly运行本地tsc构建，属常规发布流程，无恶意网络调用或凭据泄露迹象，描述与README内容一致。"
     },
     {
       "name": "sortie-ai/sortie",
@@ -375470,7 +375491,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@^1.0.216"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与 README 功能一致，未发现明确的凭据窃取、恶意网络调用或混淆代码；生命周期脚本仅为构建命令。"
     },
     {
       "name": "sporteka2/opencode-netz-retry",
@@ -375601,7 +375623,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包功能本身合理（分析JS bundle、本地UI服务器），但命令文件要求每次运行时执行 `killall bun`，会无差别终止用户所有 bun 进程，且 postinstall 将命令文件注入用户 opencode 配置目录，存在破坏性副作用风险。"
     },
     {
       "name": "spy4x/dotfiles",
@@ -375808,7 +375831,8 @@
         "engines": "node >=18",
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包内脚本仅含构建/测试类命令，无安装生命周期钩子，技能内容明确禁读凭证且需用户逐项确认，描述与代码一致。"
     },
     {
       "name": "@srah_x64/theoldllm-provider",
@@ -375879,7 +375903,8 @@
       "compat": {
         "engines": "node >=20"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包描述与代码功能一致，无恶意网络回传或凭据外泄迹象；生命周期脚本仅有发布期脚本（prepublishOnly），不含安装期钩子，网络调用为提供方插件的预期 API 调用。"
     },
     {
       "name": "opencode-browser-tools",
@@ -376215,7 +376240,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与代码一致，说明为 macOS Seatbelt 内核沙箱插件；package.json 无可疑安装脚本（仅 prepublishOnly 运行 typecheck/test），两个扫描标记在所示内容中无恶意证据，README 明确披露了网络不受控等局限性。"
     },
     {
       "name": "SssoGin/MALTS",
@@ -376618,7 +376644,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包内容与其描述一致：CLI 仅为各 coding agent 安装 StackGuardian MCP 服务器和技能，技能文档为常规操作流程，凭证处理有合理安全说明，未见提示注入、数据外泄或混淆迹象。"
     },
     {
       "name": "@stackmemoryai/stackmemory",
@@ -376861,7 +376887,7 @@
         "engines": "node >=20.0.0; npm >=10.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描命中164项、含9个混淆标记及install/prepare生命周期脚本和带网络调用的安装脚本，未经安装验证（verify=skipped）且无法确认其网络与进程调用均为良性，存在凭证外泄或供应链风险。"
     },
     {
       "name": "opencode-lossless",
@@ -377255,7 +377281,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内容提取失败导致无法审查原文，且扫描显示多个凭证读取（credential-read）红旗、大量网络与子进程调用、含 install.sh 网络请求及硬编码 IP，风险未排除。"
     },
     {
       "name": "opencode-total-session-cost",
@@ -377328,7 +377354,7 @@
         "peer": "solid-js@^1.9.12, @opentui/core@>=0.1.97, @opentui/solid@>=0.1.97, @opentui/keymap@>=0.4.5"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：未发现凭据外泄、恶意网络调用或误导性描述，仅存在一个发布前运行类型检查和测试的 prepublishOnly 生命周期脚本。"
     },
     {
       "name": "opencode-context-panel",
@@ -377671,7 +377697,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包描述与功能一致，仅有常规 build/prepublishOnly 脚本（安装时无恶意生命周期钩子），未见凭据窃取、网络外传或混淆迹象。"
     },
     {
       "name": "Stellarhold170NT/openmemory",
@@ -377793,7 +377820,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件用途明确（向 ntfy 服务器发推送通知），网络调用与生命周期脚本均为其正常功能所需，描述与代码一致，无凭证窃取或恶意行为迹象。"
     },
     {
       "name": "opencode-sfx",
@@ -377927,7 +377955,7 @@
         "peer": "@opencode-ai/plugin@>=1.4.0, @opentui/core@>=0.1.99, @opentui/solid@>=0.1.99, solid-js@^1.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：package.json中的生命周期脚本仅为常规构建命令（prepublishOnly=build），描述与功能一致，未发现注入、外传或混淆迹象。"
     },
     {
       "name": "opencode-ai-usage",
@@ -378007,7 +378035,8 @@
       "compat": {
         "peer": "@opencode/plugin@^2.0.20, @opencode-ai/plugin@^1.4.3"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件用途与其说明一致：网络调用和凭据读取均为从 Claude/OpenAI/OpenCode 官方 API 获取并展示用量数据所必需，未发现提示注入、数据外泄或混淆行为，描述与代码相符。"
     },
     {
       "name": "opencode-tokscale",
@@ -378181,7 +378210,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@^1.1.19, @opencode-ai/sdk@^1.1.19"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内含 postinstall 生命周期脚本、child-process 调用、未验证的二进制 .pyc 文件和大量自动化攻击型 Agent，安装期可执行任意代码且无法确认无凭据窃取或恶意网络行为。"
     },
     {
       "name": "steverova/kiro-provider",
@@ -378553,7 +378583,8 @@
       "compat": {
         "engines": "node >=18.0.0; bun >=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内容提取超时未能审阅原文，且扫描发现 package.json 存在生命周期脚本红旗与 verify 未执行，风险无法排除。"
     },
     {
       "name": "stonean/ductus",
@@ -378841,7 +378872,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包是本地记忆插件，描述与其功能一致；子进程和网络调用均指向本地引擎与已认证的 opencode 会话，未发现凭据外泄、混淆或恶意注入迹象。"
     },
     {
       "name": "@streetturtle/opencode-context-progress",
@@ -378912,7 +378943,8 @@
         "engines": "opencode >=2.0.0",
         "peer": "solid-js@>=1.9.0, @opentui/core@>=0.5.17, @opentui/solid@>=0.5.17"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的生命周期脚本仅为 prepublishOnly 构建步骤，不在安装时执行，且包内容未见提示注入、凭证外泄或恶意网络调用，描述与插件功能一致。"
     },
     {
       "name": "@struktoai/mirage-opencode",
@@ -379053,7 +379085,8 @@
         "engines": "bun >=1.0.0",
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与README一致，package.json仅含无害的prepublishOnly脚本（tsc --noEmit），无安装钩子或恶意调用，但仅审阅了部分材料。"
     },
     {
       "name": "opencode-plugin-keyring",
@@ -379124,7 +379157,8 @@
         "engines": "opencode >=1.4.0",
         "peer": "@opencode-ai/plugin@>=1.4.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件的核心功能就是读取系统凭证管理器中的密钥，其声明的依赖（@napi-rs/keyring）与描述一致，未见网络外传或混淆代码的迹象，credential-read 标记与其预期行为相符。"
     },
     {
       "name": "styler-ai/ProjectAtlas",
@@ -379526,7 +379560,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内含生命周期脚本（prepack 自动执行 npx -y @vscode/vsce 拉取远程包）、子进程调用及网络调用等扫描红旗，且工具本身会读取多个编辑器的会话历史数据库，代码中段被省略无法确认是否存在凭据外泄或恶意请求。"
     },
     {
       "name": "magpie-plugin-amd",
@@ -379734,7 +379768,8 @@
         "engines": "node >=20",
         "peer": "@opencode-ai/plugin@>=1.18.22 <2"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描发现的网络调用与凭据读取均与其声明的分类器调用和凭据防护功能相符，描述与代码内容一致，未见注入、混淆或恶意外发证据。"
     },
     {
       "name": "@suiramdev/opencode-meat",
@@ -380449,7 +380484,7 @@
         "engines": "node >=20.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：大量触发多为CLI与测试fixture噪音，但仍有凭据读取与混淆化vendor代码等红旗项，现有材料不足以排除凭据泄露风险。"
     },
     {
       "name": "@sunshaobei/dsh-balance-panel",
@@ -380785,7 +380820,8 @@
       "compat": {
         "engines": "node >=18.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与代码功能一致，包无安装期生命周期脚本，仅含预发布测试钩子，凭证通过环境变量或共享登录处理，未见注入或外泄迹象。"
     },
     {
       "name": "supercompress-proxy",
@@ -380880,7 +380916,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包为上下文压缩代理，网络调用与子进程使用均属功能所需且 README 已明示上下文会发送至 SuperCompress API；postinstall 仅为引导、未发现凭据窃取、混淆或描述与代码不符，manifest 描述与实际功能一致。"
     },
     {
       "name": "superfly/fly-droid-plugin",
@@ -381220,7 +381256,8 @@
         "engines": "node >=18.0.0",
         "peer": "@opencode-ai/plugin@>=0.1.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：主代码 dist/index.js 未提供明文源码（仅触发 base64-blob 告警），核心插件逻辑不可审计，且会将会话消息通过 deeplink 发送给第三方，存在无法排除的数据外泄风险。"
     },
     {
       "name": "opencode-free-usage-monitor",
@@ -381520,7 +381557,7 @@
         "engines": "node >=20.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描发现均为安装器类工具固有的子进程执行、生命周期脚本与更新网络调用，清单描述与代码功能一致，未见凭据窃取或恶意网络外联证据。"
     },
     {
       "name": "susomejias/rembric",
@@ -382243,7 +382280,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描将 credential-read 标为红旗且网络调用与子进程行为未在提供材料中证明不会外泄凭据。"
     },
     {
       "name": "@swalker326/opencode-sidebar-sessions",
@@ -382314,7 +382352,8 @@
         "engines": "opencode >=1.18.4",
         "peer": "@opencode-ai/plugin@>=1.18.4, @opentui/core@>=0.4.5, @opentui/keymap@>=0.4.5, @opentui/solid@>=0.4.5, solid-js@>=1.9.10"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：生命周期脚本仅为 prepack 构建前的检查，描述与代码功能一致，未见注入、凭据外泄或恶意网络调用。"
     },
     {
       "name": "oc2-memory",
@@ -382388,7 +382427,8 @@
       "compat": {
         "engines": "node >=22.19.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：安装时会执行一个内容未披露的 postinstall 脚本（被扫描器标记为红旗），且 CHANGELOG 是从上游 pi-memory 原样复制的，其版本号与 PI_MEMORY_* 环境变量描述与本包 0.1.1 不符，存在误导性。"
     },
     {
       "name": "aura-components-mcp",
@@ -382529,7 +382569,8 @@
         "verifiedAt": "2026-11-02T00:23:47.676Z"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件为用户自托管的 Noosphere 记忆服务提供正常 REST 客户端调用，所有网络行为均为其宣称的核心功能；生命周期脚本仅为标准 prepack 构建流程，README 中的 curl 安装器含 SHA-256 校验且未见提示注入、凭据窃取或混淆代码。"
     },
     {
       "name": "locus-product-planning",
@@ -382606,7 +382647,8 @@
         "engines": "node >=18.0.0",
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包中存在生命周期脚本与未审计的 base64 编码产物（dist bundle），虽技能内容本身为良性角色定义，但安装时脚本执行和混淆载荷无法验证，存在需人工审查的安全风险。"
     },
     {
       "name": "switchboard-pro",
@@ -383084,7 +383126,8 @@
       "compat": {
         "engines": "node >=18.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包描述与实际功能一致，SKILL.md 仅生成本地 env 文件且明确禁止安装命令和远端探测，package.json 中未见真正的安装期钩子脚本（仅 prepublishOnly），未发现凭据窃取、恶意网络调用或混淆迹象。"
     },
     {
       "name": "opencode-idea",
@@ -383356,7 +383399,7 @@
         "peer": "@opencode-ai/plugin@>=0.1.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能与描述一致，仅从用户配置的 well-known 端点读取配置并合并写入本地 oh-my-openagent.json，未发现凭据外传或恶意网络调用的明确证据。"
     },
     {
       "name": "Synergy1610/opencode-interview-skill",
@@ -383488,7 +383531,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包是协调 Claude/Codex 等 CLI agent 执行任务的循环运行器，child-process、network-call 与 prepare(husky) 均为其功能所需的正常模式，描述与文档一致，未见注入、凭据窃取或混淆迹象。"
     },
     {
       "name": "synthentica/lumora-plugins",
@@ -384165,7 +384208,8 @@
         "engines": "node >=20",
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件实现Kimi订阅OAuth登录，网络调用与lifecycle脚本均为预期的构建/登录流程，无提示注入或凭据外泄迹象，描述与功能一致。"
     },
     {
       "name": "opencode-plugin-anonymous",
@@ -384243,7 +384287,8 @@
       "compat": {
         "peer": "solid-js@>=1.9.0, typescript@^7, @opentui/core@>=0.5.10, @opentui/solid@>=0.5.10"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：未发现提示注入、凭证窃取、混淆或恶意网络外传证据，扫描命中项与文档披露的代理请求改写和数据库清理功能相符。"
     },
     {
       "name": "opencode-fastdraw",
@@ -384539,7 +384584,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.4.3, @opentui/core@>=0.1.97, @opentui/solid@>=0.1.97, solid-js@>=1.9.10"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与功能一致，未发现提示注入、凭据外泄或恶意网络调用；child-process 与生命周期脚本命中疑似误报，package.json 中仅有 prepublishOnly 构建检查，无 postinstall 类钩子。"
     },
     {
       "name": "cmux-opencode-agent-comm",
@@ -384670,7 +384716,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描报告在主入口文件中发现混淆和子进程调用两处红旗（含1个redFlag），且未提供源码供人工确认这些是插件正常连接Neovim RPC的实现还是恶意代码。"
     },
     {
       "name": "opencode-nvim-editor-context",
@@ -385228,7 +385275,7 @@
         "peer": "solid-js@*, @opentui/solid@*, @opencode-ai/plugin@>=1.18.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与插件功能一致，生命周期脚本仅为常规的 prepublishOnly 构建，README 中的网络调用是读取本地 TUI 会话数据，未发现注入、凭证窃取或混淆迹象。"
     },
     {
       "name": "opencode-double-ctrl-c",
@@ -385509,7 +385556,8 @@
       "compat": {
         "engines": "node >=18"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件用途为 OAuth 连接 Cursor API 并搭建本地 OpenAI 兼容代理，网络调用、子进程与构建脚本均符合其功能预期，未发现凭证外泄或恶意行为，描述与实现一致。"
     },
     {
       "name": "tapiamartinez809-ui/synapse-bridge",
@@ -385639,7 +385687,8 @@
       "compat": {
         "peer": "solid-js@>=1.9.0, @opentui/core@>=0.5.10, @opentui/solid@>=0.5.10, @opencode/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：唯一的生命周期脚本告警来自 package.json，但实际脚本仅有 prepublishOnly 构建命令，无安装期恶意脚本；README 与功能描述一致，未见网络调用、凭证窃取或混淆代码迹象。"
     },
     {
       "name": "@tarquinen/opencode-auth-provider",
@@ -385849,7 +385898,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=0.13.7"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包名/维护者为 @keakon 但仓库归属 Tarquinen/opencode-dynamic-context-pruning，存在 repo-mismatch 与生命周期脚本标记，且安装验证被跳过，无法确认分发链一致性。"
     },
     {
       "name": "@jacob-z/opencode-smart-title",
@@ -385920,7 +385970,7 @@
         "peer": "@opencode-ai/plugin@>=0.13.7"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包名/作者为 jacob-z 与 Tarquinen 不一致，依赖第三方 @tarquinen/auth-provider 且存在生命周期脚本与仓库归属不匹配红旗，疑似转发发布，需核实来源。"
     },
     {
       "name": "opencode-mutastic",
@@ -386216,7 +386266,7 @@
         "peer": "@opencode-ai/plugin@*"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的唯一生命周期脚本仅为 prepublishOnly 的 tsc 构建命令，无安装钩子、无网络外泄或注入迹象，描述与 README 一致且功能声明可信。"
     },
     {
       "name": "agentsw",
@@ -386293,7 +386343,7 @@
         "engines": "node >=22.13.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中项均为CLI工具的正常行为（向provider端点/models.dev发请求、调用安装命令、prepublishOnly构建脚本），未见凭证外泄、混淆代码或虚假能力声明。"
     },
     {
       "name": "@te-river/opencode-gov-mode",
@@ -386365,7 +386415,8 @@
         "engines": "node >=18.0.0",
         "peer": "@opencode-ai/plugin@>=0.1.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：文档中提供的安装脚本通过第三方代理域名 ghproxy.net 进行 curl|bash 和 irm|iex 执行，存在供应链劫持风险。"
     },
     {
       "name": "@te-river/opencode-team-mode",
@@ -387025,7 +387076,7 @@
         "peer": "@opencode-ai/plugin@*"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：标记的生命周期脚本和子进程调用对应 postinstall/preuninstall 与仅维护者使用的 release.mjs，文档与代码描述一致，未见凭据外泄、恶意网络请求或混淆内容。"
     },
     {
       "name": "magpie-zszapi",
@@ -387525,7 +387576,8 @@
         "engines": "node >=22.0.0",
         "peer": "@opencode-ai/plugin@^1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：分发代码 dist/logger.js 中存在未经说明的网络调用且 prepare/lifecycle 脚本触发安全标记，虽描述与 README 相符，但核心网络行为无法验证。"
     },
     {
       "name": "@ternetin/opencode-codex-multiplexer",
@@ -387598,7 +387650,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.15.4, @opentui/core@>=0.2.11, @opentui/solid@>=0.2.11, solid-js@1.9.12"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的网络调用与 README 宣称的 Codex 用量窗口功能一致，生命周期脚本仅为常规的 prepublishOnly 构建命令，未发现提示注入、凭证外泄或混淆迹象，描述与代码功能相符。"
     },
     {
       "name": "opencode-play",
@@ -387670,7 +387723,8 @@
         "engines": "opencode >=1.18.0",
         "peer": "@opentui/core@>=0.4.5, @opentui/solid@>=0.4.5, solid-js@>=1.9.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内容提取失败且扫描命中混淆代码红旗，无法核实 child-process、runtime 与 wasm 是否存在恶意行为，需人工复核。"
     },
     {
       "name": "terravic/embl-ebi-ols-skill",
@@ -388615,7 +388669,7 @@
         "peer": "solid-js@>=1.9.0, @opentui/solid@>=0.4.5"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：安装脚本使用 `npx -y bun` 在安装期远程下载执行构建代码（生命周期脚本已被规则标记），且插件本质是向用户界面注入广告并向外部服务发送设备 ID 与时长数据，尽管 README 做了披露但实际代码未在审查范围内可验证其不发送更多内容。"
     },
     {
       "name": "texugo7badger/OLYMPUS",
@@ -389415,7 +389469,8 @@
       "compat": {
         "engines": "node >=22.14.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与插件功能一致；检测到的命令执行和凭据读取符合加载/安装外部插件包所需的功能，未见具体数据外泄、恶意网络调用或混淆证据。"
     },
     {
       "name": "@thealtoclef/opencode-scout",
@@ -389551,7 +389606,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描标记的 prepublishOnly 生命周期脚本内容透明且仅为发布前检查（typecheck/test/build），不在安装时执行；插件功能描述与代码一致，通信仅限本机同用户进程且明确声明非安全边界，未见注入、凭据窃取或混淆迹象。"
     },
     {
       "name": "thedavidweng/sukiru",
@@ -389727,7 +389783,7 @@
         "peer": "typescript@^5.9.3"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件按其声明的功能向用户配置的本地 OpenAI 兼容服务器（127.0.0.1 默认目标）发起网络请求，生命周期脚本仅为 prepublishOnly 构建，无凭据外泄、提示注入或混淆迹象，描述与代码一致。"
     },
     {
       "name": "opencode-discord-notifier",
@@ -390330,7 +390386,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能为事件通知与提示音，子进程和网络调用均为用户明确配置且默认禁用的可选功能（自定义命令、微信 webhook），描述与代码功能一致，无明显恶意迹象。"
     },
     {
       "name": "@thelioo/opencode-balancer",
@@ -390410,7 +390467,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件功能为本地账户轮询与凭据存储于本地 sqlite，网络调用和子进程均为其正常的 provider 调用与构建脚本（prepare 为 husky），描述与实际功能一致，未见凭据外泄或恶意行为。"
     },
     {
       "name": "@chamba/opencode-extras",
@@ -390547,7 +390605,8 @@
       "compat": {
         "engines": "node >= 22; opencode2 >=2.0.21"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描发现 dist 中存在 child_process 调用与网络请求且带有生命周期脚本红旗，描述虽与代码功能一致但无法确认这些行为是否为正当（如 Jev API 调用或 shell 调用），需要人工核实。"
     },
     {
       "name": "theopenco/llmgateway",
@@ -390679,7 +390738,8 @@
         "engines": "bun >=1.0.0",
         "peer": "@opencode/plugin@2.0.16"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描发现均可合理解释：网络调用仅指向本地回环 hub、base64 为打包产物、child-process 用于生成密钥、lifecycle-script 为 prepublishOnly 而非安装脚本，且文档明确声明 token 校验与非安全边界语义，无凭证外泄或恶意行为迹象。"
     },
     {
       "name": "cortico-world-coding-agent-notify",
@@ -390752,7 +390812,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的生命周期脚本、网络调用和子进程均与文档描述的设计一致（构建脚本、向本地带令牌端点发送任务结论、通过 agent 原生 hook 调用），清单描述与代码功能相符，未见提示注入、凭据窃取或混淆迹象。"
     },
     {
       "name": "jev-client",
@@ -390869,7 +390929,7 @@
         "engines": "node >=22.13"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包是功能完整的 Jev API CLI/库，描述与代码一致；扫描命中项主要来自打包的 Next.js 构建产物中的常规网络与进程调用，未发现明显的凭证外泄、混淆或恶意行为证据。"
     },
     {
       "name": "theroich/opencode-jev-pruner",
@@ -391128,7 +391188,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：仅有的告警是无害的 prepublishOnly 构建脚本，代码与文档与 TUI token 用量图表插件的描述一致，未见注入、窃密或混淆迹象。"
     },
     {
       "name": "thin-memory",
@@ -391531,7 +391592,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：该插件处理系统凭据（keyring 存储 Firestore refresh token），且 keyring.ts 被标记为混淆（red flag），未提供可验证的源码，无法排除凭据窃取风险；编译产物中还存在多处 child-process 调用。"
     },
     {
       "name": "Thomashighbaugh/buchbinder",
@@ -392129,7 +392190,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：编译产物 dist/index.js 存在混淆、base64 blob、网络调用和子进程标记等多项红旗，且源码未被审查，无法确认网络行为与能力声明一致，存在潜在恶意载荷风险。"
     },
     {
       "name": "tiagovilasboas/downshift",
@@ -392341,7 +392403,7 @@
         "peer": "@opencode/plugin@^2.0.20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包名为 @servoy/ 但作者为 tickernelz、存在 @zhafron/ 旧仓库不匹配红旗，且含 prepare 生命周期脚本，发布者身份与元数据不一致需进一步核实。"
     },
     {
       "name": "tickernelz/opencode-mem",
@@ -392919,7 +392981,8 @@
         "engines": "bun >=1.3.0",
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件为明确披露的 TimeFly 遥测插件，仅同步会话元数据与 token 计数而不收集 prompt 内容；网络调用与子进程均属其 OAuth 登录流程所需，扫描命中的 prepublishOnly 生命周期脚本不随安装执行，manifest 描述与代码一致。"
     },
     {
       "name": "opencode-telegram-plugin",
@@ -393003,7 +393066,7 @@
         "peer": "@opencode-ai/plugin@>=0.1.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描发现混淆代码、读取凭据、生命周期脚本及网络调用等多项红旗，且包内容提取超时无法人工核查原文，存在明显安全风险。"
     },
     {
       "name": "timmo001/dotfiles",
@@ -393374,7 +393437,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件本地代理转发 NVIDIA NIM 请求并修补工具调用响应，描述与功能一致，未发现凭据外泄、混淆或恶意网络调用的证据（安装脚本与网络调用均为其声明功能所必需）。"
     },
     {
       "name": "timwuhaotian/the-pair",
@@ -393609,7 +393672,8 @@
         "engines": "opencode >=1.19.1 <2 || >=2.0.30",
         "peer": "solid-js@^1.9.0, @opentui/core@>=0.5.0, @opentui/solid@>=0.5.0, @opencode/plugin@^2.0.30, @opencode-ai/plugin@*"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包是 Tinfoil 的 opencode 模型提供方插件，描述与功能一致；生命周期脚本仅为 prepublishOnly（安装时不执行），网络调用属模型服务所需，无凭证泄露或混淆迹象。"
     },
     {
       "name": "dsh-um-proxy-ondemand",
@@ -394011,7 +394075,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包中仅有无害的 build/prepublishOnly 脚本，无 postinstall 或网络调用，清单描述与 README 所述功能一致，无注入或凭证窃取迹象。"
     },
     {
       "name": "tmashara/renderdiff",
@@ -395252,7 +395317,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能为本地裁剪工具输出，声明无网络与运行时依赖；package.json 的 prepare/prepublish 仅为构建脚本，child-process 出现在测试与各 agent hook（其职责即运行命令），README 对未验证部分披露诚实，manifest 描述与代码一致。"
     },
     {
       "name": "@tokmac/opencode-farley-score",
@@ -395834,7 +395899,8 @@
         "engines": "opencode >=1.18.4",
         "peer": "@opentui/solid@>=0.4.5"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：package.json 中存在生命周期脚本（install 时执行代码），在 npm 包发布中属于高风险信号，需要人工核查其内容。"
     },
     {
       "name": "review-hub-mcp",
@@ -395909,7 +395975,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：核心二进制未提供但扫描显示其含混淆、base64 数据块、网络调用与子进程执行等多项高危信号，且仓库指向与包名不匹配，无法验证其安全性。"
     },
     {
       "name": "opencode-token-tracker",
@@ -396051,7 +396117,8 @@
       "compat": {
         "engines": "opencode >=1.18.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包为 TUI 侧边栏面板，描述与 README 一致，仅有常规的 prepublishOnly 构建脚本，无网络外发或凭据泄露迹象。"
     },
     {
       "name": "@toninho09/opencode-continue",
@@ -396459,7 +396526,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内含未审查的生命周期脚本（被标记为红旗），安装时将执行无法验证的代码，尽管技能文档本身质量良好且含防注入护栏。"
     },
     {
       "name": "turntax",
@@ -397199,7 +397266,7 @@
         "peer": "@opencode-ai/plugin@>=0.13.7"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包描述与实际功能一致，插件将 LLM 请求/响应本地落盘用于调试，未见网络外发、混淆代码或误导性声明；仅有的 lifecycle-script 提示对应正常的 prepack 构建脚本。"
     },
     {
       "name": "opencode-oceanus",
@@ -397275,7 +397342,8 @@
       "compat": {
         "peer": "zod@^4.0.0, solid-js@>=1.9.0, @opentui/solid@>=0.5.10"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包包含网络请求、base64 blob、子进程和 npm 生命周期脚本等多项触发扫描告警的行为，且 README 描述了自动下载 CBM、浏览器及自我更新 OpenCode 安装的高风险能力，未提供证据排除滥用。"
     },
     {
       "name": "@lore-co/cli",
@@ -398304,7 +398372,8 @@
         "engines": "node >=18",
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与代码功能一致，技能文件为正常的连接/收发指引且多次要求不得凭空捏造凭证，dist 中的网络调用与子进程与消息插件和 setup CLI 相符，package.json 无安装期生命周期脚本（仅发布用 prepublishOnly），未发现提示注入、凭证外泄或混淆迹象。"
     },
     {
       "name": "tryharness",
@@ -398568,7 +398637,8 @@
       "compat": {
         "peer": "zod@^4.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：编译产物中存在大量未验证的网络调用、子进程执行、字面量IP与base64负载，且package.json触发生命周期/prepare脚本红旗，无法确认其安全性。"
     },
     {
       "name": "@tser239/openslimedit",
@@ -399000,7 +399070,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=0.13.7"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包的生命周期脚本均为常规构建/测试命令，无恶意安装钩子；描述与代码功能一致，无凭据窃取或恶意网络调用迹象，README 中的 LLM 指引段落属温和提示而非注入攻击。"
     },
     {
       "name": "tubasa821004-hash/social-manipulation-radar",
@@ -399675,7 +399746,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：清单描述与 README 一致，未发现提示注入、凭据窃取或隐蔽网络调用；fetch 补丁行为已如实披露，prepublishOnly 仅运行构建属正常生命周期脚本。"
     },
     {
       "name": "opencode-qwen-cli-auth",
@@ -399818,7 +399890,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.4.3"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描结果存在网络调用、子进程执行和生命周期脚本等红旗项，但未提供可核查的 dist/index.js 源码，无法确认其是否为合法的上下文管理通信还是数据外泄。"
     },
     {
       "name": "pi-codemode-guard",
@@ -400113,7 +400186,7 @@
         "engines": "node >=20.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：存在读取 Claude/Cursor 凭据并发起网络请求的配额模块，且与本地 Discord 状态/隐私声明的边界不够清晰。"
     },
     {
       "name": "opencode-greenbrain",
@@ -400457,7 +400530,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：仅有的标记均为可解释的良性项——prepublishOnly 只是构建检查脚本，dist 中的子进程调用无 exfiltration 或恶意网络行为的证据，README 与包描述一致。"
     },
     {
       "name": "@maskweaver/plugin",
@@ -400528,7 +400602,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描发现 dist/index.js 中存在网络调用和子进程执行且内容未展示无法确认安全性；package.json 使用 workspace:* 协议依赖不适用于 npm 发布，另插件自动安装带有 bash/edit/webfetch 完全权限的代理可能引发注入风险"
     },
     {
       "name": "ulises-jeremias/agent-toolkit",
@@ -400873,7 +400948,7 @@
         "engines": "node >=22.12.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：存在生命周期脚本红旗，并包含认证/注册网络调用与子进程执行及授予 shell 能力的代理定义，风险面较宽且材料被截断难以完全核验。"
     },
     {
       "name": "stalemap",
@@ -400958,7 +401033,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：功能与描述一致（依赖变更说明写入 AGENTS.md/CLAUDE.md），扫描命中的网络调用与子进程均为该工具的正常功能路径，package.json 中未见实际安装期生命周期脚本，未发现凭据外泄或混淆迹象。"
     },
     {
       "name": "@joingonka/setup",
@@ -401040,7 +401115,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与代码一致，README/CHANGELOG 详细说明其功能；credential-read 与 network-call 告警均与安装器向各工具写入配置并访问自家网关验证所需行为相符，未发现外传凭据或恶意指令的证据。"
     },
     {
       "name": "@uncle.f/free-agents",
@@ -401956,7 +402031,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包通过 hooks 自动捕获会话/提示词并存在多处 child-process 与 network-call 命中，且“完全本地/离线”说法与一处 lifecycle red flag 及网络行为存在需要核实的矛盾。"
     },
     {
       "name": "@ursuciprian/reflex",
@@ -402125,7 +402200,8 @@
       "compat": {
         "engines": "node >=18"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描发现的网络调用、凭据读取和子进程执行均与该包作为安全门禁工具的功能相符（Jev/Laya 引擎、读配置、判命令），描述与代码一致，未见提示注入或凭据外泄证据。"
     },
     {
       "name": "@zero-two-labs/sekisho-mcp",
@@ -402192,7 +402268,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包为本地MCP代理，声明与代码一致，密钥仅存于本地600权限文件且有每次与每日限额；未发现恶意网络调用、混淆或凭据外泄，生命周期脚本标记仅指向构建期prepublishOnly而非安装期钩子。"
     },
     {
       "name": "useagenthq/useagent",
@@ -402712,7 +402788,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件通过认证 WebSocket 连接 OrgX 服务器并执行远程任务，网络调用、子进程与生命周期脚本均与描述的功能相符，未发现提示注入、凭据外泄或描述与代码不符的迹象。"
     },
     {
       "name": "@useorgx/trail",
@@ -402796,7 +402873,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：清单声称“no upload”，但代码含 sync.mjs 网络调用与凭据读取，用于向云端上传会话收据，与描述矛盾。"
     },
     {
       "name": "username9999-sys/uwae",
@@ -403748,7 +403825,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：安装包包含 postinstall 脚本（install.js），其中触发网络调用与子进程执行，虽符合分发预编译二进制的常见模式，但无法从材料确认其行为，存在供应链风险。"
     },
     {
       "name": "opencode-openrouter-autorouter-variants",
@@ -403818,7 +403895,8 @@
         "level": "install"
       },
       "compat": {},
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件仅为 OpenRouter 模型添加路由变体，描述与功能一致；唯一的 prepare 脚本是常见的 lefthook 开发依赖安装，未见凭证窃取、恶意网络调用或混淆代码。"
     },
     {
       "name": "opencode-openrouter-budget",
@@ -404281,7 +404359,8 @@
       "compat": {
         "peer": "@opencode-ai/plugin@^1.16.2"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件为桌面宠物插件，网络调用、子进程与生命周期脚本均与其下载 Electron 覆盖层并启动的功能相符，README 已明确说明且描述与代码功能一致，未见证据表明存在凭证窃取或恶意行为。"
     },
     {
       "name": "@vasilvestre/opencode-background-resumer",
@@ -405195,7 +405274,7 @@
         "peer": "@opencode-ai/plugin@^1.1.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能为查询各平台配额，网络调用指向各官方 API，读取本地 auth.json 属其声明功能；生命周期脚本仅为 prepublishOnly（lint+build），描述与代码一致，无凭据外泄或恶意行为证据。"
     },
     {
       "name": "opencode-openai-limits",
@@ -405268,7 +405347,8 @@
       "compat": {
         "peer": "solid-js@>=1.9.0, @opentui/core@>=0.6.8, @opentui/solid@>=0.6.8"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件仅将用户自身的 OpenAI OAuth 凭证发送至官方 chatgpt.com 用量端点且不外泄令牌，README 与描述一致；prepare 脚本仅执行本地构建，无明显恶意行为。"
     },
     {
       "name": "@vdrsl/opencode-agentpost",
@@ -405513,7 +405593,8 @@
         "engines": "node >=20.0.0; opencode ^1.15.0",
         "peer": "@opencode-ai/plugin@^1.15.0, zod@^3.0.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：存在凭证读取（mcp-templates.js）与生命周期脚本两个红旗，且插件会在会话启动时强制执行自我协议并克隆外部仓库，风险面较大。"
     },
     {
       "name": "@psraghuveer/memento",
@@ -405587,7 +405668,7 @@
         "engines": "node >=22.11.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包在安装时会执行 postinstall 生命周期脚本，且扫描发现 child-process 调用，无法确认这些自动执行路径不会进行外部网络或系统操作。"
     },
     {
       "name": "opencode-permission-gate",
@@ -405659,7 +405740,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该插件功能与说明一致，网络调用用于审核模型调用、凭证读取与生命周期脚本均属合理实现，无明显恶意迹象。"
     },
     {
       "name": "@velnae/opencode-voice",
@@ -405981,7 +406062,8 @@
       "compat": {
         "engines": "opencode >=1.16.0; node >=20"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描在 dist/server.js 中发现网络调用，与 SECURITY.md 声称的\"无网络调用\"相矛盾，且存在 shell 命令执行（虽已披露为设计行为），建议人工确认网络调用的用途。"
     },
     {
       "name": "@verboo/opencode-auth",
@@ -407039,7 +407121,8 @@
       "compat": {
         "engines": "opencode >=1.16 <2"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包功能为将会话运行在第三方 Daytona 沙箱并用 Veris twin 拦截厂商 API 调用，描述与代码一致且未见隐藏的恶意网络调用、凭据窃取或混淆；扫描标记的 child_process 与 prepublishOnly 构建脚本属正常用途，源码推送到沙箱是其明示功能而非隐蔽外泄。"
     },
     {
       "name": "@veris-ai/e2b-opencode",
@@ -407113,7 +407196,8 @@
         "engines": "node >=20",
         "peer": "@opencode-ai/plugin@>=1.18"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：描述与代码一致，插件将厂商 API 调用经 Veris twin 拦截是其明确声明的功能且文档透明，扫描到的子进程调用与 prepublishOnly 构建脚本均属正常范畴，未发现隐藏指令、混淆或额外凭据外泄。"
     },
     {
       "name": "opencode-plugin-encoding-auto",
@@ -407751,7 +407835,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描在随包分发的 tool-annotations 文件中命中混淆特征、package.json 存在生命周期脚本，且该包功能本身是远程驱动已登录 Chrome 的高权限凭证式中继，风险面需进一步人工核实。"
     },
     {
       "name": "vibex-ai/vibex",
@@ -408094,7 +408178,8 @@
         "engines": "node >=24",
         "peer": "@opencode-ai/plugin@>=1.18.27 <2"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：扫描发现生命周期脚本及 dist 中的子进程与网络调用，现有材料不足以证明这些行为仅用于 Cursor 推理且无凭据外泄风险。"
     },
     {
       "name": "opencode-mate-loop",
@@ -408283,7 +408368,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：包功能与描述一致，child-process 调用仅用于 Termux 通知二进制，lifecycle 脚本为 prepublishOnly 非安装钩子，无网络外泄或混淆迹象。"
     },
     {
       "name": "victrid-oh-my-opencode-slim",
@@ -408375,7 +408460,7 @@
         "peer": "zod@^4.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 concern）：包内存在 npm 生命周期脚本(prepare)、编译产物中的网络调用、字面 IP 和 base64 大段数据，以及仓库不匹配(repo-mismatch)红旗，风险特征值得人工核查。"
     },
     {
       "name": "@vidit19sharma/opencode-cursor-auth",
@@ -408874,7 +408959,8 @@
       "compat": {
         "peer": "solid-js@^1.9.12, @opentui/core@^0.4.2 || ^0.5.0, @opentui/solid@^0.4.2 || ^0.5.0, @opencode-ai/plugin@>=1.4.3"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：提供的材料未显示任何提示词注入、凭据外泄或恶意网络调用证据，生命周期脚本标记在 package.json 中无对应 install/postinstall 脚本，manifest 描述与插件功能一致。"
     },
     {
       "name": "opencode-tasksync",
@@ -408944,7 +409030,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：插件功能与描述一致，仅向用户自行配置的本地 TaskSync 服务器及其 Telegram 通知通道发送数据，无安装期脚本或明显恶意行为证据。"
     },
     {
       "name": "poiesis-cli",
@@ -409030,7 +409116,7 @@
         "engines": "node >=22.20.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该 CLI 的凭证读取与网络调用仅在扫描层面命中，文档显示其用于 tracker/发布等正当开发流程，未发现证据表明凭证被外传，描述与实际功能一致。"
     },
     {
       "name": "opencode-agent-meetup",
@@ -409300,7 +409386,7 @@
         "engines": "node >=22.15"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：该包的能力声明与代码功能一致，子进程启动和网络调用均为局域网 LLM 网关的合理用途，凭据仅保存在本地 ~/.jev-gateway/.env，且 CHANGELOG 显示网关仅监听 127.0.0.1，无明显安全风险。"
     },
     {
       "name": "opencode-session-process-timeline",
@@ -409593,7 +409679,8 @@
       "compat": {
         "engines": "opencode >=1.8.0"
       },
-      "approval": "legacy"
+      "approval": "pending",
+      "approvalReason": "机械红旗待人工（AI 草稿，LLM 判 pass）：扫描命中的子进程、网络调用均为开发工具脚本和文档示例，未见凭证窃取、恶意网络外传或提示注入，清单描述与代码内容一致。"
     },
     {
       "name": "@visulima/find-ai-runner",
