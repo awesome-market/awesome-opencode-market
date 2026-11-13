@@ -1,6 +1,13 @@
 # AI 审核与上架管线设计
 
-> 状态：设计定稿 v3.3，待实现。
+> 状态：已实现并在线运行（v3.3 + v3.4 修订）。本文为设计依据记录；
+> 最新行为以 `docs/DATA-FLOWS.md` 为准。
+>
+> v3.4（github-kind 端到端钉装——修正 §5/§6 的"repo 无不可变快照"
+> 假设）：`source.version` 落**已解析 commit sha**，codeload@sha 即
+> 不可变快照——github 判词锚 `version:null + sha=commit`，
+> AI 取材/verify/客户端 `plugin add owner/repo#sha` 三处同一 pin，
+> sha 漂移触发重审同槽覆盖；缺 sha 的条目 fail-closed 不入队。
 >
 > v3 相对 v2 的关键变化：
 > - **队列统一**：取消 issue-label 上架池，改为 index 级 `approval` 字段 +
@@ -152,16 +159,19 @@ per-version 数据，这是本设计在 merge.ts 里的手术核心。
 `{name, version, verdict: pass|concern, reason, at, source: ai|human, sha?}`
 - verdict 按 `name@version` 键控，append-only 无清理；
   同 `name@version` 多 verdict 取 `at` 最新者生效
-- `sha` = 被审 tarball 的 sha——同 sha re-tag/重发时复用判词
-  （同内容重审零收益；无 sha 字段无法证明"同内容"）
+- `sha` = 被审字节的锚——npm 是被审 tarball 的 integrity SRI，
+  github-kind 是 `source.version` 的 commit sha；同 sha re-tag/重发
+  时复用判词（同内容重审零收益；无 sha 字段无法证明"同内容"）
 - `pass` 需**已出现在最近一期日报**（`akey(v) ∈ digest-state.json
   的 announced`）才生效；`concern` 立即生效；**human pass 同样
   需上日报**——日报是所有放行的唯一完整预告面
 - `digest-state.json` 缺文件 → `lastDigestAt` 视为 -∞ → 全冻结
   （fail-closed；首期日报建立 bootstrap）
 - github-kind 无版本：`version: null` 匹配 `latestVersion: null`
-  的条目；github-kind **无 pendingUpdate**（无版本键可挂）——
-  复审直接作用于展示条目，concern 即 `approval` 打回 pending 撤下
+  的条目，判词 sha=审过的 commit；github-kind **无 pendingUpdate**
+  （无版本键可挂）——复审直接作用于展示条目，concern 即 `approval`
+  打回 pending 撤下；commit 漂移（source.version 变了）触发重审，
+  新判词同槽覆盖（npm re-tag 同构）
 
 ## 5. AI 二审：任务收窄 + 去语义化输入
 
@@ -272,10 +282,14 @@ skill 投毒的本质区别：毒必须写在明面上（藏了就毒不到人�
 **每版都过 AI，发包频率不产生额外工作量**（每条目每趟 ≤1 次，AI 审
 的是最新版，中间版永远轮不到）。
 
-github-kind 条目无版本号：用 `pushedAt`/tree-sha 变化做复审触发——
-近似语义（repo 无不可变快照），记录在案。且其内容"活着"无法真钉
-版本：复审 concern 只能把 `approval` 打回 `pending` 事后撤下，不是
-gate——结构性限制如实写。
+github-kind 条目无 semver：`source.version` 是已解析 commit sha——
+codeload@sha 就是不可变快照，判词锚 `version:null + sha=commit`，
+`reviewPin` 把它当 npm 版本的等价物（pending 认 `source.version`，
+legacy 走 `--include-legacy`；缺 sha 的条目无字节锚不入队，fail-
+closed 不浮 HEAD）。复审触发=sha 漂移（`source.version` ≠ 判词
+sha 即字节已变）；concern 把 `approval` 打回 `pending` 撤下。客户端
+`plugin add owner/repo#<sha>` 装的是同一 pin——审/判/装三处字节
+锚定一致，不再是"近似语义"。
 
 ## 7. 现网 bug：verify 版本错位（独立修复）
 
