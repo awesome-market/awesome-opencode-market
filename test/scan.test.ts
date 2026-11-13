@@ -102,8 +102,14 @@ describe('scan/scanTarball', () => {
     expect(ip.test('f.js', 'fd00::dead:beef')).toBeNull()  // ULA
     expect(ip.test('f.js', '2404:6800:4003:c02::64')).toBeTruthy() // public v6
     const lc = RULES.find(r => r.id === 'lifecycle-script')!
-    for (const hook of ['preinstall', 'postinstall', 'install', 'prepublish', 'prepublishOnly', 'prepack', 'postpack'])
+    for (const hook of ['preinstall', 'postinstall', 'install', 'prepublish'])
       expect(lc.test('package/package.json', `{"scripts":{"${hook}":"x"}}`), hook).toBeTruthy()
-    expect(lc.test('package/package.json', '{"scripts":{"test":"x"}}')).toBeNull()
+    const ps = RULES.find(r => r.id === 'pack-script')!
+    expect(ps.sev).toBe('medium')
+    for (const hook of ['prepublishOnly', 'prepack', 'postpack']) {
+      expect(lc.test('package/package.json', `{"scripts":{"${hook}":"x"}}`), hook).toBeNull()
+      expect(ps.test('package/package.json', `{"scripts":{"${hook}":"x"}}`), hook).toBeTruthy()
+    }
+    expect(lc.test('package/package.json', '{"scripts":{"test":"x","build":"y","prepublishOnly":"z"}}')).toBeNull()
   })
 })
