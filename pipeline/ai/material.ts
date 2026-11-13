@@ -28,7 +28,7 @@ import { CatalogIndex } from '../../src/schema.ts'
 import { loadVerdicts } from '../verdicts.ts'
 import { isMain } from '../main-guard.ts'
 import {
-  unreviewedTargets, reviewVer, reviewMaterial, contentMaterial, makePackumentOf,
+  unreviewedTargets, reviewPin, reviewMaterial, contentMaterial, makePackumentOf,
   materialFileName, type Material, type MaterialBundle,
 } from './diagnose.ts'
 
@@ -59,8 +59,8 @@ export async function main(argv: string[] = process.argv.slice(2),
   // drains, legacy targets stop appearing and nothing more is built.
   const targets = unreviewedTargets(idx, verdicts, null, { ahead: true, includeLegacy: true })
   const want = new Set(targets.flatMap(e => {
-    const ver = reviewVer(e, true)
-    return ver ? [materialFileName(e.name, ver)] : []
+    const pin = reviewPin(e, true)
+    return pin ? [materialFileName(e.name, pin)] : []
   }))
 
   // prune pass — files for keys no longer reviewable die here (covers
@@ -77,13 +77,28 @@ export async function main(argv: string[] = process.argv.slice(2),
   let built = 0, kept = 0, oversized = 0, failed = 0
   mkdirSync(outdir, { recursive: true })
   for (const e of targets.slice(0, limit)) {
-    const ver = reviewVer(e, true)
-    if (!ver || e.source.kind !== 'npm') { kept++; continue } // github-kind has no tarball surface
-    const fn = materialFileName(e.name, ver)
+    const pin = reviewPin(e, true)
+    if (!pin) { kept++; continue }
+    const gh = e.source?.kind === 'github'
+    const fn = materialFileName(e.name, pin)
     try {
-      const pk = await pkOf(e.name)
-      const sha = pk?.integrityOf[ver]
-      if (!sha) { kept++; continue } // registry lookup failed — leave any existing bundle for the daemon to judge
+      // byte anchor: npm = the registry tarball SRI (a fetch, re-tag aware);
+      // github = the resolved commit sha itself — it IS the pinned bytes,
+      // no upstream call needed. The codeload URL pins the SAME sha the
+      // verdict will record (never a mutable ref).
+      let sha: string | undefined | null
+      let tarballUrl: string | null
+      if (gh) {
+        sha = pin
+        const repo = /^[\w.-]+\/[\w.-]+$/.test(e.source?.repo ?? e.source?.id ?? '')
+          ? (e.source!.repo ?? e.source!.id)! : null
+        tarballUrl = repo ? `https://codeload.github.com/${repo}/tar.gz/${pin}` : null
+      } else {
+        const pk = await pkOf(e.name)
+        sha = pk?.integrityOf[pin]
+        tarballUrl = pk?.tarballOf[pin] ?? null
+      }
+      if (!sha) { kept++; continue } // anchor lookup failed — leave any existing bundle for the daemon to judge
       const cur = join(outdir, fn)
       if (existsSync(cur)) {
         try {
@@ -97,10 +112,10 @@ export async function main(argv: string[] = process.argv.slice(2),
       // a 'content-error' block (or a thrown failure) = degraded extraction —
       // distinct from an empty [] which is a legitimate "no whitelist files"
       // package. The flag keeps degraded builds out of the freshness check.
-      const content = await contentMaterial(e.name, ver, pk?.tarballOf[ver] ?? null, deps.fetchFn, transportCap).catch(() => null)
+      const content = await contentMaterial(e.name, pin, tarballUrl, deps.fetchFn, transportCap).catch(() => null)
       const degraded = content === null || content.some(b => b.id === 'content-error')
       const bundle: MaterialBundle = {
-        name: e.name, version: ver, sourceSha: sha,
+        name: e.name, version: pin, sourceSha: sha,
         builtAt: new Date().toISOString(),
         ...(degraded ? { contentFailed: true } : {}),
         material: [...reviewMaterial(e), ...(content ?? [])],
@@ -109,7 +124,7 @@ export async function main(argv: string[] = process.argv.slice(2),
       if (json.length > BUNDLE_CAP) { oversized++; continue }
       if (!dry) writeFileSync(cur, json)
       built++
-    } catch (x) { failed++; console.warn(`[material] ${e.name}@${ver} build failed: ${String(x).slice(0, 120)}`) }
+    } catch (x) { failed++; console.warn(`[material] ${e.name}@${pin} build failed: ${String(x).slice(0, 120)}`) }
   }
   console.log(`[material] targets=${targets.length} built=${built} kept=${kept} pruned=${pruned} oversized=${oversized} failed=${failed}`)
   return 0

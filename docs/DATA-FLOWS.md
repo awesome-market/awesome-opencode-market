@@ -131,7 +131,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 
 **判定语义速记**：
 - `scannedAt:null` ≠ `findings:[]`——前者"没扫过"渲染 not scanned，后者"扫过无发现"渲染 scanned,no findings（都必须带"不等于安全"）
-- `latestVersion:null`（github-kind）→ 无 npm 可装对象，但 tree 证据门+codeload tarball 静态扫描照常（扫描失败才 `scannedAt:null`）；有可装部件（plugin/skill）时按 `repo#sha` 实测验证（unverified 进队列），无部件/旗标在身才 skipped；AI 不审（verdict 键都建不出来）
+- `latestVersion:null`（github-kind）→ 无 npm 可装对象，但 tree 证据门+codeload tarball 静态扫描照常（扫描失败才 `scannedAt:null`）；有可装部件（plugin/skill）时按 `repo#sha` 实测验证（unverified 进队列），无部件/旗标在身才 skipped；AI 审于 pinned commit（`reviewPin` 承认 `source.version` 为字节锚——`plugin`/含 skill 部件的 github 条目客户端走 `plugin add owner/repo#sha` 安装）
 - `pendingUpdate` 存在 ⇒ `latestVersion` 是**旧版**，`plugin add` 拿到的永远是它
 - `approval==='pending'` 的条目**不应携带** `pendingUpdate`——刹车留下的残存 hold 在上游继续 bump 后是比候选更旧的版本，会遮蔽真实候选（mergeEntries 在合并边界丢弃，R-9）
 
@@ -1240,7 +1240,8 @@ pass → 需 mature（akey(v)=name\0version\0at ∈ digest-state.announced——
    && verification.status ∈ {verified, skipped}      ← RELEASABLE
       verified=实测可装；skipped=没跑（高危信号 或 无可装对象）
       ——红旗 skipped 的 AI pass 已被上行忽略 → 事实只人工 pass 能放
-      ——github-kind skipped 无版本无 AI 审 → 也只能人工 verdict(version:null) 放
+      ——github-kind 的 AI 审落在 version:null 槽位（sha=审过的 commit）；
+       缺 `source.version` 的条目无字节锚 → 不入 AI 队列，仍只人工放
       unverified/failed 永不放（fail-closed；verify 瘫痪=冻结发布而不是放行）
 → pendingUpdate 放行：latestVersion/publishedAt/capabilities/verification/features/contains/integrity ← pu
    （contains/integrity=被放行版的——hold 期间展示槽一直钉展示版；
@@ -1285,7 +1286,8 @@ flowchart TB
 ```
 docket.ts：index+verdicts → docketTargets
   = ver = pendingUpdate?.version ?? (approval==='pending' ? latestVersion : null)
-    且 ver 非空（或条目本就无版本——github-kind 的 null 键查不到 AI 裁决，自然排除）
+    且 ver 非空（github-kind 的 null 版本键即其 AI 裁决槽位——判词带
+    sha=审过的 commit；缺 `source.version` 的条目无锚不入队，自然排除）
     且 最新 verdict.source='ai'
     且 无包级人工刹车（name\0null 键 human concern——applyMatureVerdicts
       verdictFor 覆盖该包所有槽位，除非槽位上有更新 human pass；docket
@@ -1590,11 +1592,12 @@ UI（gui.ts webview / tui.tsx 终端）：
     （github 插件仓无 npm 产物时，双端点击都有提示不静默）；否则四态同站点，
     verification.status 枚举钳位防 crafted 值出空白徽标；
     deprecated+replacedBy/legacy/removedFrom（墓碑）徽章叠加
-  安装路由 installPlan(e)：{plugin:有npm版∧contains:plugin, skill:npm|github|null}
-    双栖（contains 含 plugin+skill）→ 插件 pinSpec 装 + 技能装，一次点完；
+  安装路由 installPlan(e)：{plugin:(npm有版∨github钉有效sha)∧contains:plugin, skill:npm|github|null}
+    双栖（contains 含 plugin+skill）→ 插件 installSpec 装 + 技能装，一次点完；
     jobs map 防双击并发起两个 spawn
-  插件安装：pinSpec(e) = name@latestVersion（钉到批准版；VER_SAFE 字符
-       校验——crafted version 直接拒装，不让怪串进 spec）（N-8）
+  插件安装：installSpec(e) = npm `name@latestVersion` / github `owner/repo#<sha>`
+       （pinSpec 钉批准版 VER_SAFE 校验；gitSpec 钉 commit sha——
+       缺/畸形 sha 拒装，不向 HEAD 浮动，审的装的永远同一份字节）（N-8）
        装/更前 assertApprovedPin 新鲜度复查——渲染时持有的条目可能
        落后 TTL 1h，版本被 concern 撤回后重解析仍批准才放行；
        compat.engines 对 ctx.app.version 装前校验，不满足出警告
@@ -1710,7 +1713,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | 缺席≠被拒 | gone-check 的 'filtered' 只记正向拒绝（rejectedNpm/rejectedGh）；搜索面分页/排序窗口漏掉的活条目探活后保留；真 404 才 npm-404/repo-404 |
 | 外部输入损坏拒跑 | old index 损坏拒跑（WF-1）；blocklist 存在但不可解析同样拒跑——坏黑名单不等于没黑名单（缺文件才算未配置） |
 | 不可信代码零权限 | generate/verify jobs permissions:{} + egress 白名单 |
-| github-kind 特殊 | tree 证据门准入 + codeload 静态扫描（失败才 scannedAt:null）；有可装部件按 repo#sha 实测验证（codeload egress 白名单）/不 AI 审（无候选键）；只人工 verdict(version:null) 放行 |
+| github-kind 特殊 | tree 证据门准入 + codeload 静态扫描（失败才 scannedAt:null）；有可装部件按 repo#sha 实测验证（codeload egress 白名单）；AI 审落在 version:null 槽位（取材 codeload@`source.version`，判词 sha=commit，sha 漂移重审）——缺 sha 的条目无字节锚不入队，只人工 verdict(version:null) 放行 |
 
 ---
 
@@ -1966,7 +1969,7 @@ opencode 官方支持的加载方式 vs 市场当前提供的路径。**"官方�
 | opencode 官方方式 | 市场支持 | 缺口 |
 |---|---|---|
 | npm `name@ver` | ✅ `pinSpec` 钉批准版装 | — |
-| **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ⚠️ 部分 | github **skill** 已可装（客户端 installPlan → codeload `tar.gz/<commit sha>` 钉扫过的提交 → `installSkillTar`，无 sha 遗产退 HEAD）；github **plugin** 仍只展示（`installPlan` 明确拒绝，`installHint` 不印装不上的命令）——`opencode plugin add owner/repo` 本身可用但目录不提供该路径；本机 git-spec 已装插件进 extras 清单可见 |
+| **git spec**：`owner/repo`、`github:`、`https://`、`git+`、`#ref` 钉 ref | ✅ | github **skill** 可装（客户端 installPlan → codeload `tar.gz/<commit sha>` 钉扫过的提交 → `installSkillTar`，无 sha 遗产退 HEAD）；github **plugin** 可装（`installPlan` 要 `repo#<sha>` 钉版 → `gitSpec` → `plugin add owner/repo#sha`——审/验/装同一 commit，缺 sha 拒装不浮 HEAD）；`cleanSpec` 归一化 git spec→`owner/repo`（`#sha`/`github:`/`https://github.com/`/`.git` 全归一），`overlayConfigPins` 把 `#sha` 记为已装版本标记；本机 git-spec 已装插件进 extras 清单可见 |
 | git `owner/repo#commit` 钉版 | ✅ 数据已备 | github-kind 的 `source.version` 记的就是 **commit sha**——`git/trees/{ref}` 按 ref 查询时响应 `sha` 字段返回 ref 解析到的 commit sha（对 API 实测验证，与该 commit 的 `commit.tree.sha` 不同），commit 不可变所以钉得住；`modifiedAt` 记 pushedAt 作展示/兜底 |
 | github 条目静态扫描 | ✅ | **已实现**：codeload `tar.gz/HEAD` 过同一套 `scanTarball`（§1 github-kind 补集），扫描失败才 `scannedAt:null` |
 | github 条目云验证 | ✅ | `planTargets` 出 `git:{repo, sha}` 目标（`source.repo`/`source.version`）→ `plugin add owner/repo#sha` 钉死扫描过的提交 + `checkSkillStructureGit` codeload 结构检查；merge 按 version-less 结果写展示槽（pendingUpdate 在押时不写回）；verify egress 白名单含 codeload。repo 裁决键 `name\0`（无版本槽）——verdict.sha 钉 reviewed commit（submit/concern 盖戳），shaOk 与 npm 同构拒放"移动后字节" |

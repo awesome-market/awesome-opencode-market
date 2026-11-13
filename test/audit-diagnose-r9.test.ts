@@ -5,13 +5,16 @@
  *     name's tombstone judged a DIFFERENT (dead) incarnation — the release
  *     gate refuses it via epochGoverning, so the queue must NOT count it as
  *     "already reviewed" or the recycled entry sits verdict-less forever.
- *  2. null-version (github-kind) exclusion: AI never reviews version-less
- *     entries — their verdict slot is name@null, written only by humans
- *     with the pinned-commit sha. An AI line on that key would carry no
- *     byte anchor (shaOk vacuous → could release moved bytes). docket's
- *     'none' aggregate depends on the same exclusion. */
+ *  2. github-kind admission: version-less entries DO enter the queue once
+ *     their commit pin is known (reviewPin admits source.version — the
+ *     verdict lands on the name@'' slot with sha=the reviewed commit, so
+ *     shaOk pins bytes exactly like dist.integrity does for npm). An entry
+ *     withOUT a resolved sha stays out — no bytes to anchor. */
 import { describe, it, expect } from 'vitest'
-import { unreviewedTargets } from '../pipeline/ai/diagnose.ts'
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { unreviewedTargets, main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const idx = (plugins: PluginEntry[], removed: CatalogIndex['removed'] = []): CatalogIndex => ({
@@ -51,23 +54,91 @@ describe('audit#4 r9 — epoch-gated re-queue of recycled names', () => {
   })
 })
 
-describe('audit#4 r9 — github-kind (version-less) entries never enter the AI queue', () => {
+describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
   const gh = entry({
     name: 'Owner/Repo', slug: 'owner/repo',
     source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 42, version: 'c0ffee' },
     latestVersion: null, // gh entries are version-less; name@null is their verdict slot
   })
-  it('pending repo entry with no verdict → excluded (human-only release path)', () => {
-    expect(unreviewedTargets(idx([gh]), [])).toEqual([])
+  it('pending repo entry WITH a resolved sha → queued (AI reviews the pinned commit)', () => {
+    expect(unreviewedTargets(idx([gh]), [])).toHaveLength(1)
   })
-  it('--name targeting the repo still can\'t queue it — even --force stops at the null version', () => {
-    expect(unreviewedTargets(idx([gh]), [], new Set(['owner/repo']))).toEqual([])
-    // the !ver guard runs BEFORE the force override: a version-less entry has
-    // no candidate to re-review, so --force can't conjure one either
-    expect(unreviewedTargets(idx([gh]), [], new Set(['owner/repo']), { force: true })).toEqual([])
+  it('pending repo entry with NO resolved sha → excluded (no bytes to anchor a verdict to)', () => {
+    const noSha = entry({
+      name: 'Owner/Repo', slug: 'owner/repo',
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 42 },
+      latestVersion: null,
+    })
+    expect(unreviewedTargets(idx([noSha]), [])).toEqual([])
+    // the pin guard runs BEFORE the force override: a version-less entry has
+    // no bytes to re-review, so --force can't conjure one either
+    expect(unreviewedTargets(idx([noSha]), [], new Set(['owner/repo']), { force: true })).toEqual([])
+  })
+  it('legacy github entry → excluded by default, admitted by includeLegacy (first-launch sweep)', () => {
+    const lg = entry({
+      name: 'Owner/Repo', slug: 'owner/repo',
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 42, version: 'c0ffee' },
+      latestVersion: null, approval: 'legacy',
+    })
+    expect(unreviewedTargets(idx([lg]), [])).toEqual([])
+    expect(unreviewedTargets(idx([lg]), [], null, { includeLegacy: true })).toHaveLength(1)
+  })
+  it('an ai verdict on name@null → excluded (slot decided; a moved commit re-enters via the drift sweep)', () => {
+    const av = v({ name: 'owner/repo', version: null, sha: 'c0ffee' })
+    expect(unreviewedTargets(idx([gh]), [av])).toEqual([])
   })
   it('a human name@null verdict exists → still excluded (decided, never re-reviewed)', () => {
     const hv = v({ name: 'owner/repo', version: null, source: 'human', sha: 'c0ffee' })
     expect(unreviewedTargets(idx([gh]), [hv])).toEqual([])
+  })
+  it('main() emits version:null + sha:commit, fetches codeload at the PIN (never a mutable ref)', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'gh-'))
+    const ip = join(d, 'i.json'), vp = join(d, 'v.jsonl'), op = join(d, 'o.jsonl')
+    // schema-valid github row — the r9 unit fixtures carry nulls the strict
+    // CatalogIndex.parse rejects (approvalReason/pendingUpdate), so build the
+    // on-disk shape directly: latestVersion:null IS the github form
+    const ghRow = {
+      name: 'Owner/Repo', slug: 'owner/repo', aliases: [], type: 'plugin',
+      contains: ['plugin'], discoveredVia: ['github-topic'],
+      source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 42, version: 'c0ffee' },
+      description: { en: 'd' }, features: [], category: [], license: null,
+      deprecated: false, deprecatedMessage: null, replacement: null,
+      createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
+      firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: null, publishedAt: null,
+      integrity: null,
+      metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
+      capabilities: { scannedAt: '2026-01-01T00:00:00Z', findings: [], redFlags: [] },
+      approval: 'pending', verification: { status: 'skipped', level: 'install' }, compat: {},
+    }
+    writeFileSync(ip, JSON.stringify(idx([ghRow as PluginEntry])))
+    writeFileSync(vp, '')
+    const urls: string[] = []
+    // a codeload-shaped tarball: wrapper root is `<repo>-<sha>/`, not `package/`
+    const { create } = await import('tar')
+    const src = join(d, 'src', 'repo-c0ffee')
+    const { mkdirSync } = await import('node:fs')
+    mkdirSync(src, { recursive: true })
+    writeFileSync(join(src, 'SKILL.md'), '# repo skill\n')
+    const tgzPath = join(d, 'r.tgz')
+    await create({ gzip: true, file: tgzPath, cwd: join(d, 'src') }, ['repo-c0ffee/SKILL.md'])
+    const tgz = readFileSync(tgzPath)
+    const got: { version?: string | null | undefined; ids?: string[] } = {}
+    await diagnoseMain(['tsx', 'd.ts', '--index', ip, '--verdicts', vp, '--out', op], {
+      l05: () => new Map<string, number>(),
+      ornith: async (_e, m, o) => {
+        got.version = o?.version; got.ids = m.map(x => x.id)
+        return { verdict: 'pass' as const, reasonZh: 'ok', reasonEn: 'ok' }
+      },
+      fetchFn: (async (u: unknown) => { urls.push(String(u)); return new Response(new Uint8Array(tgz)) }) as unknown as typeof fetch,
+      ping: async () => true,
+    })
+    const lines = readFileSync(op, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l) as AiVerdict)
+    expect(lines).toHaveLength(1)
+    expect(lines[0]!.name).toBe('Owner/Repo')
+    expect(lines[0]!.version).toBeNull()          // the github slot key — name@''
+    expect(lines[0]!.sha).toBe('c0ffee')          // byte anchor = the pinned commit
+    expect(urls).toEqual(['https://codeload.github.com/Owner/Repo/tar.gz/c0ffee'])
+    expect(got.version).toBe('commit c0ffee')     // the judge sees the sha, not a phantom semver
+    expect(got.ids).toContain('content:SKILL.md') // codeload wrapper root was stripped correctly
   })
 })

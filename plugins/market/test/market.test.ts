@@ -425,8 +425,17 @@ describe('install routing + contract', () => {
     expect(installPlan(npm({ contains: ['plugin', 'skill'] }))).toEqual({ plugin: true, skill: 'npm' })
     // github skill repo — no npm version, still installable via codeload
     expect(installPlan(gh({ type: 'skill', contains: ['skill'], latestVersion: null }))).toEqual({ plugin: false, skill: 'github' })
-    // github plugin repo — nothing deliverable (no npm artifact)
+    // github plugin repo WITHOUT a resolved sha → nothing deliverable
     expect(installPlan(gh({ contains: ['plugin'], latestVersion: null }))).toEqual({ plugin: false, skill: null })
+    // github plugin repo WITH a commit pin → `plugin add o/repo#<sha>`
+    const ghPinned = { kind: 'github', id: 'o/repo', repo: 'o/repo', version: 'c0ffee1' }
+    expect(installPlan(gh({ contains: ['plugin'], latestVersion: null, source: ghPinned }))).toEqual({ plugin: true, skill: null })
+    // malformed sha → no route (fail closed — never floats to mutable HEAD)
+    expect(installPlan(gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'o/repo', repo: 'o/repo', version: 'HEAD' } }))).toEqual({ plugin: false, skill: null })
+    // valid sha but malformed repo → no route either
+    expect(installPlan(gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'x', repo: 'bad repo!', version: 'c0ffee1' } }))).toEqual({ plugin: false, skill: null })
     // npm entry missing a version
     expect(installPlan(npm({ latestVersion: null }))).toEqual({ plugin: false, skill: null })
     // malformed repo id → not installable as github
@@ -441,7 +450,27 @@ describe('install routing + contract', () => {
     const { canInstall } = await import('../src/catalog.ts')
     expect(canInstall(gh({ type: 'skill', contains: ['skill'], latestVersion: null }))).toBe(true)
     expect(canInstall(gh({ contains: ['plugin'], latestVersion: null }))).toBe(false)
+    // github plugin WITH a commit pin is installable now
+    expect(canInstall(gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'o/repo', repo: 'o/repo', version: 'c0ffee1' } }))).toBe(true)
     expect(canInstall(npm({ contains: ['plugin'] }))).toBe(true)
+  })
+  it('installSpec: github plugin → owner/repo#<sha>; npm → name@ver; bad pin/repo fails closed', async () => {
+    const { installSpec, pinSpec } = await import('../src/catalog.ts')
+    expect(installSpec(npm())).toBe('pkg@1.0.0')
+    const pinned = gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'o/repo', repo: 'o/repo', version: 'c0ffee1' } })
+    expect(installSpec(pinned)).toBe('o/repo#c0ffee1')
+    // missing sha → throw (not 'o/repo#HEAD' — a floating ref bypasses review)
+    expect(() => installSpec(gh({ contains: ['plugin'], latestVersion: null }))).toThrow(/invalid source pin/)
+    // malformed sha → throw
+    expect(() => installSpec(gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'o/repo', repo: 'o/repo', version: 'v1.2' } }))).toThrow(/invalid source pin/)
+    // malformed repo → throw
+    expect(() => installSpec(gh({ contains: ['plugin'], latestVersion: null,
+      source: { kind: 'github', id: 'x', repo: 'bad repo!', version: 'c0ffee1' } }))).toThrow(/invalid github repo/)
+    // npm still goes through pinSpec unchanged
+    expect(pinSpec(npm())).toBe('pkg@1.0.0')
   })
   it('verMarker + hasUpdate: github pushedAt is the version marker', async () => {
     const { verMarker, hasUpdate } = await import('../src/catalog.ts')

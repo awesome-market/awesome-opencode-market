@@ -514,10 +514,18 @@ describe('site extras (S-2/S-3/S-7/S-9/S-10)', () => {
     const dual = installHint(mk({ contains: ['plugin', 'skill'] }))
     expect(dual).toContain('opencode plugin add')
     expect(dual).toContain('skills catalog')
-    // github plugin-only → browse only (client itself has no path)
+    // github plugin-only WITHOUT a sha → browse only (no pin, nothing reviewed to install)
     const ghPlugin = mk({ latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'o/r' } })
     expect(installHint(ghPlugin)).toContain('browse only')
     expect(installHint(ghPlugin)).not.toContain('plugin add')
+    // github plugin WITH a resolved sha → pinned `plugin add o/r#<sha>`
+    const ghPinned = mk({ latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'c0ffee1' } })
+    expect(installHint(ghPinned)).toContain('opencode plugin add o/r#c0ffee1')
+    expect(installHint(ghPinned)).not.toContain('browse only')
+    // malformed sha → no command printed (never offers a floating ref)
+    const ghBadSha = mk({ latestVersion: null, source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'HEAD' } })
+    expect(installHint(ghBadSha)).toContain('browse only')
+    expect(installHint(ghBadSha)).not.toContain('plugin add')
     // github skill → skills catalog link
     const ghSkill = mk({ latestVersion: null, type: 'skill', contains: ['skill'],
       source: { kind: 'github', id: 'o/s', repo: 'o/s' } })

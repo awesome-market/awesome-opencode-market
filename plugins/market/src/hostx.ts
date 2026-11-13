@@ -30,9 +30,20 @@ export function assertEntryId(name: unknown): asserts name is string {
  *  package — blocks spec/name mismatch (acting on another plugin), flag
  *  injection (`--registry=`), and non-semver versions. Absent spec = name. */
 export function assertSpecForName(name: string, spec: unknown): void {
-  assertPkgName(name)
+  // github-kind catalog entries are named `owner/repo` — the npm-only
+  // NAME_RE would reject every git install spec at this gate. Entry-id
+  // covers both shapes (npm name OR owner/repo); the same `..`/charset
+  // guards apply.
+  assertEntryId(name)
   if (spec === undefined || spec === null || spec === '') return
-  if (typeof spec !== 'string' || cleanSpec(spec) !== name)
+  if (typeof spec !== 'string') throw new Error('spec does not match package name')
+  const clean = cleanSpec(spec)
+  // repo-shaped ids compare case-insensitively — catalog `name` keeps a
+  // repo's display case while `source.repo` tracks canonical casing (a
+  // case-only rename must not fail the identity check; github resolves
+  // owner/repo case-insensitively anyway). npm names stay exact.
+  const sameId = REPO_RE.test(name) ? clean.toLowerCase() === name.toLowerCase() : clean === name
+  if (!sameId)
     throw new Error('spec does not match package name')
   // an '@' demands a non-empty safe version — 'name@' must not read as
   // 'name' (npm resolves a trailing-empty spec to the unapproved latest)
@@ -150,7 +161,20 @@ export async function overlayConfigPins(map: Record<string, string>): Promise<vo
     const d = await readJson(await configPath())
     for (const s of strArrayField(d, 'plugins')) {
       const at = s.lastIndexOf('@')
-      if (at <= 0) continue                       // bare name / local path / non-npm ref
+      if (at <= 0) {
+        // git spec: owner/repo#<sha> — the pinned commit IS the installed
+        // marker (verMarker for github-kind = source.version, same value).
+        // Bare 'owner/repo' resolves mutable HEAD — 'local', not a version.
+        const hash = s.lastIndexOf('#')
+        if (hash > 0) {
+          const ref = s.slice(hash + 1)
+          if (/^[0-9a-f]{7,64}$/.test(ref)) {
+            const name = cleanSpec(s)
+            if (map[name] !== undefined) map[name] = ref
+          }
+        }
+        continue                                   // bare name / local path / non-npm ref
+      }
       const ver = s.slice(at + 1)
       if (!VER_RE.test(ver)) continue             // git@host:path etc — not a version
       const name = cleanSpec(s)

@@ -232,9 +232,17 @@ const CONTENT_TRANSPORT_CAP = 32 * 1024 * 1024
 const CONTENT_BASENAME = /^(package\.json|opencode[^/]*\.json|[^/]*\.plugin\.json|[^/]*skill[^/]*\.md|readme[^/]*\.(md|txt)|agents\.md|claude\.md|instructions?[^/]*\.(md|txt)|prompt[^/]*\.(md|txt)|[^/]*\.(md|txt))$/i
 // the trailing all-md alternative keeps coverage broad — skill poison hides
 // in ANY markdown the agent will read, not just SKILL.md
-const isContentFile = (p: string) =>
-  p.startsWith('package/') && !/(^|\/)\._/.test(p) &&
-  CONTENT_BASENAME.test(p.slice('package/'.length).split('/').pop() ?? '')
+/** tar member path minus its single-segment wrapper root: npm packs under
+ *  `package/`; a github codeload snapshot wraps in `<repo>-<sha>/`. Content
+ *  ids and the binary manifest are REL paths so the same file reads as the
+ *  same evidence under either root. A root-less member (no '/') keeps its
+ *  whole path — indexOf(-1)+1 = slice(0). */
+const tarRel = (p: string) => p.slice(p.indexOf('/') + 1)
+const isContentFile = (p: string) => {
+  const rel = tarRel(p)
+  return rel !== '' && !/(^|\/)\._/.test(rel) &&
+    CONTENT_BASENAME.test(rel.split('/').pop() ?? '')
+}
 
 /** Selection priority for the review budget — the prompt-injection surface
  *  the reviewer actually needs first. The tarball is fully buffered before
@@ -311,7 +319,7 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
           if (!isContentFile(entry.path)) {
             // non-whitelisted member: sniff the head for the binary manifest —
             // evidence kept, content discarded (opaque to text review anyway)
-            const rel = entry.path.slice('package/'.length)
+            const rel = tarRel(entry.path)
             let head: Buffer | null = null
             entry.on('data', (c: Buffer) => { head ??= c.subarray(0, 64) })
             entry.on('end', () => {
@@ -349,13 +357,13 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
           entry.on('end', () => {
             const headText = Buffer.concat(head).toString('utf8')
             if (whole) {
-              if (headText && !headText.includes('\0')) picked.set(entry.path.slice('package/'.length), headText)
+              if (headText && !headText.includes('\0')) picked.set(tarRel(entry.path), headText)
               else dropped++
               return
             }
             const tailText = Buffer.concat(tail).toString('utf8')
             const t = `${headText}\n…[文件过长——仅保留首 ${CONTENT_HEAD_CAP / 1024}KB 与末 ${CONTENT_TAIL_CAP / 1024}KB]…\n${tailText}`
-            if (!t.includes('\0')) picked.set(entry.path.slice('package/'.length), t)
+            if (!t.includes('\0')) picked.set(tarRel(entry.path), t)
             else dropped++
           })
         },
@@ -705,6 +713,25 @@ export function reviewVer(
     ? e.latestVersion ?? null : null
 }
 
+/** The content pin an AI review must anchor on — the npm version for npm
+ *  entries, the resolved COMMIT SHA (source.version) for github-kind.
+ *  reviewVer stays null for github (its slot verdict keys on name@''), so
+ *  queue selection needs a second derivation that admits the version-less
+ *  pin: pending entries review their own sha; legacy github entries join
+ *  the same first-launch sweep opt-in as npm legacy. A github entry without
+ *  a resolved sha has no bytes to pin the verdict to — stays out. */
+export function reviewPin(
+  e: CatalogIndex['plugins'][number],
+  includeLegacy = false,
+): string | null {
+  const v = reviewVer(e, includeLegacy)
+  if (v) return v
+  if (e.source?.kind !== 'github') return null
+  return (e.approval === 'pending' || (includeLegacy && e.approval === 'legacy'))
+    ? e.source.version ?? null
+    : null
+}
+
 /** Held versions that have NEVER received any verdict. Both held shapes:
  *  pendingUpdate (newer version behind a displayed one) and approval:pending
  *  on the entry itself (first version never released). ANY existing verdict —
@@ -736,7 +763,11 @@ export function unreviewedTargets(
   return index.plugins.filter(e => {
     if (wanted && !wanted.has(e.name.toLowerCase())) return false
     const ver = reviewVer(e, opts.includeLegacy === true)
-    if (!ver) return false
+    // github-kind: no version key exists — the slot is name@'' and the
+    // commit sha is the content anchor. Admission needs the PIN, while the
+    // verdict/brake/epoch checks below still key on `ver` (null for github
+    // → vkey name\0, the slot's own key).
+    if (!ver && !reviewPin(e, opts.includeLegacy === true)) return false
     if (opts.force) return true
     // a 'pass' predating the name's tombstone judged a DIFFERENT object —
     // the release gate refuses it (epochGoverning), and if the queue also
@@ -906,7 +937,21 @@ export async function main(
     // unreviewedTargets does, or a targeted run silently skips the sweep
     if (names && !names.has(e.name.toLowerCase())) return
     const ver = verOf(e)
-    if (!ver) return
+    if (!ver) {
+      // github-kind: the moved-commit case — source.version IS the recorded
+      // byte anchor and the slot verdict lives on name@'' with sha=the
+      // reviewed commit. A moved head (rescanStaleGh re-anchors the pin)
+      // means the verdict describes different bytes → re-review lands on
+      // the same slot and newest `at` governs, npm re-tag's equivalent.
+      const ghPin = e.source?.kind === 'github' ? e.source.version ?? null : null
+      if (!ghPin) return
+      const rec = seen.get(vkey(e.name, null))
+      if (rec?.sha && rec.sha !== ghPin) {
+        console.log(`[diagnose] ${e.name} commit moved (${rec.sha.slice(0, 12)}… → ${ghPin.slice(0, 12)}…) — re-reviewing${rec.source === 'human' ? ' on a HUMAN-verdicted key' : ''}`)
+        driftedSet.add(e)
+      }
+      return
+    }
     // package-braked slots can't apply any AI verdict — drift or not; skip
     // the sweep's packument fetch too (unreviewedTargets skips them as
     // well). --force is the explicit human override and bypasses both.
@@ -943,7 +988,10 @@ export async function main(
       // the name, and github-kind entries keep 'Owner/Repo' case. Raw e.name
       // here made every mixed-case entry's streak prune on load, so a
       // chronically failing github target could never reach MAX_ATTEMPTS.
-      const liveVer = new Map(idx.plugins.map(e => [e.name.toLowerCase(), verOf(e)]))
+      // verOf ?? '' — github slots key on name\0 (version null → ''): a raw
+      // null here never equaled the key's empty tail and github streaks
+      // pruned on load, so a chronically failing github target retried forever
+      const liveVer = new Map(idx.plugins.map(e => [e.name.toLowerCase(), verOf(e) ?? '']))
       for (const [k, x] of Object.entries(JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, { n: number; last: string }>)) {
         if (seen.has(k)) continue // drop keys that already got a verdict
         // drop keys whose entry vanished or bumped versions — the streak
@@ -984,17 +1032,25 @@ export async function main(
   const matDir = materialDirOf(idxPath)
   const rmFiles = new Set<string>()
   const works: Work[] = await mapPool(candidates, 8, async e => {
+    const gh = e.source?.kind === 'github'
+    // github: the reviewed-bytes anchor is the resolved commit sha itself —
+    // no packument lookup exists. `ver` keeps '?' so the verdict emits
+    // version:null (the name@'' slot); `pin` is the material/bundle token.
+    const ghPin = gh ? e.source?.version ?? null : null
     const ver = verOf(e) ?? '?'
+    const pin = ver === '?' ? ghPin : ver
     const slot = candidateSlot(e)
     const caps = slot?.capabilities ?? e.capabilities
     const vf = slot?.verification ?? e.verification
-    const sha = await shaFor(e.name, verOf(e))
+    const sha = gh ? ghPin ?? undefined : await shaFor(e.name, verOf(e))
     // same tarball under another version → reuse the NEWEST judgment on
     // those bytes (a re-tag/re-publish of identical content carries zero new
-    // signal — but a pass overturned since must not resurrect)
+    // signal — but a pass overturned since must not resurrect). For github
+    // t.version===null===verOf(e) → never a twin: the only sha-matching
+    // verdict is the slot's own, and a verdicted slot never reaches works.
     const t = sha ? bySha.get(`${e.name.toLowerCase()}\0${sha}`) : undefined
     const twin = t && t.version !== verOf(e) ? t : undefined
-    const staged = ver !== '?' ? readMaterialBundle(matDir, e.name, ver) : null
+    const staged = pin ? readMaterialBundle(matDir, e.name, pin) : null
     // contentFailed bundles are a miss, not a hit: the CI fetch failed (blip
     // or >CI-cap), and the daemon's own fetch may still succeed — consuming
     // the empty shell would permanently meta-only a package we could read
@@ -1002,13 +1058,23 @@ export async function main(
     if (staged && sha && staged.bundle.sourceSha && staged.bundle.sourceSha !== sha)
       rmFiles.add(staged.path) // proven stale — tarball moved under the bundle
     if (stagedHit) rmFiles.add(staged!.path) // consumed this run
-    // §5/§6: npm candidates get REAL package content in the material —
-    // twins and terminal verify-failed short-circuits never reach the model
-    // so their fetch is wasted; github-kind entries have no npm tarball
-    const content = (!stagedHit && !twin && e.source.kind === 'npm' && ver !== '?' && !terminalFailed(vf))
-      ? await contentMaterial(e.name, ver, await tarballOf(e.name, ver), deps.fetchFn).catch(() => [] as Material[])
+    // §5/§6: candidates get REAL package content in the material — npm via
+    // the registry tarball, github via the codeload snapshot AT THE PINNED
+    // sha (never HEAD — the review must see the bytes the verdict anchors).
+    // Twins and terminal verify-failed short-circuits never reach the model
+    // so their fetch is wasted.
+    const ghRepo = gh && /^[\w.-]+\/[\w.-]+$/.test(e.source?.repo ?? e.source?.id ?? '')
+      ? (e.source!.repo ?? e.source!.id)! : null
+    // the npm tarball URL resolves lazily inside the fetch branch — a staged
+    // bundle hit or a twin must not pay the packument lookup for a URL it
+    // never downloads
+    const content = (!stagedHit && !twin && pin && !terminalFailed(vf))
+      ? await contentMaterial(e.name, pin,
+          gh ? (ghPin && ghRepo ? `https://codeload.github.com/${ghRepo}/tar.gz/${ghPin}` : null)
+             : await tarballOf(e.name, pin),
+          deps.fetchFn).catch(() => [] as Material[])
       : []
-    const rec = driftedSet.has(e) ? seen.get(vkey(e.name, ver)) : undefined
+    const rec = driftedSet.has(e) ? seen.get(vkey(e.name, ver === '?' ? null : ver)) : undefined
     // a bundle's meta blocks are a CI-time snapshot — take only its
     // content-derived blocks (content:*, content-coverage, binary-manifest)
     // and pair them with LIVE reviewMaterial so a bundle built before
@@ -1025,7 +1091,10 @@ export async function main(
   // files are already in rmFiles from the works pass above.
   const keepKeys = new Set(
     unreviewedTargets(idx, allVerdicts, null, { ahead: true, includeLegacy })
-      .flatMap(e => verOf(e) ? [materialFileName(e.name, verOf(e)!)] : []))
+      .flatMap(e => {
+        const pin = reviewPin(e, includeLegacy)
+        return pin ? [materialFileName(e.name, pin)] : []
+      }))
   if (existsSync(matDir)) for (const f of readdirSync(matDir)) {
     if (f.endsWith('.json') && !keepKeys.has(f)) rmFiles.add(join(matDir, f))
   }
@@ -1195,7 +1264,10 @@ export async function main(
     let omlxErr: unknown = null
     if (llmUp && budgetLeft) {
       try {
-        r = await ornith(e, w.material, { think: Boolean(w.flagged || l05flag), version: w.ver === '?' ? null : w.ver })
+        // github's '?' slot has no semver for the prompt — the commit sha is
+        // the honest "what is being reviewed" identity for the judge
+        r = await ornith(e, w.material, { think: Boolean(w.flagged || l05flag),
+          version: w.ver === '?' ? (w.sha ? `commit ${w.sha}` : null) : w.ver })
         consecErr = 0
         console.log(`[diagnose] ${e.name}@${ver} ${judgeBackend}=${r.verdict} ${r.reasonZh.slice(0, 80)}`)
       } catch (x) {
@@ -1209,7 +1281,7 @@ export async function main(
       }
     }
     if (r !== null) {
-      attempts.delete(vkey(e.name, ver)) // a successful review clears the streak
+      attempts.delete(vkey(e.name, ver === '?' ? null : ver)) // a successful review clears the streak
       if (w.flagged) {
         // §10: AI has no verdict on red-flagged entries — the concern is the
         // vehicle, the LLM output is a DRAFT reason for the human reviewer
@@ -1224,10 +1296,10 @@ export async function main(
     } else {
       // an actual LLM call failing counts toward the streak; a skipped call
       // (omlx down at preflight) is an outage, not target poison (D-3)
-      const n = omlxErr ? (attempts.get(vkey(e.name, ver))?.n ?? 0) + 1 : 0
+      const n = omlxErr ? (attempts.get(vkey(e.name, ver === '?' ? null : ver))?.n ?? 0) + 1 : 0
       if (omlxErr) {
         console.error(`[diagnose] ${judgeBackend} failed for ${e.name}: ${omlxErr}`)
-        attempts.set(vkey(e.name, ver), { n, last: String(omlxErr).slice(0, 120) })
+        attempts.set(vkey(e.name, ver === '?' ? null : ver), { n, last: String(omlxErr).slice(0, 120) })
       }
       if (w.flagged) {
         const flags = [...(candidateSlot(e)?.capabilities ?? e.capabilities).redFlags].join('; ').slice(0, 300)
@@ -1243,7 +1315,7 @@ export async function main(
         emit(w, verdictRecord(e, 'concern',
           `AI 评审连续 ${n} 次失败（工具故障，非安全结论）——需人工复核`,
           { reasonEn: `AI review failed ${n} times in a row (tooling error, not a security finding) — needs human review`, sha: w.sha }))
-        attempts.delete(vkey(e.name, ver))
+        attempts.delete(vkey(e.name, ver === '?' ? null : ver))
       } else if (!budgetOut) console.log(`[diagnose] ${e.name} stays held (no verdict written)`)
     }
   }

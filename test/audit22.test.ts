@@ -95,11 +95,11 @@ describe('audit #10 — client consumption flow', () => {
     expect(m).toBeTruthy()
     const head = m![0]
     const tryPos = head.indexOf('try {')
-    const pinPos = head.indexOf('pinSpec(e)')
+    const pinPos = head.indexOf('installSpec(e)')
     expect(tryPos).toBeGreaterThanOrEqual(0)
-    expect(pinPos).toBeGreaterThan(tryPos)   // pinSpec inside the try block
+    expect(pinPos).toBeGreaterThan(tryPos)   // installSpec inside the try block
     // and the unguarded declaration must not appear before the try
-    expect(head.slice(0, tryPos)).not.toContain('pinSpec(e)')
+    expect(head.slice(0, tryPos)).not.toContain('installSpec(e)')
   })
 
   it('assertSpecForName rejects a trailing-empty version spec', () => {

@@ -9,7 +9,7 @@ import { Schema } from 'effect'
 import { createSignal, createEffect } from 'solid-js'
 import { insert } from 'solid-js/web'
 import { cleanSpec, dedupeToSpec, removeSpec, featuresMap, buildExtras } from './spec.js'
-import { fetchIndexCached, indexSnapshot, warmIndexCache, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, warmIndexCache, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, appendLog, clearLog, redactLog, keyLines, loadState, saveState, sanitizeState, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, installSpec, halvesToSync, halfState, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, isIndexUrl, isSkillsUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, t, tf, descOf, catLabel, setLangMode, langMode, EMPTY_STATE, scanSkillKeys, skillInstalledVer, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState } from './catalog.js'
 import { installSkillTar, uninstallSkillDir, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertUninstallRef, assertSpecForName, assertSkillId, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, skillsRoot, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
 import { PKG_VERSION } from './version.js'
@@ -434,7 +434,7 @@ export default Plugin.define({
         const clkPick = state().devVerPick ? verPicks.get(e.name) : undefined
         const clkPickOn = !!clkPick && !!e.latestVersion && clkPick !== e.latestVersion
           && (!ver || versionCmp(clkPick, ver) > 0)
-        const spec = clkPickOn ? `${e.name}@${clkPick}` : pinSpec(e)
+        const spec = clkPickOn ? `${e.name}@${clkPick}` : installSpec(e)
         // dual-nature entries deliver BOTH parts — installing only the skill
         // side silently drops the plugin half the package ships. `update`
         // (add pinned + config dedupe) is used for fresh installs too: it is
@@ -821,7 +821,7 @@ export default Plugin.define({
         const pluginLane = (async () => {
           for (const j of jobs) if (j.sync.plugin) {
             bump()
-            try { await safe.update({ name: j.e.name, spec: pinSpec(j.e) }); ok++; okPlugin++ } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
+            try { await safe.update({ name: j.e.name, spec: installSpec(j.e) }); ok++; okPlugin++ } catch (x) { wasCancelled(x) ? cancelled++ : fail++ }
           }
         })()
         const skillLane = (async () => {

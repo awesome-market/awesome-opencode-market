@@ -110,15 +110,18 @@ const ghRepoOf = (e: Pick<PluginEntry, 'source'>): string | null =>
     ? e.source!.repo! : null
 
 /** The two install-path halves, mirroring the market client's installPlan
- *  exactly: 'plugin' needs an npm spec (github plugins have no client route —
- *  the client itself refuses them); 'skill' resolves npm-tarball or
- *  github-codeload. installHint and verifyLabel both route through this so
- *  the label and the hint on the same page can never disagree. */
+ *  exactly: 'plugin' needs a pinned spec — npm name@ver or github
+ *  owner/repo#sha (the client installs git specs via `plugin add`); 'skill'
+ *  resolves npm-tarball or github-codeload. installHint and verifyLabel
+ *  both route through this so the label and the hint on the same page can
+ *  never disagree. */
+const GIT_SHA_SITE = /^[0-9a-f]{7,64}$/
 const installPaths = (e: PluginEntry): { plugin: boolean; skill: boolean } => {
   const gh = e.source?.kind === 'github'
   const parts = entryParts(e)
   return {
-    plugin: parts.includes('plugin') && !gh && !!e.latestVersion,
+    plugin: parts.includes('plugin') &&
+      (gh ? ghRepoOf(e) !== null && GIT_SHA_SITE.test(e.source?.version ?? '') : !!e.latestVersion),
     skill: parts.includes('skill') && (gh ? ghRepoOf(e) !== null : !!e.latestVersion),
   }
 }
@@ -139,16 +142,24 @@ const hasVerifyTarget = (e: PluginEntry): boolean => {
     || (e.source?.kind === 'github' && !!e.source.version)
 }
 
-/** Install instruction matching the market client's installPlan rules — a
- *  github plugin has no install path (the client itself refuses), so the
- *  detail page must not print a `plugin add` line that cannot work. Skills
- *  point at the site's own skills catalog; npm plugins pin the approved ver.
+/** Install instruction matching the market client's installPlan rules —
+ *  npm plugins pin `name@ver`; github plugins pin `owner/repo#<sha>` (the
+ *  reviewed commit — a bare repo would float to unreviewed HEAD). Entries
+ *  with no valid pin print no `plugin add` line that cannot work. Skills
+ *  point at the site's own skills catalog.
  *  `up` is the relative prefix back to site root (depth of the detail page). */
 export function installHint(e: PluginEntry, up = '../', landed?: Set<string>): string {
   const paths = installPaths(e)
   const bits: string[] = []
-  if (paths.plugin)
-    bits.push(`${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion!)}</code>`)
+  if (paths.plugin) {
+    // github-kind installs the reviewed commit, not a version: the spec is
+    // owner/repo#<sha> — the same bytes scan/AI/verify anchored on (a bare
+    // repo ref would float to unreviewed HEAD). paths.plugin already gated
+    // repo validity + sha shape, so the emitted spec is always well-formed.
+    bits.push(e.source?.kind === 'github'
+      ? `${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.source!.repo!)}#${esc(e.source!.version!)}</code>`
+      : `${bi('plugin:', '插件：')} <code>opencode plugin add ${esc(e.name)}@${esc(e.latestVersion!)}</code>`)
+  }
   // landed = slugs whose skill files actually shipped this build — a fetch
   // failure or skip_skills run must not link an empty catalog slot. The npm/
   // codeload install path in the market client is unaffected, so degrade to
