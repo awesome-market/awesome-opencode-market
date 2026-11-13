@@ -212,10 +212,13 @@ merge 幂等（verifiedAt 新鲜度守卫 + name@version+verifiedAt 去重），
 `bin/ai-diagnose-agent.sh` 是前台常驻守护循环（第三方保活程序监督的进程），每轮：`刷新脚本副本 → 跑一轮 ai-diagnose.sh → 按退出码睡眠`。启动：
 
 ```bash
-cd <repo> && ./bin/ai-diagnose-agent.sh
+cd <repo> && ./bin/ai-diagnose-agent.sh         # 本地 ornith judge（默认）
+cd <repo> && ./bin/ai-diagnose-agent.sh devin   # devin -p 单次会话 judge（AI_BACKEND=devin 透传，覆盖 ai.env）
 ```
 
-- 节拍：`DIAGNOSE_TICK`（默认 3600s，成功/无事轮次）/`DIAGNOSE_RETRY`（默认 300s，失败自动重试）；`DIAGNOSE_LIMIT=50`、`DIAGNOSE_BUDGET=45min` 控单轮规模
+- 节拍：`DIAGNOSE_TICK`（默认 1800s=30min，对齐 hourly catalog 节拍）/`DIAGNOSE_RETRY`（默认 300s，失败自动重试）；`DIAGNOSE_LIMIT=150`、`DIAGNOSE_BUDGET=45min` 控单轮规模
+- `DIAGNOSE_LEGACY=1` → 每轮带 `--include-legacy`——legacy 条目（含 legacy github）也进审队列；github pending 条目无条件进（有 `source.version` sha 即有字节锚，缺 sha fail-closed 不入队）
+- pipeline 代码跑在 `$CODE`（`~/.local/share/opencode-market-code`，钉 origin/main 的独立 checkout）——每轮 fetch+reset 自同步到最新 main，**你 cd 的 repo 只供 wrapper 脚本**；`$CAT` 是独立 catalog 分支 checkout，互不共享
 - 脚本三级刷新源：`$REPO` → `$CODE`（钉 origin/main）→ 本地缓存——外置卷未挂载/开发树脏都照跑
 - 网络隔离环境 git 走 `MARKET_GIT_PROXY`（如 `http://127.0.0.1:7890`）——shim 翻译成 `GIT_CONFIG_*` 环境注入覆盖 `~/.gitconfig`
 - 远端默认取 repo 的 origin，`MARKET_GIT_URL` 可覆盖
