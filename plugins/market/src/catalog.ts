@@ -215,6 +215,29 @@ export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string 
   return e.latestVersion ? `${e.name}@${e.latestVersion}` : e.name
 }
 
+/** Install spec for a github-kind plugin entry: `owner/repo#<commit sha>` —
+ *  the exact bytes scan/AI/verify anchored on (a bare `owner/repo` resolves
+ *  mutable HEAD — installing it would bypass the reviewed-artifact gate the
+ *  same way dist-tags.latest would for npm). Unlike gitPinRef's documented
+ *  HEAD fallback for legacy SKILL pins, an install spec must never resolve
+ *  a floating ref: missing OR malformed sha fails closed. */
+export function gitSpec(e: Pick<MarketEntry, 'name' | 'source'>): string {
+  const repo = e.source?.kind === 'github' ? (e.source.repo ?? e.source.id ?? '') : ''
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo))
+    throw new Error(`invalid github repo in catalog entry: ${repo.slice(0, 60)}`)
+  const v = e.source?.version
+  if (!v || !GIT_SHA_RE.test(v))
+    throw new Error(`invalid source pin in catalog: ${String(v ?? '').slice(0, 40)}`)
+  return `${repo}#${v}`
+}
+
+/** The spec `plugin add` should receive for an entry — npm pins name@ver,
+ *  github pins owner/repo#sha. Centralizing the kind-switch keeps install,
+ *  update and assertApprovedPin agreeing on one spec derivation. */
+export function installSpec(e: Pick<MarketEntry, 'name' | 'latestVersion' | 'source'>): string {
+  return e.source?.kind === 'github' ? gitSpec(e) : pinSpec(e)
+}
+
 /** Minimal npm packument shape the client reads — dist.integrity feeds the
  *  post-download drift check (the bytes the catalog reviewed); `time` feeds
  *  the dev-mode historical-version picker. */
@@ -694,7 +717,7 @@ export async function assertApprovedPin(getIndex: () => Promise<MarketIndex | nu
   // `pin === e.name` refuses the bare-name spec: it matches pinSpec's
   // latestVersion-less fallback but resolves dist-tags.latest — the
   // unapproved version this gate exists to hold back.
-  if (pinSpec(e) !== pin || pin === e.name) throw new Error('catalog moved — refresh data and retry')
+  if (installSpec(e) !== pin || pin === e.name) throw new Error('catalog moved — refresh data and retry')
   return e
 }
 
@@ -950,7 +973,7 @@ export function isDowngrade(e: MarketEntry, installedVer?: string): boolean {
 }
 
 /** Install routing: which parts of an entry can this client actually deliver.
- *  'plugin' needs an npm spec (github plugins have no install path here);
+ *  'plugin' needs a pinned spec — npm name@ver or github owner/repo#sha;
  *  'skill' resolves to npm tarball or github codeload. */
 export interface InstallPlan { plugin: boolean; skill: 'npm' | 'github' | null }
 export function installPlan(e: MarketEntry): InstallPlan {
@@ -964,8 +987,13 @@ export function installPlan(e: MarketEntry): InstallPlan {
     : []
   const gh = e.source?.kind === 'github'
   const ghRepo = gh && /^[\w.-]+\/[\w.-]+$/.test(e.source?.repo ?? '') ? e.source!.repo! : null
+  // github plugin route: opencode accepts git specs — `plugin add
+  // owner/repo#<sha>` installs the pinned commit (same bytes AI/scan/verify
+  // reviewed). A repo without a valid sha pin has no reviewed artifact to
+  // deliver — no route, fail closed like the malformed-contains rule.
+  const ghPinned = ghRepo !== null && GIT_SHA_RE.test(e.source?.version ?? '')
   return {
-    plugin: parts.includes('plugin') && !gh && !!e.latestVersion,
+    plugin: parts.includes('plugin') && (gh ? ghPinned : !!e.latestVersion),
     skill: !parts.includes('skill') ? null : gh ? (ghRepo ? 'github' : null) : (e.latestVersion ? 'npm' : null),
   }
 }

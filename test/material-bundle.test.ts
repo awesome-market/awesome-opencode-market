@@ -258,11 +258,20 @@ describe('material bundles — CI producer', () => {
     expect(b.material.some((x: Material) => x.id.startsWith('content:'))).toBe(true)
     expect(b.contentFailed).toBeUndefined()
   })
-  it('github-kind entry → no bundle (no npm tarball surface)', async () => {
+  it('github-kind entry → bundle built from the codeload snapshot at the pin', async () => {
     const gh = e({ source: { kind: 'github', id: 'o/r' }, approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' } })
     const { d, ip, vp } = files([gh])
     const matdir = join(d, 'material')
-    await materialMain(margv(ip, vp, matdir), { fetchFn: fetchFn(pkDoc('2.0.0', 'x', 'https://r.test/p.tgz'), Buffer.alloc(0)) })
-    expect(existsSync(join(matdir, 'pkg@2.0.0.json'))).toBe(false)
+    const tgz = await makeTgz(d, { 'README.md': '# hi' })
+    let url = ''
+    await materialMain(margv(ip, vp, matdir), {
+      fetchFn: (async (u: unknown) => { url = String(u); return new Response(new Uint8Array(tgz)) }) as unknown as typeof fetch,
+    })
+    const f = join(matdir, 'pkg@2.0.0.json')
+    expect(existsSync(f)).toBe(true)
+    // the producer fetched codeload AT THE PIN, never an npm tarball —
+    // github's byte anchor is the pin itself, not dist.integrity
+    expect(url).toBe('https://codeload.github.com/o/r/tar.gz/2.0.0')
+    expect(JSON.parse(readFileSync(f, 'utf8')).sourceSha).toBe('2.0.0')
   })
 })

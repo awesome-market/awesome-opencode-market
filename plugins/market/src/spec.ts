@@ -2,8 +2,23 @@
  *  Extracted for L2 unit tests — no fs/network, inject data. */
 
 /** Strip a trailing @version only when the @ isn't at index 0.
- *  '@scope/name' must NOT be stripped (leading @ is the scope). */
-export const cleanSpec = (s: string): string => s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+ *  '@scope/name' must NOT be stripped (leading @ is the scope). Git specs
+ *  normalize to owner/repo so a pinned `repo#sha`, a `github:` shorthand and
+ *  a github URL all resolve to the same catalog name — dedupe/uninstall/
+ *  installed-matching then compare one identity, not three spellings. */
+export const cleanSpec = (s: string): string => {
+  const noVer = s.replace(/^((?:@[^/]+\/)?[^@]+)@.*$/, '$1')
+  // git-shaped specs normalize to owner/repo; everything else keeps the
+  // npm form untouched — a `.git`-suffixed npm NAME ('foo.git@1.0') must
+  // not collapse into 'foo'
+  if (!/(#|^github:|^git\+https|^https:\/\/github\.com\/|^git@github\.com:)/i.test(noVer)) return noVer
+  return noVer
+    .replace(/^github:/i, '')
+    .replace(/^(?:git\+)?https:\/\/github\.com\//i, '')
+    .replace(/^git@github\.com:/i, '')
+    .replace(/\.git$/i, '')
+    .replace(/#.*$/, '')
+}
 
 /** Replace every spec resolving to the same name with a single exact spec —
  *  the pinned form survives (update flow: dedupe old specs down to the

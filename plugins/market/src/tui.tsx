@@ -9,7 +9,7 @@
 import { Plugin } from '@opencode/plugin/tui'
 import { useTerminalDimensions, useKeyboard } from '@opentui/solid'
 import { createSignal, createMemo, createEffect, For, Show, onMount, type JSX } from 'solid-js'
-import { fetchIndexCached, indexSnapshot, warmIndexCache, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, halfState, halvesToSync, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
+import { fetchIndexCached, indexSnapshot, warmIndexCache, fetchOutcome, search, sortEntries, categoriesOf, allCategories, inDays, hasUpdate, isDowngrade, verMarker, versionCmp, canInstall, installPlan, installSpec, halfState, halvesToSync, fetchPkgVersionMeta, fetchPkgVersions, integrityMatches, resolveIndexUrl, skillsUrl, indexAge, siteDetailUrl, removedReasonLabel, sanitize, scanSkillKeys, skillInstalledVer, t, tf, descOf, catLabel, setLangMode, EMPTY_STATE, sanitizeState, pinSpec, fmtN, gitPinRef, readBodyBounded, assertApprovedPin, assertFetchFinalUrl, enginesSatisfied, type MarketEntry, type MarketIndex, type RemovedEntry, type LocalState, type InstallPlan } from './catalog.js'
 import { dedupeToSpec, removeSpec, cleanSpec, featuresMap } from './spec.js'
 import { installSkillTar, uninstallSkillDir, globalSkillsRoot, MAX_SKILL_TGZ } from './skill-install.js'
 import { assertSpecForName, skillId, readJson, strArrayField, writeJsonAtomic, marketLogPath, appendBounded, restrictedEnv, configPath, writeSkillPermission, withConfigLock, probeActivation, overlayConfigPins } from './hostx.js'
@@ -339,7 +339,7 @@ export default Plugin.define({
         let pin: string
         // pinSpec itself throws on a crafted latestVersion — outside the try
         // it escaped as an unhandled rejection instead of a status line
-        try { pin = usePick ? `${e.name}@${pick}` : pinSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return 'fail' }
+        try { pin = usePick ? `${e.name}@${pick}` : installSpec(e); assertSpecForName(e.name, pin) } catch (x) { setStatus(`install fail ${e.name}: ${String(x)}`); return 'fail' }
         // claim BEFORE the awaits — the pin recheck (network) and the dynamic
         // import left jobs empty, so 'C' hit a noop (cancel lied: status said
         // cancelled while the spawn still ran) and a second 'i'/sweep lane

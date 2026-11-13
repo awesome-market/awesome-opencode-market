@@ -254,24 +254,43 @@ export function docketTargets(
     }
     const ver = candidateVer(e) ?? null
     if (!ver) {
-      // repo-only pending (latestVersion null): unreviewedTargets requires a
-      // version, so AI never writes a verdict — without a surface the entry
-      // sits invisible+pending forever. A PER-ENTRY issue was the old design;
-      // at real scale (500+ repo-only pendings) that is tracker spam the
-      // maintainer can't act on anyway — aggregate into ONE standing issue
-      // whose body lists the queue; entries drop out as human verdicts land.
+      // repo-only pending (latestVersion null): the github slot verdict keys
+      // on name@'' — AI reviews at the pinned commit sha now, so a verdicted
+      // entry surfaces like a versioned target (AI concern → per-entry
+      // issue, AI pass → announce track). Only the still-UNVERDICTED tail
+      // aggregates into the standing backlog issue: at real scale (500+
+      // repo-only pendings) per-entry issues for "queue not yet drained"
+      // are tracker spam the maintainer can't act on anyway.
       // !latestVersion (not === null): a malformed '' pending would
       // otherwise fall through BOTH branches — no versioned target AND
       // no backlog row — invisible forever. Empty reads as version-less.
-      if (e.approval === 'pending' && !e.latestVersion
-          && !epochGoverning(latest.get(vkey(e.name, null)), e.name, tomb)) {
-        repoOnly.push({
-          name: e.name,
-          ...(held ? { heldAt: held } : {}),
-          ...(meta.unscanned ? { unscanned: true } : {}),
-          ...(meta.redFlags ? { redFlags: meta.redFlags } : {}),
-          ...(meta.findings ? { findings: meta.findings } : {}),
-        })
+      if (e.approval === 'pending' && !e.latestVersion) {
+        const rec = epochGoverning(latest.get(vkey(e.name, null)), e.name, tomb)
+        if (!rec) {
+          repoOnly.push({
+            name: e.name,
+            ...(held ? { heldAt: held } : {}),
+            ...(meta.unscanned ? { unscanned: true } : {}),
+            ...(meta.redFlags ? { redFlags: meta.redFlags } : {}),
+            ...(meta.findings ? { findings: meta.findings } : {}),
+          })
+        } else if (rec.source === 'ai') {
+          // mirror the versioned-target row: a human verdict on the same
+          // slot attaches as context; `version: null` renders [review] name
+          // with no @suffix — the github slot's own issue
+          const hv = epochGoverning(human.get(vkey(e.name, null)), e.name, tomb)
+          out.push({
+            name: e.name, version: null, verdict: rec.verdict,
+            ...(rec.reason ? { reason: rec.reason } : {}),
+            ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
+            ...(hv ? { humanVerdict: hv } : {}),
+            ...(rec.sha ? { verdictSha: rec.sha } : {}),
+            maturity: !announced.has(akey(rec)) ? 'pending-announce'
+              : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
+            ...meta,
+          })
+        }
+        // rec.source === 'human': slot is decided — no row, no backlog
       }
       continue
     }
