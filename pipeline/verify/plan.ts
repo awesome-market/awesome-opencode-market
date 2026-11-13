@@ -219,7 +219,14 @@ if (isMain(import.meta.url)) {
   // a negative/zero cap would slice(0,-N) — verify nearly the whole queue
   // instead of none; only a positive integer is an operator cap
   const capNum = Number(process.env.VERIFY_CAP)
-  const cap = Number.isFinite(capNum) && capNum > 0 ? Math.floor(capNum) : 48
+  // cap is a CEILING, not a quota: it binds only while a backlog exists —
+  // an eligible queue of 5 returns 5 regardless. A flat small cap throttled
+  // DRAIN too: at 48/run the backlog cleared at ~192/day even though the
+  // real cooldown stage is the digest announcement window + maturity gate,
+  // not measurement speed. Entries unmeasured before the daily digest just
+  // lose a publication day — slow verify buys no safety, only delay.
+  // Default = drain ceiling; an explicit operator cap still wins.
+  const cap = Number.isFinite(capNum) && capNum > 0 ? Math.floor(capNum) : 288
   // optional verdict feed — a condemned slot isn't worth a shard measuring it.
   // Absent (local runs) the queue just doesn't apply the verdict filter.
   const verdicts = verdictsPath ? loadVerdicts(verdictsPath) : []

@@ -13,11 +13,11 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: 'comma-separated npm names to verify (empty = plan from index cap 48)'
+        description: 'comma-separated npm names to verify (empty = plan from index)'
         required: false
         default: ''
       cap:
-        description: 'max targets to plan this run (empty = 48; raise to drain backlog)'
+        description: 'max targets to plan this run (empty = 288 ceiling; lower to throttle, raise to drain backlog)'
         required: false
         default: ''
       retest:
