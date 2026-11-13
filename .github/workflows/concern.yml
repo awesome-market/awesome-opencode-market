@@ -236,7 +236,7 @@ jobs:
             // entry truth, not the typed spec shape — a repo-shaped spec can
             // resolve to an npm twin via source.repo, and an npm entry has a
             // real version slot + integrity anchor (never version:null/commit)
-            const isRepo = e?.source?.kind === 'github'
+            const isRepo = e?.source?.kind === "github"
             let v = process.argv[2]
             // `pkg@*` = explicit whole-package scope → a version:null verdict,
             // which applyMatureVerdicts reads as a package-level brake (every
@@ -251,11 +251,11 @@ jobs:
             // pkgAll meaning npm-package-scope).
             const pkgAll = v === "*" && !isRepo
             if (isRepo || pkgAll) v = ""
-            // mirror candidateVer's slot rule: a PENDING entry's candidate is
+            // mirror the candidateVer slot rule: a PENDING entry candidate is
             // the entry itself — a residual pendingUpdate is the B3 inverted
-            // state (publish-merge drops it), so the hold's version must not
+            // state (publish-merge drops it), so a held version must not
             // shadow latestVersion as the verdict target
-            else if (!v && !isRepo) v = (e?.approval === 'pending' ? e?.latestVersion : e?.pendingUpdate?.version ?? e?.latestVersion) || ""
+            else if (!v && !isRepo) v = (e?.approval === "pending" ? e?.latestVersion : e?.pendingUpdate?.version ?? e?.latestVersion) || ""
             // vstatus keyed to the RESOLVED slot (HV-4): a verdict on the
             // displayed version while a hold exists must not report the held
             // slot verification; a dead-slot version has no known status
@@ -264,14 +264,14 @@ jobs:
               : (v && e?.latestVersion === v
                   ? (e?.verification?.status ?? "")
                   // repo entries have exactly one slot — its status IS the
-                  // verdict's target status (H-17 parity: an unverified repo
+                  // verdict target status (H-17 parity: an unverified repo
                   // pass must not promise release either)
                   : (isRepo ? (e?.verification?.status ?? "") : ""))
             // flags must describe the slot the verdict LANDS on — the old
-            // `slot ?? e` fallback reported the DISPLAY version's redFlags
+            // `slot ?? e` fallback reported the DISPLAY version redFlags
             // for a dead-slot verdict (V≠held≠displayed), so the ack could
             // warn "pass overrides N flags" about bytes that release nothing.
-            // v==='' covers repo + pkg@* package scope → entry-level flags.
+            // v==="" covers repo + pkg@* package scope → entry-level flags.
             const flags = v === ""
               // a package-scope / repo verdict governs ALL slots — the ack
               // must union display+hold flags, else a pkg@* verdict on an
@@ -284,12 +284,12 @@ jobs:
                   ? (e?.capabilities?.redFlags?.length ?? 0)
                   : 0
             console.log(JSON.stringify({
-              v, heldver: e?.approval === 'pending' ? '' : e?.pendingUpdate?.version ?? "",
+              v, heldver: e?.approval === "pending" ? "" : e?.pendingUpdate?.version ?? "",
               displayed: e?.latestVersion ?? "", vstatus,
               pkgAll: pkgAll ? "1" : "",
               approval: e?.approval ?? "",
               flags,
-              // github-kind byte anchor — repo verdicts pin the entry's
+              // github-kind byte anchor — repo verdicts pin the entry
               // current commit (source.version): the bytes under review now
               srcver: e?.source?.version ?? "",
               isrepo: isRepo ? "1" : "0",
@@ -354,7 +354,7 @@ jobs:
               version: process.argv[2] || null,
               verdict: process.argv[3],
               ...(process.argv[4] ? { reason: process.argv[4] } : {}),
-              // amend: reason-only edit — reuse the prior line's timestamp so
+              // amend: reason-only edit — reuse the prior-line timestamp so
               // its digest announcement key (maturity window) stands
               at: process.argv[8] || new Date().toISOString(),
               source: "human",
@@ -666,25 +666,25 @@ jobs:
             const names = process.argv[1].split("\n").filter(Boolean)
             const ok = [], notes = []
             for (const n of names) {
-              // case-insensitive like verify's targets narrowing — a case
+              // case-insensitive like the verify targets narrowing — a case
               // typo is not "not in catalog"; emit the INDEX spelling so the
               // dispatched targets are canonical
               // name match first, then source.repo — same dual-key as the
-              // verdict channel: '/retest owner/repo' on an npm twin resolves
-              // to the npm entry's canonical name, not "不在目录"
+              // verdict channel: `/retest owner/repo` on an npm twin resolves
+              // to the npm entry canonical name, not "不在目录"
               const e = idx.plugins.find(p => p.name.toLowerCase() === n.toLowerCase())
                 ?? idx.plugins.find(p => (p.source?.repo ?? "").toLowerCase() === n.toLowerCase())
               // B3 slot rule — same as the verdict path above: a PENDING
-              // entry's candidate is the entry itself; a residual
+              // entry candidate is the entry itself; a residual
               // pendingUpdate is the inverted state and its version/flags
               // describe the stale hold, not the verifiable target
-              const pu = e?.approval === 'pending' ? undefined : e?.pendingUpdate
+              const pu = e?.approval === "pending" ? undefined : e?.pendingUpdate
               const v = pu?.version ?? e?.latestVersion
               if (!e) { notes.push(`${n} 不在目录`); continue }
               // github-kind entries have latestVersion=null but ARE verifiable —
               // the planner installs `owner/repo#sha` from source.repo/version —
               // a sha-less source.version has no reviewed bytes to measure and
-              // the plan drops it: don't promise a dispatch that does nothing
+              // the plan drops it: do not promise a dispatch that does nothing
               const ghInstallable = !v && e.source?.kind === "github" && !!(e.source.repo || e.source.id) && !!e.source?.version
               if (!v && !ghInstallable) { notes.push(`${n} 无可验证版本/锚点`); continue }
               const caps = pu?.capabilities ?? e.capabilities

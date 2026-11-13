@@ -635,9 +635,9 @@ jobs:
             const i=require("fs").readFileSync(0,"utf8")
             const n=process.env.SUB_NAME||"", r=process.env.SUB_REPO||""
             const iss=Number(process.env.ISSUE_NUM||0)
-            // prefer THIS issue\'s seed row — a same-package seed from another
-            // issue is still a valid fallback anchor, but the verdict should
-            // pin the artifact THIS issue\'s review actually scanned
+            // prefer the seed row belonging to THIS issue — a same-package seed
+            // from another issue is still a valid fallback anchor, but the
+            // verdict should pin the artifact this issue review actually scanned
             let hit=null, own=null
             for(const l of i.split("\n")){try{const s=JSON.parse(l)
               // case-insensitive both sides — seedLine stores canonical

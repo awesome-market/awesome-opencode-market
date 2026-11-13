@@ -117,7 +117,7 @@ describe('concern.yml workflow contract (audit #5 fresh pass)', () => {
     // version/flags describe the stale hold, not the verifiable target
     const i = wf.indexOf('const pu =')
     expect(i).toBeGreaterThan(-1)
-    expect(wf.slice(i, i + 400)).toContain("approval === 'pending' ? undefined : e?.pendingUpdate")
+    expect(wf.slice(i, i + 400)).toContain('approval === "pending" ? undefined : e?.pendingUpdate')
   })
   it('resolve passes the typed version through — the INFO kind check owns the null rule', () => {
     // guard the parser-side contract: `if (repo) ver = ''` must not come back —
