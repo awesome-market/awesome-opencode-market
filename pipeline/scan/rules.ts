@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r4'
+export const RULESET_VERSION = 'r5'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -17,11 +17,23 @@ const isPkgJson = (p: string) => /(^|\/)package\.json$/.test(p)
 export const RULES: Rule[] = [
   {
     id: 'lifecycle-script', sev: 'high',
-    // every script npm can execute at install/pack time — prepublish is
-    // deprecated but still runs in old npm; prepack/prepublishOnly/postpack
-    // run on npm pack (a git/tarball-install vector)
-    test: (p, c) => isPkgJson(p) && c != null && /"(preinstall|postinstall|install|prepublish|prepublishOnly|prepack|postpack)"\s*:\s*"[^"]+"/.test(c)
-      ? 'npm lifecycle script (install/pack stage) — code runs at install time' : null,
+    // install-stage only: these run on the CONSUMER's machine during
+    // npm install (prepublish is deprecated but still ran on install in
+    // old npm). Pack-stage hooks (prepublishOnly/prepack/postpack) run
+    // on the author's machine at publish/pack — downgraded to the
+    // medium 'pack-script' rule below; they gated ~half of all
+    // lifecycle hits as false positives.
+    test: (p, c) => isPkgJson(p) && c != null && /"(preinstall|postinstall|install|prepublish)"\s*:\s*"[^"]+"/.test(c)
+      ? 'npm lifecycle script (install stage) — code runs at install time' : null,
+  },
+  {
+    id: 'pack-script', sev: 'medium',
+    // runs on npm pack/publish on the publisher's machine, not on
+    // consumer install — a maintainer-side supply-chain signal, not a
+    // consumer red flag (prepare remains 'high' via its own rule: it
+    // DOES run when installing a git/tarball dep)
+    test: (p, c) => isPkgJson(p) && c != null && /"(prepublishOnly|prepack|postpack)"\s*:\s*"[^"]+"/.test(c)
+      ? 'npm pack/publish-stage script — runs on publisher machine, not on install' : null,
   },
   {
     id: 'prepare-script', sev: 'high',
