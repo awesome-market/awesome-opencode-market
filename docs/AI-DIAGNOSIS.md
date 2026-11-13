@@ -34,13 +34,15 @@
 >   公告行下期自动熟）
 > - **应用顺序钉死**：run 开头先对 old index 应用成熟 verdict 再跑
 >   发现比对——否则新版顶替 pendingUpdate 会丢弃"已审未放"版本数据
-> - pendingUpdate 的 AI 审**等 verify 结果**再跑（48h 降级硬审）
+> - pendingUpdate 的 AI 审**不等 verify**——审核与实测并行跑（v3.5 起
+>   取消 48h 等待窗：冷却靠日报公示+成熟放行，不靠测量顺序；全量重审
+>   场景下等 verify 会把整个队列锁死在测量环节）
 > - 红旗件 AI 写 `concern`+草稿当 reason——草稿顺 verdict 进日报
 > - `trustFlags` 拆身份级（挂展示层）/ 版本级 delta（挂 pendingUpdate）
 > - legacy backfill 批量翻牌 >5% → 告警+人工确认闸
 >
 > v3.3 复审三轮修正（补一个真实放毒门槛 + 一条人工死路）：
-> - **release 需 verification 通过**：48h 降级只降 AI 物料不降门槛——
+> - **release 需 verification 通过**：判词先行不先放行——
 >   `verification.status!=='verified'`（品类豁免除外）即使 verdict
 >   成熟也不释放；verify 宕机=自然 fail-closed 冻结
 > - 二次拦截收窄为 **`source:ai` 的 pass**——source 由我们代码盖章
@@ -285,8 +287,8 @@ skill 投毒的本质区别：毒必须写在明面上（藏了就毒不到人�
 github-kind 条目无 semver：`source.version` 是已解析 commit sha——
 codeload@sha 就是不可变快照，判词锚 `version:null + sha=commit`，
 `reviewPin` 把它当 npm 版本的等价物（pending 认 `source.version`，
-legacy 走 `--include-legacy`；缺 sha 的条目无字节锚不入队，fail-
-closed 不浮 HEAD）。复审触发=sha 漂移（`source.version` ≠ 判词
+legacy 默认入队——`--no-legacy` 才是逃生口；缺 sha 的条目无字节锚
+不入队，fail-closed 不浮 HEAD）。复审触发=sha 漂移（`source.version` ≠ 判词
 sha 即字节已变）；concern 把 `approval` 打回 `pending` 撤下。客户端
 `plugin add owner/repo#<sha>` 装的是同一 pin——审/判/装三处字节
 锚定一致，不再是"近似语义"。
@@ -388,10 +390,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
     落 pending 时 verdict 已在，上日报后同趟释放（by design）
   - 两个写者（本地 AI 直推 + GitHub approve job）→ push 冲突时
     fetch+rebase 重试，同 ingest 现有模式
-- ai-diagnose 对 pendingUpdate 的 audit **等 `verification.status
-  !== 'unverified'` 再跑**（48h 无结果才降级硬审——**降级只降
-  AI 物料，release 仍需 verified**，不放毒）——料不全的 audit
-  会被后来的 verify-fail 推翻，白费 token；新 pending 条目同理
+- ai-diagnose 对 pendingUpdate 的 audit **不等 verify 状态**（v3.5
+  取消 48h 等待窗——AI 判词与安装实测是平行轨道，**release 仍需
+  verified**，不放毒；retryable failed 槽位仍等重试预算耗尽再写
+  机械 concern，那是防"瞬时失败被永久误判"的正确性闸，不是限速）
 - legacy backfill 加闸：单趟 concern 翻牌 >5% 存量 → 批量告警 +
   人工确认再生效（防模型/阈值事故把站点清空一角）
 - 新条目 → `approval: pending`；存量迁移 → `approval: 'legacy'`
@@ -501,8 +503,8 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - [x] 版本 bump → pendingUpdate 挂起，展示字段钉旧版；pass 后升级
 - [x] 挂起版不重复全量扫；rollback 检测不误报；sec-delta 归
       pendingUpdate、身份级 flag 留展示层
-- [x] pendingUpdate 的 AI 审等 verify 出结果再跑（48h 只降级
-      物料，不降 release 门槛）
+- [x] pendingUpdate 的 AI 审不等 verify 出结果（v3.5：判词先行，
+      release 门槛不变——verify 实测独立推进）
 - [x] verify-failed **终态** → 直接写 concern 带 verify 摘要，不调
   LLM（可重试 failed 归 verify 自愈，不提前钉死）
 - [x] verify 测的版 == 条目批准版（无错位）；覆盖 pendingUpdate 目标

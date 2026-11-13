@@ -74,14 +74,14 @@ describe('audit#4 r9 — github-kind entries review at the pinned commit', () =>
     // no bytes to re-review, so --force can't conjure one either
     expect(unreviewedTargets(idx([noSha]), [], new Set(['owner/repo']), { force: true })).toEqual([])
   })
-  it('legacy github entry → excluded by default, admitted by includeLegacy (first-launch sweep)', () => {
+  it('legacy github entry → admitted by default, excluded via includeLegacy:false', () => {
     const lg = entry({
       name: 'Owner/Repo', slug: 'owner/repo',
       source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 42, version: 'c0ffee' },
       latestVersion: null, approval: 'legacy',
     })
-    expect(unreviewedTargets(idx([lg]), [])).toEqual([])
-    expect(unreviewedTargets(idx([lg]), [], null, { includeLegacy: true })).toHaveLength(1)
+    expect(unreviewedTargets(idx([lg]), [])).toHaveLength(1)
+    expect(unreviewedTargets(idx([lg]), [], null, { includeLegacy: false })).toEqual([])
   })
   it('an ai verdict on name@null → excluded (slot decided; a moved commit re-enters via the drift sweep)', () => {
     const av = v({ name: 'owner/repo', version: null, sha: 'c0ffee' })

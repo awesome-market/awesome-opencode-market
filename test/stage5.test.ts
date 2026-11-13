@@ -222,15 +222,14 @@ describe('renderDigest', () => {
     expect(md).not.toContain('`awaiting-run` v2.0 · 已公告·待放行闸')
     expect(md).not.toContain('`awaiting-run` v2.0 · 已裁决·待日报公告')
   })
-  it('D-C pendingReview shares unreviewedTargets — unverified <48h held is deferred, not counted', () => {
-    // 'young' is held+unverified but held <48h → diagnose defers to verify;
-    // counting it as review backlog inflates §⑤ vs what diagnose picks up
+  it('D-C pendingReview shares unreviewedTargets — every unjudged pending entry counts', () => {
+    // unverified no longer defers to verify: both entries are review targets
     const young = entry({ name: 'young', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-03T12:00:00Z' })
     const reviewable = entry({ name: 'old', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-01T00:00:00Z' })
     const md = renderDigest({
       index: idx([young, reviewable]), verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md).toContain('pending review — 1')
+    expect(md).toContain('pending review — 2')
   })
 })
 
@@ -314,13 +313,13 @@ describe('unreviewedTargets (diagnose candidate pick)', () => {
     const old = v({ name: 'pkg', version: '1.0.0' })
     expect(unreviewedTargets(idx([bump]), [old]).map(e => e.name)).toEqual(['pkg'])
   })
-  it('unverified <48h defers to the verify run; past 48h reviews anyway', () => {
+  it('unverified reviews immediately at any age — no verify-wait', () => {
     const young = entry({ name: 'young', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
     const old = entry({ name: 'old', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: '2026-01-01T00:00:00Z' })
     const verified = entry({ name: 'done', approval: 'pending', verification: { status: 'verified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
     const now = '2026-01-10T00:00:00Z'
     expect(unreviewedTargets(idx([young, old, verified]), [], null, { now }).map(e => e.name))
-      .toEqual(['old', 'done'])  // young unverified waits; verified never waits
+      .toEqual(['old', 'young', 'done'])  // FIFO by heldAt — nobody waits on verify
   })
   it('NaN heldAt/firstSeenAt is treated as old (reviewable, not stuck)', () => {
     const nan = entry({ name: 'nan', approval: 'pending', verification: { status: 'unverified' }, firstSeenAt: 'not-a-date' })
@@ -344,23 +343,24 @@ describe('unreviewedTargets (diagnose candidate pick)', () => {
     const npm = entry({ name: 'my-pkg', approval: 'pending', firstSeenAt: '2026-01-01T00:00:00Z' })
     expect(unreviewedTargets(idx([npm]), [], new Set(['MY-PKG']))).toHaveLength(1)
   })
-  it('includeLegacy queues legacy npm displayed versions — opt-in only', () => {
+  it('legacy entries queue by default — opt-out via includeLegacy:false', () => {
     const leg = entry({ name: 'old-pkg', approval: 'legacy' })
     const ghLeg = entry({ name: 'repo-only', approval: 'legacy', latestVersion: null, source: { kind: 'github', id: 'o/r' } })
     const app = entry({ name: 'kept', approval: 'approved' })
-    // default: legacy stays out — a bare run must not fan incumbents into the LLM
-    expect(unreviewedTargets(idx([leg, ghLeg, app]), [])).toEqual([])
-    // opt-in: legacy npm with a version queues; versionless github legacy cannot key a verdict
-    const t = unreviewedTargets(idx([leg, ghLeg, app]), [], null, { includeLegacy: true })
-    expect(t.map(e => e.name)).toEqual(['old-pkg'])
+    // legacy is a normal review target — a pinned unverdicted slot belongs
+    // in the queue regardless of when the entry was grandfathered
+    const t = unreviewedTargets(idx([leg, ghLeg, app]), [])
+    expect(t.map(e => e.name)).toEqual(['old-pkg'])   // versionless github legacy still can't key a verdict
+    // ops escape hatch: includeLegacy:false restores the narrow queue
+    expect(unreviewedTargets(idx([leg, ghLeg, app]), [], null, { includeLegacy: false })).toEqual([])
   })
-  it('includeLegacy respects existing verdicts and the 48h unverified defer', () => {
+  it('existing verdicts still exclude the slot; unverified reviews anyway', () => {
     const verdicted = entry({ name: 'done', approval: 'legacy' })
     const av = v({ name: 'done', version: '1.0.0' })
     const young = entry({ name: 'young', approval: 'legacy', verification: { status: 'unverified' }, firstSeenAt: '2026-01-09T12:00:00Z' })
     const now = '2026-01-10T00:00:00Z'
-    const t = unreviewedTargets(idx([verdicted, young]), [av], null, { includeLegacy: true, now })
-    expect(t).toEqual([])  // verdicted excluded; young unverified still defers
+    const t = unreviewedTargets(idx([verdicted, young]), [av], null, { now })
+    expect(t.map(e => e.name)).toEqual(['young'])  // verdicted excluded; unverified reviews immediately
   })
 })
 

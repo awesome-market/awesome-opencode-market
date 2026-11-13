@@ -87,18 +87,18 @@ describe('audit#4 — reviewMaterial describes the candidate, not the hold', () 
   })
 })
 
-describe('audit#4 — defer clock reads the candidate slot', () => {
-  it('pending+pu: entry unverified+fresh defers even though the hold is verified', () => {
+describe('audit#4 — no verify-wait: unverified candidates review immediately', () => {
+  it('pending+pu: entry unverified+fresh is a target — verify lands in parallel', () => {
     const fresh = new Date().toISOString()
     const t = inverted()
     t.verification = { status: 'unverified' }
-    t.capabilities = caps([], [], fresh)   // scannedAt=now → held <48h
+    t.capabilities = caps([], [], fresh)   // scannedAt=now — irrelevant: no 48h defer anymore
     t.pendingUpdate = { version: '9.9.9', heldAt: '2019-01-01T00:00:00Z',
       capabilities: caps([], [], '2019-01-01T00:00:00Z'),
       verification: { status: 'verified' } } as never
-    expect(unreviewedTargets(idx([t]), [])).toHaveLength(0)
-    // same entry with a STALE hold clock would have been reviewed pre-fix
-    // (hold verification was 'verified' → no defer at all)
+    expect(unreviewedTargets(idx([t]), [])).toHaveLength(1)
+    // review throughput no longer waits on install evidence — the release
+    // gate's `verified` requirement is what holds publication, not ordering
   })
   it('candidateHeldAt ignores the hold heldAt on pending entries', () => {
     const t = inverted()   // pu.heldAt=2019, e.capabilities.scannedAt='t'(NaN) → firstSeenAt

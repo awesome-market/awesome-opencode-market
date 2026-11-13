@@ -123,18 +123,18 @@ describe('latestShaVerdicts — twin reuse takes the NEWEST judgment on the byte
   })
 })
 
-describe('unreviewedTargets — 48h verify-wait measures the CANDIDATE version age', () => {
+describe('unreviewedTargets — unverified candidates review at any scan age', () => {
   const idx = (scannedAt: string) => mkIndex([mkEntry('p', {
     approval: 'pending', firstSeenAt: '2020-01-01',
     capabilities: { scannedAt, rulesetVersion: 'r', findings: [], redFlags: [] },
     verification: { status: 'unverified' },
   })])
-  it('freshly-scanned pending candidate defers even on an ancient entry', () => {
-    // firstSeenAt is entry-level and never bumps — the old clock would have
-    // expired the verify-wait instantly for every re-scanned candidate.
-    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), [], null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(0)
+  it('freshly-scanned pending candidate reviews immediately', () => {
+    // no verify-wait anymore — install evidence and AI judgment run in
+    // parallel; coupling them stalled a whole backlog behind verify
+    expect(unreviewedTargets(idx('2026-02-02T00:00:00Z'), [], null, { now: '2026-02-02T12:00:00Z' })).toHaveLength(1)
   })
-  it('candidate scanned long ago → defer expired, degraded review proceeds', () => {
+  it('candidate scanned long ago → same, a target either way', () => {
     expect(unreviewedTargets(idx('2026-02-01T00:00:00Z'), [], null, { now: '2026-02-10T00:00:00Z' })).toHaveLength(1)
   })
 })
