@@ -990,9 +990,28 @@ export async function main(
   // suspicious signal this run can see — under a >limit backlog it must not
   // starve behind the FIFO tail (D-9). Set dedupes a --force overlap.
   const queue = [...new Set([...drifted, ...targets])]
-  const backlog0 = queue.length // pre-limit queue depth — the "server still owes" counter
+  const backlog0 = queue.length // pre-limit ACTIONABLE queue depth
   const candidates = queue.slice(0, limit)
-  console.log(`[diagnose] ${candidates.length} of ${backlog0} pending candidates (${drifted.length} sha-drifted)`)
+  // raw unjudged backlog — every pinned slot still missing a matching verdict,
+  // ignoring THIS run's defer gates (verify-48h wait, retryable failures,
+  // legacy admission flag). backlog0 is what this process may take; uncovered
+  // is what the catalog still owes — the number an operator actually watches.
+  const uncovered = new Set<string>()
+  const shaSeen = new Set(allVerdicts.filter(v => v.sha).map(v => `${v.name.toLowerCase()} ${v.sha}`))
+  for (const e of idx.plugins) {
+    const gh = e.source?.kind === 'github'
+    const ver = reviewVer(e, true)
+    if (!ver && !reviewPin(e, true)) continue
+    const k = vkey(e.name, ver)
+    const covered = gh
+      ? seen.has(k) && shaSeen.has(`${e.name.toLowerCase()} ${(e.source!.version ?? '').toLowerCase()}`)
+      : seen.has(k)
+    if (!covered) uncovered.add(k)
+  }
+  console.log(`[diagnose] ${candidates.length} of ${backlog0} pending candidates (${uncovered.size} total unjudged, ${drifted.length} sha-drifted)`)
+  // keys this run has already verdicted — emit() records them so the
+  // per-item 队剩 counter decrements only when a slot truly leaves the queue
+  const emitted = new Set<string>()
 
   // per-target consecutive ornith-failure streak, persisted in --state so a
   // chronically unparseable target stops burning LLM tokens after N tries
@@ -1222,6 +1241,10 @@ export async function main(
     // works (reviewVer supplies latestVersion instead). Every emit path
     // funnels here, so normalize once rather than at each call site.
     v.version = w.ver === '?' ? null : w.ver
+    // only backlog keys decrement 队剩 — a retag/forced emit on an
+    // already-covered slot must not drain the counter for work it never owed
+    const ek = vkey(w.e.name, v.version)
+    if (uncovered.has(ek)) emitted.add(ek)
     if (w.retagOfHuman) {
       v.reason = `同版本换包（该键曾有人工裁决，re-tag 自动重审）——${v.reason ?? ''}`
       if (v.reasonEn) v.reasonEn = `re-tagged after a human verdict — auto re-review — ${v.reasonEn}`
@@ -1231,11 +1254,12 @@ export async function main(
   let budgetOut = false // skips LLM calls only — free verdicts still emit
   let consecErr = 0     // D-12 circuit breaker — reset on any successful call
   // per-item progress tag: 批 i/N (this batch's done/total) · 剩 (batch
-  // remaining) · 队剩 (backlog still unverdicted — emit() is what shrinks it,
-  // so held items keep their slot). `projected` counts an emit that runs
-  // after its own log line (the LLM path logs before emit).
+  // remaining) · 队剩 (RAW backlog still unverdicted — every pinned slot
+  // without a matching verdict, not just this run's actionable subset;
+  // emit() is what shrinks it, so held items keep their slot). `projected`
+  // counts an emit that runs after its own log line (the LLM path).
   const tag = (i: number, projected = 0) =>
-    ` [批 ${i + 1}/${works.length} · 剩 ${works.length - i - 1} · 队剩 ${Math.max(0, backlog0 - out.length - projected)}]`
+    ` [批 ${i + 1}/${works.length} · 剩 ${works.length - i - 1} · 队剩 ${Math.max(0, uncovered.size - emitted.size - projected)}]`
   for (const [wi, w] of works.entries()) {
     const { e, ver } = w
     // 0. sha reuse
