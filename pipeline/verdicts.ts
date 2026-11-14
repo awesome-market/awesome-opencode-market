@@ -263,6 +263,26 @@ export function slotVerdict(
  *  rather than letting anything through (fail-closed). */
 const RELEASABLE = new Set(['verified', 'skipped'])
 
+/** Grandfathered release (ops policy): a pass on a package that has been
+ *  publicly live ≥ GRANDFATHER_AGE and carries ≥ GRANDFATHER_STARS releases
+ *  WITHOUT waiting for the digest-announcement window. The objection window
+ *  exists for fresh names and low-reputation releases — an established,
+ *  starred package already earned its public track record. DISPLAYED slots
+ *  only: a held pendingUpdate on an established name is exactly the shape a
+ *  maintainer-account hijack takes, so version promotions keep their window.
+ *  Every other gate still applies (ai pass on flagged/unscanned slots stays
+ *  ignored, sha pinning is unchanged, verification must be releasable). */
+export const GRANDFATHER_AGE_MS = 30 * 24 * 60 * 60 * 1000
+export const GRANDFATHER_MIN_STARS = 10
+export const grandfathered = (
+  e: { createdAt?: string | null | undefined; metrics?: { stars?: number | null | undefined } | null | undefined },
+  now = Date.now(),
+): boolean => {
+  const t = Date.parse(e.createdAt ?? '')
+  return Number.isFinite(t) && t <= now - GRANDFATHER_AGE_MS
+    && (e.metrics?.stars ?? 0) >= GRANDFATHER_MIN_STARS
+}
+
 export interface VerdictApplyResult {
   index: CatalogIndex
   /** "name@version" promoted to display by this application */
@@ -386,7 +406,7 @@ export function applyMatureVerdicts(
           // that stale rationale
           if (e.approvalReason && e.approvalReason !== 'awaiting-review')
             e = { ...e, approvalReason: 'awaiting-review' }
-          if (mature(v)
+          if ((mature(v) || grandfathered(e))
             && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
               && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
             && shaOk(v, shaAnchor(e))
@@ -519,7 +539,10 @@ export function explainEntry(
     & { pendingUpdate?: Pick<PendingUpdate, 'version' | 'capabilities' | 'verification' | 'integrity'> | undefined
       // optional so test/partial fixtures stay valid — same shaAnchor rule as
       // applyMatureVerdicts: github-kind verdicts pin source.version, not SRI
-      source?: Pick<PluginEntry['source'], 'kind' | 'version'> | undefined },
+      source?: Pick<PluginEntry['source'], 'kind' | 'version'> | undefined
+      // optional for the same reason — feed the grandfathered-release explain
+      createdAt?: string | null | undefined
+      metrics?: { stars?: number | null | undefined } | null | undefined },
   verdicts: AiVerdict[],
   digest: DigestState | null,
   /** index.removed — the stale-pass epoch gate applyMatureVerdicts applies:
@@ -551,6 +574,9 @@ export function explainEntry(
   ): SlotExplain => {
     const { v, packageBrake } = verdictFor(version)
     const raw = latest.get(vkey(e.name, version))
+    // applyMatureVerdicts releases a pass on an old + starred DISPLAYED slot
+    // without the objection window — the held-update slot never qualifies
+    const gf = slot === 'displayed' && grandfathered(e)
     // a standing human pass covers the ai-pass-on-flagged ignore — the gate
     // releases under the human's authority, so '被拦截' would lie
     const humanCover = v?.verdict === 'pass' && v.source === 'ai'
@@ -594,14 +620,14 @@ export function explainEntry(
     if (base.aiBlockedByNoScan) return { ...base, outcome: 'wait', why: `${pre}ai pass 落在未扫描槽位 — 没扫到 ≠ 安全，被忽略` }
     if (v.sha && integrity && v.sha !== integrity)
       return { ...base, outcome: 'wait', why: `${pre}verdict 钉的字节（${v.sha.slice(0, 20)}…）与槽位锚（integrity / github commit）不符 — 疑似同版本换包或仓库前移，等复审` }
-    if (!base.announced) return { ...base, outcome: 'wait', why: `${pre}pass 未成熟 — verdict 行未进 digest 公示` }
+    if (!base.announced && !gf) return { ...base, outcome: 'wait', why: `${pre}pass 未成熟 — verdict 行未进 digest 公示` }
     // announced in the LATEST digest — the objection window is still open:
     // maturity needs the line to survive one more render (dayAnnounced
     // membership), same gate applyMatureVerdicts applies
-    if (dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
+    if (!gf && dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }
     return { ...base, outcome: 'release',
-      why: `${pre}pass 成熟 + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
+      why: `${pre}pass ${gf && (!base.announced || dayAnnounced.has(akey(v!))) ? '老插件免公示（上架≥30天+≥10★）' : '成熟'} + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
   }
   const displayed = slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length,
     e.capabilities.scannedAt === null, e.verification.status,

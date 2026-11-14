@@ -549,3 +549,62 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
     expect(s[0]!.why).toContain('上一个同名对象')
   })
 })
+
+// ————— grandfathered release: old + starred packages skip the objection window —————
+describe('grandfathered release (≥30d public + ≥10★)', () => {
+  const stars = (n: number | null) => ({ stars: n, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 'x' })
+  const pending = (over: Partial<PluginEntry> = {}) => mkEntry('p', { approval: 'pending', ...over })
+  const pass = () => mkVerdict('p', '1.0.0', 'pass', BEFORE)
+
+  it('old + starred pending entry releases with NO digest at all', () => {
+    const e = pending({ metrics: stars(48) })
+    const r = applyMatureVerdicts(mkIndex([e]), [pass()], null)
+    expect(r.index.plugins[0]!.approval).toBe('approved')
+    expect(r.releases).toEqual(['p@1.0.0'])
+  })
+  it('old + starred releases even when just announced today (window waived)', () => {
+    const e = pending({ metrics: stars(48) })
+    const v = pass()
+    const r = applyMatureVerdicts(mkIndex([e]), [v], digestStateOf(DIGEST, [v], [akey(v)]))
+    expect(r.index.plugins[0]!.approval).toBe('approved')
+  })
+  it('fresh package (<30d) still waits for announcement', () => {
+    const e = pending({ createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), metrics: stars(48) })
+    expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('old package with <10 stars still waits', () => {
+    const e = pending({ metrics: stars(9) })
+    expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('null stars still waits (unverifiable popularity stays in the window)', () => {
+    expect(applyMatureVerdicts(mkIndex([pending()]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('old + starred but RED-FLAGGED → ai pass still ignored', () => {
+    const e = pending({ metrics: stars(48), capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: ['x'], redFlags: ['network-call:a.ts'] } })
+    expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('old + starred but verify=failed → still not releasable', () => {
+    const e = pending({ metrics: stars(48), verification: { status: 'failed', level: 'load' } })
+    expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('held pendingUpdate on old + starred does NOT skip — promotions keep the window', () => {
+    const e = mkEntry('p', { metrics: stars(48), pendingUpdate: mkPu('1.1.0') })
+    const r = applyMatureVerdicts(mkIndex([e]), [mkVerdict('p', '1.1.0', 'pass', BEFORE)], null)
+    expect(r.index.plugins[0]!.latestVersion).toBe('1.0.0')
+    expect(r.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
+  })
+  it('github-kind old + starred pending releases without announcement', () => {
+    const e = pending({
+      source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc123' },
+      latestVersion: null, metrics: stars(48),
+    })
+    const v = mkVerdict('p', null, 'pass', BEFORE)
+    expect(applyMatureVerdicts(mkIndex([e]), [v], null).index.plugins[0]!.approval).toBe('approved')
+  })
+  it('explainEntry reports the exempted release, not 未成熟', () => {
+    const s = explainEntry(
+      mkEntry('p', { approval: 'pending', metrics: stars(48) }), [pass()], null)
+    expect(s[0]!.outcome).toBe('release')
+    expect(s[0]!.why).toContain('老插件免公示')
+  })
+})
