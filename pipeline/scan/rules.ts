@@ -1,7 +1,12 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
-/** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r9'
+/** Bump when rules change — part of the scan cache key; stale findings get
+ *  re-scanned. This is ALSO the admission-gate epoch: the incremental reuse
+ *  short-circuit keys on it, so tightening discover/filter.ts without a bump
+ *  leaves previously-admitted entries reuse-skipping the new gate forever
+ *  (the foreign-host demotion shipped under r9 proved this — r9-stamped
+ *  rescan entries kept their slots without ever facing the gate). */
+export const RULESET_VERSION = 'r10'
 
 export type Severity = 'high' | 'medium' | 'low'
 
