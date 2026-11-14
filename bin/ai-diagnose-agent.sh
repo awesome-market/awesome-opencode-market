@@ -21,6 +21,7 @@ set -u
 
 DIR=$HOME/.local/share/opencode-market/bin
 DST=$DIR/ai-diagnose.sh
+CAT=$HOME/.local/share/opencode-market-catalog   # pause flag 所在 worktree（空格键据此判断切哪边）
 mkdir -p "$DIR"
 
 # agent 旋钮也从 ai.env 读 —— 那是 worker 自己的诊断配置文件，TICK/RETRY
@@ -85,10 +86,11 @@ trap 'shutdown TERM 143' TERM
 trap 'shutdown INT 130' INT
 
 # 键盘热键（仅前台 TTY 启用；launchd 无 tty 自动跳过——headless 无回归）：
-#   p / 空格 = pause —— 调 $0 pause 翻 catalog:diagnose.paused；正在跑的
+#   空格   = toggle —— 看 $CAT/diagnose.paused 实况：在跑→pause，已停→resume
+#   p      = pause —— 调 $0 pause 翻 catalog:diagnose.paused；正在跑的
 #     sweep 逐条循环检测到该文件即在本条边界提前收队（已写判词照常推送）
-#   r / c    = resume —— 移除 flag，队列继续
-#   q        = 退出守护（TERM 走正常信号链，当前子进程一并收）
+#   r / c  = resume —— 移除 flag，队列继续
+#   q      = 退出守护（TERM 走正常信号链，当前子进程一并收）
 # 后台读键子进程直接调 pause|resume——不等主循环醒来，按键即时生效。git
 # 操作数秒，JOB 去抖防连打堆叠；每个按键都回显，用户有响应。
 KEYJOB=
@@ -105,13 +107,14 @@ keyctl() {
   return 0
 }
 if [ -t 0 ]; then
-  log "hotkeys: p/space=pause  r/c=resume  q=quit"
+  log "hotkeys: space=toggle  p=pause  r/c=resume  q=quit"
   (
     stty -echo -icanon min 1 time 0 </dev/tty 2>/dev/null
     trap 'stty sane </dev/tty 2>/dev/null' EXIT
     while IFS= read -rsn1 k; do
       case $k in
-        p|P|' ') keyctl pause ;;
+        ' ') if [ -f "$CAT/diagnose.paused" ]; then keyctl resume; else keyctl pause; fi ;;
+        p|P) keyctl pause ;;
         r|R|c|C) keyctl resume ;;
         q|Q) log "hotkey → quit"; kill -TERM $$ 2>/dev/null ;;
       esac
