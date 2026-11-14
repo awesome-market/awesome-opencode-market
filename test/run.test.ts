@@ -254,7 +254,7 @@ describe('github-kind hardening', () => {
       url => url.includes('/git/trees/')
         ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }], sha: 'commitA' }))
         : null,
-      () => { codeloadHits++; return new Response('', { status: 200, headers: { 'content-length': '70000000' } }) },
+      () => { codeloadHits++; return new Response('', { status: 200, headers: { 'content-length': '210000000' } }) },
     )
     const d = mkdtempSync(join(tmpdir(), 'big-'))
     const out1 = join(d, 'i1.json')

@@ -196,6 +196,39 @@ describe('discover/filter', () => {
     expect(hasPluginEvidence({ keywords: ['opencode'], readme: 'add to opencode.json plugin list' }).ok).toBe(true)
     expect(hasPluginEvidence({}).ok).toBe(false)
   })
+  it('evidence: foreign-host keywords demote the opencode keyword', () => {
+    // dsh plugins tag 'opencode' because they INTEGRATE with it (adapters,
+    // usage meters) — the keyword claims integration, not installability.
+    // keyword+entry was the exact pair that admitted ~90 dsh packages
+    expect(hasPluginEvidence({ keywords: ['dsh', 'dsh-plugin', 'opencode'], main: 'index.js' }).ok).toBe(false)
+    expect(hasPluginEvidence({ keywords: ['deepseek-harness', 'cordis', 'opencode'], main: 'x.js' }).ok).toBe(false)
+    // a dsh readme's own install command is `dsh plugin add` — the bare
+    // verb can't count, only the host-qualified `opencode plugin add` can
+    expect(hasPluginEvidence({
+      keywords: ['dsh-plugin', 'opencode'],
+      main: 'x.js',
+      readme: 'DeepSeek Harness plugin: shows OpenCode Go quota. Install: dsh plugin add this-pkg. Config: "plugins": [...]',
+    }).ok).toBe(false)
+    // a genuinely dual-host package documents the opencode install path
+    expect(hasPluginEvidence({
+      keywords: ['dsh-plugin', 'opencode'],
+      main: 'index.js',
+      readme: 'for opencode: opencode plugin add this-pkg',
+    }).ok).toBe(true)
+    // foreign tag without any opencode claim — no change, still rejects
+    expect(hasPluginEvidence({ keywords: ['dsh-plugin'], main: 'x.js' }).ok).toBe(false)
+    // untagged fallbacks: a 'dsh-*' name or a self-declaring readme is the
+    // same membership claim as the keyword (@tnnevol/dsh-opencode shipped
+    // 'for DeepSeek Harness' with zero dsh keywords)
+    expect(hasPluginEvidence({ name: '@tnnevol/dsh-opencode', keywords: ['opencode', 'provider'], main: 'x.js' }).ok).toBe(false)
+    expect(hasPluginEvidence({
+      keywords: ['opencode'], main: 'x.js',
+      readme: 'OpenCode Console login for DeepSeek Harness: usage + models.',
+    }).ok).toBe(false)
+    // a real opencode plugin whose author just has 'dsh' inside the scope
+    // name is unaffected — 'amadshobi' is not a 'dsh-' name prefix
+    expect(hasPluginEvidence({ name: '@amadshobi/oh-my-hook', keywords: ['opencode'], main: 'x.js' }).ok).toBe(true)
+  })
   it('repo evidence: topic tag alone insufficient', () => {
     const S = (...p: string[]) => new Set(p)
     // generic 'opencode' topic + a bare package.json → just an opencode-related
@@ -220,6 +253,25 @@ describe('discover/filter', () => {
     expect(hasRepoEvidence(S('opencode.json', 'package.json'), []).ok).toBe(true)
     // nothing at all → reject
     expect(hasRepoEvidence(S('README.md'), []).ok).toBe(false)
+  })
+  it('repo evidence: foreign-host topics demote the opencode-* topic', () => {
+    const S = (...p: string[]) => new Set(p)
+    // dsh plugins tag 'opencode-plugin' for discoverability — topic +
+    // package.json admitted dsh-opencode-palette; a foreign-host topic must
+    // demote the topic arm, leaving only positive in-tree evidence
+    expect(hasRepoEvidence(S('package.json'), ['opencode-plugin', 'dsh-plugin']).ok).toBe(false)
+    expect(hasRepoEvidence(S('SKILL.md'), ['opencode-skill', 'dsh', 'deepseek-harness']).ok).toBe(false)
+    // a repo that genuinely ships opencode content still passes — the
+    // .opencode//opencode.json arms don't depend on topics
+    expect(hasRepoEvidence(S('.opencode/plugin/x.ts', 'package.json'), ['dsh-plugin']).ok).toBe(true)
+    expect(hasRepoEvidence(S('opencode.json', 'package.json'), ['claude-code']).ok).toBe(true)
+    // foreign topic without opencode-* topic — no change either way
+    expect(hasRepoEvidence(S('package.json'), ['dsh-plugin']).ok).toBe(false)
+    // untagged fallbacks: dsh-* repo names and self-declaring descriptions
+    // demote the topic arm the same way
+    expect(hasRepoEvidence(S('package.json'), ['opencode-plugin'], 'owner/dsh-opencode-palette').ok).toBe(false)
+    expect(hasRepoEvidence(S('SKILL.md'), ['opencode-skill'], 'owner/x', '把任务分给多模型的 DSH Agent Skill').ok).toBe(false)
+    expect(hasRepoEvidence(S('opencode.json', 'package.json'), [], 'owner/dsh-tools').ok).toBe(true)
   })
 })
 

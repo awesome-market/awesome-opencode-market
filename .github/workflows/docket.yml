@@ -65,7 +65,13 @@ jobs:
             "ai:concern|F9D0C4|AI 判 concern（信息标签）" \
             "review:human|B60205|放行闸无 AI 通道——必须人工 verdict 才能收敛"; do
             IFS='|' read -r name color desc <<< "$spec"
-            gh label create "$name" --color "$color" --description "$desc" --force
+            # ensure-only: all labels already exist on the repo, so a
+            # transient API failure (rate limit right after the catalog
+            # sweep burns through the token budget) must not kill the run —
+            # a genuinely missing label still fails loudly downstream when
+            # an issue edit names it
+            gh label create "$name" --color "$color" --description "$desc" --force \
+              || echo "::warning::label '$name' bootstrap skipped — will retry next run"
           done
       - name: sync review issues from catalog branch
         env:
