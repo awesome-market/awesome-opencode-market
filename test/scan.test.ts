@@ -46,6 +46,40 @@ describe('scan/rules', () => {
     expect(r.test('f.js', '0.0.0.0')).toBeNull()
     expect(r.test('f.js', '45.33.32.156')).toBeTruthy()
   })
+
+  it('demotes high hits in non-execution / inert context to medium', () => {
+    const cred = RULES.find(r => r.id === 'credential-read')!
+    // test/fixture path — content that never runs on the consumer
+    expect(cred.test('package/test/plugin.test.ts', 'fs.readFileSync(home + "/.ssh/id_rsa")')!.sev).toBe('medium')
+    expect(cred.test('package/src/plugin.spec.js', 'x(".npmrc")')!.sev).toBe('medium')
+    // comment line — describing the path, not opening it
+    expect(cred.test('package/guard.mjs', '// detects: cat ~/.aws/credentials')!.sev).toBe('medium')
+    // quoted example/detection signature — spaces or shell/regex syntax
+    // inside the string mean "command about the path", not the path itself
+    expect(cred.test('package/guard.mjs', 'rx("cat\\\\s+~/.ssh")')!.sev).toBe('medium')
+    expect(cred.test('package/deny.mjs', "deny('cat ~/.ssh/id_rsa')")!.sev).toBe('medium')
+    // a closed earlier string must NOT demote the real read after it
+    expect(cred.test('package/index.js', "const a='x'; readFileSync('/root/.npmrc')")!.sev).toBeUndefined()
+    // bare path literal — the real operational signal stays high
+    expect(cred.test('package/index.js', 'fs.readFileSync(home + "/.ssh/id_rsa")')!.sev).toBeUndefined()
+
+    const obf = RULES.find(r => r.id === 'obfuscation')!
+    // eval inside a detection-signature string
+    expect(obf.test('package/rules.mjs', "deny('eval(String.fromCharCode(114))')")!.sev).toBe('medium')
+    // test file
+    expect(obf.test('package/test/t.test.ts', 'eval(atob(x))')!.sev).toBe('medium')
+    // real eval stays high
+    expect(obf.test('package/index.js', "const a='x'; eval('run()')")!.sev).toBeUndefined()
+    // hex blob in test dir demotes; in src stays high
+    const hex = "'\\x41\\x42\\x43\\x44\\x45\\x46\\x47\\x48'"
+    expect(obf.test('package/test/fixtures/blob.js', `const b = ${hex}`)!.sev).toBe('medium')
+    expect(obf.test('package/index.js', `const b = ${hex}`)!.sev).toBeUndefined()
+
+    const life = RULES.find(r => r.id === 'lifecycle-script')!
+    // fixture package.json is a test asset — finding, not a flag
+    expect(life.test('package/test/fixtures/pkg/package.json', '{"scripts":{"postinstall":"x"}}')!.sev).toBe('medium')
+    expect(life.test('package/package.json', '{"scripts":{"postinstall":"x"}}')!.sev).toBeUndefined()
+  })
 })
 
 describe('scan/scanTarball', () => {
