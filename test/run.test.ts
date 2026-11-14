@@ -437,7 +437,7 @@ describe('kept-entry re-gate — discovery window is smaller than the catalog', 
           time: { '1.0.0': 't' },
         }))
       }
-      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(mkTgz()))
       if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 0 }))
       return new Response('', { status: 404 })
     }) as typeof fetch
