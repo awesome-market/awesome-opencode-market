@@ -395,6 +395,47 @@ jobs:
             else gh issue create -R "$GITHUB_REPOSITORY" --title "site dispatch failed (run ${GITHUB_RUN_ID})" --body "$BODY" --label pipeline-alert || true; fi
           }; }
 
+  host-drift:
+    # Upstream release watch: when npm's latest @opencode/cli diverges from
+    # the OPENCODE_VERSION pin, every new 'verified' stamp measures a host
+    # users no longer install and every existing stamp is stale. The bump
+    # gates on the verify-marker pin test's SECURITY ASSUMPTION re-audit, so
+    # it stays manual — this job's job is that the drift can't go UNNOTICED.
+    # No needs: merge is skipped on empty-queue days, and a check that dies
+    # with the queue would stop warning exactly when things look calm.
+    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read, issues: write }
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            registry.npmjs.org:443
+            api.github.com:443
+      - uses: actions/checkout@v4
+      - name: compare pinned host vs npm latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PINNED=$(sed -nE "s/.*OPENCODE_VERSION = '([^']+)'.*/\1/p" pipeline/publish/merge.ts | head -1)
+          [ -n "$PINNED" ] || { echo "::warning::cannot resolve OPENCODE_VERSION — skipping drift check"; exit 0; }
+          # probe failure must not page — the check is informational; a dead
+          # registry returns next run
+          LATEST=$(curl -sf --max-time 20 'https://registry.npmjs.org/@opencode%2fcli/latest' | grep -oE '"version":"[^"]+"' | head -1 | cut -d'"' -f4 || true)
+          [ -n "$LATEST" ] || { echo "::warning::npm latest probe failed — skipping drift check"; exit 0; }
+          echo "pinned=$PINNED latest=$LATEST"
+          [ "$LATEST" = "$PINNED" ] && { echo "host pin current — no drift"; exit 0; }
+          gh label create pipeline-alert --color d93f0b --force 2>/dev/null || true
+          EX=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "opencode host drift in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          BODY="npm latest \`@opencode/cli\` is \`$LATEST\` but the verify host pin is \`$PINNED\` (pipeline/publish/merge.ts) — new 'verified' stamps measure a host users no longer install, and every existing stamp is host-stale."
+          BODY="$BODY"$'\n\n'"Bump procedure: edit OPENCODE_VERSION → re-audit the SECURITY ASSUMPTION in pipeline/verify/verify.ts (the pin test in test/verify-marker.test.ts fails until the lazy-load marker trust and /api/plugin shape are re-verified) → merge; the hostStale tier + failed-slot amnesty re-queue the catalog automatically."
+          BODY="$BODY"$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -n "$EX" ]; then gh issue comment "$EX" -R "$GH_REPO" --body "$BODY" || true
+          else gh issue create -R "$GH_REPO" --title "opencode host drift: npm $LATEST vs pin $PINNED" --body "$BODY" --label pipeline-alert || true; fi
+
   alert:
     needs: [plan, verify, merge]
     # cancelled() included: the catalog-branch concurrency lock can evict a

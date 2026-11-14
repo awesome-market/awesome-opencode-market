@@ -13,14 +13,26 @@ import { verifyPackage, type ExecFn, type SpawnFn } from '../pipeline/verify/ver
 import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
 
 /** The SECURITY ASSUMPTION in verify.ts was audited against this host version.
- *  A bump here must fail until the lazy-load marker trust is re-verified. */
+ *  A bump here must fail until the lazy-load marker trust is re-verified.
+ *
+ *  Re-audit log:
+ *  - 2.3.0 (2026-11-15): serve marker format identical (`server listening on
+ *    http://127.0.0.1:N` / `server password X`). Live test with a plugin whose
+ *    module prints forged listener lines at import: plugin load logs show it
+ *    ran INSIDE the session-create request (lazy — no plugin code before the
+ *    markers), AND plugin stdout/stderr never reaches serve's output at all
+ *    (it goes to the opencode log file) — forging a marker is impossible even
+ *    if a plugin ran early. `/api/plugin` shape verified compatible with
+ *    apiPluginState: package entries carry source.type='package' +
+ *    source.target=<install spec>. Plugin contract unchanged (both binaries
+ *    enforce `export default {id, setup|effect}`). */
 it('OPENCODE_VERSION stays pinned to the version the marker-trust was audited under', () => {
   expect(OPENCODE_VERSION,
     'host bumped — re-audit the SECURITY ASSUMPTION in pipeline/verify/verify.ts: ' +
     'the serve marker scrape trusts that no plugin code can run before the ' +
     'listening/password lines print (lazy load). If the new host loads eagerly, ' +
     'a plugin can print a forged listener pointing at its own socket.')
-    .toBe('2.2.5')
+    .toBe('2.3.0')
 })
 
 const spawnOf = (out: string): SpawnFn => (() => ({
