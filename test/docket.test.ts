@@ -534,6 +534,84 @@ describe('docket main', () => {
     expect(edits).not.toContain('--body')
   })
 
+  it('flagged slot + AI pass → review:human on create AND on update-sync', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk3h-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const flagged = e({ capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => { calls.push(args); return args.includes('list') ? '[]' : '' }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))!.join(' ')
+    expect(create).toContain('--label review:pending')
+    expect(create).toContain('--label review:human')
+  })
+
+  it('review:human follows the flag lock — added while held, removed once cleared', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      // held side: flagged entry, existing issue lacks the label → add
+      let dir = mkdtempSync(join(tmpdir(), 'dk3i-'))
+      let idxPath = join(dir, 'index.json'); let vPath = join(dir, 'v.jsonl')
+      writeFileSync(idxPath, JSON.stringify(idx([e({ capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })])))
+      writeFileSync(vPath, JSON.stringify(v()) + '\n')
+      const wantBody = issueBody(
+        { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
+          slug: 'o/pkg', findings: 0, redFlags: 1, redFlagList: ['sec:x'] },
+        { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+      const calls: string[][] = []
+      const ghFn = (args: string[]) => {
+        calls.push(args)
+        if (args.includes('list')) return JSON.stringify([{
+          number: 3, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'ai:pass' }], body: wantBody,
+        }])
+        return ''
+      }
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+      const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+      expect(edits).toContain('--add-label review:human')
+
+      // cleared side: rescan dropped the flag, stale label must go
+      dir = mkdtempSync(join(tmpdir(), 'dk3j-'))
+      idxPath = join(dir, 'index.json'); vPath = join(dir, 'v.jsonl')
+      writeFileSync(idxPath, JSON.stringify(idx([e()])))
+      writeFileSync(vPath, JSON.stringify(v()) + '\n')
+      const wantBody2 = issueBody(
+        { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
+          slug: 'o/pkg', findings: 0, redFlags: 0 },
+        { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+      const calls2: string[][] = []
+      const ghFn2 = (args: string[]) => {
+        calls2.push(args)
+        if (args.includes('list')) return JSON.stringify([{
+          number: 3, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'ai:pass' }, { name: 'review:human' }],
+          body: wantBody2,
+        }])
+        return ''
+      }
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn2)
+      const edits2 = calls2.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+      expect(edits2).toContain('--remove-label review:human')
+    } finally { process.env.GH_REPO = saved }
+  })
+
   it('a wanted issue still carrying review:decided gets it stripped — pending+decided never coexist', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')

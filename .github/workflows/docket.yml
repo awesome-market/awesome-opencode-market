@@ -62,7 +62,8 @@ jobs:
             "verdict:pass|0E8A16|人工放行——手机点选" \
             "verdict:concern|D93F0B|人工拦截——手机点选" \
             "ai:pass|C5DEF5|AI 判 pass（信息标签）" \
-            "ai:concern|F9D0C4|AI 判 concern（信息标签）"; do
+            "ai:concern|F9D0C4|AI 判 concern（信息标签）" \
+            "review:human|B60205|放行闸无 AI 通道——必须人工 verdict 才能收敛"; do
             IFS='|' read -r name color desc <<< "$spec"
             gh label create "$name" --color "$color" --description "$desc" --force
           done
