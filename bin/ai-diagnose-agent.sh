@@ -74,12 +74,51 @@ stamp() {
 }
 
 CHILD=
+KEYPID=
 shutdown() {
+  [ -n "$KEYPID" ] && kill "$KEYPID" 2>/dev/null
   [ -n "$CHILD" ] && kill -"$1" "$CHILD" 2>/dev/null
+  [ -t 0 ] && stty sane </dev/tty 2>/dev/null
   exit "$2"
 }
 trap 'shutdown TERM 143' TERM
 trap 'shutdown INT 130' INT
+
+# 键盘热键（仅前台 TTY 启用；launchd 无 tty 自动跳过——headless 无回归）：
+#   p / 空格 = pause —— 调 $0 pause 翻 catalog:diagnose.paused；正在跑的
+#     sweep 逐条循环检测到该文件即在本条边界提前收队（已写判词照常推送）
+#   r / c    = resume —— 移除 flag，队列继续
+#   q        = 退出守护（TERM 走正常信号链，当前子进程一并收）
+# 后台读键子进程直接调 pause|resume——不等主循环醒来，按键即时生效。git
+# 操作数秒，JOB 去抖防连打堆叠；每个按键都回显，用户有响应。
+KEYJOB=
+keyctl() {
+  [ -n "$KEYJOB" ] && kill -0 "$KEYJOB" 2>/dev/null && { log "hotkey $1 ignored — flip still running"; return; }
+  bash "$DST" "$1" 'hotkey' > >(stamp) 2>&1 &
+  KEYJOB=$!
+  log "hotkey → $1 (pid $KEYJOB)"
+  # resume 时守护若正睡在间隔段，杀父进程名下直系 sleep 让下一轮立即开跑
+  # （flag 已翻，醒来那轮自然继续）。读键循环在子 shell 里，看不到父的
+  # PHASE/CHILD 变量——但 $$ 在子 shell 仍指父 pid，pkill -P 命中当前
+  # sleep 子进程；work 段 worker 是 bash 不匹配，天然空操作，无需相位。
+  [ "$1" = resume ] && pkill -P $$ -x sleep 2>/dev/null
+  return 0
+}
+if [ -t 0 ]; then
+  log "hotkeys: p/space=pause  r/c=resume  q=quit"
+  (
+    stty -echo -icanon min 1 time 0 </dev/tty 2>/dev/null
+    trap 'stty sane </dev/tty 2>/dev/null' EXIT
+    while IFS= read -rsn1 k; do
+      case $k in
+        p|P|' ') keyctl pause ;;
+        r|R|c|C) keyctl resume ;;
+        q|Q) log "hotkey → quit"; kill -TERM $$ 2>/dev/null ;;
+      esac
+    done </dev/tty
+  ) &
+  KEYPID=$!
+fi
 
 while :; do
   for SRC in "$MARKET_REPO/bin/ai-diagnose.sh" \
