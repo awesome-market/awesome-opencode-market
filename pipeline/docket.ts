@@ -66,6 +66,12 @@ export interface DocketTarget {
   redFlags?: number
   /** the slot was never scanned — same human-only posture as red flags */
   unscanned?: boolean
+  /** scan stamp for the "0 findings" case — an empty result must still show
+   *  WHEN it was scanned or the reviewer can't tell clean from never-ran */
+  scannedAt?: string | null
+  /** ruleset the scan ran under — an empty r4 result is weaker evidence
+   *  than an empty r9 one (demotions only landed recently) */
+  rulesetVersion?: string
   heldAt?: string
   publishedAt?: string | undefined
   /** verdict line's pinned tarball sha vs the slot's live integrity anchor —
@@ -198,6 +204,8 @@ export function docketTargets(
       // 没扫到 ≠ 安全: a null scannedAt means the scanner never ran — the
       // reviewer must decide blind, same human-only posture as red flags
       ...(slot.capabilities.scannedAt === null ? { unscanned: true } : {}),
+      ...(slot.capabilities.scannedAt !== null ? { scannedAt: slot.capabilities.scannedAt } : {}),
+      ...(slot.capabilities.rulesetVersion ? { rulesetVersion: slot.capabilities.rulesetVersion } : {}),
       verification: slot.verification.status,
       ...(e.slug ? { slug: e.slug } : {}),
       ...(held ? { heldAt: held } : {}),
@@ -245,6 +253,8 @@ export function docketTargets(
           redFlagList: e.capabilities.redFlags,
           sitePage: true, // flag targets exist only on non-pending entries
           ...(e.capabilities.scannedAt === null ? { unscanned: true } : {}),
+          ...(e.capabilities.scannedAt !== null ? { scannedAt: e.capabilities.scannedAt } : {}),
+          ...(e.capabilities.rulesetVersion ? { rulesetVersion: e.capabilities.rulesetVersion } : {}),
           ...(e.slug ? { slug: e.slug } : {}),
           ...(e.publishedAt ? { publishedAt: e.publishedAt } : {}),
           // a pre-signal verdict is CONTEXT, not a decision — the body
@@ -602,8 +612,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   L.push(`- 验证状态：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}`)
   if (t.unscanned) {
     L.push('- 静态扫描：**未运行**（findings/redFlags 为空是缺数据，不是无发现）')
-  } else if ((t.redFlags ?? 0) > 0 || (t.findings ?? 0) > 0) {
-    L.push(`- 静态扫描：redFlags ${t.redFlags ?? 0} / findings ${t.findings ?? 0}`)
+  } else {
+    // 0/0 must render too — "clean scan" and "never scanned" are different
+    // facts and the AGENTS rule says 没扫到 ≠ 安全 has to be spelled out.
+    // The stamp lets the reviewer see a stale-ruleset empty result for what
+    // it is rather than reading it as fresh evidence.
+    const scanAt = t.scannedAt ? `（${t.scannedAt.slice(0, 10)}${t.rulesetVersion ? ` · ${t.rulesetVersion}` : ''} 扫过）` : ''
+    L.push(`- 静态扫描：redFlags ${t.redFlags ?? 0} / findings ${t.findings ?? 0}${scanAt}${(t.redFlags ?? 0) + (t.findings ?? 0) === 0 ? '——零命中，**没扫到不等于安全**' : ''}`)
   }
   const detailPage = t.slug && opts.pagesBase && t.sitePage
   // the flags ARE the case file for a flagged target — show the whole list
@@ -620,6 +635,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   }
   if (t.verdictSha && t.integrity && t.verdictSha !== t.integrity) {
     L.push('- ⚠️ 裁决钉的字节与当前槽位完整性指纹不一致——疑似同版本换包（re-tag）：放行闸会拒绝按此裁决生效，等 drift 复审或人工重判')
+  } else if (t.verdictSha) {
+    // always name the pinned bytes — "AI said pass" is unverifiable prose
+    // until the reviewer can see WHICH commit/tarball it judged. github
+    // entries (name = owner/repo, sha = commit) get a tree link so the
+    // exact judged source opens in a browser tab, no download needed.
+    const gh = !t.name.startsWith('@') && t.name.includes('/')
+    L.push(`- 裁决钉版：\`${t.verdictSha.slice(0, 12)}\`——${t.integrity ? '与槽位指纹一致' : '判词覆盖的字节'}${gh ? `（[浏览这份源码](https://github.com/${t.name}/tree/${t.verdictSha})）` : ''}`)
   }
   if (t.heldAt) {
     L.push(`- 在押自：${t.heldAt.slice(0, 10)}${t.publishedAt ? `；npm 发布于 ${t.publishedAt.slice(0, 10)}` : ''}`)
