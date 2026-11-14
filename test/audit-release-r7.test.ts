@@ -77,7 +77,7 @@ describe('§7: merge rollback anchor uses the candidate version, not a stale hol
       distTags: { latest: '0.9.0' },
       approval: 'pending',
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', '2026-02-01T00:00:00Z')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', '2026-02-01T00:00:00Z')
     expect(out!.capabilities.redFlags).toContain('sec:version-rollback')
   })
 
@@ -95,7 +95,7 @@ describe('§7: merge rollback anchor uses the candidate version, not a stale hol
       approval: 'approved',
       pendingUpdate: mkPu('2.0.0'),
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', '2026-02-01T00:00:00Z')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', '2026-02-01T00:00:00Z')
     expect(out!.capabilities.redFlags).toContain('sec:version-rollback')
   })
 })

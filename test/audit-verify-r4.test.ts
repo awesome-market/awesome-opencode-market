@@ -31,7 +31,7 @@ const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
 })
 const idx = (plugins: PluginEntry[]) =>
   CatalogIndex.parse({ version: '1', generatedAt: 't', categories: {}, plugins, removed: [] })
-const base = { level: 'load' as const, opencodeVersion: '2.2.5', verifiedAt: '2026-01-02T00:00:00Z' }
+const base = { level: 'load' as const, opencodeVersion: '2.3.0', verifiedAt: '2026-01-02T00:00:00Z' }
 
 const noopExec = (async () => ({ stdout: '', stderr: '' })) as unknown as ExecFn
 
@@ -59,7 +59,7 @@ describe('audit#3 — github pin drift drops, npm drift still fails', () => {
     const gh = entry({
       name: 'g', slug: 'g', latestVersion: null,
       source: { kind: 'github', id: 'o/r', repo: 'O/R', version: 'shaNEW' },
-      verification: { status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: '2026-01-01' },
+      verification: { status: 'verified', level: 'load', opencodeVersion: '2.3.0', verifiedAt: '2026-01-01' },
     })
     const m = mergeResults(idx([gh]), [
       { name: 'g', status: 'failed', integrity: 'shaOLD', ...base },

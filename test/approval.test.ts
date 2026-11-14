@@ -302,7 +302,7 @@ describe('mergeEntries — hold surgery', () => {
       pendingUpdate: mkPu('1.1.0'),
       firstSeenAt: 'x', // should be overwritten by identity layer
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.pendingUpdate?.version).toBe('1.1.0')
     expect(out!.latestVersion).toBe('1.0.0')
     expect(out!.approval).toBe('approved')
@@ -310,7 +310,7 @@ describe('mergeEntries — hold surgery', () => {
   it('same held version on both sides → remote verification slot wins', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { verification: { status: 'verified', level: 'load' } }) })
     const fresh = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { verification: { status: 'unverified' } }) })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.pendingUpdate!.verification.status).toBe('verified')
   })
   it('same held version → remote fills byte-anchor/parts ours lacks', () => {
@@ -318,22 +318,22 @@ describe('mergeEntries — hold surgery', () => {
     // survive the merge, not get stripped to undefined
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { integrity: 'sha512-r==', contains: ['skill'] }) })
     const fresh = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { verification: { status: 'unverified' } }) })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.pendingUpdate!.integrity).toBe('sha512-r==')
     expect(out!.pendingUpdate!.contains).toEqual(['skill'])
     // ours wins on conflict though — this run's data is authoritative
     const fresh2 = mkEntry('p', { pendingUpdate: mkPu('1.1.0', { integrity: 'sha512-mine==', verification: { status: 'unverified' } }) })
-    const [out2] = mergeEntries([fresh2], mkIndex([prev]), '2.2.5', 'r')
+    const [out2] = mergeEntries([fresh2], mkIndex([prev]), '2.3.0', 'r')
     expect(out2!.pendingUpdate!.integrity).toBe('sha512-mine==')
   })
   it('prev holds a version ours never saw → hold carried (unless ours released it)', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0') })
     const fresh = mkEntry('p') // no pendingUpdate, latestVersion 1.0.0
-    const [kept] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [kept] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(kept!.pendingUpdate?.version).toBe('1.1.0')
     // ours released that exact version → don't resurrect
     const released = mkEntry('p', { latestVersion: '1.1.0' })
-    const [gone] = mergeEntries([released], mkIndex([prev]), '2.2.5', 'r')
+    const [gone] = mergeEntries([released], mkIndex([prev]), '2.3.0', 'r')
     expect(gone!.pendingUpdate).toBeUndefined()
   })
   it('sec-delta flags attach to pendingUpdate.capabilities, identity flags to display', () => {
@@ -347,7 +347,7 @@ describe('mergeEntries — hold surgery', () => {
       }),
       createdAt: '2021-01-01',
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.capabilities.redFlags).toContain('sec:name-reused')        // identity → display
     expect(out!.capabilities.findings.some(f => f.startsWith('sec-delta'))).toBe(false)
     expect(out!.pendingUpdate!.capabilities.redFlags).toContain('sec-delta:lifecycle-script') // delta → held
@@ -357,21 +357,21 @@ describe('mergeEntries — hold surgery', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0') })
     // npm latest = held candidate 1.1.0 (worker would reuse; merge should still not flag)
     const fresh1 = mkEntry('p', { pendingUpdate: mkPu('1.1.0'), createdAt: '2020-01-01' })
-    const [a] = mergeEntries([fresh1], mkIndex([prev]), '2.2.5', 'r')
+    const [a] = mergeEntries([fresh1], mkIndex([prev]), '2.3.0', 'r')
     expect(a!.capabilities.redFlags).not.toContain('sec:version-rollback')
     // npm latest genuinely regressed below held target → rollback flags
     const prev2 = mkEntry('p', { pendingUpdate: mkPu('1.1.0'), distTags: { latest: '1.0.5' } })
     const fresh2 = mkEntry('p', { pendingUpdate: mkPu('1.0.5'), createdAt: '2020-01-01' })
-    const [b] = mergeEntries([fresh2], mkIndex([prev2]), '2.2.5', 'r')
+    const [b] = mergeEntries([fresh2], mkIndex([prev2]), '2.3.0', 'r')
     expect(b!.capabilities.redFlags).toContain('sec:version-rollback')
   })
   it('pending entry approval carries; new entries default pending + reason', () => {
     const prev = mkEntry('p', { approval: 'pending', approvalReason: 'exec found' })
     const fresh = mkEntry('p', { approval: 'pending' })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.approval).toBe('pending')
     expect(out!.approvalReason).toBe('exec found')
-    const [brand] = mergeEntries([mkEntry('new-pkg', { approval: 'pending', approvalReason: 'awaiting-review' })], null, '2.2.5', 'r')
+    const [brand] = mergeEntries([mkEntry('new-pkg', { approval: 'pending', approvalReason: 'awaiting-review' })], null, '2.3.0', 'r')
     expect(brand!.approval).toBe('pending')
   })
 })

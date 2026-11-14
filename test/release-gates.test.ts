@@ -383,7 +383,7 @@ describe('G4: compaction drops only superseded old AI lines', () => {
 // ————— G9: verify-merge flagged slots land 'skipped', not 'verified' —————
 describe('G9: mergeResults honors the honest-label invariant', () => {
   const res = (name: string, version: string, status: 'verified' | 'failed' = 'verified'): VerifyResult => ({
-    name, version, status, level: 'load', opencodeVersion: '2.2.5', verifiedAt: 't',
+    name, version, status, level: 'load', opencodeVersion: '2.3.0', verifiedAt: 't',
   })
   const flagged = () => mkEntry('p', {
     verification: { status: 'unverified' },

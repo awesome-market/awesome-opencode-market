@@ -49,7 +49,7 @@ describe('R-9: pendingUpdate only exists on a displayed entry', () => {
     // on every review surface (all prefer pendingUpdate.version).
     const prev = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', pendingUpdate: mkPu('1.1.0') })
     const fresh = mkEntry('p', { approval: 'pending', latestVersion: '1.2.0' })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.approval).toBe('pending')
     expect(out!.latestVersion).toBe('1.2.0')
     expect(out!.pendingUpdate).toBeUndefined()
@@ -57,13 +57,13 @@ describe('R-9: pendingUpdate only exists on a displayed entry', () => {
   it('reuse-push still carrying a hold on a pending entry → dropped', () => {
     const prev = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', pendingUpdate: mkPu('1.1.0') })
     const fresh = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', pendingUpdate: mkPu('1.1.0') })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.pendingUpdate).toBeUndefined()
   })
   it('displayed entries keep their holds — the gate must not overfire', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0') })
     const fresh = mkEntry('p')
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.pendingUpdate?.version).toBe('1.1.0')
   })
   it('R-8 still fires when ours is in transitional pending+pu and remote released the held version', () => {
@@ -73,7 +73,7 @@ describe('R-9: pendingUpdate only exists on a displayed entry', () => {
     // keeping our pinned display parts would misroute installs for 1.1.0.
     const prev = mkEntry('p', { approval: 'approved', latestVersion: '1.1.0', contains: ['skill'] })
     const fresh = mkEntry('p', { approval: 'pending', latestVersion: '1.0.0', contains: ['plugin'], pendingUpdate: mkPu('1.1.0') })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r')
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r')
     expect(out!.approval).toBe('approved')
     expect(out!.latestVersion).toBe('1.1.0')
     expect(out!.pendingUpdate).toBeUndefined()
@@ -335,7 +335,7 @@ describe('mergeEntries flaggedAt — the identity-flag clock docket suppresses a
     const fresh = mkEntry('p', {
       capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused'] },
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', NOW)
     expect(out!.capabilities.flaggedAt).toBe('2026-01-01')
   })
   it('a CHANGED flag set restamps now — a new signal is a new observation', () => {
@@ -343,7 +343,7 @@ describe('mergeEntries flaggedAt — the identity-flag clock docket suppresses a
     const fresh = mkEntry('p', {
       capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused', 'sec:repo-recreated'] },
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', NOW)
     expect(out!.capabilities.flaggedAt).toBe(NOW)
   })
   it('legacy flags without a stamp get stamped now (first observation under the field)', () => {
@@ -351,7 +351,7 @@ describe('mergeEntries flaggedAt — the identity-flag clock docket suppresses a
     const fresh = mkEntry('p', {
       capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec:name-reused'] },
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', NOW)
     expect(out!.capabilities.flaggedAt).toBe(NOW)
   })
   it('no identity flags → no stamp; sec-delta:* never counts as identity', () => {
@@ -359,7 +359,7 @@ describe('mergeEntries flaggedAt — the identity-flag clock docket suppresses a
     const fresh = mkEntry('p', {
       capabilities: { scannedAt: 't2', rulesetVersion: 'r', findings: [], redFlags: ['sec-delta:lifecycle-script'] },
     })
-    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', 'r', NOW)
+    const [out] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', 'r', NOW)
     expect(out!.capabilities.flaggedAt).toBeUndefined()
   })
 })

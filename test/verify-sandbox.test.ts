@@ -93,7 +93,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
         const o = args.indexOf('-o')
         if (o >= 0 && args[o + 1] !== '/dev/null') writeFileSync(args[o + 1]!, opts.api ?? API('pkg'))
       }
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
 
   it('routes every untrusted command through the nobody wrapper', async () => {
@@ -194,7 +194,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       }
       if (cmd.endsWith('sb.sh') && args.includes('tsx'))
         return { stdout: '{"ok":true,"rendered":1}', stderr: '' }
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const r = await verifyPackage('pkg', { version: '1.0.0', features: ['gui'], home, sandboxUser: 'nobody',
       execFn: fake, spawnFn: serveSpawn(calls) })
@@ -400,13 +400,13 @@ describe('shard-level hoists and boundaries', () => {
     const calls: string[][] = []
     const fake = (async (_c: string, args: string[]) => {
       calls.push(args)
-      return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args[0] === '--version' ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const spawnCalls: Rec[] = []
     const results = await verifyShard(['a', 'b', 'c'], join(home, 'r.json'), { execFn: fake, spawnFn: serveSpawn(spawnCalls), apiWaitMs: 30 })
     expect(results).toHaveLength(3)
     expect(calls.filter(a => a[0] === '--version')).toHaveLength(1)
-    expect(results.every(r => r.opencodeVersion === '2.2.5')).toBe(true)
+    expect(results.every(r => r.opencodeVersion === '2.3.0')).toBe(true)
   })
 
   it('VerifyResultFile drops malformed artifact rows at the merge boundary', async () => {

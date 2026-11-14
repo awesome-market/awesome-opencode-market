@@ -1,7 +1,7 @@
 /** Serve-marker trust regression tests (F-3/F-4).
  *
  *  The load canary scrapes `server listening`/`server password` from serve's
- *  stdout — trusted only because opencode 2.2.5 loads plugins LAZILY (no
+ *  stdout — trusted only because the pinned host loads plugins LAZILY (no
  *  plugin code has run when those lines print). The pin test below forces a
  *  re-audit of that SECURITY ASSUMPTION whenever OPENCODE_VERSION is bumped;
  *  the marker tests pin the fail-closed behaviors around it. */
@@ -45,7 +45,7 @@ const spawnOf = (out: string): SpawnFn => (() => ({
 /** Install/lookup calls succeed; every curl fails like a dead socket. */
 const deadApiExec = (async (cmd: string, args: string[]) => {
   if (cmd === 'curl') throw new Error('curl: (7) failed to connect — connection refused')
-  if (cmd === 'opencode' && args[0] === '--version') return { stdout: 'opencode v2.2.5\n', stderr: '' }
+  if (cmd === 'opencode' && args[0] === '--version') return { stdout: 'opencode v2.3.0\n', stderr: '' }
   return { stdout: '', stderr: '' }
 }) as unknown as ExecFn
 

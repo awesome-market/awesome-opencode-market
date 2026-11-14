@@ -438,7 +438,7 @@ Pipeline/CI 安全：
 | V-2 吞吐 96/天 硬编码无积压观测 | ✅ | digest 新增「④ 验证积压」段：队列长度（同 planTargets 谓词）/投稿数/近7天失败数/最老等待日期；`verify.yml` dispatch 加 `cap` input → `VERIFY_CAP` 环境变量 → plan.ts 可调上限冲积压 |
 | V-3 `failed` 终态不分暂态/确定性，唯一重试是手动 --retest | ✅ | `Verification.retries` 字段记录连续失败次数（merge 写回递增、非 failed 清零）；plan `retryable()`：`failed && retries<3` 自动重入队列——真死版本 3 次尝试后仍终态，canary 误杀自愈；red-flagged 依然永不执行。**窗口改按次不按墙钟**：旧 `verifiedAt<7d` 条件在深积压下让"排队时长"烧掉从没花过的重试预算（排不上队≠不该重试）——现预算只由实测次数消耗 |
 | V-4 canary 时序赌博（12s 窗口）是 V-3 误杀主源 | ✅ | 窗口 12s→20s；`apiPluginState`/`apiFailed` 区分确定性失败（serve 报 `failed` → 条目一出现就跳出，~1s 判死）vs 超时缺席——`logExcerpt` 写明死因供人工抽查；残余 flake 由 V-3 自动重试吸收 |
-| V-5 单版本测试（cli@2.2.5），`compat:{}` 死字段 | 仍开 | 多版本矩阵才有"兼容"语义 |
+| V-5 单版本测试（cli@2.3.0），`compat:{}` 死字段 | 仍开 | 多版本矩阵才有"兼容"语义 |
 | V-6 rpc/skill/mcp/theme 等类型无验证层级 | 仍开 | 仅 server/tui/gui 有深度路由 |
 | V-8 merge 在 verify.yml 里顺带重建+发布 site，与 catalog.yml site job 双发布者 | ✅ | site 发布抽成独立 `site.yml`（唯一 Pages 发布者，bot push 不触发 `on:push` 故走 dispatch）；catalog publish 与 verify merge 推送后 `gh workflow run site.yml`（各加 `actions:write`，merge 去掉 pages/id-token）——验证标签即时上站且不再双写 |
 
@@ -457,7 +457,7 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 | V-E timeout 预算账过期——V-4 加宽窗口后 12 目标最坏 ≈44min 超 30min 上限 | ✅ | 片宽 12→8（≈30min 最坏）+ job timeout 30→35min 留余量 |
 | V-F `targets` 打错名 → 零命中绿过空跑，操作者以为验过了 | ✅ | 收窄后 `plugins.length===0` → plan 步 exit 1 红失败，报错列出请求的名字 |
 | V-G `ocVersion` 每目标一次 `opencode --version`（~2s×N） | ✅ | 提到 `verifyShard` 入口一次——runner 侧跑（--version 不执行插件代码），结果经 `opts.opencodeVersion` 分发；verifyPackage 有该字段时不再自探 |
-| V-H workflow 字面量 `cli@2.2.5` 与 `OPENCODE_VERSION` 靠注释互引会漂 | ✅ | 回归测试 grep `.github/workflows/verify.yml` 断言含 `@opencode/cli@${OPENCODE_VERSION}`——漂移当场红 |
+| V-H workflow 字面量 `cli@2.3.0` 与 `OPENCODE_VERSION` 靠注释互引会漂 | ✅ | 回归测试 grep `.github/workflows/verify.yml` 断言含 `@opencode/cli@${OPENCODE_VERSION}`——漂移当场红 |
 | V-I `level` 字段双关（failed=失败阶段 / verified=最深通过）未写明 | ✅ | VerifyResult 字段注释 + DATA-FLOWS §3 写明双关语义 |
 | V-J `grep -qF "\"$NAME"` 子串早退（`core` 命中 `"core-x"`） | ✅ 顺带消除 | spawn 化后判定走 `apiPluginState` 解析条目（精确 target 匹配），不再有任何子串判定；早退只省等待不误判 |
 | V-K docket `workflow_run` 只接 `conclusion=='success'`——verify 部分失败时评审单停更 | ✅ | 门放宽到 `!= 'cancelled'`：部分失败照样落了有效 catalog 数据，同步安全；cancelled 才意味着什么都没写 |
@@ -489,7 +489,7 @@ V-1 的 uid 隔离堵住"改结果文件"后，剩余攻击面在**判定证据�
 | 项 | 状态 | 落点 |
 |---|---|---|
 | G-1 merge job 排队被 catalog-branch 并发组置换（1 running + 1 pending），被顶掉的班 ~30min 分片白烧且 `failure()` 不覆盖 cancelled → 静默丢整轮结果 | ✅ | `alert` 条件加 `\|\| cancelled()` 先保可见；merge 开头扫前序 run 的 `results-*` artifact 下载平铺合并（遗留结果不再白烧；命名带片序号跨 run 覆盖无碍）；写槽前加 freshness 守卫（槽位 verifiedAt 更新于结果之后则旧结果不落——重放的遗留 artifact 防陈旧覆盖新证据） |
-| G-2 serve boot 窗口内无 listening 行被记包级 `failed/load`（"plugin absent"）——2.2.5 懒加载下 serve 起不来时插件代码根本没跑，责任只在 harness/资源/上游输出漂移；该 failed 会经 diagnose verify-failed 短路批量假 concern | ✅ | `!port` → harness throw（走 `harness:true` 整条丢弃路径，不烧 retries、不进 concern 短路）；存量 deadSpawn 假 serve 的测试统一改 liveSpawn（emit listening 行）区分"harness 故障"与"包故障"两类语义 |
+| G-2 serve boot 窗口内无 listening 行被记包级 `failed/load`（"plugin absent"）——2.3.0 懒加载下 serve 起不来时插件代码根本没跑，责任只在 harness/资源/上游输出漂移；该 failed 会经 diagnose verify-failed 短路批量假 concern | ✅ | `!port` → harness throw（走 `harness:true` 整条丢弃路径，不烧 retries、不进 concern 短路）；存量 deadSpawn 假 serve 的测试统一改 liveSpawn（emit listening 行）区分"harness 故障"与"包故障"两类语义 |
 | G-3 `checkSkillStructure` 只验 tar 列表**第一个** SKILL.md 的 frontmatter——多 SKILL.md 包（docs/ 文档 + skills/x/ 真身）由 tar 排序决定验谁，排前无 `name:` 即假 failed | ✅ | `checkSkillTgz` 收集全部 SKILL.md 成员，**任一** frontmatter 含 `name:` 即 pass——与 opencode"扫到能解析的就算"实际语义、收录门 hasSkillPath 同一口径 |
 | G-4 `skipped` 单向阀：旗标清空后槽位永久停 skipped（"有高危信号没跑"两边都不成立） | ✅ | verifyQueued 收 `ver?.status==='skipped'`——`flagged` 检查先行保证只在旗标真清后回队重验；skipIfFlagged 降级保留 verifiedAt/runUrl/integrity/opencodeVersion 证据字段（详情页留审计链，publish/merge.ts 与 verify/merge.ts 两处同修） |
 | G-5 verify 不钉字节：`name@ver` 验的是 registry 当前字节，re-tag 窗口内 verified 描述的可能是未扫字节 | ✅ | `Verification.integrity` 字段（npm=measuredIntegrity 经沙箱 urun 跑 `npm view dist.integrity`；github=钉死 sha）；merge `driftCheck` 对槽位锚点（pu.integrity/entry.integrity/source.version）——实测≠钉值改记 failed/install+drift 摘录进 diagnose 人工面；`reuseVerified` 后处理让内容锚逐字节相同的槽领养同宿主 verified 结果（re-tag 回滚/hold↔展示双胞胎不烧第二趟） |

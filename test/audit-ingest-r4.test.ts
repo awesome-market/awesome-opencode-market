@@ -203,7 +203,7 @@ describe('mergeEntries R-8: remote release of our held version adopts remote com
         compat: { engines: 'opencode >=2' },
         capabilities: { scannedAt: 't2', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
         verification: { status: 'verified' as const } })] }
-    const merged = mergeEntries([ours], remote, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([ours], remote, '2.3.0', RULESET_VERSION)
     const m = merged[0]!
     expect(m.pendingUpdate).toBeUndefined()
     expect(m.latestVersion).toBe('2.0.0')

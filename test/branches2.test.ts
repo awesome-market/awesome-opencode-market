@@ -86,7 +86,7 @@ describe('branches round 2', () => {
   it('mergeEntries: aliases + discoveredVia union', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
       plugins: [{ ...mkEntry('a'), aliases: ['old-alias'], discoveredVia: ['github-topic' as const] }], removed: [] }
-    const merged = mergeEntries([{ ...mkEntry('a'), aliases: ['new-alias'] }], old, '2.2.5')
+    const merged = mergeEntries([{ ...mkEntry('a'), aliases: ['new-alias'] }], old, '2.3.0')
     expect(merged[0]!.aliases).toEqual(expect.arrayContaining(['old-alias', 'new-alias']))
     expect(merged[0]!.discoveredVia).toContain('github-topic')
   })

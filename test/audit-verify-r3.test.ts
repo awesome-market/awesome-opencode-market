@@ -9,7 +9,7 @@ import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
 
 const caps = { scannedAt: null, findings: [], redFlags: [] }
 const verf = (status: 'unverified' | 'verified' | 'failed' | 'skipped' = 'unverified') =>
-  ({ status, ...(status === 'verified' ? { level: 'load' as const, opencodeVersion: '2.2.5', verifiedAt: 't' } : {}) })
+  ({ status, ...(status === 'verified' ? { level: 'load' as const, opencodeVersion: '2.3.0', verifiedAt: 't' } : {}) })
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'p', slug: 'p', aliases: [], type: 'plugin', discoveredVia: [],
   source: { kind: 'npm', id: 'p' }, description: {}, features: [], category: [],

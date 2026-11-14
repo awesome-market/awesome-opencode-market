@@ -91,7 +91,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
       discoveredVia: ['submission'], verification: { status: 'verified', level: 'load' },
     })
     const fresh = mkEntry('a', '2.0.0')
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', RULESET_VERSION)
     expect(m!.firstSeenAt).toBe('2025-01-01')
     expect(m!.slug).toBe('o/a-repo')
     expect(m!.aliases).toContain('x')
@@ -105,7 +105,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
       verification: { status: 'verified', level: 'load' },
     })
     const same = mkEntry('a', '1.0.0')
-    const [m] = mergeEntries([same], mkIndex([prev]), '2.2.5', RULESET_VERSION)
+    const [m] = mergeEntries([same], mkIndex([prev]), '2.3.0', RULESET_VERSION)
     expect(m!.verification.status).toBe('verified')
     expect(m!.capabilities.findings).toEqual(['f1'])
   })
@@ -117,7 +117,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
     const fresh = mkEntry('a', '1.0.0', {
       capabilities: { scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: ['new'], redFlags: [] },
     })
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', RULESET_VERSION)
     expect(m!.capabilities.findings).toEqual(['new'])
     expect(m!.verification.status).toBe('verified')
   })
@@ -130,7 +130,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
     const fresh = mkEntry('a', '1.0.0', {
       source: { kind: 'npm', id: 'a', repo: 'o/r', repoId: 999 },   // repojacking fires
     })
-    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.2.5', RULESET_VERSION)
+    const [m] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', RULESET_VERSION)
     expect(m!.verification.status).toBe('skipped')
     expect(m!.capabilities.redFlags).toContain('sec:repo-recreated')
   })
@@ -160,14 +160,14 @@ describe('buildIndex removed + categories (F-2/I-3)', () => {
       { slug: 'b', name: 'b', disappearedAt: '2020-01-01', reason: 'npm-404' },
       { slug: 'c', name: 'c', disappearedAt: '2026-05-01', reason: 'npm-404' },
     ] })
-    const { index } = buildIndex([mkEntry('c')], old, { opencodeVersion: '2.2.5', now })
+    const { index } = buildIndex([mkEntry('c')], old, { opencodeVersion: '2.3.0', now })
     expect(index.removed.map(r => r.name)).toEqual(['a'])
   })
   it('caller tombstones appended; category registry unions whitelisted', () => {
     const e = mkEntry('x', '1.0.0', { category: ['other'] })
     const old = mkIndex([], { categories: { tools: { en: 'Old', zh: '旧' }, 'old-cat': { en: 'Gone' } } })
     const { index } = buildIndex([e], old, {
-      opencodeVersion: '2.2.5', now: '2026-01-01',
+      opencodeVersion: '2.3.0', now: '2026-01-01',
       removed: [{ slug: 'y', name: 'y', disappearedAt: '2026-01-01', reason: 'npm-404' }],
     })
     expect(index.removed).toHaveLength(1)

@@ -58,7 +58,7 @@ describe('verifyPackage pinning', () => {
     const calls: string[][] = []
     const fake = (async (_c: string, args: string[]) => {
       calls.push(args)
-      return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args[0] === '--version' ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
@@ -72,7 +72,7 @@ describe('verifyPackage pinning', () => {
     const calls: string[][] = []
     const fake = (async (_c: string, args: string[]) => {
       calls.push(args)
-      return { stdout: 'opencode v2.2.5', stderr: '' }
+      return { stdout: 'opencode v2.3.0', stderr: '' }
     }) as unknown as ExecFn
     const home = vHome()
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
@@ -98,7 +98,7 @@ describe('verify/merge version routing', () => {
   })
   it('result for held version writes pendingUpdate.verification, display untouched', () => {
     const m = mergeResults(idx([held]), [
-      { name: 'p', version: '1.1.0', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', version: '1.1.0', status: 'verified', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     const p = m.plugins[0]!
     expect(p.pendingUpdate!.verification.status).toBe('verified')
@@ -108,13 +108,13 @@ describe('verify/merge version routing', () => {
   it('result for display version writes entry.verification', () => {
     const e = entry({ verification: verf('unverified') })
     const m = mergeResults(idx([e]), [
-      { name: 'p', version: '1.0.0', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', version: '1.0.0', status: 'verified', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     expect(m.plugins[0]!.verification.status).toBe('verified')
   })
   it('stale result (version matches neither slot) is dropped', () => {
     const m = mergeResults(idx([held]), [
-      { name: 'p', version: '9.9.9', status: 'failed', level: 'install', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', version: '9.9.9', status: 'failed', level: 'install', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     const p = m.plugins[0]!
     expect(p.pendingUpdate!.verification.status).toBe('unverified')
@@ -123,7 +123,7 @@ describe('verify/merge version routing', () => {
   it('legacy version-less result writes the display slot', () => {
     const e = entry({ verification: verf('unverified') })
     const m = mergeResults(idx([e]), [
-      { name: 'p', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', status: 'verified', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     expect(m.plugins[0]!.verification.status).toBe('verified')
   })
@@ -133,7 +133,7 @@ describe('verify/merge version routing', () => {
       pendingUpdate: { version: '1.1.0', capabilities: caps(), verification: verf('unverified'), heldAt: 't' },
     })
     const m = mergeResults(idx([e]), [
-      { name: 'p', status: 'failed', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', status: 'failed', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     const p = m.plugins[0]!
     expect(p.verification.status).toBe('unverified')
@@ -142,7 +142,7 @@ describe('verify/merge version routing', () => {
   it('harness:true results are dropped entirely — infrastructure is not a package verdict', () => {
     const e = entry({ verification: verf('unverified') })
     const m = mergeResults(idx([e]), [
-      { name: 'p', version: '1.0.0', status: 'failed', level: 'install', opencodeVersion: '2.2.5',
+      { name: 'p', version: '1.0.0', status: 'failed', level: 'install', opencodeVersion: '2.3.0',
         verifiedAt: 'v', logExcerpt: 'harness error: sudo: a password is required', harness: true },
     ])
     const v = m.plugins[0]!.verification
@@ -154,14 +154,14 @@ describe('verify/merge version routing', () => {
       verification: { status: 'failed', level: 'install', verifiedAt: '2026-01-01T00:00:00Z' } as PluginEntry['verification'],
     })
     const m = mergeResults(idx([e]), [
-      { name: 'p', version: '1.0.0', status: 'failed', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', version: '1.0.0', status: 'failed', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     expect(m.plugins[0]!.verification.retries).toBe(1)   // was 2 before the ?? 0 fix
   })
   it('pending new entry: result for latestVersion lands in verification (release gate reads it)', () => {
     const e = entry({ approval: 'pending', latestVersion: '3.0.0', verification: verf('unverified') })
     const m = mergeResults(idx([e]), [
-      { name: 'p', version: '3.0.0', status: 'verified', level: 'load', opencodeVersion: '2.2.5', verifiedAt: 'v' },
+      { name: 'p', version: '3.0.0', status: 'verified', level: 'load', opencodeVersion: '2.3.0', verifiedAt: 'v' },
     ])
     expect(m.plugins[0]!.verification.status).toBe('verified')
   })
@@ -384,7 +384,7 @@ describe('tui judge', () => {
     expect(judgeTuiPane('plugin x crashed while loading', true).ok).toBe(false)
   })
   it('alive session + real ui content → pass', () => {
-    const pane = '┌─ opencode ────────────┐\n│ Ask anything...       │\n│ build agent · 2.2.5   │\n└───────────────────────┘'
+    const pane = '┌─ opencode ────────────┐\n│ Ask anything...       │\n│ build agent · 2.3.0   │\n└───────────────────────┘'
     const r = judgeTuiPane(pane, true)
     expect(r.ok).toBe(true)
     expect(r.log).toContain('opencode')
@@ -523,7 +523,7 @@ describe('skill structure check (skill-only + dual-nature parts)', () => {
   const fakeSkillOs = (opts: { body?: string; list?: string; packErr?: boolean; calls?: string[][] } = {}) =>
     (async (cmd: string, args: string[]) => {
       opts.calls?.push([cmd, ...args])
-      if (args.includes('--version')) return { stdout: 'opencode v2.2.5', stderr: '' }
+      if (args.includes('--version')) return { stdout: 'opencode v2.3.0', stderr: '' }
       if (cmd === 'npm' && args[0] === 'pack') {
         if (opts.packErr) throw Object.assign(new Error('boom'), { stderr: 'npm ERR! 404' })
         return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
@@ -606,7 +606,7 @@ describe('skill structure check (skill-only + dual-nature parts)', () => {
   it('structure-level result rows pass the merge artifact boundary', () => {
     expect(VerifyResultFile.safeParse({
       name: 's', version: '1', status: 'verified', level: 'structure',
-      opencodeVersion: '2.2.5', verifiedAt: '2026-01-02T00:00:00Z',
+      opencodeVersion: '2.3.0', verifiedAt: '2026-01-02T00:00:00Z',
     }).success).toBe(true)
   })
 })
@@ -621,7 +621,7 @@ describe('verifyShard', () => {
     // verifyPackage entirely → the per-target catch records 'harness error'
     const notDir = join(home, 'afile')
     writeFileSync(notDir, 'x')
-    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const fake = (async () => ({ stdout: 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     const results = await verifyShard(['a', 'b'], out, { home: notDir, execFn: fake, spawnFn: deadSpawn })
     expect(results).toHaveLength(2)
     expect(results.every(r => r.status === 'failed')).toBe(true)
@@ -638,7 +638,7 @@ describe('verifyShard', () => {
     const out = join(home, 'results.json')
     const notDir = join(home, 'afile')
     writeFileSync(notDir, 'x')
-    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const fake = (async () => ({ stdout: 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     // pin to 2 lanes so the abort is actually exercised — with 4 default lanes
     // all 6 targets could be in-flight before the streak can bite
     const prev = process.env.VERIFY_LANES
@@ -782,7 +782,7 @@ describe('skill tarball edge cases', () => {
     // docs/SKILL.md sorts first in the tar listing but has no frontmatter;
     // the real manifest under skills/ must still verify the package
     const fake = (async (cmd: string, args: string[]) => {
-      if (args.includes('--version')) return { stdout: 'opencode v2.2.5', stderr: '' }
+      if (args.includes('--version')) return { stdout: 'opencode v2.3.0', stderr: '' }
       if (cmd === 'npm' && args[0] === 'pack') return { stdout: 'pkg-1.0.0.tgz\n', stderr: '' }
       if (cmd === 'tar' && args[0] === 'tzf')
         return { stdout: 'package/docs/SKILL.md\npackage/package.json\npackage/skills/x/SKILL.md\n', stderr: '' }
@@ -861,7 +861,7 @@ describe('github-kind verify routes', () => {
       [{ source: { type: 'package', target: 'r#abc123' }, state: { status: 'active' } }]))
     const fake = (async (cmd: string, args: string[]) => {
       calls.push([cmd, ...args])
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' },
       home, execFn: fake, spawnFn: liveSpawn })
@@ -875,7 +875,7 @@ describe('github-kind verify routes', () => {
     const okFake = (async (cmd: string, args: string[]) =>
       cmd === 'npm' && args.includes('dist.integrity')
         ? { stdout: 'sha512-AAA\n', stderr: '' }
-        : { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }) as unknown as ExecFn
+        : { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }) as unknown as ExecFn
     const ok = await verifyPackage('pkg', { version: '1.0.0', home, execFn: okFake, spawnFn: liveSpawn })
     expect(ok.integrity).toBe('sha512-AAA')
     const home2 = vHome()
@@ -883,7 +883,7 @@ describe('github-kind verify routes', () => {
       [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
     const badFake = (async (cmd: string, args: string[]) => {
       if (cmd === 'npm' && args.includes('dist.integrity')) throw new Error('registry down')
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const degraded = await verifyPackage('pkg', { version: '1.0.0', home: home2, execFn: badFake, spawnFn: liveSpawn })
     expect(degraded.status).toBe('verified')
@@ -894,7 +894,7 @@ describe('github-kind verify routes', () => {
 describe('remaining verify/plan/merge edge branches', () => {
   it('spawnFn throwing outright → dead serve → harness throw, not a verdict', async () => {
     const boom = (() => { throw new Error('spawn refused') }) as unknown as SpawnFn
-    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const fake = (async () => ({ stdout: 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake, spawnFn: boom, bootWaitMs: 20 }))
       .rejects.toThrow('serve did not announce a listener')
   })
@@ -907,7 +907,7 @@ describe('remaining verify/plan/merge edge branches', () => {
       calls.push([cmd, ...args])
       if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-abc/SKILL.md\n', stderr: '' }
       if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const r = await verifyPackage('o/r', { git: { repo: 'O/R', sha: 'abc123' }, parts: ['plugin', 'skill'],
       home, execFn: fake, spawnFn: liveSpawn })
@@ -920,7 +920,7 @@ describe('remaining verify/plan/merge edge branches', () => {
         return h })(),
       execFn: (async (cmd: string, args: string[]) => {
         if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-abc/index.js\n', stderr: '' }
-        return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+        return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
       }) as unknown as ExecFn, spawnFn: liveSpawn })
     expect(broken.status).toBe('failed')
     expect(broken.logExcerpt).toContain('skill payload failed')
@@ -1037,7 +1037,7 @@ describe('coverage: branch stragglers', () => {
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'pkg@1.0.0' }, state: { status: 'active' } }]))
     const fake = (async (_c: string, args: string[]) =>
-      ({ stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' })) as unknown as ExecFn
+      ({ stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' })) as unknown as ExecFn
     const r = await verifyPackage('pkg', { version: '1.0.0', home, execFn: fake, spawnFn: liveSpawn })
     expect(r.status).toBe('verified')
   })
@@ -1049,7 +1049,7 @@ describe('coverage: branch stragglers', () => {
       stdout: { on: (_e: 'data', cb: (d: unknown) => void) => { cb('server listening on http://127.0.0.1:4567\n') } },
       stderr: { on: () => {} }, on: () => {}, kill: () => {},
     })) as unknown as SpawnFn
-    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const fake = (async () => ({ stdout: 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     const r = await verifyPackage('pkg', { version: '1.0.0', home, execFn: fake, spawnFn: noPw })
     expect(r.status).toBe('verified')
   })
@@ -1071,7 +1071,7 @@ describe('coverage: branch stragglers', () => {
       calls.push([cmd, ...args])
       if (cmd === 'tar' && args[0] === 'tzf') return { stdout: 'repo-x/SKILL.md\n', stderr: '' }
       if (cmd === 'tar' && args[0] === 'xzf') return { stdout: '---\nname: s\n---\nb', stderr: '' }
-      return { stdout: args.includes('--version') ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args.includes('--version') ? 'opencode v2.3.0' : '', stderr: '' }
     }) as unknown as ExecFn
     const rs = await verifyShard([{ name: 'o/r', git: { repo: 'O/R', sha: 'abc' }, parts: ['skill'] }],
       join(home, 'res.json'), { execFn: fake })
@@ -1112,7 +1112,7 @@ describe('coverage: last branch stragglers', () => {
       stdout: { on: (_e: 'data', cb: (d: unknown) => void) => { cb('server listening on unix:///tmp/s.sock\n') } },
       stderr: { on: () => {} }, on: () => {}, kill: () => {},
     })) as unknown as SpawnFn
-    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+    const fake = (async () => ({ stdout: 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')), execFn: fake, spawnFn: weird, bootWaitMs: 30 }))
       .rejects.toThrow('serve did not announce a listener')
   })
@@ -1234,14 +1234,14 @@ describe('verify audit batch — replay bounds, git-gui, tar cap, api states', (
     writeFileSync(join(home, 'plugins.json'), JSON.stringify(
       [{ source: { type: 'package', target: 'p@1.0.0' }, state: { status: 'loading' } }]))
     const fake = (async (cmd: string) => ({
-      stdout: cmd === 'curl' ? '200' : 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+      stdout: cmd === 'curl' ? '200' : 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     const r = await verifyPackage('p', { version: '1.0.0', home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 40 })
     expect(r.status).toBe('failed')
     expect(r.logExcerpt).toContain("non-terminal state 'loading'")
   })
   it('serve API refusing auth with no scraped password → harness throw, not a package verdict', async () => {
     const fake = (async (cmd: string) => ({
-      stdout: cmd === 'curl' ? '401' : 'opencode v2.2.5', stderr: '' })) as unknown as ExecFn
+      stdout: cmd === 'curl' ? '401' : 'opencode v2.3.0', stderr: '' })) as unknown as ExecFn
     await expect(verifyPackage('p', { home: mkdtempSync(join(tmpdir(), 'vx-')),
       execFn: fake, spawnFn: liveSpawn, apiWaitMs: 40 }))
       .rejects.toThrow('upstream output/auth drift')
