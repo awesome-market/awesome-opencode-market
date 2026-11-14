@@ -736,6 +736,15 @@ export async function main(
   // exactly what the assignee push exists for
   const urgent = (t: DocketTarget) =>
     t.verdict === 'flag' || t.verdict === 'concern' || (paused && t.name === NONE_BACKLOG)
+  // flagged/unscanned slot carrying only an AI pass — the release gate refuses
+  // AI authority on it (same first-blocker check as the body 放行闸 line), so
+  // the issue can ONLY converge via a human verdict:pass. A covering human
+  // pass releases under the human's authority; a human concern is already
+  // decided — neither still needs a human.
+  const humanRequired = (t: DocketTarget) =>
+    t.verdict === 'pass'
+    && t.humanVerdict?.verdict !== 'pass' && t.humanVerdict?.verdict !== 'concern'
+    && ((t.redFlags ?? 0) > 0 || !!t.unscanned)
   const assignBestEffort = async (issue: string | number, only?: string[]) => {
     if (!assignees.length) return
     const want = only ?? assignees
@@ -789,6 +798,7 @@ export async function main(
       console.log(`[docket] create ${title}`)
       const args = ['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
+        ...(humanRequired(t) ? ['--label', 'review:human'] : []),
         '--body', issueBody(t, { repo, pagesBase, paused })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
@@ -828,6 +838,11 @@ export async function main(
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
+    // same drift rule as ai:* — a rescan clearing the flags (or a landing
+    // human verdict) retires the human-only gate, so the label must follow
+    const wantHuman = humanRequired(t)
+    if (wantHuman && !curLabels.has('review:human')) edit.push('--add-label', 'review:human')
+    if (!wantHuman && curLabels.has('review:human')) edit.push('--remove-label', 'review:human')
     // a wanted issue must not keep the terminal decided label — a reopened
     // or hand-labeled issue would otherwise carry pending+decided at once
     // (the close path converges to decided; the update path mirrors it)
@@ -927,6 +942,7 @@ export async function main(
       const cur = new Set((i.labels ?? []).map(l => l.name))
       const largs: string[] = []
       if (cur.has('review:pending')) largs.push('--remove-label', 'review:pending')
+      if (cur.has('review:human')) largs.push('--remove-label', 'review:human')
       if (!cur.has('review:decided')) largs.push('--add-label', 'review:decided')
       for (const l of cur) if (l.startsWith('verdict:')) largs.push('--remove-label', l)
       if (largs.length) await ghFn(['issue', 'edit', '-R', repo, String(i.number), ...largs])
