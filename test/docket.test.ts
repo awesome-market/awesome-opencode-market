@@ -26,7 +26,7 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e()]), [v()])
     // 't' fixtures are unparseable → heldAt is OMITTED, never rendered as garbage
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0 }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' }])
   })
   it('ai pass maturity phase follows digest-state membership', () => {
     const ver = v()
@@ -40,7 +40,7 @@ describe('docketTargets', () => {
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })]), [v({ version: '2.0.0', verdict: 'concern' })])
     expect(t).toEqual([{ name: 'pkg', version: '2.0.0', verdict: 'concern', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true, scannedAt: 't' }])
   })
   it('human verdict already rules → no docket entry', () => {
     expect(docketTargets(idx([e()]), [v({ source: 'human' })])).toEqual([])
@@ -71,7 +71,7 @@ describe('docketTargets', () => {
       capabilities: { scannedAt: '2020-06-01T00:00:00Z', findings: [], redFlags: [] },
     })]), [], null, { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z', scannedAt: '2020-06-01T00:00:00Z' }])
   })
   it('unparseable hold clock → fail-VISIBLE none issue, never silent suppression', () => {
     const t = docketTargets(idx([e({
@@ -186,7 +186,7 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e({ firstSeenAt: '2026-01-01T00:00:00Z' })]), [], null,
       { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z', scannedAt: 't' }])
   })
   it('young hold without verdict stays AI-owned — no issue inside the age window', () => {
     expect(docketTargets(idx([e({ firstSeenAt: '2026-01-04T00:00:00Z' })]), [], null,
@@ -197,7 +197,7 @@ describe('docketTargets', () => {
       capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-recreated'] } })]), [])
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'flag', reason: 'sec:repo-recreated',
       verification: 'verified', slug: 'o/pkg', findings: 0, redFlags: 1, publishedAt: '2026-01-01T00:00:00Z',
-      redFlagList: ['sec:repo-recreated'], sitePage: true }])
+      redFlagList: ['sec:repo-recreated'], sitePage: true, scannedAt: 't' }])
   })
   it('flag retired only by a human verdict that POSTDATES the flag (flaggedAt)', () => {
     const flaggedAt = (stamp?: string) => e({ approval: 'approved',
@@ -512,7 +512,7 @@ describe('docket main', () => {
     // derives from GH_REPO
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0 },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -594,7 +594,7 @@ describe('docket main', () => {
       writeFileSync(vPath, JSON.stringify(v()) + '\n')
       const wantBody2 = issueBody(
         { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-          slug: 'o/pkg', findings: 0, redFlags: 0 },
+          slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
         { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
       const calls2: string[][] = []
       const ghFn2 = (args: string[]) => {
@@ -624,7 +624,7 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0 },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -807,7 +807,7 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0 },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
