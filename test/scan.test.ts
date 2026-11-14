@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { scanTarball, fmtFinding } from '../pipeline/scan/scan.ts'
-import { RULES, isBinary } from '../pipeline/scan/rules.ts'
+import { RULES, isBinary, knownBinaryMagic, ASSET_PATH } from '../pipeline/scan/rules.ts'
 
 let tgz: Buffer
 
@@ -98,6 +98,44 @@ describe('scan/rules', () => {
     // fixture package.json is a test asset — finding, not a flag
     expect(life.test('package/test/fixtures/pkg/package.json', '{"scripts":{"postinstall":"x"}}')!.sev).toBe('medium')
     expect(life.test('package/package.json', '{"scripts":{"postinstall":"x"}}')!.sev).toBeUndefined()
+  })
+
+  it('r9 demotions: .ssh boundary, deny tables, eval names/codegen, hex data', () => {
+    const cred = RULES.find(r => r.id === 'credential-read')!
+    // product's own file named like the credential dir — not the dir itself
+    expect(cred.test('package/a.mjs', 'if (!name.endsWith(".ssh-runtime-manifest.json")) continue')!).toBeNull()
+    // real .ssh paths still hit
+    expect(cred.test('package/a.mjs', 'open("~/.ssh/config")')!.sev).toBeUndefined()
+    expect(cred.test('package/a.mjs', 'open("~/.ssh/id_ed25519")')!.sev).toBeUndefined()
+    // deny/guard-table line — FORBIDDEN_GRANT_PATTERN listing the path
+    expect(cred.test('package/guard.mjs', 'const FORBIDDEN = [".ssh", ".aws/credentials"]')!.sev).toBe('medium')
+
+    const obf = RULES.find(r => r.id === 'obfuscation')!
+    // identifier suffix / member call / method definition — not bare eval
+    expect(obf.test('package/a.js', 'myeval(x)')!.sev).toBe('medium')
+    expect(obf.test('package/a.js', 'await page.eval(js, arg)')!.sev).toBe('medium')
+    expect(obf.test('package/a.js', 'eval(args, ctx) { return ctx.v }')!.sev).toBe('medium')
+    // schema codegen / globalThis polyfill
+    expect(obf.test('package/v.js', "new Function('return this')()")!.sev).toBe('medium')
+    expect(obf.test('package/ajv.js', 'const fn = new Function("data","opts",code)')!.sev).toBe('medium')
+    // hex runs inside regex classes / encoding tables are data
+    expect(obf.test('package/e.js', 'chars:"\\\\x80\\\\x81\\\\x82\\\\x83\\\\x84\\\\x85\\\\x86\\\\x87"')!.sev).toBe('medium')
+    expect(obf.test('package/r.js', 'const re = /[\\\\x01\\\\x02\\\\x03\\\\x04\\\\x05\\\\x06\\\\x07\\\\x08\\\\x09]/g')!.sev).toBe('medium')
+    // bare global eval + unexplained hex still flag high
+    expect(obf.test('package/a.js', 'eval(payload)')!.sev).toBeUndefined()
+    const hex = "'\\x41\\x42\\x43\\x44\\x45\\x46\\x47\\x48'"
+    expect(obf.test('package/a.js', `const b = ${hex}`)!.sev).toBeUndefined()
+  })
+
+  it('r9 binary magic: recognized containers demote, unknown stays high', async () => {
+    expect(knownBinaryMagic(Buffer.from('OggS' + '\0'.repeat(60)))).toBe('ogg')
+    expect(knownBinaryMagic(Buffer.concat([Buffer.from([0x37, 0x7f, 0x06, 0x82]), Buffer.alloc(40)]))).toBe('sqlite-wal')
+    expect(knownBinaryMagic(Buffer.from([0xff, 0xfe, 0x41, 0x00]))).toBe('utf16-text')
+    expect(knownBinaryMagic(Buffer.from('PDLP' + '\0'.repeat(60)))).toBe('pdl')
+    expect(knownBinaryMagic(Buffer.from('VIMsug' + '\0'.repeat(60)))).toBe('vim-spell')
+    expect(knownBinaryMagic(Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x01, 0x02]))).toBeNull()
+    expect(ASSET_PATH.test('pkg/assets/prompt.db')).toBe(true)
+    expect(ASSET_PATH.test('pkg/lib/entry.js')).toBe(false)
   })
 })
 

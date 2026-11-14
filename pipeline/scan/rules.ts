@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r8'
+export const RULESET_VERSION = 'r9'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -70,19 +70,26 @@ const lineOf = (c: string, i: number): { text: string; off: number } => {
   return { text: c.slice(s, e), off: s }
 }
 
+/** Deny/guard-table context — a credential token inside a FORBIDDEN /
+ *  EXCLUDE / sensitive-pattern list is the guard doing its job
+ *  (workspace-read-broker, FORBIDDEN_GRANT_PATTERN), not a read. */
+const DENY_LINE = /FORBIDDEN|EXCLUD|deny|blocklist|sensitive|SANITIZ|protect|BASENAME_PATTERN|GRANT_PATTERN|cannot be (committed|read|granted)|DETECT|signature/i
+
 /** The token is descriptive rather than operational: inside a // or block
- *  comment, or inside a quoted string that is NOT a bare path — quoted
- *  content containing whitespace or shell/regex syntax ('cat ~/.ssh/id_rsa',
- *  'eval(String.fromCharCode(114,109))') is an example command, a detection
- *  signature, or a test case, not a path being opened. Bare path strings
- *  ('~/.ssh/id_rsa', '.npmrc') contain none of those characters and keep
- *  their severity — writing/reading that literal path is the real signal. */
+ *  comment, inside a guard/deny-pattern table, or inside a quoted string
+ *  that is NOT a bare path — quoted content containing whitespace or
+ *  shell/regex syntax ('cat ~/.ssh/id_rsa', 'eval(String.fromCharCode(..))')
+ *  is an example command, a detection signature, or a test case, not a path
+ *  being opened. Bare path strings ('~/.ssh/id_rsa', '.npmrc') contain none
+ *  of those characters and keep their severity — writing/reading that
+ *  literal path is the real signal. */
 const inertRef = (c: string, m: RegExpMatchArray): boolean => {
   const i = m.index!
   const { text: line, off } = lineOf(c, i)
   const li = i - off
   const before = line.slice(0, li)
   if (/\/\/|\/\*/.test(before)) return true
+  if (DENY_LINE.test(line)) return true
   // inside an unclosed quoted string? count parity per quote type — an
   // odd count means the last quote of that type opened a string that
   // contains the match (a closed earlier string must NOT demote:
@@ -188,14 +195,39 @@ export const RULES: Rule[] = [
       // credential-read)
       if (c == null || !EXEC_EXT.test(p)) return null
       const e = c.match(/eval\(|new Function/)
-      // inertRef demotion: 'eval(String.fromCharCode(114,109))' inside a
-      // detection-signature table / comment is a string ABOUT eval
-      if (e) return { detail: 'eval/Function usage', ...demoted(p, c, e), ...srcLine(c, e) }
-      const h = c.match(/(\\x[0-9a-fA-F]{2}){8,}/)
-      // hex blobs live inside quotes by definition — inertRef would demote
-      // every one; path context is the only honest demotion here
-      if (h) return { detail: 'long hex-escaped blob',
-        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, h) }
+      if (e) {
+        const i = e.index!
+        const pre = c.slice(Math.max(0, i - 15), i)
+        // identifier suffix / member call / method definition — `myeval(`,
+        // `page.eval(`, `eval(args, ctx) {` — the DANGEROUS form is bare
+        // global eval; x.eval() is usually CDP/schema/jexl-style APIs
+        if (/[A-Za-z_$.]$/.test(pre) || /\beval\s*\([^)]*\)\s*\{/.test(lineOf(c, i).text))
+          return { detail: 'eval as identifier/method name', sev: 'medium', ...srcLine(c, e) }
+        // schema/template codegen & the globalThis polyfill — ajv's
+        // compiled validators, multi-arg new Function("a","b",body), and
+        // new Function('return this') are everywhere; keep the hit as a
+        // finding, drop the flag. Single-arg new Function(payload) is the
+        // form that smells like a payload and stays high.
+        if (/new Function\s*\(\s*[`'"]return this/.test(c)
+          || /new Function\s*\([^)]*,[^)]*,/.test(c)
+          || /ajv|schemastery|schema\.callback|code\.process|makeValidate|jsonata|expr[.-]?eval|mathjs|jexl/i.test(lineOf(c, i).text))
+          return { detail: 'eval/Function codegen (schema/template/polyfill)', sev: 'medium', ...srcLine(c, e) }
+        // inertRef demotion: 'eval(String.fromCharCode(114,109))' inside a
+        // detection-signature table / comment is a string ABOUT eval
+        return { detail: 'eval/Function usage', ...demoted(p, c, e), ...srcLine(c, e) }
+      }
+      // \x and \\x escape runs both — iconv tables and packed strings are
+      // written \\xNN, smuggled payloads often plain \xNN
+      const h = c.match(/(\\\\?x[0-9a-fA-F]{2}){8,}/)
+      if (h) {
+        // regex char-class runs (/[\x01-\x1f...]/) and iconv/encoding
+        // tables (chars:"\\x80\\x81…", _sbcs/_dbcs) are data, not payloads
+        const { text: hline } = lineOf(c, h.index!)
+        if (/chars\s*[:=]|_sbcs|_dbcs|iconv|encoding|\/\[|\]\/g|new RegExp|\\u/i.test(hline))
+          return { detail: 'hex escapes in regex/encoding table', sev: 'medium', ...srcLine(c, h) }
+        return { detail: 'long hex-escaped blob',
+          ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, h) }
+      }
       return null
     },
   },
@@ -214,7 +246,9 @@ export const RULES: Rule[] = [
     test: (p, c) => {
       // docs legitimately mention credential paths — only fire on code
       if (c == null || !EXEC_EXT.test(p)) return null
-      const m = c.match(/\.ssh|id_rsa|\.aws\/credentials|keychain|\.npmrc|\.netrc/)
+      // .ssh needs a boundary — '.ssh-runtime-manifest.json' is a product's
+      // own file name, not the credential dir; '.ssh/' and '~/.ssh' match
+      const m = c.match(/\.ssh(?![\w-])|id_rsa|\.aws\/credentials|keychain|\.npmrc|\.netrc/)
       return m ? { detail: `credential-path reference: ${m[0]}`, ...demoted(p, c, m), ...srcLine(c, m) } : null
     },
   },
@@ -227,6 +261,54 @@ export const RULES: Rule[] = [
     },
   },
 ]
+
+/** Resource/asset dirs — blobs there are shipped data (fonts, audio,
+ *  fixtures, vendored blobs), not smuggled payloads. Same demotion
+ *  philosophy as testPath: finding yes, red flag no. */
+export const ASSET_PATH =
+  /(^|\/)(__pycache__|assets?|sfx|sounds?|fonts?|media|static|public|resources?|img|images?|icons?|vendor|third[-_]?party|deps|extern|learning|i18n|locales?|spell|data)\//i
+
+/** Magic-byte sniffing for the binary-blob rule — a recognizable container
+ *  is unscannable but explained; an unknown blob stays high. Covers the
+ *  formats the review backlog actually contained: sqlite WAL, pyc, vim
+ *  spell, .lnk, ogg/flac/id3 audio, fonts, utf-16 text. */
+export function knownBinaryMagic(buf: Buffer): string | null {
+  const h = (m: number[]) => m.every((b, i) => buf[i] === b)
+  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) return 'utf16-text'
+  if (buf.length >= 4 && buf[0] === 0x37 && buf[1] === 0x7f && (buf[2] === 0x06) && (buf[3] === 0x82 || buf[3] === 0x83)) return 'sqlite-wal'
+  const pairs: [number[] | Buffer, string][] = [
+    [Buffer.from('SQLite format 3\0', 'latin1'), 'sqlite'],
+    [Buffer.from('\0asm', 'latin1'), 'wasm'],
+    [[0x7f, 0x45, 0x4c, 0x46], 'elf'],
+    [[0x4d, 0x5a], 'pe'],
+    [[0x50, 0x4b, 0x03, 0x04], 'zip'],
+    [[0x1f, 0x8b], 'gzip'],
+    [[0x89, 0x50, 0x4e, 0x47], 'png'],
+    [[0xff, 0xd8, 0xff], 'jpeg'],
+    [Buffer.from('GIF8', 'latin1'), 'gif'],
+    [Buffer.from('RIFF', 'latin1'), 'riff'],
+    [Buffer.from('OggS', 'latin1'), 'ogg'],
+    [Buffer.from('fLaC', 'latin1'), 'flac'],
+    [Buffer.from('ID3', 'latin1'), 'mp3'],
+    [Buffer.from('OTTO', 'latin1'), 'otf'],
+    [Buffer.from('wOFF', 'latin1'), 'woff'],
+    [Buffer.from('wOF2', 'latin1'), 'woff2'],
+    [Buffer.from('true', 'latin1'), 'ttf'],
+    [Buffer.from('\xca\xfe\xba\xbe', 'latin1'), 'class/fat-macho'],
+    [[0xfe, 0xed, 0xfa], 'mach-o'], [[0xce, 0xfa, 0xed, 0xfe], 'mach-o'], [[0xcf, 0xfa, 0xed, 0xfe], 'mach-o'],
+    [[0xfd, 0x37, 0x7a, 0x58, 0x5a], 'xz'],
+    [[0x28, 0xb5, 0x2f, 0xfd], 'zstd'],
+    [Buffer.from('BZh', 'latin1'), 'bzip2'],
+    [Buffer.from('VIMsug', 'latin1'), 'vim-spell'],
+    [[0x4c, 0x00, 0x00, 0x00, 0x01, 0x14, 0x02], 'lnk'],
+    [Buffer.from('PDLP', 'latin1'), 'pdl'],
+    [Buffer.from('CPFONT', 'latin1'), 'cpfont'],
+    [[0x00, 0x00, 0x01, 0x00], 'ico'],
+  ]
+  for (const [m, k] of pairs) if (buf.length >= m.length && h([...m] as number[])) return k
+  if (buf.length > 262 && buf.subarray(257, 262).toString('latin1') === 'ustar') return 'tar'
+  return null
+}
 
 /** Binary blob detection: >30% non-printable bytes in first 8KB. */
 export function isBinary(buf: Buffer): boolean {

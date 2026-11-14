@@ -1291,7 +1291,13 @@ export async function main(
     //    (auto-retry may flip it) and gets a real review instead. Harness
     //    rows are also excluded: the package was never measured (infra ≠ package).
     if (terminalFailed(w.vf)) {
-      const excerpt = (w.vf.logExcerpt ?? '').replace(/\s+/g, ' ').trim().slice(0, 300) || '(无日志摘录)'
+      // prefer the first error-looking line over a raw head slice — a load
+      // log that opens with the plugin's own config dump otherwise puts
+      // hundreds of chars of JSON into the reason instead of the failure
+      const vlog = w.vf.logExcerpt ?? ''
+      const errLine = vlog.split(/\n+/).map(l => l.trim())
+        .find(l => /error|failed|cannot|exception|ENOENT|not found|denied|SyntaxError|TypeError/i.test(l))
+      const excerpt = (errLine ?? vlog.replace(/\s+/g, ' ').trim()).slice(0, 300) || '(无日志摘录)'
       emit(w, verdictRecord(e, 'concern',
         `装测失败（verify ${w.vf.level ?? 'install'} 级）：${excerpt}`,
         { reasonEn: `install/load verification failed at ${w.vf.level ?? 'install'}: ${excerpt === '(无日志摘录)' ? 'no log excerpt' : excerpt}`, sha: w.sha }))

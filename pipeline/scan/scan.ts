@@ -1,7 +1,7 @@
 /** Tarball scan driver: unpack .tgz in memory, apply rules per file. */
 import { Readable } from 'node:stream'
 import { t as tarList } from 'tar'
-import { RULES, isBinary, testPath, type Severity } from './rules.ts'
+import { RULES, isBinary, knownBinaryMagic, testPath, ASSET_PATH, type Severity } from './rules.ts'
 
 export interface ScanFinding {
   rule: string
@@ -113,12 +113,16 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
           }
           const buf = Buffer.concat(chunks)
           if (isBinary(buf)) {
-            // test fixtures legitimately carry binary blobs — same demotion
-            // logic as known runtime binaries: finding, not a red flag
-            const known = KNOWN_BIN_EXT.test(path) || testPath(path)
+            // recognizable container / test fixture / asset dir — same
+            // demotion logic as known runtime binaries: finding, not a
+            // red flag. The magic string doubles as the explanation.
+            const magic = knownBinaryMagic(buf)
+            const known = KNOWN_BIN_EXT.test(path) || testPath(path) || ASSET_PATH.test(path) || magic !== null
             pushFinding({
               rule: 'binary-blob', severity: known ? 'medium' : 'high', file: path,
-              detail: known ? 'binary payload of a known type — unscannable' : 'binary file in package',
+              detail: magic ? `recognized binary format (${magic}) — unscannable`
+                : known ? 'binary asset in a resource/test path — unscannable'
+                : 'binary file in package',
             })
             return
           }

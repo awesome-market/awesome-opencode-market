@@ -235,7 +235,8 @@ describe('scan — code-scoped obfuscation + known-binary severity', () => {
     expect(blobs.every(f => f.severity === 'medium')).toBe(true)
     expect(r.redFlags).toHaveLength(0)
     // an UNKNOWN binary type still flags high
-    const r2 = await scanTarball(mkTgz({ 'package.json': JSON.stringify({ name: 'p' }), 'mystery.xyz': bin }))
+    const unknown = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04])
+    const r2 = await scanTarball(mkTgz({ 'package.json': JSON.stringify({ name: 'p' }), 'mystery.xyz': unknown }))
     expect(r2.findings.find(f => f.rule === 'binary-blob')!.severity).toBe('high')
   })
 })

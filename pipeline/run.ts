@@ -1460,7 +1460,9 @@ export async function run(opts: RunOptions = {}) {
   // sweep a ruleset upgrade would leave them judged by retired rules forever.
   // Failed scans stay retryable (undefined rulesetVersion is stale by
   // definition); the oversize stamp exempts itself since it IS current-rules.
-  let rescanBudget = 20
+  // CATALOG_RESCAN_BUDGET lets a manual dispatch run a bulk sweep instead of
+  // grinding through thousands of stale entries at 20/hour.
+  let rescanBudget = Math.max(0, Number(process.env.CATALOG_RESCAN_BUDGET ?? 20) || 20)
   const staleCaps = (c: PluginEntry['capabilities'] | undefined) =>
     c !== undefined && c.rulesetVersion !== RULESET_VERSION
   const rescanStaleNpm = async (e: PluginEntry, pk: { tarballOf: Record<string, string | undefined>; integrityOf: Record<string, string | undefined> } | null): Promise<PluginEntry> => {
@@ -1640,6 +1642,13 @@ export async function run(opts: RunOptions = {}) {
     })
   }
   const missing = (old?.plugins ?? []).filter(e => !freshNames.has(e.name.toLowerCase()))
+  // flagged-first order: entries carrying red flags are what actually gate
+  // the human review queue — under a new ruleset their flags may demote,
+  // so they must not queue behind thousands of clean entries for the same
+  // 20-per-run budget
+  const flagN = (e: PluginEntry) =>
+    (e.capabilities?.redFlags.length ?? 0) + (candidateSlot(e)?.capabilities?.redFlags.length ?? 0)
+  missing.sort((a, b) => flagN(b) - flagN(a))
   await pool(missing, goneCheck)
   if (removedNow.length) {
     console.log(`removed: ${removedNow.length} (${removedNow.map(r => `${r.name}:${r.reason}`).join(', ')})`)
