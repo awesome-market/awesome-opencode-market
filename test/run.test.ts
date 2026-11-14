@@ -335,6 +335,36 @@ describe('kept-entry re-gate — discovery window is smaller than the catalog', 
     expect(e!.capabilities.findings.some(x => x.startsWith('sec:evidence-regressed'))).toBe(true)
     expect(idx2.removed.some(r => r.name === 'dsh-meter')).toBe(false)
   })
+
+  it('github kept entry: foreign name + tree losing opencode evidence → filtered', async () => {
+    let hits = true, opencodeDir = true
+    const item = { full_name: 'o/dsh-x', description: 'd', archived: false, fork: false,
+      pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin', 'dsh-plugin'] }
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(JSON.stringify({ objects: [] }))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: hits ? [item] : [] }))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: opencodeDir
+        ? [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }]
+        : [{ path: 'package.json' }], sha: 'commitA' }))
+      if (url.includes('codeload')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, pushed_at: 't', topics: item.topics }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'reg3-'))
+    const out1 = join(d, 'i1.json')
+    // phase 1: foreign topics demote the topic arm, but .opencode/ in the
+    // tree is the positive evidence a dual-host repo ships — admitted
+    const idx1 = await run({ outPath: out1, fetchFn: f, now: 't1' })
+    expect(idx1.plugins.find(p => p.name === 'o/dsh-x')?.source.kind).toBe('github')
+    // phase 2: drops out of discovery AND the tree loses .opencode/ —
+    // the kept-entry re-gate must tombstone, not carry stale evidence
+    hits = false; opencodeDir = false
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2', forceGate: true })
+    expect(idx2.plugins.find(p => p.name === 'o/dsh-x')).toBeUndefined()
+    expect(idx2.removed.some(r => r.name === 'o/dsh-x' && r.reason === 'filtered')).toBe(true)
+  })
 })
 
 describe('classify', () => {
