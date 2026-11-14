@@ -1261,7 +1261,17 @@ export async function main(
   // counts an emit that runs after its own log line (the LLM path).
   const tag = (i: number, projected = 0) =>
     ` [批 ${i + 1}/${works.length} · 剩 ${works.length - i - 1} · 队剩 ${Math.max(0, uncovered.size - emitted.size - projected)}]`
+  // mid-run pause: `ai-diagnose.sh pause` writes diagnose.paused into the
+  // catalog worktree BEFORE the push lands — polling the local file lets a
+  // hotkey stop the queue at the next item boundary even while the push is
+  // still in flight (and offline). Emitted verdicts still push; the rest
+  // wait for resume. Cheap stat per item.
+  const pauseFlagPath = join(dirname(verdictsPath), 'diagnose.paused')
   for (const [wi, w] of works.entries()) {
+    if (existsSync(pauseFlagPath)) {
+      console.log(`[diagnose] pause flag appeared mid-run — stopping queue at item ${wi}/${works.length}; resume removes it`)
+      break
+    }
     const { e, ver } = w
     // 0. sha reuse
     if (w.twin) {
