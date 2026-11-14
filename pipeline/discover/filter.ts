@@ -54,6 +54,23 @@ const FOREIGN_HOST_TAGS = new Set([
  *  that does match just faces the readme-install-verb bar like the rest. */
 const FOREIGN_HOST_PROSE = /deepseek[ -]harness|\b(?:dsh|cordis|koishi)[- ](?:plugin|skill|bundle|agent|provider)\b|\bclaude[ -]code (?:plugin|skill|extension)\b/i
 
+/** Cheap self-declaration check — any of the foreign-host signals fires.
+ *  The admission gates call it with keywords/topics/readme/desc; the
+ *  kept-entry sweep calls it with just the stored name/description to
+ *  decide whether a re-gate fetch is worth making (a false positive there
+ *  only costs one fetch — the real gate still decides). */
+export function foreignHostDeclared(i: {
+  keywords?: string[] | undefined
+  topics?: string[] | undefined
+  name?: string | undefined
+  text?: string | undefined
+}): boolean {
+  return (i.keywords ?? []).some(k => FOREIGN_HOST_TAGS.has(k.toLowerCase()))
+    || (i.topics ?? []).some(t => FOREIGN_HOST_TAGS.has(t.toLowerCase()))
+    || /(^|\/)dsh[-_]/i.test(i.name ?? '')
+    || FOREIGN_HOST_PROSE.test(i.text ?? '')
+}
+
 /** Template-spam heuristic: same owner + >5 near-identical names (magpie-community pattern, DEV §4.5). */
 export function looksLikeTemplateSpam(names: string[]): boolean {
   if (names.length < 6) return false
@@ -100,9 +117,7 @@ export function hasRepoEvidence(
   // that genuinely ships an opencode artifact carries those files anyway.
   // The name/desc arms cover untagged repos: 'owner/dsh-x' and 'a DSH
   // Agent Skill' declare the same foreign membership as a topic tag.
-  const foreignTopic = topics.some(t => FOREIGN_HOST_TAGS.has(t.toLowerCase()))
-    || /(^|\/)dsh[-_]/i.test(name ?? '')
-    || FOREIGN_HOST_PROSE.test(desc ?? '')
+  const foreignTopic = foreignHostDeclared({ topics: [...topics], name, text: desc })
   const specific = via.includes('opencode-dir') || via.includes('opencode-config')
     || (opencodeTopic && !foreignTopic)
   const artifact = pluginArtifact || skillFile || pkg
@@ -148,9 +163,7 @@ export function hasPluginEvidence(pkg: {
   // self-declares the foreign host ('DeepSeek Harness plugin') is the
   // same membership claim as the keyword — sloppy taggers don't get a
   // weaker bar for forgetting the tag.
-  const foreignHost = kw.some(k => FOREIGN_HOST_TAGS.has(k))
-    || /(^|\/)dsh[-_]/i.test(pkg.name ?? '')
-    || FOREIGN_HOST_PROSE.test(pkg.readme ?? '')
+  const foreignHost = foreignHostDeclared({ keywords: kw, name: pkg.name, text: pkg.readme })
   const readmeInstallVerb = !!pkg.readme && /opencode plugin add/i.test(pkg.readme)
   const opencodeSpecific = foreignHost
     ? readmeInstallVerb

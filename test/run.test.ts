@@ -269,6 +269,193 @@ describe('github-kind hardening', () => {
   })
 })
 
+describe('kept-entry re-gate — discovery window is smaller than the catalog', () => {
+  /** Phase 1 admits a dual-host package (foreign tags + opencode plugin add
+   *  in readme); phase 2 drops it from discovery and strips the verb —
+   *  under the tightened gate the kept entry must tombstone 'filtered',
+   *  not ride forever on rescanStaleNpm which never re-checks evidence. */
+  const fixture = (state: { searchHit: boolean; readme: string }) => {
+    const tgz = mkTgz()
+    return (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) {
+        const objects = [
+          // a clean entry that stays discovered both phases — without it
+          // the tombstoned index is empty and the publish gate refuses
+          { package: { name: 'good-pkg', version: '1.0.0', description: 'd', keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } },
+          ...(state.searchHit ? [{ package: { name: 'dsh-meter', version: '1.0.0', description: 'DeepSeek Harness plugin', keywords: ['dsh-plugin', 'opencode'], links: {}, date: 't' } }] : []),
+        ]
+        return new Response(JSON.stringify({ objects }))
+      }
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org') && url.includes('good-pkg')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: { '1.0.0': { repository: 'https://github.com/o/good', license: 'MIT', keywords: ['opencode'], main: 'index.js', dist: { tarball: 'https://x/t.tgz' } } },
+          time: { '1.0.0': 't' },
+        }))
+      }
+      if (url.includes('registry.npmjs.org') && url.includes('dsh-meter')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: { '1.0.0': { keywords: ['dsh-plugin', 'opencode'], main: 'index.js', dist: { tarball: 'https://x/t.tgz' } } },
+          readme: state.readme,
+          time: { '1.0.0': 't' },
+        }))
+      }
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(tgz))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 0 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+  }
+
+  it('pending foreign entry that falls out of discovery → filtered tombstone', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'reg-'))
+    const out1 = join(d, 'i1.json')
+    const idx1 = await run({ outPath: out1, fetchFn: fixture({ searchHit: true, readme: 'DeepSeek Harness plugin. For opencode: opencode plugin add dsh-meter' }), now: 't1' })
+    expect(idx1.plugins.find(p => p.name === 'dsh-meter')).toBeTruthy()
+    // forceGate: the fixture catalog is 2 entries so one tombstone trips
+    // the 50%-drop publish gate — the test asserts the tombstone itself
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: fixture({ searchHit: false, readme: 'DeepSeek Harness plugin: dsh plugin add dsh-meter' }), now: 't2', forceGate: true })
+    expect(idx2.plugins.find(p => p.name === 'dsh-meter')).toBeUndefined()
+    expect(idx2.removed.some(r => r.name === 'dsh-meter' && r.reason === 'filtered')).toBe(true)
+  })
+
+  it('approved foreign entry is kept with sec:evidence-regressed, not tombstoned', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'reg2-'))
+    const out1 = join(d, 'i1.json')
+    const idx1 = await run({ outPath: out1, fetchFn: fixture({ searchHit: true, readme: 'DeepSeek Harness plugin. For opencode: opencode plugin add dsh-meter' }), now: 't1' })
+    const first = JSON.parse(readFileSync(out1, 'utf8'))
+    first.plugins[0].approval = 'approved'
+    delete first.plugins[0].approvalReason
+    writeFileSync(out1, JSON.stringify(first))
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: fixture({ searchHit: false, readme: 'DeepSeek Harness plugin: dsh plugin add dsh-meter' }), now: 't2', forceGate: true })
+    const e = idx2.plugins.find(p => p.name === 'dsh-meter')
+    expect(e).toBeTruthy()
+    expect(e!.capabilities.findings.some(x => x.startsWith('sec:evidence-regressed'))).toBe(true)
+    expect(idx2.removed.some(r => r.name === 'dsh-meter')).toBe(false)
+  })
+
+  it('github kept entry: foreign name + tree losing opencode evidence → filtered', async () => {
+    let hits = true, opencodeDir = true
+    const item = { full_name: 'o/dsh-x', description: 'd', archived: false, fork: false,
+      pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin', 'dsh-plugin'] }
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(JSON.stringify({ objects: [] }))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: hits ? [item] : [] }))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: opencodeDir
+        ? [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }]
+        : [{ path: 'package.json' }], sha: 'commitA' }))
+      if (url.includes('codeload')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, pushed_at: 't', topics: item.topics }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'reg3-'))
+    const out1 = join(d, 'i1.json')
+    // phase 1: foreign topics demote the topic arm, but .opencode/ in the
+    // tree is the positive evidence a dual-host repo ships — admitted
+    const idx1 = await run({ outPath: out1, fetchFn: f, now: 't1' })
+    expect(idx1.plugins.find(p => p.name === 'o/dsh-x')?.source.kind).toBe('github')
+    // phase 2: drops out of discovery AND the tree loses .opencode/ —
+    // the kept-entry re-gate must tombstone, not carry stale evidence
+    hits = false; opencodeDir = false
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2', forceGate: true })
+    expect(idx2.plugins.find(p => p.name === 'o/dsh-x')).toBeUndefined()
+    expect(idx2.removed.some(r => r.name === 'o/dsh-x' && r.reason === 'filtered')).toBe(true)
+  })
+
+  it('github kept entry: approved + lost evidence → kept with sec:evidence-regressed', async () => {
+    let hits = true, opencodeDir = true
+    const item = { full_name: 'o/dsh-x', description: 'd', archived: false, fork: false,
+      pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin', 'dsh-plugin'] }
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) return new Response(JSON.stringify({ objects: [] }))
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: hits ? [item] : [] }))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: opencodeDir
+        ? [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }]
+        : [{ path: 'package.json' }], sha: 'commitA' }))
+      if (url.includes('codeload')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, pushed_at: 't', topics: item.topics }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'reg4-'))
+    const out1 = join(d, 'i1.json')
+    await run({ outPath: out1, fetchFn: f, now: 't1' })
+    const first = JSON.parse(readFileSync(out1, 'utf8'))
+    first.plugins[0].approval = 'approved'
+    delete first.plugins[0].approvalReason
+    writeFileSync(out1, JSON.stringify(first))
+    hits = false; opencodeDir = false
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2', forceGate: true })
+    const e = idx2.plugins.find(p => p.name === 'o/dsh-x')
+    expect(e).toBeTruthy()
+    expect(e!.capabilities.findings.some(x => x.startsWith('sec:evidence-regressed@'))).toBe(true)
+    expect(idx2.removed.some(r => r.name === 'o/dsh-x')).toBe(false)
+  })
+
+  it('re-gate evidence fetch transient-fails → entry kept via stale rescan', async () => {
+    let hits = true, transients = false
+    const item = { full_name: 'o/dsh-x', description: 'd', archived: false, fork: false,
+      pushed_at: 't', stargazers_count: 1, default_branch: 'main', topics: ['opencode-plugin', 'dsh-plugin'] }
+    const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) {
+        const objects = [
+          { package: { name: 'good-pkg', version: '1.0.0', description: 'd', keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } },
+          ...(hits ? [{ package: { name: 'dsh-meter', version: '1.0.0', description: 'DeepSeek Harness plugin', keywords: ['dsh-plugin', 'opencode'], links: {}, date: 't' } }] : []),
+        ]
+        return new Response(JSON.stringify({ objects }))
+      }
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: hits ? [item] : [] }))
+      if (url.includes('/git/trees/')) {
+        if (transients) return new Response('', { status: 500 })
+        return new Response(JSON.stringify({ tree: [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }], sha: 'commitA' }))
+      }
+      if (url.includes('codeload')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 1, pushed_at: 't', topics: item.topics }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      if (url.includes('registry.npmjs.org') && url.includes('good-pkg')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: { '1.0.0': { repository: 'https://github.com/o/good', license: 'MIT', keywords: ['opencode'], main: 'index.js', dist: { tarball: 'https://x/t.tgz' } } },
+          time: { '1.0.0': 't' },
+        }))
+      }
+      if (url.includes('registry.npmjs.org') && url.includes('dsh-meter')) {
+        // the re-gate's full packument (no install-v1 accept header) is the
+        // transient probe — the abbreviated gone-check stays healthy
+        const abbr = (init?.headers as Record<string, string> | undefined)?.Accept?.includes('install-v1')
+        if (transients && !abbr) return new Response('', { status: 500 })
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: { '1.0.0': { keywords: ['dsh-plugin', 'opencode'], main: 'index.js', dist: { tarball: 'https://x/t.tgz' } } },
+          readme: 'DeepSeek Harness plugin. For opencode: opencode plugin add dsh-meter',
+          time: { '1.0.0': 't' },
+        }))
+      }
+      if (url.includes('x/t.tgz')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 0 }))
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'reg5-'))
+    const out1 = join(d, 'i1.json')
+    const idx1 = await run({ outPath: out1, fetchFn: f, now: 't1' })
+    expect(idx1.plugins.find(p => p.name === 'dsh-meter')).toBeTruthy()
+    expect(idx1.plugins.find(p => p.name === 'o/dsh-x')).toBeTruthy()
+    // phase 2: both drop out of discovery; the re-gate's evidence probes
+    // (npm full packument, github tree) 500 — fail-closed keep, no tombstone
+    hits = false; transients = true
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: 't2' })
+    expect(idx2.plugins.find(p => p.name === 'dsh-meter')).toBeTruthy()
+    expect(idx2.plugins.find(p => p.name === 'o/dsh-x')).toBeTruthy()
+    expect(idx2.removed.length).toBe(0)
+  })
+})
+
 describe('classify', () => {
   it('assigns english category ids by keywords, declared fallback other', async () => {
     const { classify } = await import('../src/categories.ts')

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { discoverNpm } from './discover/npm.ts'
 import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
-import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
+import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath, foreignHostDeclared } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d, fetchDownloadsMonth, compatStrings, type PackumentResult } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
 import { scanTarball, fmtFinding } from './scan/scan.ts'
@@ -1621,7 +1621,24 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedNpm.has(lower)) { entries.push(await rescanStaleNpm(e, pk)); return }
+      if (status === 'ok' && !rejectedNpm.has(lower)) {
+        // kept-entry re-gate: keyword windows can't hold every package
+        // (keywords:opencode alone answers 10k+ hits against a 2.5k page
+        // budget), so an aged-out entry never re-sees the admission gate —
+        // a gate tightening (foreign-host demotion) would never reach it.
+        // The name/desc/repo-slug prefilter is free; a self-declared
+        // foreign host costs one full packument so the real gate's
+        // keywords/readme arms decide (abbreviated has neither field).
+        const descText = `${e.description?.en ?? ''} ${e.description?.zh ?? ''}`
+        if (foreignHostDeclared({ name: e.name, text: descText })
+            || foreignHostDeclared({ name: e.source.repo ?? '' })) {
+          const { pk: full } = await fetchPackument(e.name, { fetchFn: f })
+          const evOk = full ? hasPluginEvidence({ name: full.name, keywords: full.keywords, main: full.main ?? undefined, exports: full.exports, readme: full.readme ?? undefined }).ok : null
+          if (evOk === false && e.approval === 'pending') { reason = 'filtered' }
+          else if (evOk === false) { entries.push({ ...e, capabilities: addFinding(e.capabilities, `sec:evidence-regressed@${pk?.latest ?? 'kept'}`) }); return }
+          else { entries.push(await rescanStaleNpm(e, pk)); return }
+        } else { entries.push(await rescanStaleNpm(e, pk)); return }
+      }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
     // github-kind entries never pass through the candidate filters — but a
@@ -1635,7 +1652,20 @@ export async function run(opts: RunOptions = {}) {
         entries.push(e)
         return
       }
-      if (status === 'ok' && !rejectedGh.has(lower)) { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
+      if (status === 'ok' && !rejectedGh.has(lower)) {
+        // same kept-entry re-gate as the npm arm — repo topics/name/desc
+        // declare the foreign host for free; only those cost a tree fetch
+        // so the real gate's .opencode/ + opencode.json arms can decide
+        const repo = e.source.repo ?? e.name
+        const descText = `${e.description?.en ?? ''} ${e.description?.zh ?? ''}`
+        if (foreignHostDeclared({ topics: meta?.topics, name: repo, text: descText })) {
+          const tree = await fetchRepoTree(repo, 'HEAD', { token: opts.ghToken, fetchFn: f })
+          const evOk = tree.paths ? hasRepoEvidence(tree.paths, meta?.topics ?? [], repo, descText).ok : null
+          if (evOk === false && e.approval === 'pending') { reason = 'filtered' }
+          else if (evOk === false) { entries.push({ ...e, capabilities: addFinding(e.capabilities, `sec:evidence-regressed@${(tree.sha ?? 'HEAD').slice(0, 12)}`) }); return }
+          else { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
+        } else { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
+      }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }
     removedNow.push({
