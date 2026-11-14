@@ -380,6 +380,7 @@ case ${DIAGNOSE_LEGACY:-} in ''|0|false|no) ;; *) ARGS+=(--include-legacy) ;; es
 
 npx tsx pipeline/ai/diagnose.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" --out "$TMPV" \
+  --pause-file "$CAT/diagnose.paused" \
   --limit "$DIAGNOSE_LIMIT" --budget "$DIAGNOSE_BUDGET" --state "$STATEF" \
   --sweep-state "$SWEEPF" --health "$HEALTHF" --material-rm "$RMF" \
   ${ARGS[@]+"${ARGS[@]}"} \
