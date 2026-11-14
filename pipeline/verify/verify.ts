@@ -516,6 +516,12 @@ export async function verifyPackage(
   // last parsed /api/plugin entry state for OUR candidates — feeds the
   // failure message below (a non-terminal end-state isn't 'absent')
   let apiState: string | null = null
+  // a package whose exports lack a server entry (tui/gui-only) is routed by
+  // `plugin add` into cli.json, not the server plugin table — it can NEVER
+  // appear in /api/plugin, so polling + apiLoaded can only mint a false
+  // 'failed' and burn the 20s window. Its own feature check
+  // (checkTui/checkGuiBundle) IS the load evidence.
+  const serverRequired = (opts.features ?? []).length === 0 || (opts.features ?? []).includes('server')
   try {
     let port = '', pw = ''
     // SECURITY ASSUMPTION: the listening+password markers are scraped from
@@ -579,7 +585,7 @@ export async function verifyPackage(
       // A deterministic load failure still exits in ~1s.
       let lastHttp = ''
       let answered = false   // did the server answer ANY poll?
-      for (const t1 = Date.now(); Date.now() - t1 < (opts.apiWaitMs ?? 20_000);) {
+      for (const t1 = Date.now(); serverRequired && Date.now() - t1 < (opts.apiWaitMs ?? 20_000);) {
         const res = await run('curl', ['-s', ...auth, '-o', apiPath, '-w', '%{http_code}',
           `${api}/plugin`], { timeout: 15_000 }).catch(() => null)
         if (res) answered = true
@@ -590,7 +596,7 @@ export async function verifyPackage(
         if (st === 'active' || st === 'failed') break
         await sleep(500)
       }
-      if (apiState === null && !answered) {
+      if (serverRequired && apiState === null && !answered) {
         // the listening line scraped yet not one poll connected — the socket
         // behind it is dead (runner resources, upstream drift). Under 2.2.5's
         // lazy load plugin code hadn't run when the line printed, so the
@@ -598,7 +604,7 @@ export async function verifyPackage(
         throw new Error(`serve announced a listener but never answered /api/plugin — ` +
           `the socket was dead before the plugin loaded (harness):\n${tail(serveOut)}`)
       }
-      if (apiState === null && (lastHttp === '401' || lastHttp === '403')) {
+      if (serverRequired && apiState === null && (lastHttp === '401' || lastHttp === '403')) {
         // the entry never listed AND the API kept refusing auth — the
         // credentials we scraped are unusable (upstream serve output/auth
         // drift). A package can't 401 the server it runs inside; this is a
@@ -620,7 +626,7 @@ export async function verifyPackage(
   if (sb) await run('sudo', ['-n', 'chmod', '-R', 'a+rX', home], { timeout: 30_000 }).catch(() => {})
   const log = readLog(uh)
   const api = existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : ''
-  if (!apiLoaded(api, apiNames)) {
+  if (serverRequired && !apiLoaded(api, apiNames)) {
     // why: deterministic (server moved the plugin to 'failed') vs a stuck
     // non-terminal state vs the entry never listing at all — the distinction
     // surfaces in the published logExcerpt so a flake is visibly different
@@ -633,7 +639,13 @@ export async function verifyPackage(
     // serveOut still carries the `server password <pw>` line — the token is
     // dead with the process but must not be published into index.json either.
     const safeServeOut = serveOut.replace(/server password \S+/g, 'server password [redacted]')
-    return { ...base, status: 'failed', level: 'load', logExcerpt: tail(`${why}\n${safeServeOut}\n${log}\n/api/plugin: ${api}`) }
+    // tail() keeps the LAST 2KB — order matters: the /api/plugin registry
+    // dump is huge (all builtin opencode.* entries) and used to eat the
+    // whole window, hiding `why` and the plugin's own error entirely.
+    // Bound it and put the verdict line last so it always survives.
+    const apiBrief = api.length > 600 ? `${api.slice(0, 600)}…` : api
+    return { ...base, status: 'failed', level: 'load',
+      logExcerpt: tail(`/api/plugin: ${apiBrief}\n${safeServeOut}\n${log}\n${why}`) }
   }
 
   try {

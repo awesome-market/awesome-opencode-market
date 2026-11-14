@@ -139,6 +139,21 @@ describe('verifyPackage (injected exec)', () => {
     expect(r.level).toBe('load')
     expect(r.logExcerpt).toContain('absent from /api/plugin')
   })
+  it('tui-only package (no server export) skips the /api/plugin load gate', async () => {
+    // exports:{ './tui': … } routes into cli.json, never the server plugin
+    // table — apiLoaded must not mint a false 'failed/load'. The run should
+    // reach the tui check (which harness-fails here: no real tmux/opencode)
+    // instead of returning load-failed.
+    const home = vHome()
+    const fake = (async () => ({ stdout: 'opencode v2.2.5', stderr: '' })) as unknown as import('../pipeline/verify/verify.ts').ExecFn
+    const r = await (await import('../pipeline/verify/verify.ts'))
+      .verifyPackage('tui-only-pkg', { home, execFn: fake, spawnFn: liveSpawn, apiWaitMs: 30,
+        features: ['tui'], tuiOpts: { settleMs: 100, cols: 80, rows: 24 } })
+      .catch(e => e)
+    // checkTui spawn failure throws (harness) — anything but a 'load' verdict
+    if (r instanceof Error) { expect(r.message).toMatch(/tui check infrastructure|interactive|spawn/i); return }
+    expect(r.status === 'verified' || (r.status === 'failed' && r.level !== 'load')).toBe(true)
+  })
   it('serve boot silence → harness THROW, not a package verdict (G2)', async () => {
     // a serve that never announces a listener means the plugin code never ran
     // — blaming the package fed diagnose's concern short-circuit. Throwing
