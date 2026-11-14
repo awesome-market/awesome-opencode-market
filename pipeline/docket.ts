@@ -189,7 +189,9 @@ export function docketTargets(
     // render their own complete section (红旗清单) — a signal printed in
     // both sections is the same triplication this file exists to kill
     const flagSet = new Set(slot.capabilities.redFlags)
-    const preview = [...new Set(slot.capabilities.findings.filter(f => !flagSet.has(f)))].slice(0, 4)
+    // 8 items ≈ cover the typical findings set in-issue — the reviewer's
+    // standard is judging from evidence lines without downloading the pkg
+    const preview = [...new Set(slot.capabilities.findings.filter(f => !flagSet.has(f)))].slice(0, 8)
     const meta: SlotMeta = {
       findings: slot.capabilities.findings.length,
       redFlags: slot.capabilities.redFlags.length,

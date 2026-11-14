@@ -114,6 +114,10 @@ jobs:
         env:
           # MARKET_PAT (optional, 5000 req/h) overrides the 1000 req/h GITHUB_TOKEN budget
           GH_TOKEN: ${{ secrets.MARKET_PAT || secrets.GITHUB_TOKEN }}
+          # stale-ruleset backlog (~3900 entries pre-r6 lack srcLine evidence —
+          # issues can't render file+code without it): 300/hr drains it in ~13h
+          # instead of ~8 days at the default 20. vars override once caught up.
+          CATALOG_RESCAN_BUDGET: ${{ vars.CATALOG_RESCAN_BUDGET || 300 }}
         run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
       - uses: actions/upload-artifact@v4
         with:
