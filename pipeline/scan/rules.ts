@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r6'
+export const RULESET_VERSION = 'r7'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -14,6 +14,10 @@ export interface RuleHit {
    *  line), trimmed — never spans lines */
   line?: string
   lineNo?: number
+  /** per-hit severity override — the same token means different things in a
+   *  shipping entry point vs a test fixture; context demotes high→medium
+   *  (stays a finding, stops forcing a human slot) without hiding the hit */
+  sev?: Severity
 }
 
 export interface Rule {
@@ -47,6 +51,56 @@ export function srcLine(content: string, m: RegExpMatchArray | null): { line: st
 
 const EXEC_EXT = /\.(js|mjs|cjs|ts|mts|cts|sh)$/i
 
+/** Files that never sit on the install/runtime path — tests, fixtures,
+ *  mocks, examples, docs. A high-severity hit there gates the release on
+ *  a human slot over content that cannot execute on the consumer; the
+ *  triage backlog showed ~half of all flags were exactly this. The hit
+ *  stays a finding (visible), just not a red flag. */
+export const TEST_PATH =
+  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|spec|testing|e2e|fixtures?|mocks?|examples?|demos?|docs?|testdata|test[-_]data)\//i
+const TEST_FILE = /[._-](test|spec|stories)\.[^/]+$/i
+export const testPath = (p: string): boolean => TEST_PATH.test(p) || TEST_FILE.test(p)
+
+/** The matching line + the match's offset within it — inertness checks need
+ *  the real line, not srcLine's clipped excerpt. */
+const lineOf = (c: string, i: number): { text: string; off: number } => {
+  const s = c.lastIndexOf('\n', i - 1) + 1
+  let e = c.indexOf('\n', i)
+  if (e < 0) e = c.length
+  return { text: c.slice(s, e), off: s }
+}
+
+/** The token is descriptive rather than operational: inside a // or block
+ *  comment, or inside a quoted string that is NOT a bare path — quoted
+ *  content containing whitespace or shell/regex syntax ('cat ~/.ssh/id_rsa',
+ *  'eval(String.fromCharCode(114,109))') is an example command, a detection
+ *  signature, or a test case, not a path being opened. Bare path strings
+ *  ('~/.ssh/id_rsa', '.npmrc') contain none of those characters and keep
+ *  their severity — writing/reading that literal path is the real signal. */
+const inertRef = (c: string, m: RegExpMatchArray): boolean => {
+  const i = m.index!
+  const { text: line, off } = lineOf(c, i)
+  const li = i - off
+  const before = line.slice(0, li)
+  if (/\/\/|\/\*/.test(before)) return true
+  // inside an unclosed quoted string? count parity per quote type — an
+  // odd count means the last quote of that type opened a string that
+  // contains the match (a closed earlier string must NOT demote:
+  // `const a='x'; eval('run()')` stays a real hit)
+  for (const q of ["'", '"', '`']) {
+    const pos = before.lastIndexOf(q)
+    if (pos < 0 || (before.split(q).length - 1) % 2 === 0) continue
+    const rq = line.indexOf(q, li + m[0].length)
+    if (rq < 0) return false
+    return /[\s()|\\]/.test(line.slice(pos + 1, rq))
+  }
+  return false
+}
+
+/** severity override honoring both non-execution paths and inert context. */
+const demoted = (p: string, c: string, m: RegExpMatchArray): { sev: 'medium' } | Record<never, never> =>
+  testPath(p) || inertRef(c, m) ? { sev: 'medium' } : {}
+
 export const RULES: Rule[] = [
   {
     id: 'lifecycle-script', sev: 'high',
@@ -59,7 +113,10 @@ export const RULES: Rule[] = [
     test: (p, c) => {
       if (!isPkgJson(p) || c == null) return null
       const m = c.match(/"(preinstall|postinstall|install|prepublish)"\s*:\s*"[^"]+"/)
-      return m ? { detail: 'npm lifecycle script (install stage) — code runs at install time', ...srcLine(c, m) } : null
+      // a fixture package.json under test/ is a test asset, not the shipped
+      // manifest — keep as finding, don't gate on it
+      return m ? { detail: 'npm lifecycle script (install stage) — code runs at install time',
+        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
     },
   },
   {
@@ -79,7 +136,8 @@ export const RULES: Rule[] = [
     test: (p, c) => {
       if (!isPkgJson(p) || c == null) return null
       const m = c.match(/"prepare"\s*:\s*"[^"]+"/)
-      return m ? { detail: '"prepare" script — runs on git/tarball install', ...srcLine(c, m) } : null
+      return m ? { detail: '"prepare" script — runs on git/tarball install',
+        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
     },
   },
   {
@@ -114,9 +172,14 @@ export const RULES: Rule[] = [
       // credential-read)
       if (c == null || !EXEC_EXT.test(p)) return null
       const e = c.match(/eval\(|new Function/)
-      if (e) return { detail: 'eval/Function usage', ...srcLine(c, e) }
+      // inertRef demotion: 'eval(String.fromCharCode(114,109))' inside a
+      // detection-signature table / comment is a string ABOUT eval
+      if (e) return { detail: 'eval/Function usage', ...demoted(p, c, e), ...srcLine(c, e) }
       const h = c.match(/(\\x[0-9a-fA-F]{2}){8,}/)
-      if (h) return { detail: 'long hex-escaped blob', ...srcLine(c, h) }
+      // hex blobs live inside quotes by definition — inertRef would demote
+      // every one; path context is the only honest demotion here
+      if (h) return { detail: 'long hex-escaped blob',
+        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, h) }
       return null
     },
   },
@@ -136,7 +199,7 @@ export const RULES: Rule[] = [
       // docs legitimately mention credential paths — only fire on code
       if (c == null || !EXEC_EXT.test(p)) return null
       const m = c.match(/\.ssh|id_rsa|\.aws\/credentials|keychain|\.npmrc|\.netrc/)
-      return m ? { detail: `credential-path reference: ${m[0]}`, ...srcLine(c, m) } : null
+      return m ? { detail: `credential-path reference: ${m[0]}`, ...demoted(p, c, m), ...srcLine(c, m) } : null
     },
   },
   {
