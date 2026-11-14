@@ -33,7 +33,7 @@ export async function reviewPackage(name: string, opts: { fetchFn?: typeof fetch
   const base = { name, exists: false, evidenceOk: false, evidence: [] as string[], scanned: false, scanError: null as string | null, findings: [] as string[], redFlags: [] as string[], downloads30d: null as number | null, repo: null as string | null, pkgName: null as string | null, createdAt: null as string | null, version: null as string | null, integrity: null as string | null }
   const { pk, status } = await fetchPackument(name, opts)
   if (!pk) return { ...base, status: status === 'not-found' ? 'not-found' : 'error' }
-  const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
+  const ev = hasPluginEvidence({ name: pk.name, keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
   let findings: string[] = [], redFlags: string[] = []
   // npm↔repo same-origin checks, same rules run.ts applies at ingest — but
   // run HERE so a grafted declaration can't wear a 'clean' issue label into
@@ -119,7 +119,7 @@ export async function reviewRepo(repo: string, opts: { token?: string | undefine
   const { meta, status } = await fetchRepoMeta(repo, opts)
   if (status === 'not-found' || !meta) return { ...base, status }
   const tree = await fetchRepoTree(repo, 'HEAD', opts)
-  const ev = hasRepoEvidence(tree.paths ?? new Set(), meta.topics)
+  const ev = hasRepoEvidence(tree.paths ?? new Set(), meta.topics, meta.fullName ?? repo)
   let findings: string[] = [], redFlags: string[] = []
   let scanned = false, scanError: string | null = null
   if (ev.ok) {

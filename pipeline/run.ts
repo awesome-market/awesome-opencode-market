@@ -548,7 +548,7 @@ export async function run(opts: RunOptions = {}) {
     // (reject → 'filtered' tombstone)
     if (pk && pk.latest !== null && e.approval !== 'pending') {
       caps = { ...caps, findings: caps.findings.filter(x => !x.startsWith('sec:evidence-regressed')) }
-      const evOk = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined }).ok
+      const evOk = hasPluginEvidence({ name: pk.name, keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined }).ok
       if (!evOk) caps = addFinding(caps, `sec:evidence-regressed@${pk.latest}`)
     }
     const claimedCats = (marketMeta?.category ?? sub?.category ?? [])
@@ -675,7 +675,7 @@ export async function run(opts: RunOptions = {}) {
         }
         return
       }
-      const ev = hasPluginEvidence({ keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
+      const ev = hasPluginEvidence({ name: pk.name, keywords: pk.keywords, main: pk.main ?? undefined, exports: pk.exports, readme: pk.readme ?? undefined })
       // the gate reads LATEST-version metadata — a regression (author drops
       // the opencode keyword, renames main) must not tombstone an existing
       // entry's still-valid approved slot. Keep the entry, surface the
@@ -1249,7 +1249,7 @@ export async function run(opts: RunOptions = {}) {
       // visible counter (and a finding on the admitted entry), instead of a
       // silent 'evidence-rejected' against partial information
       if (treeRes.truncated) ghStats.truncated++
-      const ev = hasRepoEvidence(treeRes.paths, cand.topics)
+      const ev = hasRepoEvidence(treeRes.paths, cand.topics, cand.fullName, cand.description)
       if (!ev.ok) {
         // mirror the npm-side rule (hasPluginEvidence above): an APPROVED
         // slot's pinned commit still describes reviewed bytes — HEAD losing
@@ -1285,7 +1285,10 @@ export async function run(opts: RunOptions = {}) {
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
       try {
-        const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/${treeRes.sha ?? 'HEAD'}`, { fetchFn: f })
+        // github repo archives carry the whole tree (docs/assets/vendored
+        // bits) — 3× the npm cap is routine, and MAX_UNPACKED still bounds
+        // what actually inflates in memory
+        const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/${treeRes.sha ?? 'HEAD'}`, { fetchFn: f, maxBytes: 192 * 1024 * 1024 })
         const r = await scanTarball(tgz)
         const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
         scanFiles = r.files.map(strip)
@@ -1301,8 +1304,10 @@ export async function run(opts: RunOptions = {}) {
         ghStats.scanFailed++
         // oversize repos fail deterministically — stamp the ruleset so the
         // incremental-reuse check above skips re-fetching them every run
-        // (retries resume naturally when pushedAt changes)
-        if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++ }
+        // (retries resume naturally when pushedAt changes). Mark WHY in
+        // findings: 'scan failed' alone leaves the issue/diagnose material
+        // blind to the cause.
+        if (/too large/.test(msg)) { scan.rulesetVersion = RULESET_VERSION; ghStats.scanOversize++; scan.findings.push('scan:oversize-repo') }
       }
       ghStats.admitted++
       // an admitted entry built on a truncated tree says so — deep paths the
