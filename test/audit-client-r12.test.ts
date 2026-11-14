@@ -31,12 +31,12 @@ describe('enginesSatisfied — every opencode clause must hold', () => {
     expect(enginesSatisfied('2.5.0', 'opencode-beta >=9; opencode >=2; opencode <3')).toBe(true)
   })
   it('unrelated named clauses still do not gate the verdict', () => {
-    expect(enginesSatisfied('2.2.5', 'node >=18; opencode >=2.0.0')).toBe(true)
+    expect(enginesSatisfied('2.3.0', 'node >=18; opencode >=2.0.0')).toBe(true)
     expect(enginesSatisfied('1.0.0', 'node >=18; opencode >=2.0.0')).toBe(false)
-    expect(enginesSatisfied('2.2.5', 'npm >=9; yarn >=1')).toBeNull()
+    expect(enginesSatisfied('2.3.0', 'npm >=9; yarn >=1')).toBeNull()
   })
   it('an unparseable clause among opencode clauses degrades to null, not false', () => {
-    expect(enginesSatisfied('2.2.5', 'opencode >=2; opencode latest')).toBeNull()
+    expect(enginesSatisfied('2.3.0', 'opencode >=2; opencode latest')).toBeNull()
     // but a definite fail still wins over an unknown sibling
     expect(enginesSatisfied('1.0.0', 'opencode <1; opencode latest')).toBe(false)
   })

@@ -2,7 +2,7 @@
 
 ## Spike #1（run 41347141082）关键发现
 
-**装错了版本**：`bun install -g opencode-ai` 装到的是 **v1.19.5**（旧 CLI），不是 v2.2.5。
+**装错了版本**：`bun install -g opencode-ai` 装到的是 **v1.19.5**（旧 CLI），不是 v2.3.0。
 v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包名装——
 我们的 `plugin list` 实际装了一个叫 "list" 的 npm 包（日志可见 "Added to ./.opencode/opencode.json"）。
 **v2 CLI 是 `@opencode/cli` 包**（amplifying.ai 文档佐证：v1=opencode-ai，v2=@opencode/cli）。
@@ -31,7 +31,7 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 ✅ **A2**：`plugin add` 非交互可用；但 **file:// 不支持**——"must be an npm registry package or Git specifier"。负样本改用假 npm 名或 git 源
 ✅ **A4**：`@opencode/plugin` 确认
 ✅ **A5**：bun 默认拦 postinstall（`@opencode/cli` 在 bun 下装失败实证）——npm i -g 才放行
-✅ **A6（新增）**：v2 正确装法 = `npm i -g @opencode/cli`（v2.2.5）；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5
+✅ **A6（新增）**：v2 正确装法 = `npm i -g @opencode/cli`（v2.3.0）；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5
 
 🟡 **残留**：
 - `plugin list` 报 "No plugins found" 但 add 明明成功——add 写到 `~/.config/opencode/opencode.json`，说明隔离要用 `XDG_CONFIG_HOME` 不是 `HOME`（下一轮验证）
@@ -54,7 +54,7 @@ v1 的 `plugin` 命令语义不同：`opencode plugin <module>` 把参数当包�
 
 **P0 正式判定：通过（Level B 保底可用，激活级验证待 P2 探路）**
 
-## Spike #6 本地验证（opencode v2.2.5 + oh-my-opencode 实装）——A3 真信号找到
+## Spike #6 本地验证（opencode v2.3.0 + oh-my-opencode 实装）——A3 真信号找到
 
 **激活信号存在且可靠**：`$XDG_DATA_HOME/opencode/log/opencode.log` 里
 `msg="loading plugin" id=<name> entrypoint=<path>`（role=server）

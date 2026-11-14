@@ -599,7 +599,7 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
       12 目标双通道 ≈30min 上限（片内 2 lane 并行，墙钟与旧 8 目标
       串行相当；V-4 加宽 load 窗口后旧的 18min/12 目标账已过期，
       超时 30→35 留余量））：
-      npm i -g @opencode/cli@2.2.5（与 OPENCODE_VERSION 常量钉齐——缓存键含宿主版本；
+      npm i -g @opencode/cli@2.3.0（与 OPENCODE_VERSION 常量钉齐——缓存键含宿主版本；
         测试断言 workflow 字面量与常量同步，钉漂移当场红）
       ocVersion 每片探测一次（verifyShard 入口，runner 侧——--version
         不执行插件代码；探到版本随 opts 分发给全部目标，不再每包一次）
@@ -630,11 +630,11 @@ verify job（permissions:{} 零权限 + harden-runner egress 白名单
                      nobody wrapper 的部分）——stdout/stderr 管道直接回
                      runner 进程，等 "server listening"+密码行；
                      窗口内没有 listening 行 → **harness throw**——serve
-                     起不来时插件代码尚未执行（2.2.5 懒加载），责任只能
+                     起不来时插件代码尚未执行（2.3.0 懒加载），责任只能
                      在 harness/资源/上游输出漂移，记包级 failed 会经
                      diagnose 的 verify-failed 短路批量假 concern
                    → GET /api/plugin + GET+POST /api/session（curl 全部
-                     runner 侧跑；2.2.5 懒加载：GET 不触发，POST session 才 load）
+                     runner 侧跑；2.3.0 懒加载：GET 不触发，POST session 才 load）
                    → 轮询 GET /api/plugin ≤20s 看 apiPluginState：
                      只认终态 break——active→pass / failed→带 reason fail
                      （apiLoaded/apiFailed）；中间态（loading/idle）不是
@@ -1764,7 +1764,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 | `fetch/github.ts` | `fetchRepoMeta` `fetchRepoTree` `fetchRepoPackageName` `fetchRepoPackage` `fetchMarketMeta` | repo 元数据/文件树探测（rate-limited 状态透传） |
 | `scan/scan.ts` | `scanTarball` | tarball 解包+逐文件规则匹配 → findings/redFlags（MAX_UNPACKED=512MB 解压上限防 zip bomb；MAX_FINDINGS=500 截断+scan-capped 标记；已知良性二进制扩展名降 medium） |
 | `scan/rules.ts` | `RULES` `RULESET_VERSION='r4'` `isBinary` | 扫描规则表（high→redFlag，medium/low→finding；obfuscation/credential-read 限代码扩展名） |
-| `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.2.5'` | 双层合并+信任 flag+腐化门 |
+| `publish/merge.ts` | `mergeEntries` `buildIndex` `corruptionGate` `trustFlags` `dedupeSlugs` `cacheKey` `OPENCODE_VERSION='2.3.0'` | 双层合并+信任 flag+腐化门 |
 | `publish/slug.ts` | `slugOf` | URL slug（repo 优先） |
 | `remerge.ts` | `remerge` | publish 重试时 ours-vs-remote 再合并（其后 release.ts 追赶应用裁决，R-10） |
 | `verdicts.ts` | `loadVerdicts` `latestVerdicts` `latestHumanVerdicts` `effectiveVerdict` `packageBrake` `brakeFor` `slotVerdict` `vkey` `akey` `atCmp` `candidateVer` `tombEpochs` `epochGoverning` `loadDigestState` `loadLastDigestAt` `digestStateOf` `applyMatureVerdicts` `explainEntry` | 裁决读盘+NUL 键+放行判定（announced 成熟+human stickiness+包级闸+sha 校验+同名片段闸）+判定链解释器 |
@@ -1845,7 +1845,7 @@ UI（gui.ts webview / tui.tsx 终端）：
  "firstSeenAt": "2026-09-01T00:00:00Z",
  "metrics": {"stars": 42, "npmDownloads30d": 1330, "checkedAt": "2026-11-04T03:50:00Z"},
  "capabilities": {"scannedAt":"2026-11-03T14:29:15Z","rulesetVersion":"r4","findings":[],"redFlags":[]},
- "verification": {"status":"verified","level":"load","opencodeVersion":"2.2.5","verifiedAt":"2026-11-02T00:02:51Z",
+ "verification": {"status":"verified","level":"load","opencodeVersion":"2.3.0","verifiedAt":"2026-11-02T00:02:51Z",
    "integrity":"sha512-AAA…"},      ← 实测到的字节锚（drift 对照/同字节复用 key；re-tag 后与槽位钉锚不同）
  "compat": {},
  "approval": "legacy",
@@ -1895,7 +1895,7 @@ UI（gui.ts webview / tui.tsx 终端）：
 
 ```json
 [{"name":"opencode-poke","version":"0.1.5","status":"verified","level":"load",
-  "opencodeVersion":"2.2.5","verifiedAt":"2026-11-04T04:46:12Z",
+  "opencodeVersion":"2.3.0","verifiedAt":"2026-11-04T04:46:12Z",
   "integrity":"sha512-AAA…","logExcerpt":"…loading plugin id=opencode-poke…"}]
 ```
 

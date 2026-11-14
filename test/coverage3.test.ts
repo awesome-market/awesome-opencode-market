@@ -30,7 +30,7 @@ function mkBadTgz(): Buffer {
 describe('coverage round 3', () => {
   it('verifyShard writes results json', async () => {
     const fake = (async (_c: string, args: string[]) => {
-      if (args[0] === '--version') return { stdout: 'opencode v2.2.5', stderr: '' }
+      if (args[0] === '--version') return { stdout: 'opencode v2.3.0', stderr: '' }
       if (args[1] === 'add') throw Object.assign(new Error('x'), { stderr: 'addfail' })
       return { stdout: '', stderr: '' }
     }) as unknown as ExecFn
@@ -66,7 +66,7 @@ describe('coverage round 3', () => {
       firstSeenAt: '2026-01-01T00:00:00Z', latestVersion: '1', publishedAt: null,
       metrics: { stars: 1, npmDownloads30d: 2, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
       capabilities: { scannedAt: 't', findings: ['f1', 'f2'], redFlags: [] },
-      verification: { status: 'failed', logExcerpt: 'boom', runUrl: 'https://run/1', opencodeVersion: '2.2.5' },
+      verification: { status: 'failed', logExcerpt: 'boom', runUrl: 'https://run/1', opencodeVersion: '2.3.0' },
       compat: {},
       approval: 'approved',
     }

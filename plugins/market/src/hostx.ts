@@ -277,7 +277,7 @@ export function pluginLoadRe(name: string): RegExp {
 }
 
 /** Activation probe: spawn `opencode serve` against a throwaway HOME whose
- *  opencode.json lists ONLY the installed spec, create a session (2.2.5
+ *  opencode.json lists ONLY the installed spec, create a session (2.3.0
  *  loads plugins lazily on session CREATE — a bare serve never triggers
  *  the load), then grep the daemon log for the plugin id. Shared by GUI
  *  main and TUI. The env pins OPENCODE_CONFIG to the sandbox file:

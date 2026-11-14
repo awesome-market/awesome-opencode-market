@@ -432,7 +432,7 @@ describe('verifyPackage feature routes', () => {
       const key = args[0] === '--version' ? '--version' : args[0]!
       const b = over[key]
       if (b === 'fail') throw new Error(`${key} failed`)
-      return { stdout: key === '--version' ? 'opencode v2.2.5' : typeof b === 'string' ? b : '', stderr: '' }
+      return { stdout: key === '--version' ? 'opencode v2.3.0' : typeof b === 'string' ? b : '', stderr: '' }
     }) as never
   const guiFixture = (h: string) => {
     const dir = join(h, 'cache', 'opencode', 'npm', 'pkg@1.0.0', '1', 'node_modules', 'pkg')
@@ -866,7 +866,7 @@ describe('verdicts + merge + misc uncovered arms', () => {
         verification: { status: 'verified' },
       },
     })]
-    const m = mergeEntries(fresh, idx([prev]), '2.2.5', 'rs')
+    const m = mergeEntries(fresh, idx([prev]), '2.3.0', 'rs')
     expect(m[0]!.verification.status).toBe('skipped')
     expect(m[0]!.pendingUpdate!.verification.status).toBe('skipped')
   })
@@ -1014,7 +1014,7 @@ describe('verifyShard + writeDummyProvider arms', () => {
     const calls: string[][] = []
     const fake = (async (_c: string, args: string[]) => {
       calls.push(args)
-      return { stdout: args[0] === '--version' ? 'opencode v2.2.5' : '', stderr: '' }
+      return { stdout: args[0] === '--version' ? 'opencode v2.3.0' : '', stderr: '' }
     }) as never
     const rs = await verifyShard(['p'], join(d, 'res.json'), { execFn: fake, spawnFn: deadSpawn })
     // execFn is shared, but home is mkdtemp — the log above isn't read here;
@@ -1228,17 +1228,17 @@ describe('run.ts remaining arms', () => {
       name: 'pkg', latestVersion: '2.0.0', approval: 'approved',
       verification: { status: 'verified' }, integrity: 'sha512-NEW',
     })
-    const [out] = mergeEntries([ours], idx([remote]), '2.2.5')
+    const [out] = mergeEntries([ours], idx([remote]), '2.3.0')
     expect(out!.latestVersion).toBe('2.0.0')          // remote's released display wins
     expect(out!.pendingUpdate).toBeUndefined()         // hold is NOT resurrected
     expect(out!.integrity).toBe('sha512-NEW')
     // symmetric case: remote released a DIFFERENT version → our hold stays
     const remote2 = e({ name: 'pkg', latestVersion: '3.0.0', approval: 'approved' })
-    const [out2] = mergeEntries([ours], idx([remote2]), '2.2.5')
+    const [out2] = mergeEntries([ours], idx([remote2]), '2.3.0')
     expect(out2!.pendingUpdate?.version).toBe('2.0.0')
     // remote saw the version but is still pending → hold kept (adopt-gate false arm)
     const remote3 = e({ name: 'pkg', latestVersion: '2.0.0', approval: 'pending' })
-    const [out3] = mergeEntries([ours], idx([remote3]), '2.2.5')
+    const [out3] = mergeEntries([ours], idx([remote3]), '2.3.0')
     expect(out3!.pendingUpdate?.version).toBe('2.0.0')
   })
   it('corrupt blocklist → run() refuses rather than running unprotected (C-4)', async () => {
@@ -1459,14 +1459,14 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
   it('mergeEntries: identity redFlag + verified → skipped (honest label)', () => {
     const prev = e({ source: { kind: 'npm', id: 'p', repoId: 1 }, verification: { status: 'verified' } })
     const fresh = e({ source: { kind: 'npm', id: 'p', repoId: 2 }, verification: { status: 'verified' } })
-    const m = mergeEntries([fresh], idx([prev]), '2.2.5')
+    const m = mergeEntries([fresh], idx([prev]), '2.3.0')
     expect(m[0]!.capabilities.redFlags).toContain('sec:repo-recreated')
     expect(m[0]!.verification.status).toBe('skipped')
   })
   it('mergeEntries: fresh entry missing approval → prev approval fills it', () => {
     const prev = e({ approval: 'approved', approvalReason: 'x' })
     const fresh = { ...e(), approval: undefined, approvalReason: undefined } as unknown as PluginEntry
-    const m = mergeEntries([fresh], idx([prev]), '2.2.5')
+    const m = mergeEntries([fresh], idx([prev]), '2.3.0')
     expect(m[0]!.approval).toBe('approved')
   })
   it('sec-delta on a held entry attaches to pendingUpdate.capabilities', () => {
@@ -1479,7 +1479,7 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
         verification: { status: 'unverified' },
       },
     })
-    const m = mergeEntries([fresh], idx([prev]), '2.2.5')
+    const m = mergeEntries([fresh], idx([prev]), '2.3.0')
     expect(m[0]!.pendingUpdate!.capabilities.redFlags).toContain('sec-delta:prepare-script')
     expect(m[0]!.capabilities.redFlags).not.toContain('sec-delta:prepare-script')
   })

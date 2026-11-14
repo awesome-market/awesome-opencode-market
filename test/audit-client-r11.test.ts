@@ -205,17 +205,17 @@ describe('siteDetailUrl — the audit-plane backlink', () => {
 
 describe('enginesSatisfied — honest compat evaluation', () => {
   it('picks the opencode clause among several', () => {
-    expect(enginesSatisfied('2.2.5', 'node >=18; opencode >=2.0.0')).toBe(true)
+    expect(enginesSatisfied('2.3.0', 'node >=18; opencode >=2.0.0')).toBe(true)
     expect(enginesSatisfied('1.0.0', 'node >=18; opencode >=2.0.0')).toBe(false)
   })
   it('a lone bare range reads as opencode', () => {
-    expect(enginesSatisfied('2.2.5', '>=2.0.0')).toBe(true)
-    expect(enginesSatisfied('2.2.5', '^2.0.0')).toBe(true)
+    expect(enginesSatisfied('2.3.0', '>=2.0.0')).toBe(true)
+    expect(enginesSatisfied('2.3.0', '^2.0.0')).toBe(true)
     expect(enginesSatisfied('3.0.0', '^2.0.0')).toBe(false)   // major bump ≠ satisfied
   })
   it('unparseable → null, never a confident false', () => {
-    expect(enginesSatisfied('2.2.5', 'latest')).toBeNull()
-    expect(enginesSatisfied('2.2.5', 'npm >=9; yarn >=1')).toBeNull()  // no opencode clause
+    expect(enginesSatisfied('2.3.0', 'latest')).toBeNull()
+    expect(enginesSatisfied('2.3.0', 'npm >=9; yarn >=1')).toBeNull()  // no opencode clause
     expect(enginesSatisfied('abc', '>=2.0.0')).toBeNull()              // bad host version
   })
 })

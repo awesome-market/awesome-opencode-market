@@ -302,7 +302,7 @@ npm latest"，条目记录的是"catalog 时刻的版本"：catalog 收录 v1.2 
 **修法**：分片文件写 `{name, version}` 对，verify 装 `name@version`——
 测的就是用户（钉装后）会装的版本，错位在结构上消失。
 
-## 8. 客户端钉装（已实测，opencode v2.2.5）
+## 8. 客户端钉装（已实测，opencode v2.3.0）
 
 ```diff
 - opencode plugin add <name>          → npm latest
@@ -484,7 +484,7 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 ## 15. 验收清单
 
-- [x] `opencode plugin add name@x.y.z` 版本 spec 实测可用（v2.2.5，
+- [x] `opencode plugin add name@x.y.z` 版本 spec 实测可用（v2.3.0，
       wakatime@1.3.8 / oh-my-opencode@5.1.59 验证；精确 pin 为硬底，
       `plugin update` 无法越过；升级=改写 `plugins` spec 后 resolve）
 - [x] clean 投稿 → ingest → entry 落 `pending`，不展示不安装

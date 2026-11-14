@@ -16,7 +16,7 @@ const mkEntry = (name: string, v = '1.0.0'): PluginEntry => ({
 
 describe('publish/merge', () => {
   it('cacheKey = name@version+host', () => {
-    expect(cacheKey(mkEntry('a', '1.2.3'), '2.2.5')).toBe('a@1.2.3+2.2.5')
+    expect(cacheKey(mkEntry('a', '1.2.3'), '2.3.0')).toBe('a@1.2.3+2.3.0')
   })
   it('merge preserves scan/verify for unchanged entries', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
@@ -24,7 +24,7 @@ describe('publish/merge', () => {
         verification: { status: 'verified' as const, level: 'load' as const },
         capabilities: { scannedAt: 't', findings: ['f'], redFlags: [] },
         firstSeenAt: '2025-01-01' }], removed: [] }
-    const merged = mergeEntries([mkEntry('a'), mkEntry('b')], old, '2.2.5')
+    const merged = mergeEntries([mkEntry('a'), mkEntry('b')], old, '2.3.0')
     expect(merged[0]!.verification.status).toBe('verified')
     expect(merged[0]!.firstSeenAt).toBe('2025-01-01')
     expect(merged[1]!.verification.status).toBe('unverified')
@@ -32,7 +32,7 @@ describe('publish/merge', () => {
   it('merge re-verifies on version bump (cache key miss)', () => {
     const old = { version: '1' as const, generatedAt: 'x', categories: {},
       plugins: [{ ...mkEntry('a', '1.0.0'), verification: { status: 'verified' as const } }], removed: [] }
-    const merged = mergeEntries([mkEntry('a', '2.0.0')], old, '2.2.5')
+    const merged = mergeEntries([mkEntry('a', '2.0.0')], old, '2.3.0')
     expect(merged[0]!.verification.status).toBe('unverified')
   })
   it('corruption gate: empty refuse, >20% drop refuse, ok pass', () => {
@@ -44,7 +44,7 @@ describe('publish/merge', () => {
     expect(corruptionGate([mkEntry('a')], null).ok).toBe(true)
   })
   it('buildIndex outputs valid schema + sorts by slug', () => {
-    const { index, gate } = buildIndex([mkEntry('b'), mkEntry('a')], null, { opencodeVersion: '2.2.5', now: 't' })
+    const { index, gate } = buildIndex([mkEntry('b'), mkEntry('a')], null, { opencodeVersion: '2.3.0', now: 't' })
     expect(gate.ok).toBe(true)
     expect(index.plugins.map(p => p.slug)).toEqual(['a', 'b'])
     expect(index.version).toBe('1')

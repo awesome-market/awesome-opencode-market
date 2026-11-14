@@ -181,7 +181,7 @@ describe('gone-check rescan preserves non-scan findings', () => {
       integrity: null,
       capabilities: { scannedAt: 'old', rulesetVersion: 'r0',
         findings: ['sec:evidence-regressed@abc123', 'sec:tree-truncated'], redFlags: [] },
-      verification: { status: 'verified', integrity: 'oldsha000', opencodeVersion: '2.2.5' },
+      verification: { status: 'verified', integrity: 'oldsha000', opencodeVersion: '2.3.0' },
     })
     writeFileSync(join(d, 'old.json'), JSON.stringify(idx([oldEntry])))
     const f = baseFetch(tgz, url => {
@@ -223,14 +223,14 @@ describe('mergeEntries: per-version restore requires byte-anchor agreement', () 
   })
 
   it('moved commit → fresh caps + unverified survive (no stale verified inherit)', () => {
-    const merged = mergeEntries([ghFresh('shaB')], ghOld(), '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([ghFresh('shaB')], ghOld(), '2.3.0', RULESET_VERSION)
     expect(merged[0]!.verification.status).toBe('unverified')
     expect(merged[0]!.capabilities.findings).not.toContain('old-scan-finding')
     expect(merged[0]!.capabilities.scannedAt).toBe('t2')
   })
 
   it('same commit → legacy restore still applies', () => {
-    const merged = mergeEntries([ghFresh('shaA')], ghOld(), '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([ghFresh('shaA')], ghOld(), '2.3.0', RULESET_VERSION)
     expect(merged[0]!.verification.status).toBe('verified')
     expect(merged[0]!.capabilities.findings).toContain('old-scan-finding')
   })
@@ -243,7 +243,7 @@ describe('mergeEntries: per-version restore requires byte-anchor agreement', () 
     const fresh = e({ name: 'np', slug: 'np', latestVersion: '1.0.0', integrity: 'sha512-x',
       capabilities: { scannedAt: 't2', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [] },
       verification: { status: 'unverified' as const } })
-    const merged = mergeEntries([fresh], old, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     expect(merged[0]!.verification.status).toBe('verified')
   })
 })

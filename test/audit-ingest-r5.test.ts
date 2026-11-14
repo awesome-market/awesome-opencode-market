@@ -69,7 +69,7 @@ describe('mergeEntries: held-version verification restore requires byte-anchor a
 
   it('re-tagged held version (anchor shaB ≠ measured shaA) → unverified, evidence kept', () => {
     const { old, fresh } = held('sha512-B')
-    const merged = mergeEntries([fresh], old, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     const v = merged[0]!.pendingUpdate!.verification
     expect(v.status).toBe('unverified')
     // audit trail of what WAS measured survives the downgrade
@@ -83,13 +83,13 @@ describe('mergeEntries: held-version verification restore requires byte-anchor a
 
   it('same bytes (anchor === measured) → verified restored as before', () => {
     const { old, fresh } = held('sha512-A')
-    const merged = mergeEntries([fresh], old, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     expect(merged[0]!.pendingUpdate!.verification.status).toBe('verified')
   })
 
   it('missing fresh anchor falls back to remote pin → still matches → verified', () => {
     const { old, fresh } = held(null)
-    const merged = mergeEntries([fresh], old, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     expect(merged[0]!.pendingUpdate!.integrity).toBe('sha512-A')
     expect(merged[0]!.pendingUpdate!.verification.status).toBe('verified')
   })
@@ -98,7 +98,7 @@ describe('mergeEntries: held-version verification restore requires byte-anchor a
     const { old, fresh } = held('sha512-B', undefined)
     // strip the measurement anchor entirely (pre-field verify results)
     ;(old.plugins[0]!.pendingUpdate!.verification as Record<string, unknown>).integrity = undefined
-    const merged = mergeEntries([fresh], old, '2.2.5', RULESET_VERSION)
+    const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     expect(merged[0]!.pendingUpdate!.verification.status).toBe('verified')
   })
 })

@@ -102,7 +102,7 @@
       "verification": {                     // 实机验证结果
         "status": "verified|failed|unverified|skipped",
         "level": "load",                    // install（装得上）| load（能激活）| structure（仅结构校验，非代码类）
-        "opencodeVersion": "2.2.5",
+        "opencodeVersion": "2.3.0",
         "verifiedAt": "2026-11-01T00:00:00Z",
         "runUrl": "https://github.com/.../actions/runs/123",  // 完整日志在 run 里，索引只存指针
         "logExcerpt": "..."                 // 失败诊断摘录，硬截断 ≤2KB，防索引膨胀
@@ -355,7 +355,7 @@ npm keyword 2876 条大半是垃圾，收录必须过证据门，不是"提到 o
 | A3 | canary 激活信号 | ✅ **解（真信号找到）** | 本地实装 oh-my-opencode 实证：`opencode run` 起 server 即加载插件，信号在 **`$XDG_DATA_HOME/opencode/log/opencode.log`**：`msg="loading plugin" id=<name> entrypoint=<path>`（--print-logs 不转发，须读日志文件）。负信号：WARN `configured plugin path must be a directory`。隔离用 `XDG_*` 三件套 |
 | A4 | SDK 包名 | ✅ **解** | `@opencode/plugin`（loop-recover peerDep 实证） |
 | A5 | bun postinstall | ✅ **解** | bun 默认拦生命周期脚本（`@opencode/cli` 装失败实证）；npm 放行——**verify 用 npm 装宿主时高危件 `skipped` 规则仍必须** |
-| A6 | CI 装 v2 的方法 | ✅ **解** | **`npm i -g @opencode/cli` = v2.2.5 唯一正解**；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5 |
+| A6 | CI 装 v2 的方法 | ✅ **解** | **`npm i -g @opencode/cli` = v2.3.0 唯一正解**；官方 install 脚本和 `bun i -g opencode-ai` 都装 v1.19.5 |
 
 ### B. 数据卡点（P1 发现期）
 | # | 卡点 | 应对 |
