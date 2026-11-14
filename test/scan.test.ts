@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { scanTarball } from '../pipeline/scan/scan.ts'
+import { scanTarball, fmtFinding } from '../pipeline/scan/scan.ts'
 import { RULES, isBinary } from '../pipeline/scan/rules.ts'
 
 let tgz: Buffer
@@ -60,6 +60,21 @@ describe('scan/scanTarball', () => {
     expect(rules).toContain('obfuscation')
     expect(rules).toContain('binary-blob')
     expect(r.redFlags.length).toBeGreaterThan(0)
+  })
+
+  it('captures the offending source line + number as evidence', async () => {
+    const r = await scanTarball(tgz)
+    const cred = r.findings.find(f => f.rule === 'credential-read')!
+    expect(cred.file).toBe('pkg/dist/index.js')
+    expect(cred.lineNo).toBe(5)
+    expect(cred.line).toContain('.ssh/id_rsa')
+    const evalHit = r.findings.find(f => f.rule === 'obfuscation')!
+    expect(evalHit.lineNo).toBe(2)
+    expect(evalHit.line).toContain('eval(')
+    const life = r.findings.find(f => f.rule === 'lifecycle-script')!
+    expect(life.line).toContain('postinstall')
+    // serialization keeps the `rule:file` head and appends ` — L<no>: <code>`
+    expect(fmtFinding(cred)).toMatch(/^credential-read:pkg\/dist\/index\.js — L5: /)
   })
 
   it('findings are capped at 500 with a scan-capped marker', async () => {

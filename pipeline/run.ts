@@ -6,7 +6,7 @@ import { discoverGithub, normalizeRepoUrl } from './discover/github.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence, hasSkillPath } from './discover/filter.ts'
 import { fetchPackument, fetchTarball, fetchDownloads30d, fetchDownloadsMonth, compatStrings, type PackumentResult } from './fetch/npm.ts'
 import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchRepoPackageName, unsafeRepoDir, type RepoMetaStatus } from './fetch/github.ts'
-import { scanTarball } from './scan/scan.ts'
+import { scanTarball, fmtFinding } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
 import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs, candidateSlot } from './verdicts.ts'
@@ -795,12 +795,12 @@ export async function run(opts: RunOptions = {}) {
                 puCaps = {
                   scannedAt: now,
                   rulesetVersion: RULESET_VERSION,
-                  findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(heldPin.capabilities)])],
+                  findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(heldPin.capabilities)])],
                   // a confirmed re-tag stays flagged even after the fresh
                   // scan — "bytes changed under a stable version" is the
                   // signal a reviewer must see; keepFlags unions back the
                   // persistent identity/delta flags nothing re-derives
-                  redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...keepFlags(heldPin.capabilities), ...(puDrift ? [DRIFT_FLAG] : [])])],
+                  redFlags: [...new Set([...r.redFlags.map(x => fmtFinding(x)), ...keepFlags(heldPin.capabilities), ...(puDrift ? [DRIFT_FLAG] : [])])],
                 }
                 puIntegrity = regSha ?? puIntegrity  // anchor the bytes just scanned
               } catch (e) {
@@ -885,8 +885,8 @@ export async function run(opts: RunOptions = {}) {
           scan = {
             scannedAt: now,
             rulesetVersion: RULESET_VERSION,
-            findings: r.findings.map(x => `${x.rule}:${x.file}`),
-            redFlags: r.redFlags.map(x => `${x.rule}:${x.file}`),
+            findings: r.findings.map(x => fmtFinding(x)),
+            redFlags: r.redFlags.map(x => fmtFinding(x)),
           }
         } catch (e) {
           const msg = (e as Error).message
@@ -1292,8 +1292,8 @@ export async function run(opts: RunOptions = {}) {
         scan = {
           scannedAt: now,
           rulesetVersion: RULESET_VERSION,
-          findings: r.findings.map(x => `${x.rule}:${strip(x.file)}`),
-          redFlags: r.redFlags.map(x => `${x.rule}:${strip(x.file)}`),
+          findings: r.findings.map(x => fmtFinding(x, strip)),
+          redFlags: r.redFlags.map(x => fmtFinding(x, strip)),
         }
       } catch (e) {
         const msg = (e as Error).message
@@ -1483,10 +1483,10 @@ export async function run(opts: RunOptions = {}) {
           const r = await scanTarball(await fetchTarball(url, { fetchFn: f }))
           return {
             scannedAt: now, rulesetVersion: RULESET_VERSION,
-            findings: [...new Set([...r.findings.map(x => `${x.rule}:${x.file}`), ...keepFindings(c)])],
+            findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(c)])],
             // union the persistent flags — sec:repo-recreated/sec-delta:* are
             // re-derived by NO layer once repoId/findings converge (keepFlags)
-            redFlags: [...new Set([...r.redFlags.map(x => `${x.rule}:${x.file}`), ...keepFlags(c)])],
+            redFlags: [...new Set([...r.redFlags.map(x => fmtFinding(x)), ...keepFlags(c)])],
           }
         } catch { return c }
       }
@@ -1540,7 +1540,7 @@ export async function run(opts: RunOptions = {}) {
       const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/${tree.sha ?? 'HEAD'}`, { fetchFn: f })
       const r = await scanTarball(tgz)
       const strip = (p: string) => p.replace(/^[^/]+\//, '')
-      const redFlags = r.redFlags.map(x => `${x.rule}:${strip(x.file)}`)
+      const redFlags = r.redFlags.map(x => fmtFinding(x, strip))
       // an aged-out entry never sees ghWorker — mirror its drift flags here
       // or a moved HEAD re-anchors source.version silently (reviewed commit →
       // unreviewed pin with nothing for the flag/docket surfaces to catch)
@@ -1581,7 +1581,7 @@ export async function run(opts: RunOptions = {}) {
           // exception — it describes THIS probe's completeness, so it
           // re-derives fresh below instead of carrying a stale marker
           findings: [...new Set([
-            ...r.findings.map(x => `${x.rule}:${strip(x.file)}`),
+            ...r.findings.map(x => fmtFinding(x, strip)),
             ...keepFindings(e.capabilities).filter(f => f !== 'sec:tree-truncated'),
             ...(tree.truncated ? ['sec:tree-truncated'] : []),
           ])],
