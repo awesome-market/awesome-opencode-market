@@ -525,11 +525,14 @@ export async function verifyPackage(
   try {
     let port = '', pw = ''
     // SECURITY ASSUMPTION: the listening+password markers are scraped from
-    // serve's own stdout/stderr — trusted only because opencode 2.2.5 loads
+    // serve's own stdout/stderr — trusted only because the pinned host loads
     // plugins lazily (no plugin code has run when these lines print). If a
     // future version loads eagerly at boot, plugin output could print a fake
     // "server listening" line pointing at a plugin-owned socket; re-audit
     // this extraction on host upgrades (or switch to a runner-side probe).
+    // Re-audited for 2.3.0: plugin stdout/stderr never reaches serve's output
+    // at all (captured to the opencode log file), so even an eagerly-loaded
+    // plugin could not forge a marker on this host version.
     for (const t0 = Date.now(); Date.now() - t0 < (opts.bootWaitMs ?? 15_000) && !dead;) {
       if (/server listening/.test(serveOut)) {
         port = /127\.0\.0\.1:(\d+)/.exec(serveOut)?.[1] ?? ''
@@ -539,10 +542,11 @@ export async function verifyPackage(
       await sleep(250)
     }
     if (!port) {
-      // serve never announced a listener — under 2.2.5's lazy load the plugin
-      // code hasn't run at boot, so the package itself can't be the reason
-      // the server stayed down: this is harness breakage (runner resources,
-      // upstream output drift) and must not be written as a package 'failed'.
+      // serve never announced a listener — under the pinned host's lazy load
+      // the plugin code hasn't run at boot, so the package itself can't be
+      // the reason the server stayed down: this is harness breakage (runner
+      // resources, upstream output drift) and must not be written as a
+      // package 'failed'.
       // A thrown error lands in the shard's harness:true lane — merge drops
       // it and diagnose never sees a concern-worthy package verdict.
       throw new Error(`serve did not announce a listener within ${opts.bootWaitMs ?? 15_000}ms` +
@@ -571,8 +575,8 @@ export async function verifyPackage(
     {
       const auth = ['-u', `opencode:${pw}`]
       const api = `http://127.0.0.1:${port}/api`
-      // 2.2.5 loads plugins lazily on session CREATE — a GET alone never
-      // triggers the load, so POST one (E2E rehearsal: GET-only left
+      // the pinned host loads plugins lazily on session CREATE — a GET alone
+      // never triggers the load, so POST one (E2E rehearsal: GET-only left
       // /api/plugin empty)
       await run('curl', ['-s', ...auth, '-o', '/dev/null', `${api}/session`], { timeout: 15_000 }).catch(() => {})
       await run('curl', ['-s', ...auth, '-o', '/dev/null', '-X', 'POST',
@@ -598,9 +602,10 @@ export async function verifyPackage(
       }
       if (serverRequired && apiState === null && !answered) {
         // the listening line scraped yet not one poll connected — the socket
-        // behind it is dead (runner resources, upstream drift). Under 2.2.5's
-        // lazy load plugin code hadn't run when the line printed, so the
-        // package can't be the cause: infrastructure, not a package verdict.
+        // behind it is dead (runner resources, upstream drift). Under the
+        // pinned host's lazy load plugin code hadn't run when the line
+        // printed, so the package can't be the cause: infrastructure, not a
+        // package verdict.
         throw new Error(`serve announced a listener but never answered /api/plugin — ` +
           `the socket was dead before the plugin loaded (harness):\n${tail(serveOut)}`)
       }

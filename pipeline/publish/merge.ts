@@ -11,7 +11,7 @@ import { candidateVer } from '../verdicts.ts'
 
 /** Host opencode version used for verification cache keys (name@version+host, DEV §4).
  *  Bump in lockstep with verify.yml's installed @opencode/cli version. */
-export const OPENCODE_VERSION = '2.2.5'
+export const OPENCODE_VERSION = '2.3.0'
 
 export function cacheKey(e: Pick<PluginEntry, 'name' | 'latestVersion'>, opencodeVersion: string): string {
   return `${e.name}@${e.latestVersion ?? '?'}+${opencodeVersion}`
