@@ -46,6 +46,25 @@ describe('scan/rules', () => {
     expect(r.test('f.js', '0.0.0.0')).toBeNull()
     expect(r.test('f.js', '45.33.32.156')).toBeTruthy()
   })
+  it('literal-ip rejects version/RFC/SVG/OID false positives', () => {
+    const r = RULES.find(r => r.id === 'literal-ip')!
+    // octet-overflow version soup
+    expect(r.test('f.js', 'd="M11.385.6.113a9"')).toBeNull()
+    // version pin
+    expect(r.test('f.js', '"opencv-python==4.9.0.80"')).toBeNull()
+    // UA string
+    expect(r.test('f.js', 'Chrome/131.0.0.0 Safari/537.36')).toBeNull()
+    // RFC section ref
+    expect(r.test('f.js', 'RFC 9309 §2.3.1.4 recommends')).toBeNull()
+    // kernel version fragment glued to dotted token
+    expect(r.test('f.js', 'kernel_version: 5.10.0-180.12.0.50.oe2203')).toBeNull()
+    // multicast + CGNAT excluded
+    expect(r.test('f.js', 'ssdp 239.255.255.250')).toBeNull()
+    expect(r.test('f.js', 'cgnet 100.64.0.0/10')).toBeNull()
+    // real IPs still fire — bare token, host assignment, url
+    expect(r.test('f.js', 'connect("45.33.32.156")')).toBeTruthy()
+    expect(r.test('f.js', 'const host = "45.33.32.156"')).toBeTruthy()
+  })
 
   it('demotes high hits in non-execution / inert context to medium', () => {
     const cred = RULES.find(r => r.id === 'credential-read')!
