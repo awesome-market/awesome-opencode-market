@@ -214,6 +214,14 @@ export function main(argv: string[] = process.argv): void {
     for (const r of rows) console.log(JSON.stringify(r))
     return
   }
+  // the labels this step attaches are created by submit.yml's review path —
+  // until one submission actually runs it, they don't exist and every
+  // rejected row logs 'label not found' while the phase marker silently
+  // never lands. Ensure once here; per-row label ops then succeed.
+  try {
+    gh(['label', 'create', 'submission:rejected', '-R', repo, '--color', 'b60205', '--description', 'admission gate refused', '--force'])
+    gh(['label', 'create', 'submission:approved', '-R', repo, '--color', '0e8a16', '--description', 'review passed', '--force'])
+  } catch { /* label ensure is best-effort — per-row edits still warn honestly */ }
   for (const r of rows) upsertStatusComment(repo, r, runId)
 }
 
