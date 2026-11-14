@@ -1,7 +1,7 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r7'
+export const RULESET_VERSION = 'r8'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -153,8 +153,24 @@ export const RULES: Rule[] = [
     test: (_p, c) => {
       if (c == null) return null
       const v4 = c.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)
-      if (v4 && !/^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|255\.)/.test(v4[0]))
-        return { detail: `literal IP ${v4[0]}`, ...srcLine(c, v4) }
+      if (v4) {
+        // octet + context validity — \d{1,3} alone matches version pins
+        // (opencv-python==4.9.0.80), UA strings (Chrome/131.0.0.0), RFC
+        // section numbers (§6.2.2.1), OIDs, and SVG path soup, none of
+        // which are addresses. Octets must be ≤255, the token must not be
+        // glued to a longer dotted number, and version/host context
+        // (==v, /v, -v, RFC §) demotes the hit out entirely.
+        const o = v4[0].split('.').map(Number)
+        const i = v4.index!
+        const pre = c.slice(Math.max(0, i - 30), i)
+        const post = c.slice(i + v4[0].length, i + v4[0].length + 8)
+        const valid = o.every(x => x <= 255)
+          && !/[\d.]$/.test(pre) && !/^\.[\dA-Za-z]/.test(post)
+          && !/[-=~§]$/.test(pre) && !/[A-Za-z]\/$/.test(pre) && !/==\s*$/.test(pre)
+          && !/(RFC|rfc|§|version|v\.?|Chapter|sec(tion)?\.?|clause)\s*$/.test(pre)
+        if (valid && !/^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|255\.|22[4-9]\.|23[0-9]\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)/.test(v4[0]))
+          return { detail: `literal IP ${v4[0]}`, ...srcLine(c, v4) }
+      }
       // IPv6: hex-ish token with ≥2 colons AND ≥1 hex letter (the letter test
       // keeps 12:30:45-style times/ratios out; doc/loopback/ULA excluded too)
       const v6 = c.match(/\b(?=[0-9a-fA-F:]*[a-fA-F])[0-9a-fA-F]*(?::[0-9a-fA-F]*){2,}\b/)
