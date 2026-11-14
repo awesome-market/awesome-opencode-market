@@ -609,7 +609,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // embedded twice inside the bilingual reason text
   if (t.redFlagList?.length) {
     L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
-    for (const f of t.redFlagList.slice(0, 20)) L.push(`  - ${clean(f, 160)}`)
+    for (const f of t.redFlagList.slice(0, 20)) L.push(`  - ${clean(f, 300)}`)
     if (t.redFlagList.length > 20) L.push(`  - …另 ${t.redFlagList.length - 20} 条见 index.json`)
   }
   if (t.scanPreview?.length) {

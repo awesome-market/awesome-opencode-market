@@ -8,7 +8,19 @@ export interface ScanFinding {
   severity: Severity
   file: string
   detail: string
+  /** offending source line + number — the human-review case file; rules
+   *  report it via srcLine so flag strings can carry the actual trigger */
+  line?: string
+  lineNo?: number
 }
+
+/** Serialize a finding for capabilities.findings/redFlags — `rule:file`
+ *  plus, when the rule located it, ` — L<no>: <code>` evidence. Keep the
+ *  prefix byte-compatible: ruleOf() (first `:`), sec:/sec-delta: prefix
+ *  checks, and findings↔redFlags string equality all read the head only.
+ *  Evidence is package source — already public bytes, bounded by srcLine. */
+export const fmtFinding = (x: ScanFinding, strip: (p: string) => string = p => p): string =>
+  `${x.rule}:${strip(x.file)}${x.lineNo != null ? ` — L${x.lineNo}: ${x.line}` : ''}`
 
 export interface ScanResult {
   findings: ScanFinding[]
@@ -110,8 +122,12 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
           }
           const text = isText ? buf.toString('utf8') : null
           for (const r of RULES) {
-            const detail = r.test(path, text)
-            if (detail) pushFinding({ rule: r.id, severity: r.sev, file: path, detail })
+            const hit = r.test(path, text)
+            if (hit) pushFinding({
+              rule: r.id, severity: r.sev, file: path, detail: hit.detail,
+              ...(hit.line !== undefined ? { line: hit.line } : {}),
+              ...(hit.lineNo !== undefined ? { lineNo: hit.lineNo } : {}),
+            })
           }
         })
       },

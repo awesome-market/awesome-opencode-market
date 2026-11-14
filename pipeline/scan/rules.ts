@@ -1,18 +1,51 @@
 /** Static scan rules v1 (DEV §3). Read-only analysis — never executes package code. */
 
 /** Bump when rules change — part of the scan cache key; stale findings get re-scanned. */
-export const RULESET_VERSION = 'r5'
+export const RULESET_VERSION = 'r6'
 
 export type Severity = 'high' | 'medium' | 'low'
+
+/** One rule hit: the human-readable detail PLUS the offending source line —
+ *  `rule:file` alone forces a reviewer to re-derive WHERE the trigger sits;
+ *  the line itself is the case file (serialized onto flag strings downstream). */
+export interface RuleHit {
+  detail: string
+  /** source line (or a window around the match inside a giant minified
+   *  line), trimmed — never spans lines */
+  line?: string
+  lineNo?: number
+}
 
 export interface Rule {
   id: string
   sev: Severity
   /** match against file path + text content (binary files flagged by isBinary separately) */
-  test(path: string, content: string | null): string | null
+  test(path: string, content: string | null): RuleHit | null
 }
 
 const isPkgJson = (p: string) => /(^|\/)package\.json$/.test(p)
+
+/** Locate the match's line and return a bounded excerpt around it — a
+ *  minified single-line bundle would otherwise "excerpt" MBs of nothing
+ *  useful, so the window centers on the match, not the line start.
+ *  `…` markers disclose truncation. */
+export function srcLine(content: string, m: RegExpMatchArray | null): { line: string; lineNo: number } | undefined {
+  const i = m?.index
+  if (i == null) return undefined
+  const start = content.lastIndexOf('\n', i - 1) + 1
+  let end = content.indexOf('\n', i)
+  if (end < 0) end = content.length
+  // count newlines without materializing a prefix copy — files scan up to
+  // 32MB and a slice(0,i) per hit is pure GC churn
+  let lineNo = 1
+  for (let p = content.indexOf('\n'); p >= 0 && p < i; p = content.indexOf('\n', p + 1)) lineNo++
+  const lo = Math.max(start, i - 60)
+  const hi = Math.min(end, i + m![0].length + 80)
+  const line = (lo > start ? '…' : '') + content.slice(lo, hi).trim() + (hi < end ? '…' : '')
+  return { line, lineNo }
+}
+
+const EXEC_EXT = /\.(js|mjs|cjs|ts|mts|cts|sh)$/i
 
 export const RULES: Rule[] = [
   {
@@ -23,8 +56,11 @@ export const RULES: Rule[] = [
     // on the author's machine at publish/pack — downgraded to the
     // medium 'pack-script' rule below; they gated ~half of all
     // lifecycle hits as false positives.
-    test: (p, c) => isPkgJson(p) && c != null && /"(preinstall|postinstall|install|prepublish)"\s*:\s*"[^"]+"/.test(c)
-      ? 'npm lifecycle script (install stage) — code runs at install time' : null,
+    test: (p, c) => {
+      if (!isPkgJson(p) || c == null) return null
+      const m = c.match(/"(preinstall|postinstall|install|prepublish)"\s*:\s*"[^"]+"/)
+      return m ? { detail: 'npm lifecycle script (install stage) — code runs at install time', ...srcLine(c, m) } : null
+    },
   },
   {
     id: 'pack-script', sev: 'medium',
@@ -32,20 +68,26 @@ export const RULES: Rule[] = [
     // consumer install — a maintainer-side supply-chain signal, not a
     // consumer red flag (prepare remains 'high' via its own rule: it
     // DOES run when installing a git/tarball dep)
-    test: (p, c) => isPkgJson(p) && c != null && /"(prepublishOnly|prepack|postpack)"\s*:\s*"[^"]+"/.test(c)
-      ? 'npm pack/publish-stage script — runs on publisher machine, not on install' : null,
+    test: (p, c) => {
+      if (!isPkgJson(p) || c == null) return null
+      const m = c.match(/"(prepublishOnly|prepack|postpack)"\s*:\s*"[^"]+"/)
+      return m ? { detail: 'npm pack/publish-stage script — runs on publisher machine, not on install', ...srcLine(c, m) } : null
+    },
   },
   {
     id: 'prepare-script', sev: 'high',
-    test: (p, c) => isPkgJson(p) && c != null && /"prepare"\s*:\s*"[^"]+"/.test(c)
-      ? '"prepare" script — runs on git/tarball install' : null,
+    test: (p, c) => {
+      if (!isPkgJson(p) || c == null) return null
+      const m = c.match(/"prepare"\s*:\s*"[^"]+"/)
+      return m ? { detail: '"prepare" script — runs on git/tarball install', ...srcLine(c, m) } : null
+    },
   },
   {
     id: 'network-call', sev: 'medium',
     test: (_p, c) => {
       if (c == null) return null
       const m = c.match(/fetch\(|http\.request|require\(['"]https?['"]|axios|\bcurl\s|\bwget\s/)
-      return m ? `network indicator: ${m[0]}` : null
+      return m ? { detail: `network indicator: ${m[0]}`, ...srcLine(c, m) } : null
     },
   },
   {
@@ -54,12 +96,12 @@ export const RULES: Rule[] = [
       if (c == null) return null
       const v4 = c.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)
       if (v4 && !/^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.0\.2\.|192\.168\.|198\.51\.100\.|203\.0\.113\.|255\.)/.test(v4[0]))
-        return `literal IP ${v4[0]}`
+        return { detail: `literal IP ${v4[0]}`, ...srcLine(c, v4) }
       // IPv6: hex-ish token with ≥2 colons AND ≥1 hex letter (the letter test
       // keeps 12:30:45-style times/ratios out; doc/loopback/ULA excluded too)
       const v6 = c.match(/\b(?=[0-9a-fA-F:]*[a-fA-F])[0-9a-fA-F]*(?::[0-9a-fA-F]*){2,}\b/)
       if (v6 && !/^(::1|::|fe80:|f[cd][0-9a-fA-F]{0,2}:|ff[0-9a-fA-F]{0,2}:|2001:db8:)/i.test(v6[0]))
-        return `literal IPv6 ${v6[0]}`
+        return { detail: `literal IPv6 ${v6[0]}`, ...srcLine(c, v6) }
       return null
     },
   },
@@ -70,9 +112,11 @@ export const RULES: Rule[] = [
       // README would fake a red flag and gate the whole version on manual
       // review; only executable surface can obfuscate (same scoping as
       // credential-read)
-      if (c == null || !/\.(js|mjs|cjs|ts|mts|cts|sh)$/i.test(p)) return null
-      if (/eval\(|new Function/.test(c)) return 'eval/Function usage'
-      if (/(\\x[0-9a-fA-F]{2}){8,}/.test(c)) return 'long hex-escaped blob'
+      if (c == null || !EXEC_EXT.test(p)) return null
+      const e = c.match(/eval\(|new Function/)
+      if (e) return { detail: 'eval/Function usage', ...srcLine(c, e) }
+      const h = c.match(/(\\x[0-9a-fA-F]{2}){8,}/)
+      if (h) return { detail: 'long hex-escaped blob', ...srcLine(c, h) }
       return null
     },
   },
@@ -83,22 +127,25 @@ export const RULES: Rule[] = [
     test: (_p, c) => {
       if (c == null) return null
       const m = c.match(/atob\(|Buffer\.from\(['"][A-Za-z0-9+/=]{200,}/)
-      return m ? `base64 payload decode: ${m[0].slice(0, 40)}` : null
+      return m ? { detail: `base64 payload decode: ${m[0].slice(0, 40)}`, ...srcLine(c, m) } : null
     },
   },
   {
     id: 'credential-read', sev: 'high',
     test: (p, c) => {
       // docs legitimately mention credential paths — only fire on code
-      if (c == null || !/\.(js|mjs|cjs|ts|mts|cts|sh)$/i.test(p)) return null
+      if (c == null || !EXEC_EXT.test(p)) return null
       const m = c.match(/\.ssh|id_rsa|\.aws\/credentials|keychain|\.npmrc|\.netrc/)
-      return m ? `credential-path reference: ${m[0]}` : null
+      return m ? { detail: `credential-path reference: ${m[0]}`, ...srcLine(c, m) } : null
     },
   },
   {
     id: 'child-process', sev: 'medium',
-    test: (_p, c) =>
-      c != null && /child_process|execSync|spawnSync|\bspawn\(|\bexec\(/.test(c) ? 'spawns child processes' : null,
+    test: (_p, c) => {
+      if (c == null) return null
+      const m = c.match(/child_process|execSync|spawnSync|\bspawn\(|\bexec\(/)
+      return m ? { detail: 'spawns child processes', ...srcLine(c, m) } : null
+    },
   },
 ]
 
