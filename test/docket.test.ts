@@ -456,6 +456,26 @@ describe('issueBody', () => {
     expect((body.match(/credential-read:a\.js/g) ?? []).length).toBe(1)
     expect((body.match(/credential-read:b\.js/g) ?? []).length).toBe(1)
   })
+  it('红旗清单 attaches "为什么报警+查什么" explainers per flag', () => {
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [], redFlags: [
+        'prepare-script:package.json — L63: "prepare": "npm run build"',
+        'sec:repo-moved-since-release:63915cf91cd1',
+        'unknown-rule:x.js — L1: y',
+      ] },
+    })]), [v({ verdict: 'concern' })])
+    const body = issueBody(t[0]!)
+    expect(body).toContain('↳ "prepare" 在 git/tarball 安装时自动执行')
+    expect(body).toContain('↳ 仓库 HEAD 在上架钉版后移动')
+    // unknown ids render raw, no explainer line — never invent a gloss
+    expect(body).toContain('unknown-rule:x.js')
+    expect((body.match(/↳/g) ?? []).length).toBe(2)
+  })
+  it('flag verdict headline carries the flag explainer', () => {
+    const t = docketTargets(idx([e()]), [])
+    const body = issueBody({ ...t[0]!, verdict: 'flag', reason: 'sec:repo-recreated' })
+    expect(body).toContain('↳ 仓库被删除重建')
+  })
   it('stripFlagTail never touches real prose or LLM-draft payloads', () => {
     // an LLM-draft reason ends in prose, not type:path pairs — must survive intact
     const t = docketTargets(idx([e()]), [v({ verdict: 'concern',
