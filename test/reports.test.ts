@@ -155,3 +155,59 @@ describe('loadState / main', () => {
     expect(existsSync(join(out, 'yearly', '2026.md'))).toBe(true)
   })
 })
+
+describe('fetchNpmDownloads', () => {
+  const withFetch = async (impl: (...a: unknown[]) => Promise<unknown>, fn: () => Promise<void>) => {
+    const orig = globalThis.fetch
+    globalThis.fetch = impl as typeof fetch
+    try { await fn() } finally { globalThis.fetch = orig }
+  }
+  const resp = (body: unknown, ok = true) => ({
+    ok, status: ok ? 200 : 500, headers: { get: () => null }, body: undefined, json: async () => body,
+  })
+  it('sums downloads across names; skips failures; null when all fail', async () => {
+    const { fetchNpmDownloads } = await import('../pipeline/reports.ts')
+    await withFetch(async (url: unknown) => {
+      const u = String(url)
+      if (u.endsWith('/bad')) return resp({}, false)
+      if (u.endsWith('/junk')) return resp({ downloads: 'x' })
+      return resp({ downloads: u.endsWith('/a') ? 10 : 20 })
+    }, async () => {
+      expect(await fetchNpmDownloads(['a', 'b'])).toBe(30)
+      expect(await fetchNpmDownloads(['bad', 'junk'])).toBeNull()   // zero ok → null
+      expect(await fetchNpmDownloads(['a', 'bad'])).toBe(10)        // partial still sums
+      expect(await fetchNpmDownloads([])).toBe(0)
+    })
+  })
+})
+
+describe('computeDaily — review inputs', () => {
+  it('awaitingRelease counts docket pass targets when verdicts provided', async () => {
+    const verdicts = [{ name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'ai' }]
+    const r = await computeDaily(idx([e({ approval: 'pending' })]), '2026-11-15', emptyState(), async () => 0,
+      { verdicts: verdicts as never, digest: null })
+    expect(r.snap.awaitingRelease).toBe(1)
+    expect(r.snap.pendingReview).toBe(1)
+    const noReview = await computeDaily(idx([e()]), '2026-11-15', emptyState(), async () => 0)
+    expect(noReview.snap.awaitingRelease).toBeNull()
+  })
+})
+
+describe('main — verdicts/digest inputs', () => {
+  it('loads verdicts+digest and renders linked queue stats', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-v-'))
+    const idxPath = join(dir, 'i.json'), stPath = join(dir, 'state.json'), out = join(dir, 'out')
+    const vPath = join(dir, 'v.jsonl'), dPath = join(dir, 'd.json')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ approval: 'pending' })])))
+    writeFileSync(vPath, JSON.stringify({ name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'ai' }) + '\n')
+    writeFileSync(dPath, JSON.stringify({ lastDigestAt: '2026-11-14T00:00:00Z', announced: [], dayAnnounced: [] }))
+    await main(['x', '--index', idxPath, '--state', stPath, '--out', out, '--date', '2026-11-15',
+      '--verdicts', vPath, '--digest-state', dPath, '--repo', 'o/r'],
+      { downloadsFn: async () => 5 })
+    const daily = readFileSync(join(out, 'daily', '2026-11-15.md'), 'utf8')
+    expect(daily).toContain('label%3Aai%3Apass')
+    expect(daily).toContain('label%3Areview%3Apending')
+    const state = JSON.parse(readFileSync(stPath, 'utf8')) as ReportState
+    expect(state.dailies[0]!.awaitingRelease).toBe(1)
+  })
+})
