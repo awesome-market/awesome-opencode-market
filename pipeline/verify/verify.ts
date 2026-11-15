@@ -680,7 +680,7 @@ export async function verifyPackage(
 
     if (feats.includes('tui')) {
       const { checkTui } = await import('./tui.ts')
-      const tui = await checkTui(env, run, { ...opts.tuiOpts, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
+      const tui = await checkTui(env, run, { ...opts.tuiOpts, cwd: uh, ...(sb ? { command: `${sb.wrapper} opencode` } : {}) })
       if (!tui.ok) {
         // spawn-level tmux failures carry no package evidence (the plugin
         // never ran) — throw so the shard's harness:true lane drops it

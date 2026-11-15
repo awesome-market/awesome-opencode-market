@@ -437,6 +437,20 @@ describe('verify/checkTui', () => {
     // the fuller raw stream rides along as reviewer-facing diag
     expect(r.diag).toContain('panic: plugin init exploded')
   })
+  it('pane cwd pinned via -c when opts.cwd given (checkout-EACCES guard)', async () => {
+    const seen: string[][] = []
+    const f = (async (_c: string, args: string[]) => {
+      seen.push(args)
+      const key = args[0] === '-f' ? args[2]! : args[0]!
+      if (key === 'new-session') return { stdout: '', stderr: '' }
+      if (key === 'capture-pane') return { stdout: 'x'.repeat(200), stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as never
+    const r = await checkTui(env, f, { settleMs: 1, cwd: '/tmp/sandbox-home' })
+    expect(r.ok).toBe(true)
+    const ns = seen.find(a => a.includes('new-session'))!
+    expect(ns[ns.indexOf('-c') + 1]).toBe('/tmp/sandbox-home')
+  })
   it('alive + blank capture does NOT fall back to pane log', async () => {
     const f = (async (_c: string, args: string[]) => {
       const key = args[0] === '-f' ? args[2]! : args[0]!
