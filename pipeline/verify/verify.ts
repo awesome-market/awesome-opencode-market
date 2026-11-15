@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { isMain } from '../main-guard.ts'
+import { EGRESS_BLOCKED } from './failExplain.ts'
 
 const exec = promisify(execFile)
 export type ExecFn = typeof exec
@@ -687,12 +688,18 @@ export async function verifyPackage(
     const pkgErr = errAll.filter(l => hints.some(h => l.toLowerCase().includes(h)))
     const errLines = [...pkgErr.slice(-8), ...errAll.filter(l => !pkgErr.includes(l)).slice(-7)]
       .join('\n').slice(-1400)
+    // sandbox egress is allow-listed — a plugin whose own load error is a
+    // blocked-network signature (ECONNREFUSED to a non-allowlisted host,
+    // fetch timeout) failed because of policy, not necessarily because the
+    // package is broken. Same honesty note the install stage already gives;
+    // without it a network-dependent provider reads as a dead plugin.
+    const egressBlocked = sb && pkgErr.some(l => EGRESS_BLOCKED.test(l) && !/models\.dev/.test(l))
     dumpDiag(`spec: ${spec}\napiNames: ${apiNames.join(', ')}\nverdict: ${why}\n\n` +
       `--- /api/plugin (head) ---\n${apiBrief}\n\n` +
       `--- serve output (tail 64k, password redacted) ---\n${safeServeOut}\n\n` +
       `--- opencode log (tail 256k) ---\n${log}`)
     return { ...base, status: 'failed', level: 'load',
-      logExcerpt: tail(`${errLines ? `--- errors ---\n${errLines}\n` : ''}--- stream tail ---\n${log.slice(-300)}\n${why}`) }
+      logExcerpt: tail(`${errLines ? `--- errors ---\n${errLines}\n` : ''}--- stream tail ---\n${log.slice(-300)}\n${why}${egressBlocked ? '\n[sandboxed egress is allow-listed — a load failure caused by blocked network is policy, not necessarily a broken package]' : ''}`) }
   }
 
   try {

@@ -95,6 +95,45 @@ describe('D-1 omlx preflight', () => {
     expect(got?.verdict).toBe('pass')                             // ornith's verdict, not concern
     expect(got?.reason).not.toContain('装测失败')
   })
+  it('egress-blocked terminal failure is NOT a mechanical concern — reaches the judge', async () => {
+    // sandbox egress is allow-listed: a provider plugin whose load error is
+    // ECONNREFUSED to a non-allowlisted host failed on POLICY, not on
+    // package evidence — a mechanical concern could never self-heal
+    const egressFailed = e({ name: 'netpkg', approval: 'approved', pendingUpdate: {
+      version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'failed', level: 'load', retries: 3,
+        logExcerpt: '--- errors ---\nlevel=ERROR message="plugin init failed" cause="fetch https://api.example.com ECONNREFUSED"\n--- stream tail ---\nserve reports the plugin failed to load' },
+      heldAt: '2026-01-01T00:00:00Z' } })
+    let ornithCalls = 0
+    const { argv, op } = files([egressFailed])
+    await diagnoseMain(argv, {
+      l05: cleanL05,
+      ornith: async () => { ornithCalls++; return okOrnith() },
+      sha: noSha, ping: async () => true,
+    })
+    expect(ornithCalls).toBe(1)
+    const got = outLines(op).find(x => x.name === 'netpkg')
+    expect(got?.verdict).toBe('pass')
+    expect(got?.reason).not.toContain('装测失败')
+  })
+  it('terminal failure with a hard crash signature stays a mechanical concern', async () => {
+    // a LoadError line NOT caused by network is real package evidence —
+    // egress routing must not swallow genuine load failures
+    const crashFailed = e({ name: 'crashpkg', approval: 'approved', pendingUpdate: {
+      version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
+      verification: { status: 'failed', level: 'load', retries: 3,
+        logExcerpt: '--- errors ---\nPluginModule.LoadError: export did not satisfy contract\nserve reports the plugin failed to load' },
+      heldAt: '2026-01-01T00:00:00Z' } })
+    let ornithCalls = 0
+    const { argv, op } = files([crashFailed])
+    await diagnoseMain(argv, {
+      l05: cleanL05,
+      ornith: async () => { ornithCalls++; return okOrnith() },
+      sha: noSha, ping: async () => true,
+    })
+    expect(ornithCalls).toBe(0)
+    expect(outLines(op).find(x => x.name === 'crashpkg')?.verdict).toBe('concern')
+  })
 })
 
 describe('D-2 sha fetch dedup', () => {

