@@ -76,6 +76,19 @@ export function egressBlockedExcerpt(log: string): boolean {
   return errs.some(l => EGRESS_BLOCKED.test(l)) && !errs.some(l => HARD_FAIL.test(l) && !EGRESS_BLOCKED.test(l))
 }
 
+/** The verify excerpt's upstream-bug annotation (verify.ts gitDepPrepNote) —
+ *  a git dep declaring build/prepare-type scripts or workspaces cannot be
+ *  `plugin add`ed on opencode ≤2.3.0 regardless of package quality
+ *  (anomalyco/opencode#62817). Recognized ahead of the generic npm-failure
+ *  signature so the reviewer sees "上游 bug，宿主修复后自动重测" instead of
+ *  "依赖安装失败" — which reads like a package defect. */
+const UPSTREAM_GIT_DEP = /\[upstream opencode bug:[^\]]+\]/
+export const UPSTREAM_GIT_DEP_WHY =
+  '上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测'
+export function upstreamGitDepFail(log: string): boolean {
+  return UPSTREAM_GIT_DEP.test(log)
+}
+
 /** One-sentence human explanation of the failure signature; '' when the
  *  excerpt matches nothing known — callers fall back to the raw line. */
 export function explainVerifyFail(level: string | undefined, line: string): string {

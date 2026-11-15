@@ -40,7 +40,7 @@ import { candidateHeldAt } from './ai/diagnose.ts'
 import { isMain } from './main-guard.ts'
 import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from './delta.ts'
 import { explainFlag } from './scan/flagExplain.ts'
-import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise } from './verify/failExplain.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
 
 export interface DocketTarget {
@@ -817,7 +817,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     // signature into one sentence. Old excerpts (pre-noise-filter merges)
     // also benefit because the pick/unwrap happens at render time.
     const failLine = pickFailLine(t.verifyLog)
-    const why = failLine ? explainVerifyFail(undefined, failLine) : ''
+    // upstream git-dep bug annotation outranks the generic npm signature —
+    // "plugin add 必失败（上游 bug）" is not a package defect
+    const why = upstreamGitDepFail(t.verifyLog)
+      ? UPSTREAM_GIT_DEP_WHY
+      : (failLine ? explainVerifyFail(undefined, failLine) : '')
     if (failLine) {
       L.push(`  - 失败速读：${why ? `${why} — ` : ''}${clean(unwrapLogLine(failLine).slice(0, 240), 240)}`)
     }
