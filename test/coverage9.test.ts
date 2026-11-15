@@ -78,6 +78,12 @@ describe('verdicts applyMatureVerdicts matrix', () => {
     const vp2 = verdict({ name: 'flag', version: '1.0.0', verdict: 'pass', at: now })
     const r5 = applyMatureVerdicts(mkIdx([flagged]), [vp2], dg([akey(vp2)]))
     expect(r5.index.plugins[0]!.approval).toBe('pending')
+    // ai pass WITH flagsReviewed on the same flagged slot → releases —
+    // the mark says the judge engaged the flag evidence, so it isn't hollow
+    const vfr = verdict({ name: 'flag', version: '1.0.0', verdict: 'pass', at: now, flagsReviewed: true })
+    const r5b = applyMatureVerdicts(mkIdx([flagged]), [vfr], dg([akey(vfr)]))
+    expect(r5b.index.plugins[0]!.approval).toBe('approved')
+    expect(r5b.releases).toContain('flag@1.0.0')
     // unannounced pass → not mature → stays pending
     const r6 = applyMatureVerdicts(mkIdx([mkEntry('unann', { approval: 'pending' })]), [verdict({ name: 'unann', version: '1.0.0', verdict: 'pass', at: now })], dg([]))
     expect(r6.index.plugins[0]!.approval).toBe('pending')
@@ -144,6 +150,11 @@ describe('verdicts explainEntry outcomes', () => {
     expect(ux.outcome).toBe('wait')
     expect(ux.aiBlockedByFlags).toBe(true)
     expect(ux.why).toContain('redFlag')
+    // same slot + flagsReviewed mark → the flag block lifts; announced pass releases
+    const vfr = verdict({ name: 'p', version: '1.0.0', verdict: 'pass', at: '2026-01-03T00:00:00Z', flagsReviewed: true })
+    const ufr = explainEntry(flagged as never, [vfr], dg([akey(vfr)]))[0]!
+    expect(ufr.aiBlockedByFlags).toBe(false)
+    expect(ufr.outcome).toBe('release')
     // sha-mismatch is structural for the same reason — this exact line can
     // never release these bytes; unannounced doesn't soften it to '未成熟'
     const usha = explainEntry(shaE as never, [vsha], dg([]))[0]!

@@ -679,7 +679,7 @@ export async function omlxAlive(): Promise<boolean> {
 
 export function verdictRecord(
   e: CatalogIndex['plugins'][number], v: 'pass' | 'concern', reason: string,
-  extra: { sha?: string | undefined; reasonEn?: string | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined } = {},
+  extra: { sha?: string | undefined; reasonEn?: string | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined; flagsReviewed?: boolean | undefined } = {},
 ): AiVerdict {
   return {
     name: e.name,
@@ -692,6 +692,7 @@ export function verdictRecord(
     ...(extra.reasonEn ? { reasonEn: extra.reasonEn } : {}),
     at: new Date().toISOString(), source: 'ai',
     ...(extra.sha ? { sha: extra.sha } : {}),
+    ...(extra.flagsReviewed ? { flagsReviewed: true } : {}),
     // sha-reuse provenance: the judgment was copied from ANOTHER version's
     // verdict line — record which one (and whose: ai/human) so the audit
     // trail shows this run never made its own call on these bytes
@@ -744,6 +745,15 @@ export function reviewPin(
     : null
 }
 
+/** Reason prefix on verdicts that are PLACEHOLDERS, not judgments — written
+ *  when red flags forced 'concern' without the model ever ruling. Under the
+ *  flag-review policy these keys re-enter the queue: the AI now judges
+ *  flagged entries itself, so the placeholder is obsolete the moment a real
+ *  verdict (pass w/ flagsReviewed, or an LLM concern) can be written. */
+export const MECH_FLAG_PREFIX = '机械红旗待人工'
+export const isMechFlagConcern = (v: AiVerdict | undefined): boolean =>
+  v?.verdict === 'concern' && v.source === 'ai' && (v.reason ?? '').startsWith(MECH_FLAG_PREFIX)
+
 /** Held versions that have NEVER received any verdict. Both held shapes:
  *  pendingUpdate (newer version behind a displayed one) and approval:pending
  *  on the entry itself (first version never released). ANY existing verdict —
@@ -784,7 +794,13 @@ export function unreviewedTargets(
     // the release gate refuses it (epochGoverning), and if the queue also
     // counted it as "already reviewed" the recycled entry would sit
     // pending forever with no verdict anywhere. Re-queue it.
-    if (epochGoverning(seen.get(vkey(e.name, ver)), e.name, tomb) !== undefined) return false
+    // Exception: a mechanical red-flag PLACEHOLDER is not a judgment — it
+    // was written by policy before the AI could rule on flagged entries.
+    // Re-queue it so the model can actually decide (pass w/ flagsReviewed
+    // or a real concern); once any real verdict lands this exclusion holds
+    // again. Human verdicts and AI judgments are untouched.
+    const gov = epochGoverning(seen.get(vkey(e.name, ver)), e.name, tomb)
+    if (gov !== undefined && !isMechFlagConcern(gov)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
@@ -1047,6 +1063,11 @@ export async function main(
     vf: CatalogIndex['plugins'][number]['verification']
     flagged: boolean
     twin?: AiVerdict | undefined
+    /** the standing latest verdict on THIS slot key — a mechanical-flag
+     *  placeholder re-entering the queue carries one; the emit paths use
+     *  it to avoid rewriting an identical placeholder (jsonl noise) and to
+     *  never downgrade a real verdict when the LLM is unavailable */
+    prior?: AiVerdict | undefined
     /** re-tag detected on a HUMAN-verdicted key — the fresh verdict's
      *  reason carries a marker so digest/docket readers see that bytes
      *  changed after a person approved this exact version */
@@ -1119,7 +1140,9 @@ export async function main(
       ? [...reviewMaterial(e), ...staged!.bundle.material.filter(b => b.id.startsWith('content') || b.id === 'binary-manifest')]
       : [...reviewMaterial(e), ...content]
     return { e, ver, material, sha, vf,
-      flagged: caps.redFlags.length > 0, twin, retagOfHuman: rec?.source === 'human' }
+      flagged: caps.redFlags.length > 0, twin,
+      prior: seen.get(vkey(e.name, ver === '?' ? null : ver)),
+      retagOfHuman: rec?.source === 'human' }
   })
   // material GC: files for keys that can never be consumed (verdicted,
   // braked, removed, gone) get swept — pending-but-unselected keys KEEP
@@ -1276,18 +1299,29 @@ export async function main(
     const { e, ver } = w
     // 0. sha reuse
     if (w.twin) {
-      // §10 applies to reused verdicts too — a red-flagged candidate can never
-      // take 'pass' from any AI path: the flags force concern and the twin's
-      // judgment rides along as draft context for the human. A reused 'pass'
-      // would also exit this key from the review queue without ever writing
-      // the mechanical concern that surfaces flagged holds (the release gate
-      // ignores it, so it reads as "decided" while blocking forever).
+      // §10 revised: the judge DOES see the flag lines (they ride the prompt
+      // as flag:* blocks) plus the package material — its call on flagged
+      // content is a real verdict. A same-sha twin that already passed WITH
+      // flag review carries over (identical bytes, identical flag set); any
+      // lesser twin judgment stays draft context behind a placeholder.
       if (w.flagged) {
         const flags = [...(candidateSlot(e)?.capabilities ?? e.capabilities).redFlags].join('; ').slice(0, 300)
-        emit(w, verdictRecord(e, 'concern',
-          `机械红旗待人工（同 sha ${w.twin.version ?? '?'} 判 ${w.twin.verdict}，仅作草稿参考）：${flags}`,
-          { reasonEn: `red-flagged — same-sha ${w.twin.version ?? '?'} verdict '${w.twin.verdict}' is draft context only: ${flags}`,
-            sha: w.sha, reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+        if (w.twin.verdict === 'pass' && w.twin.flagsReviewed) {
+          emit(w, verdictRecord(e, 'pass',
+            `同 sha 复用 ${w.twin.version ?? '?'} 红旗复核 pass 判词${w.twin.reason ? `：${w.twin.reason}` : ''}`,
+            { reasonEn: `same tarball sha as ${w.twin.version ?? '?'} — flag-reviewed pass reused${w.twin.reasonEn ? `: ${w.twin.reasonEn}` : ''}`,
+              sha: w.sha, flagsReviewed: true,
+              reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+        } else if (!isMechFlagConcern(w.prior)) {
+          // placeholder only when no real verdict stands — never downgrade a
+          // human/flag-reviewed/LLM judgment because the twin didn't clear
+          emit(w, verdictRecord(e, 'concern',
+            `${MECH_FLAG_PREFIX}（同 sha ${w.twin.version ?? '?'} 判 ${w.twin.verdict}，仅作草稿参考）：${flags}`,
+            { reasonEn: `red-flagged — same-sha ${w.twin.version ?? '?'} verdict '${w.twin.verdict}' is draft context only: ${flags}`,
+              sha: w.sha, reusedFrom: { version: w.twin.version ?? null, source: w.twin.source } }))
+        } else {
+          console.log(`[diagnose] ${e.name}@${ver} keeps standing flag placeholder (same-sha twin not flag-cleared)${tag(wi)}`)
+        }
       } else {
         emit(w, verdictRecord(e, w.twin.verdict,
           `同 sha 复用 ${w.twin.version ?? '?'} 判词${w.twin.reason ? `：${w.twin.reason}` : ''}`,
@@ -1347,11 +1381,19 @@ export async function main(
     if (r !== null) {
       attempts.delete(vkey(e.name, ver === '?' ? null : ver)) // a successful review clears the streak
       if (w.flagged) {
-        // §10: AI has no verdict on red-flagged entries — the concern is the
-        // vehicle, the LLM output is a DRAFT reason for the human reviewer
-        emit(w, verdictRecord(e, 'concern',
-          `机械红旗待人工（AI 草稿，LLM 判 ${r.verdict}）：${r.reasonZh}`,
-          { reasonEn: `red-flagged — AI draft for human review (LLM: ${r.verdict}): ${r.reasonEn}`, sha: w.sha }))
+        // the judge saw the flag lines (flag:* prompt blocks) AND the package
+        // material — its call on flagged content is a real verdict, not a
+        // draft. 'pass' carries flagsReviewed so the release gate knows the
+        // flags were actually engaged; 'concern' stands on its own.
+        if (r.verdict === 'pass') {
+          emit(w, verdictRecord(e, 'pass',
+            `红旗已复核，AI 判 pass：${r.reasonZh}`,
+            { reasonEn: `red flags reviewed — AI pass: ${r.reasonEn}`, sha: w.sha, flagsReviewed: true }))
+        } else {
+          emit(w, verdictRecord(e, 'concern',
+            `红旗在案，AI 判 concern：${r.reasonZh}`,
+            { reasonEn: `red flags noted — AI concern: ${r.reasonEn}`, sha: w.sha }))
+        }
       } else if (l05flag) { // L0.5 red flag outranks the LLM's own call — honest layering
         emit(w, verdictRecord(e, 'concern',
           `${l05flag.zh}；LLM 判 ${r.verdict}：${r.reasonZh}`,
@@ -1367,9 +1409,18 @@ export async function main(
       }
       if (w.flagged) {
         const flags = [...(candidateSlot(e)?.capabilities ?? e.capabilities).redFlags].join('; ').slice(0, 300)
-        emit(w, verdictRecord(e, 'concern',
-          `机械红旗待人工：${flags}`,
-          { reasonEn: `red-flagged — pending human review (LLM draft failed): ${flags}`, sha: w.sha }))
+        // placeholder ONLY when no verdict stands: rewriting an identical
+        // placeholder is jsonl noise, and emitting over a real verdict
+        // (human pass, flag-reviewed pass, LLM concern) would downgrade it
+        // while the judge is merely unavailable — the standing verdict
+        // keeps its slot and the key stays queued for the next run
+        if (w.prior === undefined) {
+          emit(w, verdictRecord(e, 'concern',
+            `${MECH_FLAG_PREFIX}：${flags}`,
+            { reasonEn: `red-flagged — pending review (LLM unavailable): ${flags}`, sha: w.sha }))
+        } else {
+          console.log(`[diagnose] ${e.name}@${ver} keeps standing verdict (flagged, LLM unavailable)${tag(wi)}`)
+        }
       } else if (l05flag) emit(w, verdictRecord(e, 'concern', l05flag.zh, { reasonEn: l05flag.en, sha: w.sha })) // L0.5 alone still blocks
       else if (n >= MAX_ATTEMPTS) {
         // D-3: chronic failure → stop retrying, surface as a HUMAN-READABLE

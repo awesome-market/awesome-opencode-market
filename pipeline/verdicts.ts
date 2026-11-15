@@ -220,15 +220,15 @@ export function brakeFor(
   return brake
 }
 
-/** A standing HUMAN pass on this exact key — the sanctioned release
- *  authority for slots an AI pass can never legitimately release
- *  (red-flagged or never-scanned). The "ai pass on flagged = ignored" gate
- *  exists because an AI verdict on those slots is hollow (the AI never
- *  reviews flagged content) — but when a human already passed the same key,
- *  a LATER ai pass of the same verdict must not shadow that decision back
- *  into 'ignored' forever: the same human-stickiness principle as R-4,
- *  applied to passes. Epoch-gated like every pass: a pass on a previous
- *  incarnation (pre-tombstone) does not cover a recycled name's bytes. */
+/** A standing HUMAN pass on this exact key — release authority for slots an
+ *  AI pass can't legitimately release (never-scanned, or flagged without a
+ *  flagsReviewed mark). The "ai pass on flagged = ignored" gate exists for
+ *  HOLLOW ai verdicts (no flag engagement recorded) — but when a human
+ *  already passed the same key, a LATER ai pass of the same verdict must
+ *  not shadow that decision back into 'ignored' forever: the same
+ *  human-stickiness principle as R-4, applied to passes. Epoch-gated like
+ *  every pass: a pass on a previous incarnation (pre-tombstone) does not
+ *  cover a recycled name's bytes. */
 export const humanPassCovers = (
   human: Map<string, AiVerdict>, name: string, version: string | null,
   tomb: Map<string, string>,
@@ -257,8 +257,9 @@ export function slotVerdict(
 /** Release gate (AI-DIAGNOSIS §10): the target version's own verification must
  *  have run. 'verified' = install/load passed. 'skipped' = deliberately not
  *  run (red-flag short-circuit, or no-install-concept kinds like github entries)
- *  — an AI pass on a flagged entry is already intercepted below, so a skipped
- *  entry can only release via a human pass: an informed, audited decision.
+ *  — a hollow ai pass on a flagged entry is intercepted below, but a
+ *  flag-REVIEWED ai pass or a human pass can release a skipped slot: both
+ *  are informed, audited decisions.
  *  'unverified'/'failed' = never releasable — a verify outage freezes releases
  *  rather than letting anything through (fail-closed). */
 const RELEASABLE = new Set(['verified', 'skipped'])
@@ -270,8 +271,9 @@ const RELEASABLE = new Set(['verified', 'skipped'])
  *  starred package already earned its public track record. DISPLAYED slots
  *  only: a held pendingUpdate on an established name is exactly the shape a
  *  maintainer-account hijack takes, so version promotions keep their window.
- *  Every other gate still applies (ai pass on flagged/unscanned slots stays
- *  ignored, sha pinning is unchanged, verification must be releasable). */
+ *  Every other gate still applies (ai pass on flagged-without-review or
+ *  unscanned slots stays ignored, sha pinning is unchanged, verification
+ *  must be releasable). */
 export const GRANDFATHER_AGE_MS = 30 * 24 * 60 * 60 * 1000
 export const GRANDFATHER_MIN_STARS = 10
 export const grandfathered = (
@@ -295,9 +297,10 @@ export interface VerdictApplyResult {
  *  - `pass` matures only when its exact verdict LINE appears in
  *    `digest.announced` — set membership, not a timestamp check
  *  - `concern` applies immediately (conservative direction needs no window)
- *  - `source:ai` pass landing on a red-flagged entry is ignored (defense in
- *    depth — the model never reaches flagged content with a release);
- *    `source:human` pass is allowed (stamped by our writers, audited)
+ *  - `source:ai` pass landing on a red-flagged entry is ignored UNLESS the
+ *    verdict carries `flagsReviewed` (the model engaged the flag evidence —
+ *    defense in depth against hollow passes); `source:human` pass is always
+ *    allowed (stamped by our writers, audited)
  *  - concern on the DISPLAYED version → approval back to pending (human brake;
  *    the AI only audits pending targets, so this can only be a human verdict)
  *  - human stickiness: `latest` ranks by `at` alone, so an ai 'pass' stamped
@@ -408,7 +411,7 @@ export function applyMatureVerdicts(
             e = { ...e, approvalReason: 'awaiting-review' }
           if ((mature(v) || grandfathered(e))
             && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
-              && (e.capabilities.redFlags.length > 0 || e.capabilities.scannedAt === null))
+              && ((e.capabilities.redFlags.length > 0 && !v.flagsReviewed) || e.capabilities.scannedAt === null))
             && shaOk(v, shaAnchor(e))
             && RELEASABLE.has(e.verification.status)) {
             e = { ...e, approval: 'approved', approvalReason: undefined }
@@ -444,7 +447,7 @@ export function applyMatureVerdicts(
         // not be shadowed by a later AI pass of the same verdict (the ignore
         // exists for hollow AI verdicts, not to un-release human decisions)
         && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, pu.version, latestTomb)
-          && (pu.capabilities.redFlags.length > 0 || pu.capabilities.scannedAt === null))
+          && ((pu.capabilities.redFlags.length > 0 && !v.flagsReviewed) || pu.capabilities.scannedAt === null))
         // only pu.integrity describes the CANDIDATE's bytes — e.integrity
         // pins the displayed version and would false-block every legacy
         // hold (pre-pu.integrity) whose verdict carries a sha
@@ -588,7 +591,7 @@ export function explainEntry(
       at: v?.at ?? null,
       announced: v ? announced.has(akey(v)) : false,
       stickyHuman: raw !== undefined && raw !== v && !packageBrake,
-      aiBlockedByFlags: v?.verdict === 'pass' && v.source === 'ai' && !humanCover && redFlags > 0,
+      aiBlockedByFlags: v?.verdict === 'pass' && v.source === 'ai' && !humanCover && redFlags > 0 && !v.flagsReviewed,
       aiBlockedByNoScan: v?.verdict === 'pass' && v.source === 'ai' && !humanCover && unscanned,
       verification,
     }
