@@ -201,12 +201,15 @@ jobs:
           path: /tmp/results-${{ matrix.shard }}.json
           retention-days: 7
       # reviewer-facing deep logs — only exists when the shard produced
-      # failures (dumpDiag writes failed targets only)
-      - if: always() && hashFiles('/tmp/vlogs/*.log') != ''
+      # failures (dumpDiag writes failed targets only). No hashFiles gate:
+      # the glob silently evaluated empty once already; upload-artifact's
+      # own if-no-files-found handles the empty case without failing.
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vlogs-${{ matrix.shard }}
           path: /tmp/vlogs/*.log
+          if-no-files-found: ignore
           retention-days: 7
 
   merge:
