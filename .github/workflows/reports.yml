@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency: reports
-    permissions: { contents: write }
+    permissions: { contents: write, pull-requests: write }
     steps:
       # renders catalog-controlled text into committed markdown; npm API +
       # github.com egress for the index fetch
@@ -56,6 +56,7 @@ jobs:
         env:
           REPORT_DATE: ${{ inputs.date }}
           GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # --date as a discrete argv element — never word-split user input
           DATE_ARG=()
@@ -65,9 +66,18 @@ jobs:
             --state docs/reports/state.json --out docs/reports \
             --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json \
             "${DATE_ARG[@]}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/reports
           git diff --cached --quiet && { echo "no report changes"; exit 0; }
+          # main is PR-protected — reports land via a single-commit
+          # automation branch + PR, force-pushed fresh each run so it can
+          # never conflict with a previously-merged state.json
+          BRANCH=reports-automation
+          git checkout -qb "$BRANCH"
           git commit -qm "reports: $RDATE daily/weekly/monthly/yearly stats"
-          git push origin HEAD:${{ github.ref_name }}
+          git push -qf origin "$BRANCH"
+          PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          [ -n "$PR" ] || PR=$(gh pr create --head "$BRANCH" --base main \
+            --title "reports: $RDATE marketplace stats" \
+            --body "Automated docs/reports update ($RDATE). Merges itself once CI is green." | grep -o '[0-9]*$')
+          gh pr checks "$PR" --watch --interval 20
+          gh pr merge "$PR" --squash --delete-branch
