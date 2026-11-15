@@ -383,6 +383,7 @@ npx tsx pipeline/ai/diagnose.ts \
   --pause-file "$CAT/diagnose.paused" \
   --limit "$DIAGNOSE_LIMIT" --budget "$DIAGNOSE_BUDGET" --state "$STATEF" \
   --sweep-state "$SWEEPF" --health "$HEALTHF" --material-rm "$RMF" \
+  --spool "$SPOOL" \
   ${ARGS[@]+"${ARGS[@]}"} \
   || exit $?
 
