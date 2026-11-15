@@ -150,11 +150,12 @@ function table(rows: DailySnap[]): string {
  *  awaitingRelease needs verdicts+digest inputs; absent → '—' not 0. */
 function queueBlock(s: DailySnap, repo: string | undefined): string {
   const q = (label: string) => repo ? issueQ(repo, label) : undefined
+  const site = repo ? siteBase(repo) : undefined
   return `## 审核队列（期末快照）
 - [等待审核](${q('review:pending') ?? '#'})：${stat(s.pendingReview, q('review:pending'))} 个 pending 条目
 - [公示中待上架](${q('ai:pass') ?? '#'})：${stat(s.awaitingRelease, q('ai:pass'))} 个 AI pass 在公示/成熟窗内
 - [人工拦截单](${q('verdict:concern') ?? '#'})：见 issue 列表
-- [下架/弃用](${q('verdict:concern') ?? '#'})：${stat(s.deprecated, repo ? siteBase(repo) : undefined)} 个 deprecated 条目
+- [下架/弃用](${site ?? '#'})：${stat(s.deprecated, site)} 个 deprecated 条目（npm 上游标记——catalog 事实，见站点列表）
 `
 }
 
@@ -184,7 +185,7 @@ ${table(week)}
 ## 累计（自 ${state.dailies[0]?.date ?? snap.date} 起 ${state.dailies.length} 天）
 - 新增合计：${tot.fresh} · 升级合计：${tot.up}
 
-> 数据源：catalog 分支 index.json + npm downloads last-day API。firstSeenAt 为发现时间；github 插件无版本号概念，升级按 install pin 变化计。审核队列链接指向对应 label 的 open issue 列表。
+> 数据源：catalog 分支 index.json + npm downloads last-day API。firstSeenAt 为发现时间；github 插件无版本号概念，升级按 install pin 变化计。新增/升级/总数/下架为 catalog 事实，链接到站点目录；审核队列数字链接到对应 label 的 open issue 列表。
 `
 }
 
