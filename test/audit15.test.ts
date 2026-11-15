@@ -96,6 +96,26 @@ describe('findGuiBundle export resolution', () => {
     writeFileSync(join(home, 'cache', 'opencode', 'npm', 'pkg@1.2.3', '999', 'node_modules', 'escape.js'), 'x')
     expect(findGuiBundle(home, 'pkg')).toMatchObject({ error: expect.stringContaining('escapes') })
   })
+  it('scoped installs nest one level (@scope/name@ver) — still resolved', () => {
+    // opencode ≥2.3 cache layout: npm/@lidtop/opencode-cost@latest/<ts>/nm/@lidtop/opencode-cost
+    const home = mkdtempSync(join(tmpdir(), 'gh15d-'))
+    const dir = join(home, 'cache', 'opencode', 'npm', '@lidtop', 'opencode-cost@latest', '999', 'node_modules', '@lidtop', 'opencode-cost')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui': './dist/gui.js' } }))
+    mkdirSync(join(dir, 'dist'), { recursive: true })
+    writeFileSync(join(dir, 'dist', 'gui.js'), 'module.exports={}')
+    const found = findGuiBundle(home, '@lidtop/opencode-cost')
+    expect('src' in found && found.src).toBe('module.exports={}')
+  })
+  it('a DIFFERENT scope under the same basename does not vouch for the target', () => {
+    const home = mkdtempSync(join(tmpdir(), 'gh15e-'))
+    const dir = join(home, 'cache', 'opencode', 'npm', '@other', 'opencode-cost@latest', '999', 'node_modules', '@other', 'opencode-cost')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ exports: { './gui': './dist/gui.js' } }))
+    mkdirSync(join(dir, 'dist'), { recursive: true })
+    writeFileSync(join(dir, 'dist', 'gui.js'), 'module.exports={}')
+    expect(findGuiBundle(home, '@lidtop/opencode-cost')).toMatchObject({ error: expect.stringContaining('not found') })
+  })
 })
 
 describe('checkTui harness classification', () => {
