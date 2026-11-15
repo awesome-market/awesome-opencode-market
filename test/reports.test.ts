@@ -211,3 +211,98 @@ describe('main — verdicts/digest inputs', () => {
     expect(state.dailies[0]!.awaitingRelease).toBe(1)
   })
 })
+
+describe('edge coverage — schema/null tolerance', () => {
+  it('verOf falls back through null latestVersion and missing pins', async () => {
+    const plugins = [
+      e({ name: 'npmbad', latestVersion: null }),                                          // npm, no version → ''
+      e({ name: 'ghnov', latestVersion: null, source: { kind: 'github', id: 'o/g', repo: 'o/g' } as never }), // github, no pin → ''
+      e({ name: 'nulldate', firstSeenAt: null as never }),                                          // null firstSeenAt
+      e({ name: 'dep', deprecated: true }),
+      e({ name: 'nofeat', features: undefined }),
+      e({ name: 'weirdfeat', features: ['cli'] as never }),
+    ]
+    const r = await computeDaily(idx(plugins), '2026-11-15', emptyState())   // no downloadsFn → null
+    expect(r.snap.npmDownloads).toBeNull()
+    expect(r.snap.deprecated).toBe(1)
+    expect(r.snap.byType).toEqual({ server: 0, tui: 0, gui: 0, rpc: 0 })
+    expect(r.state.versions.npmbad).toBe('')
+    expect(r.state.versions.ghnov).toBe('')
+  })
+  it('loadState tolerates partial/mistyped fields', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-p-'))
+    const p = join(dir, 's.json')
+    writeFileSync(p, JSON.stringify({ seeded: true, dailies: 'nope', versions: null }))
+    const s = loadState(p)
+    expect(s.dailies).toEqual([])
+    expect(s.versions).toEqual({})
+    expect(s.seeded).toBe(true)
+  })
+  it('empty periods render 暂无数据 and —, never crash', () => {
+    const state: ReportState = { versions: {}, seeded: true, dailies: [] }
+    const daily = dailyBody(snap(), state)                       // no repo → plain stats
+    expect(daily).toContain('_暂无数据_')
+    expect(daily).toContain('自 2026-11-15 起 0 天')
+    expect(monthlyBody('2020-01', state)).toContain('_暂无数据_')
+    expect(monthlyBody('2020-01', state)).toContain('期末总数：**—**')
+    expect(monthlyBody('2020-01', state)).not.toContain('获取失败')
+    expect(yearlyBody('2020', state)).toContain('_暂无数据_')
+    expect(yearlyBody('2020', state)).toContain('期末总数：**—**')
+    expect(yearlyBody('2020', state)).not.toContain('获取失败')
+    // yearly with a null-download day → 下限 disclosure + ?? 0 arm
+    const ystate: ReportState = { versions: {}, seeded: true, dailies: [
+      snap({ date: '2026-06-01', npmDownloads: null }),
+      snap({ date: '2026-11-15', npmDownloads: 10 }),
+    ] }
+    const y = yearlyBody('2026', ystate)
+    expect(y).toContain('下限')
+    expect(y).toContain('）：**10**')
+  })
+})
+
+describe('fetchNpmDownloads — failure modes', () => {
+  it('fetch throw and non-finite downloads count as failures', async () => {
+    const { fetchNpmDownloads } = await import('../pipeline/reports.ts')
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.endsWith('/boom')) throw new Error('net down')
+      if (u.endsWith('/inf')) return { ok: true, status: 200, headers: { get: () => null }, body: undefined, json: async () => ({ downloads: 1e999 }) }
+      return { ok: true, status: 200, headers: { get: () => null }, body: undefined, json: async () => ({ downloads: 5 }) }
+    }) as unknown as typeof fetch
+    try {
+      expect(await fetchNpmDownloads(['boom', 'inf'])).toBeNull()   // throw + non-finite → all fail
+      expect(await fetchNpmDownloads(['ok', 'boom'])).toBe(5)
+    } finally { globalThis.fetch = orig }
+  })
+})
+
+describe('main — arg defaults and env repo', () => {
+  it('defaults --date to today; --repo falls back to GH_REPO env; github-only index needs no downloadsFn', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-e-'))
+    const idxPath = join(dir, 'i.json'), stPath = join(dir, 'state.json'), out = join(dir, 'out')
+    writeFileSync(idxPath, JSON.stringify(idx([
+      e({ name: 'gh', source: { kind: 'github', id: 'o/g', repo: 'o/g', version: 'v1' }, latestVersion: null }),
+    ])))
+    const origRepo = process.env.GH_REPO
+    process.env.GH_REPO = 'envowner/envrepo'
+    try {
+      await main(['x', '--index', idxPath, '--state', stPath, '--out', out], {})   // no --date, no downloadsFn
+    } finally { if (origRepo === undefined) delete process.env.GH_REPO; else process.env.GH_REPO = origRepo }
+    const today = new Date().toISOString().slice(0, 10)
+    const daily = readFileSync(join(out, 'daily', `${today}.md`), 'utf8')
+    expect(daily).toContain('envowner.github.io/envrepo')      // env repo → site links
+    const state = JSON.parse(readFileSync(stPath, 'utf8')) as ReportState
+    expect(state.dailies[0]!.npmDownloads).toBe(0)             // no npm names → 0, no fetch
+  })
+  it('verdicts file with some bad lines still runs (bad>0 but non-empty ok)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-b-'))
+    const idxPath = join(dir, 'i.json'), stPath = join(dir, 'state.json'), out = join(dir, 'out')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(vPath, '{bad json\n' + JSON.stringify({ name: 'pkg', version: '1.0.0', verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'ai' }) + '\n')
+    await main(['x', '--index', idxPath, '--state', stPath, '--out', out, '--date', '2026-11-15',
+      '--verdicts', vPath], { downloadsFn: async () => 1 })
+    expect(existsSync(join(out, 'daily', '2026-11-15.md'))).toBe(true)
+  })
+})

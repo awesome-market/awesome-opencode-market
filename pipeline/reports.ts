@@ -181,7 +181,7 @@ ${queueBlock(snap, repo)}
 ## 近 7 天
 ${table(week)}
 
-## 累计（自 ${state.dailies[0]?.date ?? snap.date} 起 ${tot} 天）
+## 累计（自 ${state.dailies[0]?.date ?? snap.date} 起 ${state.dailies.length} 天）
 - 新增合计：${tot.fresh} · 升级合计：${tot.up}
 
 > 数据源：catalog 分支 index.json + npm downloads last-day API。firstSeenAt 为发现时间；github 插件无版本号概念，升级按 install pin 变化计。审核队列链接指向对应 label 的 open issue 列表。
@@ -194,7 +194,7 @@ export function monthlyBody(month: string, state: ReportState, repo?: string): s
   return `# 插件市场月报 — ${month}
 
 - 覆盖天数：${days.length}${days.length ? `（${days[0]!.date} → ${days[days.length - 1]!.date}）` : ''}
-- 期末总数：**${fmt(last?.total ?? null)}**
+- 期末总数：**${last ? fmt(last.total) : '—'}**
 - 本月新增合计：**${days.reduce((s, d) => s + d.newPlugins, 0)}**
 - 本月升级合计：**${days.reduce((s, d) => s + d.upgrades, 0)}**
 - npm 日下载（期间累计）：**${fmt(days.reduce((s, d) => s + (d.npmDownloads ?? 0), 0))}**${days.some(d => d.npmDownloads === null) ? '（含获取失败日，合计为下限）' : ''}
@@ -211,7 +211,7 @@ export function yearlyBody(year: string, state: ReportState, repo?: string): str
   return `# 插件市场年报 — ${year}
 
 - 覆盖天数：${days.length}
-- 期末总数：**${fmt(last?.total ?? null)}**
+- 期末总数：**${last ? fmt(last.total) : '—'}**
 - 全年新增合计：**${days.reduce((s, d) => s + d.newPlugins, 0)}**
 - 全年升级合计：**${days.reduce((s, d) => s + d.upgrades, 0)}**
 - npm 日下载（期间累计）：**${fmt(days.reduce((s, d) => s + (d.npmDownloads ?? 0), 0))}**${days.some(d => d.npmDownloads === null) ? '（含获取失败日，合计为下限）' : ''}
