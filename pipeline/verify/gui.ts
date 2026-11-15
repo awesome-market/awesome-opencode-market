@@ -282,7 +282,9 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
   const npmRoot = join(home, 'cache', 'opencode', 'npm')
   if (!existsSync(npmRoot)) return { error: `no plugin cache at ${npmRoot}` }
   // spec dirs are named by the bare package segment — a scoped '@s/p@ver'
-  // spec dir can't exist ('/' isn't a valid path segment), it's 'p@ver'
+  // spec dir can't exist ('/' isn't a valid path segment). opencode ≥2.3
+  // nests scoped installs one level deep: npm/@scope/<name@ver>/<ts>/… —
+  // flatten that level so 'opencode-cost@latest' is seen as a candidate.
   const norm = name.split('/').pop() ?? name
   const gitDir = spec ? gitSpecDir(spec) : null
   let pkgDir: string | null = null
@@ -295,30 +297,37 @@ export function findGuiBundle(home: string, name: string, spec?: string): { path
     // applies inside the git spec dir, where the installed package name
     // legitimately differs from the entry name.
     const isGit = gitDir !== null && dir === gitDir
-    if (!dir.startsWith(`${name}@`) && !dir.startsWith(`${norm}@`) && !isGit) continue
-    for (const ts of safeReaddir(join(npmRoot, dir))) {
-      const nm = join(npmRoot, dir, ts, 'node_modules')
-      const cand = join(nm, name)
-      if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }
-      if (isGit) {
-        // every gui-export package under the install tree is a candidate —
-        // including DEPENDENCIES, which can carry a gui export and sort ahead
-        // of the real one. Prefer the package whose name matches the repo's
-        // basename; several non-matching candidates = unprovable which one is
-        // the plugin — honest error over measuring the wrong bundle.
-        const hits = scanForGuiPackage(nm)
-        if (hits.length > 1) {
-          const repoBase = spec?.split('#')[0]?.split('/').pop()?.toLowerCase()
-          const hit = repoBase
-            ? hits.find(h => h.split('/').pop()?.toLowerCase() === repoBase)
-            : undefined
-          pkgDir = hit ?? null
-          if (!pkgDir) return { error: `ambiguous gui bundle under ${dir}: ${hits.map(h => h.split('/').pop()).join(', ')} — cannot identify the plugin's own` }
-        } else {
-          pkgDir = hits[0] ?? null
+    const inner = !isGit && dir.startsWith('@')
+      ? safeReaddir(join(npmRoot, dir)).map(s => `${dir}/${s}`)
+      : [dir]
+    for (const d of inner) {
+      const base = d.split('/').pop() ?? d
+      if (!isGit && !base.startsWith(`${name}@`) && !base.startsWith(`${norm}@`)) continue
+      for (const ts of safeReaddir(join(npmRoot, d))) {
+        const nm = join(npmRoot, d, ts, 'node_modules')
+        const cand = join(nm, name)
+        if (existsSync(join(cand, 'package.json'))) { pkgDir = cand; break }
+        if (isGit) {
+          // every gui-export package under the install tree is a candidate —
+          // including DEPENDENCIES, which can carry a gui export and sort ahead
+          // of the real one. Prefer the package whose name matches the repo's
+          // basename; several non-matching candidates = unprovable which one is
+          // the plugin — honest error over measuring the wrong bundle.
+          const hits = scanForGuiPackage(nm)
+          if (hits.length > 1) {
+            const repoBase = spec?.split('#')[0]?.split('/').pop()?.toLowerCase()
+            const hit = repoBase
+              ? hits.find(h => h.split('/').pop()?.toLowerCase() === repoBase)
+              : undefined
+            pkgDir = hit ?? null
+            if (!pkgDir) return { error: `ambiguous gui bundle under ${d}: ${hits.map(h => h.split('/').pop()).join(', ')} — cannot identify the plugin's own` }
+          } else {
+            pkgDir = hits[0] ?? null
+          }
+          if (pkgDir) break
         }
-        if (pkgDir) break
       }
+      if (pkgDir) break
     }
     if (pkgDir) break
   }
