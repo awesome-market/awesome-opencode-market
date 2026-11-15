@@ -57,15 +57,17 @@ jobs:
           REPORT_DATE: ${{ inputs.date }}
           GH_REPO: ${{ github.repository }}
         run: |
-          DATE_ARG=""
-          [ -n "$REPORT_DATE" ] && DATE_ARG="--date $REPORT_DATE"
+          # --date as a discrete argv element — never word-split user input
+          DATE_ARG=()
+          RDATE="${REPORT_DATE:-$(date -u +%F)}"
+          if [ -n "$REPORT_DATE" ]; then DATE_ARG=(--date "$REPORT_DATE"); fi
           npx tsx pipeline/reports.ts --index /tmp/index.json \
             --state docs/reports/state.json --out docs/reports \
             --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json \
-            $DATE_ARG
+            "${DATE_ARG[@]}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/reports
           git diff --cached --quiet && { echo "no report changes"; exit 0; }
-          git commit -qm "reports: $(date -u +%F) daily/weekly/monthly/yearly stats"
+          git commit -qm "reports: $RDATE daily/weekly/monthly/yearly stats"
           git push origin HEAD:${{ github.ref_name }}
