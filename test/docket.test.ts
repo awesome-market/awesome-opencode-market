@@ -26,7 +26,7 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e()]), [v()])
     // 't' fixtures are unparseable → heldAt is OMITTED, never rendered as garbage
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
   })
   it('ai pass maturity phase follows digest-state membership', () => {
     const ver = v()
@@ -40,7 +40,7 @@ describe('docketTargets', () => {
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })]), [v({ version: '2.0.0', verdict: 'concern' })])
     expect(t).toEqual([{ name: 'pkg', version: '2.0.0', verdict: 'concern', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true, scannedAt: 't' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
   })
   it('human verdict already rules → no docket entry', () => {
     expect(docketTargets(idx([e()]), [v({ source: 'human' })])).toEqual([])
@@ -71,7 +71,7 @@ describe('docketTargets', () => {
       capabilities: { scannedAt: '2020-06-01T00:00:00Z', findings: [], redFlags: [] },
     })]), [], null, { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z', scannedAt: '2020-06-01T00:00:00Z' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z', scannedAt: '2020-06-01T00:00:00Z', src: { kind: 'npm', id: 'pkg' } }])
   })
   it('unparseable hold clock → fail-VISIBLE none issue, never silent suppression', () => {
     const t = docketTargets(idx([e({
@@ -186,7 +186,7 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e({ firstSeenAt: '2026-01-01T00:00:00Z' })]), [], null,
       { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z', scannedAt: 't' }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z', scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
   })
   it('young hold without verdict stays AI-owned — no issue inside the age window', () => {
     expect(docketTargets(idx([e({ firstSeenAt: '2026-01-04T00:00:00Z' })]), [], null,
@@ -512,7 +512,7 @@ describe('docket main', () => {
     // derives from GH_REPO
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -594,7 +594,7 @@ describe('docket main', () => {
       writeFileSync(vPath, JSON.stringify(v()) + '\n')
       const wantBody2 = issueBody(
         { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-          slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
+          slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
         { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
       const calls2: string[][] = []
       const ghFn2 = (args: string[]) => {
@@ -624,7 +624,7 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -807,7 +807,7 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't' },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -1503,5 +1503,75 @@ describe('main — repo-moved flag compare evidence', () => {
     expect(body).toContain('compare 取数失败')
     expect(body).toContain('oldsha111222333...newsha999888777')
     expect(body).not.toContain('AI 初筛')
+  })
+})
+
+describe('issue evidence enrichment', () => {
+  const findingsEntry = () => e({
+    capabilities: {
+      scannedAt: '2026-01-01T00:00:00Z',
+      findings: [
+        'network-call:src/index.js — L10: fetch("https://evil.example")',
+        'child-process:src/index.js — L20: execSync(cmd)',
+        'network-call:src/net.js — L5: http.get(u)',
+        'network-call:README.md — L30: curl example',
+        'docs-example:docs/guide.md — L1: fetch demo',
+      ],
+      redFlags: [],
+    },
+    verification: { status: 'failed', logExcerpt: 'npm ERR! code E404\n404 Not Found', runUrl: 'https://example.com/run/1' },
+    metrics: { stars: 42, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
+    publishedAt: '2025-12-01T00:00:00Z',
+  })
+  it('docketTargets rolls findings up per file and carries source/verify/stars', () => {
+    const t = docketTargets(idx([findingsEntry()]), [v({ verdict: 'concern' })])[0]!
+    expect(t.hotFiles!.map(f => f.path)).toEqual(['src/index.js', 'docs/guide.md', 'README.md', 'src/net.js'])
+    expect(t.hotFiles![0]).toMatchObject({ n: 2, doc: false })
+    expect(t.hotFiles![0]!.rules).toContain('network-call')
+    expect(t.hotFiles![0]!.rules).toContain('child-process')
+    expect(t.hotFiles![2]!.doc).toBe(true)          // README.md → doc-ish
+    expect(t.docFindings).toBe(2)                    // README.md + docs/guide.md
+    expect(t.src).toMatchObject({ kind: 'npm', id: 'pkg' })
+    expect(t.verifyLog).toContain('E404')
+    expect(t.verifyRunUrl).toBe('https://example.com/run/1')
+    expect(t.stars).toBe(42)
+  })
+  it('flag-listed findings are excluded from hotFiles (they render in 红旗清单)', () => {
+    const ent = findingsEntry()
+    ent.capabilities.redFlags = ['network-call:src/net.js — L5: http.get(u)']
+    const t = docketTargets(idx([ent]), [v({ verdict: 'concern' })])[0]!
+    expect(t.hotFiles!.find(f => f.path === 'src/net.js')).toBeUndefined()
+  })
+  it('issueBody renders package links, hot-file source links, verify log', () => {
+    const t = docketTargets(idx([findingsEntry()]), [v({ verdict: 'concern' })])[0]!
+    const body = issueBody(t)
+    expect(body).toContain('[npm 包页](https://www.npmjs.com/package/pkg)')
+    expect(body).toContain('发布于 2025-12-01')
+    expect(body).toContain('★42')
+    expect(body).toContain('风险文件 TOP')
+    expect(body).toContain('代码 2 / 文档类 2')
+    // npm source → unpkg links at the judged version
+    expect(body).toContain('https://unpkg.com/pkg@1.0.0/src/index.js')
+    expect(body).toContain('📄')
+    expect(body).toContain('装测日志摘要')
+    expect(body).toContain('404 Not Found')
+    expect(body).toContain('[完整运行日志](https://example.com/run/1)')
+  })
+  it('github source links blob at verdictSha; no src → plain paths', () => {
+    const gh = e({
+      name: 'o/r', slug: 'o/r', latestVersion: null,
+      source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'deadbeef1234' },
+      capabilities: { scannedAt: 't', findings: ['network-call:a/b.js — L1: fetch(x)'], redFlags: [] },
+      verification: { status: 'unverified' },
+    })
+    const t = docketTargets(idx([gh]), [v({ name: 'o/r', version: null, verdict: 'concern', sha: 'cafebabe5678' })])[0]!
+    const body = issueBody(t)
+    expect(body).toContain('[GitHub 仓库](https://github.com/o/r)')
+    expect(body).toContain('https://github.com/o/r/blob/cafebabe5678/a/b.js')
+    // unverified + no log → no 装测日志摘要 section
+    expect(body).not.toContain('装测日志摘要')
+    const bare = issueBody({ name: 'p', version: '1', verdict: 'concern', hotFiles: [{ path: 'x.js', rules: 'r', n: 1, doc: false }] })
+    expect(bare).toContain('`x.js`')
+    expect(bare).not.toContain('unpkg.com')
   })
 })
