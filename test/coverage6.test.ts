@@ -418,6 +418,38 @@ describe('verify/checkTui', () => {
     expect(r.ok).toBe(false)
     expect(r.log).toContain('pane nearly empty')
   })
+  it('dead session → pipe-pane log tail surfaces as crash evidence', async () => {
+    const f = (async (_c: string, args: string[]) => {
+      const key = args[0] === '-f' ? args[2]! : args[0]!
+      if (key === 'pipe-pane') {
+        // simulate tmux streaming pane output into the cat > target
+        const dest = /cat > (\S+)/.exec(args[args.length - 1]!)?.[1]
+        if (dest) writeFileSync(dest, 'opencode boot\npanic: plugin init exploded\n')
+        return { stdout: '', stderr: '' }
+      }
+      if (key === 'new-session' || key === 'kill-session') return { stdout: '', stderr: '' }
+      throw new Error('session dead') // has-session + capture-pane
+    }) as never
+    const r = await checkTui(env, f, { settleMs: 1 })
+    expect(r.ok).toBe(false)
+    expect(r.log).toContain('exited during startup')
+    expect(r.log).toContain('panic: plugin init exploded')
+  })
+  it('alive + blank capture does NOT fall back to pane log', async () => {
+    const f = (async (_c: string, args: string[]) => {
+      const key = args[0] === '-f' ? args[2]! : args[0]!
+      if (key === 'pipe-pane') {
+        const dest = /cat > (\S+)/.exec(args[args.length - 1]!)?.[1]
+        if (dest) writeFileSync(dest, 'x'.repeat(500))
+        return { stdout: '', stderr: '' }
+      }
+      if (key === 'capture-pane') return { stdout: '   \n  ', stderr: '' }
+      return { stdout: '', stderr: '' }
+    }) as never
+    const r = await checkTui(env, f, { settleMs: 1 })
+    expect(r.ok).toBe(false)
+    expect(r.log).toContain('pane nearly empty')
+  })
 })
 
 describe('verifyPackage feature routes', () => {
