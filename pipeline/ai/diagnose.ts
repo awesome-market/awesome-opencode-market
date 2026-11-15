@@ -905,7 +905,7 @@ export async function main(
     if (!Number.isFinite(n) || n < 0) die(`usage: ${k} must be a non-negative number`)
     return n
   }
-  const usage = 'usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--include-legacy] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>] [--material-rm <p>]'
+  const usage = 'usage: --index <p> --verdicts <p> --out <p> [--limit N] [--budget MIN] [--name a,b] [--force] [--include-legacy] [--dry] [--state <p>] [--sweep-state <p>] [--health <p>] [--material-rm <p>] [--spool <p>]'
   // `?? die(...)`: die returns never, so the result type is string — a plain
   // `if (!x) die()` does not narrow these destructured bindings.
   const idxPath = arg('--index') ?? die(usage)
@@ -913,6 +913,7 @@ export async function main(
   const outPath = arg('--out') ?? die(usage)
   const materialRmPath = arg('--material-rm')
   const statePath = arg('--state')
+  const spoolPath = arg('--spool')
   const limit = numArg('--limit', 50) // bounded by default — a bare run must not fan the whole backlog into the LLM
   const budgetMs = numArg('--budget', 120) * 60_000 // bounded even for manual runs — Infinity let a bare invocation burn days
   const names = args.includes('--name')
@@ -1257,6 +1258,7 @@ export async function main(
   // and must not eat the minutes meant for model calls
   const t0 = Date.now()
   const out: AiVerdict[] = []
+  let spoolAlive = true // emit() flips it off on first spool write failure — warn once, keep judging
   /** record a verdict — re-tag reviews on human-verdicted keys prefix the
    *  reason so digest/docket readers see "bytes changed after human approval" */
   const emit = (w: Work, v: AiVerdict) => {
@@ -1274,6 +1276,17 @@ export async function main(
       if (v.reasonEn) v.reasonEn = `re-tagged after a human verdict — auto re-review — ${v.reasonEn}`
     }
     out.push(v)
+    // durability: land each verdict in the wrapper's spool the moment it's
+    // decided. out[] only reaches disk at end-of-run — a SIGKILL mid-queue
+    // would otherwise lose every finished judgment and re-burn the LLM on
+    // them next sweep. The next run's verdict view unions spool, so these
+    // count as already-decided (no re-review) and the push leg replays them.
+    // Best-effort: a spool failure degrades to batch-only durability, never
+    // fails the run; --dry writes nothing (exploratory, like --state).
+    if (spoolPath && !dry && spoolAlive) {
+      try { appendFileSync(spoolPath, JSON.stringify(v) + '\n') }
+      catch { spoolAlive = false; console.warn(`[diagnose] spool append failed (${spoolPath}) — continuing with batch-only durability`) }
+    }
   }
   let budgetOut = false // skips LLM calls only — free verdicts still emit
   let consecErr = 0     // D-12 circuit breaker — reset on any successful call

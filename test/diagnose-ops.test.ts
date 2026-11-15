@@ -430,3 +430,55 @@ describe('audit#4: health stamp merges — shell-stamped fields survive', () => 
     }
   })
 })
+
+describe('verdict spool: emit-time durability', () => {
+  it('--spool lands every emitted verdict as JSONL identical to the out file', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'dops-spool-'))
+    const sp = join(d, 'pending-verdicts.jsonl')
+    const { argv, op } = files([failedHeld, flaggedHeld])
+    argv.push('--spool', sp)
+    await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+    const spoolLines = readFileSync(sp, 'utf8').split('\n').filter(Boolean)
+    const outLinesRaw = readFileSync(op, 'utf8').split('\n').filter(Boolean)
+    expect(spoolLines.length).toBe(outLinesRaw.length)
+    expect(spoolLines.sort()).toEqual(outLinesRaw.sort()) // same verdicts, same serialization
+  })
+  it('--dry emits to console but never touches the spool', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'dops-spooldry-'))
+    const sp = join(d, 'pending-verdicts.jsonl')
+    const { argv } = files([failedHeld])
+    argv.push('--spool', sp, '--dry')
+    await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+    expect(existsSync(sp)).toBe(false)
+  })
+  it('unwritable spool degrades to batch durability — run still completes', async () => {
+    const d = mkdtempSync(join(tmpdir(), 'dops-spoolbad-'))
+    const { argv, op } = files([failedHeld, flaggedHeld])
+    argv.push('--spool', join(d, 'no-such-dir', 'spool.jsonl')) // parent missing → every append throws
+    await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+    expect(outLines(op).length).toBe(2) // verdicts still reached --out
+  })
+  it('spooled-but-unpushed verdicts count as decided — a restart does not re-review them', async () => {
+    // simulates: run 1 emitted + spooled, then died before push. Run 2's
+    // verdict view (catalog ∪ spool, built by the wrapper) must suppress
+    // re-review — otherwise every crash re-burns the LLM on finished work.
+    const d = mkdtempSync(join(tmpdir(), 'dops-spoolrec-'))
+    const sp = join(d, 'pending-verdicts.jsonl')
+    const { argv } = files([failedHeld])
+    argv.push('--spool', sp)
+    await diagnoseMain(argv, { l05: cleanL05, ornith: okOrnith, sha: noSha, ping: async () => true })
+    const recovered = readFileSync(sp, 'utf8').split('\n').filter(Boolean)
+      .map(l => JSON.parse(l) as AiVerdict)
+    expect(recovered.length).toBe(1)
+    // run 2: verdicts input = what the wrapper's VVIEW would contain
+    const { argv: argv2, op: op2 } = files([failedHeld], recovered)
+    let ornithCalls = 0
+    await diagnoseMain(argv2, {
+      l05: cleanL05,
+      ornith: async () => { ornithCalls++; return okOrnith() },
+      sha: noSha, ping: async () => true,
+    })
+    expect(ornithCalls).toBe(0)
+    expect(outLines(op2).length).toBe(0) // nothing re-emitted for the decided key
+  })
+})
