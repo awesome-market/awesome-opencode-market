@@ -30,13 +30,13 @@ export async function searchByKeyword(
   // so `opts.fetchFn ?` cannot detect tests; only a non-`fetch` fetch is fake
   const test = opts.fetchFn !== undefined && opts.fetchFn !== fetch
   const size = opts.size ?? 250
-  const maxPages = opts.maxPages ?? 10 // registry caps ~1000 results anyway
+  const maxPages = opts.maxPages ?? 40 // registry hard-caps at 10k results (from+size ≤ 10000); 'opencode' alone is >10k today
   const out: NpmSearchResult[] = []
   let hitPageCap = false
   for (let page = 0; page < maxPages; page++) {
     const url = `${NPM_SEARCH_URL}?text=keywords:${encodeURIComponent(keyword)}&size=${size}&from=${page * size}`
     let body: unknown
-    let retried = false
+    let retries = 0
     for (;;) {
       try {
         const res = await f(url)
@@ -44,14 +44,14 @@ export async function searchByKeyword(
         // vanished otherwise (truncation telemetry). fetch throws and JSON
         // parse/oversize errors take the same path: run.ts awaits discovery
         // bare, so an uncaught rejection here kills the whole catalog run.
-        // 429/5xx are rate/transient — one spaced retry per page recovers
-        // most truncations; honor Retry-After when the registry sends one.
+        // 429/5xx are rate/transient — spaced retries recover most
+        // truncations; honor Retry-After when the registry sends one.
         if (!res.ok) {
-          if ((res.status === 429 || res.status >= 500) && !retried) {
-            retried = true
+          if ((res.status === 429 || res.status >= 500) && retries < 3) {
+            retries++
             await res.arrayBuffer().catch(() => undefined)
             const ra = Number.parseInt(res.headers.get('retry-after') ?? '', 10)
-            const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) : 3
+            const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) : 3 * retries
             await sleep(test ? 0 : wait * 1000)
             continue
           }
