@@ -406,7 +406,8 @@ export async function verifyPackage(
     try {
       mkdirSync(diagDir, { recursive: true })
       writeFileSync(join(diagDir, diagFile), body.slice(-524_288))
-    } catch { /* diagnostics must never break verification */ }
+      console.error(`diag: wrote ${diagFile} (${Math.min(body.length, 524_288)} bytes)`)
+    } catch (e) { console.error(`diag: write failed for ${diagFile}: ${String(e).slice(0, 120)}`) }
   }
   // installable spec: npm name@version, or github owner/repo#sha — the sha is
   // the commit the catalog pipeline scanned, so verify exercises the REVIEWED
