@@ -666,12 +666,20 @@ export async function verifyPackage(
     // whole window, hiding `why` and the plugin's own error entirely.
     // Bound it and put the verdict line last so it always survives.
     const apiBrief = api.length > 600 ? `${api.slice(0, 600)}…` : api
+    // the published excerpt must carry the CAUSE, not the ambient tail —
+    // serve/opencode streams end in watcher/INFO noise while the plugin's
+    // actual load error (SchemaError, missing module, exit) sits mid-stream,
+    // so a raw 'last 2KB' shows noise and the cause scrolls off. Pull the
+    // error-shaped lines out explicitly, bounded so `why` still survives.
+    const errLines = `${safeServeOut}\n${log}`.split('\n')
+      .filter(l => /level=ERROR|\berror\b|\bError:|failed|panic|Cannot find|SyntaxError|TypeError|SchemaError|ENOENT|denied/i.test(l))
+      .slice(-15).join('\n').slice(-1200)
     dumpDiag(`spec: ${spec}\napiNames: ${apiNames.join(', ')}\nverdict: ${why}\n\n` +
       `--- /api/plugin (head) ---\n${apiBrief}\n\n` +
       `--- serve output (tail 64k, password redacted) ---\n${safeServeOut}\n\n` +
       `--- opencode log (tail 256k) ---\n${log}`)
     return { ...base, status: 'failed', level: 'load',
-      logExcerpt: tail(`/api/plugin: ${apiBrief}\n${safeServeOut}\n${log}\n${why}`) }
+      logExcerpt: tail(`/api/plugin: ${apiBrief}\n${errLines ? `--- errors ---\n${errLines}\n` : ''}--- stream tail ---\n${log.slice(-300)}\n${why}`) }
   }
 
   try {
