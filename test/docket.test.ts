@@ -1416,3 +1416,92 @@ describe('docket audit — round 3 regressions', () => {
     expect(unreviewedTargets(withTomb, [staleConcern])).toHaveLength(0)
   })
 })
+
+describe('main — repo-moved flag compare evidence', () => {
+  it('fetches compare for flagDelta targets and renders 变化详情 + AI 初筛', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk-cmp-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const aPath = join(dir, 'assess.jsonl')
+    const flagged = e({
+      name: 'o/plugin', slug: 'o/plugin', approval: 'approved', latestVersion: null,
+      source: { kind: 'github', id: 'o/plugin', repo: 'o/plugin', version: 'newsha999888777' },
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-moved-since-release:newsha999888777'], flaggedAt: '2026-11-15T00:00:00Z' },
+    })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v({ name: 'o/plugin', version: null, source: 'human', sha: 'oldsha111222333', at: '2026-11-14T00:00:00Z' })) + '\n')
+    writeFileSync(aPath, JSON.stringify({
+      name: 'o/plugin', flag: 'sec:repo-moved-since-release:newsha999888777', repo: 'o/plugin',
+      oldSha: 'oldsha111222333', newSha: 'newsha999888777', at: '2026-11-16T00:00:00Z',
+      aheadBy: 2, filesChanged: 1, commitsTotal: 2, additions: 5, deletions: 1,
+      commits: [{ sha: 'abc', msg: 'bump version' }],
+      files: [{ path: 'README.md', status: 'modified', add: 5, del: 1, risky: false }],
+      riskyFiles: [], trivial: true, truncated: false,
+      ai: { verdict: 'pass', reasonZh: '仅文档更新', reasonEn: 'docs only' },
+    }) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([])
+      if (args[0] === 'api' && args[1]?.includes('/compare/')) return JSON.stringify({
+        ahead_by: 2, total_commits: 2,
+        commits: [{ sha: 'abc123456789', commit: { message: 'bump version to 1.1.0' } }],
+        files: [{ filename: 'README.md', status: 'modified', additions: 5, deletions: 1, patch: '@@ docs' }],
+      })
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--assessments', aPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))
+    expect(create).toBeTruthy()
+    const body = create![create!.indexOf('--body') + 1]!
+    expect(body).toContain('### 🔍 这次变了什么')
+    expect(body).toContain('bump version to 1.1.0')
+    expect(body).toContain('/compare/oldsha111222333...newsha999888777/files')
+    expect(body).toContain('### 🤖 AI 初筛')
+    expect(body).toContain('仅文档更新')
+    expect(body).toContain('advisory')
+  })
+  it('compare fetch failure degrades to manual link; corrupt assessments warn not fail', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk-cmp2-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const aPath = join(dir, 'assess.jsonl')
+    const flagged = e({
+      name: 'o/plugin', slug: 'o/plugin', approval: 'approved', latestVersion: null,
+      source: { kind: 'github', id: 'o/plugin', repo: 'o/plugin', version: 'newsha999888777' },
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-moved-since-release:newsha999888777'], flaggedAt: '2026-11-15T00:00:00Z' },
+    })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v({ name: 'o/plugin', version: null, source: 'human', sha: 'oldsha111222333', at: '2026-11-14T00:00:00Z' })) + '\n')
+    writeFileSync(aPath, '{"corrupt"\nnot json\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([])
+      if (args[0] === 'api') throw new Error('api down')
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--assessments', aPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))
+    const body = create![create!.indexOf('--body') + 1]!
+    expect(body).toContain('compare 取数失败')
+    expect(body).toContain('oldsha111222333...newsha999888777')
+    expect(body).not.toContain('AI 初筛')
+  })
+})

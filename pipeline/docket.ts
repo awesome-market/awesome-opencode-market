@@ -38,6 +38,8 @@ import { vkey, akey, atCmp, candidateVer, candidateSlot, latestVerdicts, latestH
 import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 import { isMain } from './main-guard.ts'
+import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from './delta.ts'
+import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
 
 export interface DocketTarget {
   name: string
@@ -83,6 +85,11 @@ export interface DocketTarget {
    *  the body pairs it with a pre-signal human verdict so the maintainer
    *  sees "the bytes were judged, the signal arrived later" explicitly */
   flaggedAt?: string
+  /** repo-moved-since-release flags only: the sha pair a compare link needs —
+   *  oldSha = the human verdict's reviewed-bytes anchor, newSha = the live
+   *  install pin the entry drifted to. Either may be absent (legacy verdicts
+   *  predate sha stamping) → the body falls back to flag-name-only display */
+  flagDelta?: { repo: string; oldSha?: string; newSha?: string }
   /** bounded scan excerpt (redFlags first) — the phone reviewer sees WHAT
    *  without opening the detail page */
   scanPreview?: string[]
@@ -244,9 +251,24 @@ export function docketTargets(
       const decided = postdates(hv) || postdates(hvPkg)
       if (flags.length && !decided) {
         const prior = hv ?? hvPkg
+        // repo-moved-since-release carries its own evidence need: WHICH
+        // bytes the standing verdict covered vs which bytes the pin drifted
+        // to. Both shas already exist on the entry/verdict — surface them so
+        // the body can link a GitHub compare instead of asking the
+        // maintainer to diff blind. Other payload flags (pkg-changed,
+        // integrity-drift) have no sha pair — they stay flag-name-only.
+        const moved = flags.some(f => f.startsWith('sec:repo-moved-since-release:'))
+        const ghSrc = e.source?.kind === 'github' ? e.source : undefined
         out.push({
           name: e.name, version: e.latestVersion, verdict: 'flag',
           reason: flags.join(' '),
+          ...(moved && ghSrc?.version
+            ? { flagDelta: {
+                repo: ghSrc.repo ?? e.name,
+                ...(prior?.sha ? { oldSha: prior.sha } : {}),
+                newSha: ghSrc.version,
+              } }
+            : {}),
           verification: e.verification.status,
           findings: e.capabilities.findings.length,
           redFlags: e.capabilities.redFlags.length,
@@ -412,9 +434,34 @@ interface OpenIssue {
   assignees?: { login: string }[]
 }
 
+/** compare-API evidence for a repo-moved flag — what the maintainer needs
+ *  to judge "normal release vs suspicious drift" without leaving the issue.
+ *  Fetched at render time (main), bounded, untrusted-content-cleaned at
+ *  display. */
+export interface CompareInfo {
+  url: string
+  filesUrl: string
+  aheadBy: number
+  commitsTotal: number
+  commits: { sha: string; msg: string }[]
+  filesTotal: number
+  additions: number
+  deletions: number
+  files: { path: string; status: string; add: number; del: number; risky: boolean }[]
+  riskyCount: number
+  truncated: boolean
+}
+
 export interface IssueBodyOpts {
   repo?: string | null
   pagesBase?: string | null
+  /** repo-moved flag compare evidence — absent when the sha pair or the
+   *  API fetch is unavailable (body degrades to flag-name-only) */
+  compare?: CompareInfo | null
+  /** flag-delta assessments keyed "name\0flag" — the AI/rules pre-screen for
+   *  repo-moved flags. Advisory evidence for the human verdict, never a
+   *  substitute: the freshness gate still requires source:human. */
+  assessments?: Map<string, FlagAssessment> | null
   /** a decision label (verdict:pass/concern) is stuck on the issue but no
    *  human verdict landed in the jsonl — the write-back job failed; the
    *  label event won't re-fire, so say so on the body instead of letting
@@ -547,6 +594,66 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
         (t.flaggedAt
           ? `信号首次观察 ${t.flaggedAt.slice(0, 10)}，裁决早于信号——判的是字节，不是该信号`
           : '信号首次观察时点无记录（flaggedAt 缺失）——无法确认该判词是否覆盖此信号，需就该信号再判一次'))
+    }
+    // the decision core a flag name can't carry: WHICH commits/files the pin
+    // drifted through. Commit subjects + risky-file marks answer "routine
+    // release vs suspicious change" in one glance; the compare links hand
+    // the full diff to GitHub's own paginated view (issue bodies cap at
+    // 64KB — never inline patches here).
+    const cmp = opts.compare
+    if (cmp) {
+      L.push('', '### 🔍 这次变了什么',
+        `- 规模：**${cmp.aheadBy} commits** · ${cmp.filesTotal} files · +${cmp.additions}/-${cmp.deletions}` +
+          (cmp.truncated ? '（列表已截断——全量看下方对比页）' : ''))
+      if (cmp.riskyCount > 0) {
+        const risky = cmp.files.filter(f => f.risky).slice(0, 8).map(f => `\`${clean(f.path, 120)}\``)
+        L.push(`- ⚠️ 风险文件 ${cmp.riskyCount} 个：${risky.join('、')}${cmp.riskyCount > 8 ? ' …' : ''}（依赖/生命周期脚本/workflow/凭据路径类——优先看这些）`)
+      }
+      if (cmp.commits.length) {
+        L.push('- 提交备注：')
+        for (const c of cmp.commits.slice(0, 10)) L.push(`  · \`${c.sha}\` ${clean(c.msg, 120) || '(no subject)'}`)
+        if (cmp.commitsTotal > cmp.commits.length) L.push(`  · …共 ${cmp.commitsTotal} commits`)
+      }
+      L.push(`- 对比：${cmp.url} · [文件视图](${cmp.filesUrl})`)
+    } else if (t.flagDelta?.oldSha && t.flagDelta.newSha) {
+      // sha pair known but compare fetch failed — still give the maintainer
+      // the manual path rather than a dead end
+      L.push('', `- 对比（compare 取数失败，请手动打开）：https://github.com/${clean(t.flagDelta.repo, 140)}/compare/${t.flagDelta.oldSha}...${t.flagDelta.newSha}`)
+    }
+    // AI 初筛: flag-delta's assessment of THIS flag's commit range. Advisory
+    // only — rendered as evidence for the human verdict, explicitly labelled
+    // so an ai:pass here can't be mistaken for the deciding verdict (the
+    // freshness gate only accepts source:human postdating flaggedAt).
+    const assess = opts.assessments
+      ? (t.redFlagList ?? []).filter(f => f.startsWith('sec:repo-moved-since-release:'))
+          // key format mirrors latestAssessments: "name\0flag"
+          .map(f => opts.assessments!.get(`${t.name.toLowerCase()}\0${f}`)).find(Boolean)
+      : undefined
+    if (assess) {
+      const a = assess
+      L.push('', '### 🤖 AI 初筛（advisory——身份信号仍需人工裁决）')
+      if (a.ai) {
+        L.push(`- 判定：**${a.ai.verdict}**（${a.at.slice(0, 10)} · 本地模型）` +
+          (a.ai.reasonZh ? ` — ${clean(a.ai.reasonZh, 300)}` : ''))
+        if (a.ai.reasonEn) L.push(`  · EN: ${clean(a.ai.reasonEn, 300)}`)
+      } else {
+        L.push(`- AI 判词暂缺（${clean(a.aiNote ?? 'judge unavailable', 120)}——下轮自动重试）；以下为机械规则+统计`)
+      }
+      L.push(`- delta 规模：${a.aheadBy} commits · ${a.filesChanged} files · +${a.additions}/-${a.deletions}` +
+        ` · 纯文档类改动: ${a.trivial ? '是' : '否'} · compare 数据截断: ${a.truncated ? '是' : '否'}`)
+      if (a.riskyFiles.length) {
+        const rf = a.riskyFiles.slice(0, 8).map(p => `\`${clean(p, 120)}\``)
+        L.push(`- ⚠️ 规则命中风险路径 ${a.riskyFiles.length} 个：${rf.join('、')}${a.riskyFiles.length > 8 ? ' …' : ''}`)
+      }
+      const noPatch = a.files.filter(f => f.patchOmitted).length
+      if (noPatch || a.truncated) {
+        L.push(`- ⚠️ 覆盖不全：${noPatch ? `${noPatch} 个文件无 patch（大文件省略）` : ''}${noPatch && a.truncated ? '；' : ''}${a.truncated ? 'compare 负载被截断' : ''}——AI 只看到了拿到的部分，**这不等于安全**`)
+      }
+      if (a.ai?.verdict === 'concern') {
+        L.push('- 下一步：对照上方风险文件/对比页核实 → 确认则 `verdict:concern` 下架回炉；误报则 `verdict:pass` 放行')
+      } else if (a.ai?.verdict === 'pass') {
+        L.push('- 下一步：AI 初筛未见明显风险——仍请扫一眼提交备注与风险文件（advisory 不构成放行依据）→ `verdict:pass` / `verdict:concern`')
+      }
     }
   } else {
     // stripFlagTail: mechanical-flag reasons embed the raw flag enumeration —
@@ -718,6 +825,17 @@ export async function main(
   const digestRaw = (() => { try { return digestPath ? readFileSync(digestPath, 'utf8') : null } catch { return null } })()
   if (digestPath && !digest && (digestRaw === null || digestRaw.trim()))
     throw new Error(`[docket] digest-state ${digestPath} ${digestRaw === null ? 'is missing/unreadable' : 'is malformed'} — refusing to regress announced maturity to empty`)
+  // flag-delta assessments — advisory render data only (the freshness gate
+  // still requires source:human), so a missing/corrupt file degrades to "no
+  // AI 初筛 block" with a warning rather than failing the whole sync. The
+  // workflow touches the absent-on-branch case into existence.
+  const assessPath = arg('--assessments')
+  const assessments = assessPath ? latestAssessments(loadAssessments(assessPath)) : undefined
+  if (assessPath) {
+    const raw = (() => { try { return readFileSync(assessPath, 'utf8') } catch { return null } })()
+    if (raw === null) console.warn(`[docket] assessments ${assessPath} missing/unreadable — rendering without AI 初筛`)
+    else if (raw.trim() && assessments!.size === 0) console.warn(`[docket] assessments ${assessPath} has content but zero parseable lines — rendering without AI 初筛`)
+  }
   // closeReason needs the raw maps too — claiming "verdict 已决议" without
   // checking the key is how a version-bumped/clock-reset issue used to close
   // with a pointer to a judgment that never existed
@@ -745,6 +863,28 @@ export async function main(
   // target (vkey already canonicalizes verdict identity the same way)
   const wantedByName = new Map<string, DocketTarget>()
   for (const t of targets) { const k = t.name.toLowerCase(); if (!wantedByName.has(k)) wantedByName.set(k, t) }
+  // repo-moved flag evidence: fetch each target's compare ONCE per sync —
+  // flag targets are rare (identity signals), so a handful of API calls per
+  // hourly tick is nothing next to the issue-list call already made. A
+  // failed fetch degrades that one body to the manual-link fallback, never
+  // fails the sync.
+  const compareOf = new Map<string, CompareInfo>()
+  await Promise.all(targets.map(async t => {
+    const d = t.flagDelta
+    if (!d?.oldSha || !d.newSha || !d.repo) return
+    const cmp = await fetchCompare(d.repo, d.oldSha, d.newSha, async a => String(await ghFn(a)))
+    if (!cmp) return
+    const cls = classifyDelta(cmp.files)
+    compareOf.set(issueTitle(t), {
+      url: `https://github.com/${d.repo}/compare/${d.oldSha}...${d.newSha}`,
+      filesUrl: `https://github.com/${d.repo}/compare/${d.oldSha}...${d.newSha}/files`,
+      aheadBy: cmp.aheadBy, commitsTotal: cmp.commitsTotal,
+      commits: cmp.commits, filesTotal: cmp.filesTotal,
+      additions: cmp.additions, deletions: cmp.deletions,
+      files: cmp.files.map(f => ({ path: f.path, status: f.status, add: f.add, del: f.del, risky: isRiskyDeltaPath(f.path) })),
+      riskyCount: cls.riskyFiles.length, truncated: cmp.truncated,
+    })
+  }))
   const pagesBase = env.MARKET_PAGES_URL
     ?? `https://${repo.split('/')[0]}.github.io/${repo.split('/')[1]}`
 
@@ -823,7 +963,7 @@ export async function main(
       const args = ['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
-        '--body', issueBody(t, { repo, pagesBase, paused })]
+        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -854,7 +994,7 @@ export async function main(
       .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
       .sort()
     const stuck = stuckList.length ? stuckList.join('`, `') : null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()
