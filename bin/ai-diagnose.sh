@@ -46,6 +46,11 @@ HEALTHF=$STATED/diagnose-health.json
 # verdicts whose push never landed — replayed into the next run's payload and
 # fed back as evidence so the same keys aren't re-reviewed at LLM cost
 SPOOL=$STATED/pending-verdicts.jsonl
+# flag-delta assessments share the verdict durability model: emit→append
+# here, push→catalog flag-assessments.jsonl, clear on success. ai:null
+# lines (judge unavailable) do NOT count as assessed — flag-delta retries
+# them next run and latest-by-at wins downstream.
+ASSESS_SPOOL=$STATED/flag-assessments.jsonl
 # material-bundle deletions ride out on the same push as verdicts — the list
 # is durable state like the spool: a failed push keeps it for next run's replay
 RMF=$STATED/material-rm.list
@@ -356,6 +361,8 @@ DIAGNOSE_BUDGET=${DIAGNOSE_BUDGET:-45}   # minutes of LLM time per run
 TMPV=$(mktemp "${TMPDIR:-/tmp}/ai-verdicts.XXXXXXXX")
 PAY=$(mktemp "${TMPDIR:-/tmp}/ai-payload.XXXXXXXX")
 VVIEW=$(mktemp "${TMPDIR:-/tmp}/verdicts-view.XXXXXXXX")
+VASSESS=$(mktemp "${TMPDIR:-/tmp}/assess-view.XXXXXXXX")
+AMISS=$(mktemp "${TMPDIR:-/tmp}/assess-missing.XXXXXXXX")
 
 # diagnose must see spooled (un-pushed) verdicts as already-decided — else a
 # push that failed last run triggers a second LLM review of the same keys
@@ -386,6 +393,19 @@ npx tsx pipeline/ai/diagnose.ts \
   --spool "$SPOOL" \
   ${ARGS[@]+"${ARGS[@]}"} \
   || exit $?
+
+# flag-delta: drift assessments for live entries carrying
+# sec:repo-moved-since-release flags — compare evidence + rules + LLM judge,
+# appended straight into ASSESS_SPOOL (durable per-emit like verdicts). Its
+# view = catalog file ∪ unpushed spool so a failed push never re-burns the
+# judge. Non-fatal by design: a delta failure must not block verdict pushes.
+{ git show origin/catalog:flag-assessments.jsonl 2>/dev/null; cat "$ASSESS_SPOOL" 2>/dev/null; } \
+  | sort -u > "$VASSESS" 2>/dev/null || : > "$VASSESS"
+npx tsx pipeline/ai/flag-delta.ts \
+  --index "$CAT/index.json" --verdicts "$VVIEW" \
+  --assessments "$VASSESS" --spool "$ASSESS_SPOOL" \
+  --limit "${FLAG_DELTA_LIMIT:-30}" \
+  || log "flag-delta failed (non-fatal) — verdicts still push"
 
 # health stamp → catalog branch (transition/24h gated, advisory). CI's
 # watchdog leg 5 and digest §⑤ read it there — the local file alone is
@@ -418,7 +438,9 @@ if (bad) { console.error(`dropped ${bad} malformed payload line(s)`); writeFileS
 cp "$PAY" "$SPOOL" 2>/dev/null \
   || log "WARN: spool sync failed ($SPOOL) — a failed push would lose this run's verdicts and re-burn the LLM next run"
 
-[ -s "$PAY" ] || [ -s "$RMF" ] || { log "no new verdicts — idle (常驻等待请跑 bin/ai-diagnose-agent.sh)"; exit 0; }
+# an assessment-only run (flag-delta emitted, diagnose idle) must still push —
+# verdict emptiness alone is not "nothing to do"
+[ -s "$PAY" ] || [ -s "$RMF" ] || [ -s "$ASSESS_SPOOL" ] || { log "no new verdicts — idle (常驻等待请跑 bin/ai-diagnose-agent.sh)"; exit 0; }
 
 # Replay push: verdicts live in $PAY, not the worktree — a failed push just
 # means re-append onto the newest origin/catalog next attempt.
@@ -436,7 +458,18 @@ for i in 1 2 3 4; do
   # push success/failure — never local git state — clear the spool.
   comm -13 <(git show origin/catalog:ai-verdicts.jsonl 2>/dev/null | sort -u) \
            <(sort -u "$PAY") > "$VVIEW"
-  [ -s "$VVIEW" ] || [ -s "$RMF" ] || { log "verdicts already on origin/catalog"; : > "$SPOOL"; stamp_health pushed already-landed; exit 0; }
+  # parallel missing-set for flag-delta assessments — the remote file may not
+  # exist yet (first push creates it); a spool line the remote already carries
+  # is skipped so a succeeded-but-reported-failed push can't duplicate lines
+  comm -13 <(git show origin/catalog:flag-assessments.jsonl 2>/dev/null | sort -u) \
+           <(cat "$ASSESS_SPOOL" 2>/dev/null | sort -u) > "$AMISS"
+  [ -s "$VVIEW" ] || [ -s "$AMISS" ] || [ -s "$RMF" ] || { log "verdicts+assessments already on origin/catalog"; : > "$SPOOL"; : > "$ASSESS_SPOOL"; stamp_health pushed already-landed; exit 0; }
+  if [ -s "$AMISS" ]; then
+    touch flag-assessments.jsonl
+    [ -s flag-assessments.jsonl ] && [ -n "$(tail -c1 flag-assessments.jsonl)" ] && printf '\n' >> flag-assessments.jsonl
+    cat "$AMISS" >> flag-assessments.jsonl
+    git add flag-assessments.jsonl
+  fi
   if [ -s "$VVIEW" ]; then
     touch ai-verdicts.jsonl
     # a remote file whose last byte isn't '\n' would fuse its last line with
@@ -459,12 +492,12 @@ for i in 1 2 3 4; do
   # without this check a cleanup-only run would hit 4 "nothing to commit"
   # failures and misreport the push as lost
   if git diff --cached --quiet; then
-    log "nothing new to push — remote already carries verdicts+cleanup"
-    : > "$SPOOL"; : > "$RMF"; stamp_health pushed already-landed; exit 0
+    log "nothing new to push — remote already carries verdicts+assessments+cleanup"
+    : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$RMF"; stamp_health pushed already-landed; exit 0
   fi
   git commit -qm "ai-diagnose: $(date '+%F %H:%M')" \
     || { log "commit attempt $i failed"; sleep 3; continue; }
-  git push -q origin catalog && { : > "$SPOOL"; : > "$RMF"; stamp_health pushed ok; exit 0; }
+  git push -q origin catalog && { : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$RMF"; stamp_health pushed ok; exit 0; }
   log "push attempt $i failed"; sleep 3
 done
 # push never landed — keep the payload for the next run instead of burning
