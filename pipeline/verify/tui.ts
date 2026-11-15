@@ -5,17 +5,25 @@
  *
  *  Honest boundary (same class as the serve canary): proves the TUI doesn't
  *  die on load; does NOT prove any specific keypath works. */
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExecFn } from './verify.ts'
 
 export interface TuiCheck { ok: boolean; log?: string; harness?: boolean }
 
-/** Pure judge — unit-testable. Pane text + session liveness → pass/fail. */
+/** Pure judge — unit-testable. Pane text + session liveness → pass/fail.
+ *  `paneText` is the best available rendering: live capture-pane output when
+ *  the session survives, otherwise the pipe-pane log tail — whatever the TUI
+ *  painted before dying. */
 export function judgeTuiPane(paneText: string, sessionAlive: boolean): TuiCheck {
-  if (!sessionAlive) return { ok: false, log: 'tmux session exited during startup' }
   const text = paneText.trim()
+  if (!sessionAlive) {
+    // a dead session's scrollback dies with it — surface the last painted
+    // output so the failure carries evidence instead of a bare verdict
+    const tail = text ? `; last pane output:\n${text.slice(-1400)}` : ''
+    return { ok: false, log: `tmux session exited during startup${tail}` }
+  }
   if (text.length < 20) return { ok: false, log: `pane nearly empty (${text.length} chars): ${text.slice(0, 200)}` }
   const crash = text.match(/panic:|SIGSEGV|SIGABRT|fatal error|uncaught exception|plugin .*(crashed|failed to load)/i)
   if (crash) return { ok: false, log: `crash pattern "${crash[0]}" in pane: ${text.slice(-600)}` }
@@ -57,6 +65,14 @@ export async function checkTui(
       // a package 'failed' — same class as the dead-serve throw (V-4).
       return { ok: false, log: `tmux spawn failed: ${(e as Error).message}`, harness: true }
     }
+    // pipe-pane streams the raw pane output into a file that OUTLIVES the
+    // session — capture-pane cannot read a dead session's scrollback, so
+    // without this a crashed TUI leaves only "exited during startup" and the
+    // reviewer gets zero diagnostic content. Set before the settle wait so
+    // boot output is captured too; failure is non-fatal (falls back to the
+    // old evidence-free verdict).
+    const paneLog = join(sockDir, 'pane.log')
+    await run('tmux', ['pipe-pane', '-t', sess, `cat > ${paneLog}`], { env: tenv, timeout: 5_000 }).catch(() => {})
     try {
       await new Promise(r => setTimeout(r, settle))
       let alive = false
@@ -65,10 +81,22 @@ export async function checkTui(
         alive = true
       } catch { alive = false }
       let pane = ''
+      let captured = false
       try {
         const { stdout } = await run('tmux', ['capture-pane', '-p', '-t', sess], { env: tenv, timeout: 5_000 })
         pane = stdout
-      } catch { /* session died between probes — judge reports not-alive */ }
+        captured = true
+      } catch { /* session died between probes — the pane log is the fallback */ }
+      if (!captured) {
+        // ONLY on capture failure: the pipe-pane file is the surviving record
+        // of what the TUI painted. A successful-but-blank capture must NOT
+        // fall back — raw stream bytes would clear the 'pane nearly empty'
+        // floor and could flip a real fail into a pass.
+        try {
+          const raw = readFileSync(paneLog, 'utf8')
+          pane = raw.length > 16_384 ? raw.slice(-16_384) : raw
+        } catch { /* never piped or already empty */ }
+      }
       return judgeTuiPane(pane, alive)
     } finally {
       await run('tmux', ['kill-session', '-t', sess], { env: tenv, timeout: 5_000 }).catch(() => {})
