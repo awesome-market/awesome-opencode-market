@@ -13,6 +13,12 @@ on:
         type: boolean
         default: false
         required: false
+  # reusable entry for full-run.yml — redeclared so force_publish is a real
+  # false for callers that pass nothing (undeclared → null, still falsy but
+  # explicit is cheaper than trusting coercion)
+  workflow_call:
+    inputs:
+      force_publish: { required: false, type: boolean, default: false }
 permissions: {}               # job-level grants below
 jobs:
   generate:

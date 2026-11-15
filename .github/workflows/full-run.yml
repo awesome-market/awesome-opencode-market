@@ -1,0 +1,50 @@
+name: full-run
+# scope: prod-only — one-shot manual release chain
+#
+# 人工全量放行链：手动触发一次，顺次跑
+#   verify  → digest → catalog
+#
+# verify 是最长杆（装测+merge 结果回 catalog）；digest 在其后公告当日判词
+# 启动成熟时钟；catalog 最后 fold——此时 verify 结果和 digest-state 都已
+# 就位，grandfathered + 已成熟 + 验证通过的条目当轮放行。
+#
+# 串行而非并行是刻意的：catalog 必须看到 verify merge 后的 index，提前跑
+# 只会读到旧状态白忙一轮。任一环失败即停——判词链断在中间比假装放行安全。
+#
+# 每个阶段都是独立 job 引用原 workflow（workflow_call），内部重试/并发锁/
+# 权限全部沿用原定义——这里没有第二份实现可漂移。
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+# 防连点/重复触发叠出第二条链；catalog-branch 锁在各 callee 内部继续生效
+concurrency: { group: full-release-chain, cancel-in-progress: false }
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+    secrets: inherit
+    # ceiling for the callee's job-level grants (merge job: contents+actions
+    # +issues — dispatch site.yml, notify issues, write the catalog branch)
+    permissions:
+      contents: write
+      actions: write
+      issues: write
+
+  digest:
+    needs: verify
+    uses: ./.github/workflows/digest.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      issues: write
+
+  catalog:
+    needs: digest
+    uses: ./.github/workflows/catalog.yml
+    secrets: inherit
+    permissions:
+      contents: write
+      issues: write
+      actions: write

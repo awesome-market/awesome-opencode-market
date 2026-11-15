@@ -25,6 +25,14 @@ on:
         required: false
         type: boolean
         default: false
+  # reusable entry for full-run.yml — inputs MUST be redeclared with the
+  # same defaults: an undeclared input resolves to null under workflow_call
+  # and `inputs.targets != ''` would mis-fire --retest on the whole catalog
+  workflow_call:
+    inputs:
+      targets: { required: false, type: string, default: '' }
+      cap: { required: false, type: string, default: '' }
+      retest: { required: false, type: boolean, default: false }
 permissions: {}
 jobs:
   plan:
