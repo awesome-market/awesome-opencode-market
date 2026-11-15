@@ -332,6 +332,13 @@ jobs:
           # worktree add recreates it from origin/catalog.
           git branch -D catalog 2>/dev/null || true
           git worktree add /tmp/cat origin/catalog 2>/dev/null || git worktree add -b catalog /tmp/cat
+          # resolve per-shard job URLs once — merge tags each results-<N>.json
+          # row with its `verify (N)` job link so the issue body's log link
+          # opens the failing job instead of the whole-run job list (unusable
+          # on mobile). Best-effort: '[]' keeps merge on the run-level URL.
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+            --jq '[.jobs[] | {name: .name, html_url: .html_url}]' > /tmp/jobs.json 2>/dev/null \
+            || echo '[]' > /tmp/jobs.json
           ok=0; pushed=0
           RELEASE_FAILED=0
           for i in 1 2 3 4; do

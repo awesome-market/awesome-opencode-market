@@ -58,6 +58,7 @@ import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail } from '../verify/failExplain.ts'
 import { isMain } from '../main-guard.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -1351,13 +1352,19 @@ export async function main(
     if (terminalFailed(w.vf)) {
       // prefer the first error-looking line over a raw head slice — a load
       // log that opens with the plugin's own config dump otherwise puts
-      // hundreds of chars of JSON into the reason instead of the failure
+      // hundreds of chars of JSON into the reason instead of the failure.
+      // pickFailLine skips '--- errors ---' section markers (they match the
+      // error regex on the word 'errors') and harness noise (watcher EACCES,
+      // models.dev) so the reason never opens on a literal marker line.
       const vlog = w.vf.logExcerpt ?? ''
-      const errLine = vlog.split(/\n+/).map(l => l.trim())
-        .find(l => /error|failed|cannot|exception|ENOENT|not found|denied|SyntaxError|TypeError/i.test(l))
-      const excerpt = (errLine ?? vlog.replace(/\s+/g, ' ').trim()).slice(0, 300) || '(无日志摘录)'
+      const errLine = pickFailLine(vlog)
+      const excerpt = (errLine ? unwrapLogLine(errLine) : vlog.replace(/\s+/g, ' ').trim()).slice(0, 300) || '(无日志摘录)'
+      // the raw line answers WHAT the runner logged; explainVerifyFail maps
+      // its signature to WHY it matters for the reviewer — a LoadError row
+      // becomes "模块加载失败（常见于未适配新版宿主）" not log soup
+      const why = errLine ? explainVerifyFail(w.vf.level, errLine) : ''
       emit(w, verdictRecord(e, 'concern',
-        `装测失败（verify ${w.vf.level ?? 'install'} 级）：${excerpt}`,
+        `装测失败（verify ${w.vf.level ?? 'install'} 级）：${why ? `${why} — ` : ''}${excerpt}`,
         { reasonEn: `install/load verification failed at ${w.vf.level ?? 'install'}: ${excerpt === '(无日志摘录)' ? 'no log excerpt' : excerpt}`, sha: w.sha }))
       console.log(`[diagnose] ${e.name}@${ver} verify-failed → concern (no LLM call)${tag(wi)}`)
       continue

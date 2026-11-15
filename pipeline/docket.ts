@@ -40,6 +40,7 @@ import { candidateHeldAt } from './ai/diagnose.ts'
 import { isMain } from './main-guard.ts'
 import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from './delta.ts'
 import { explainFlag } from './scan/flagExplain.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
 
 export interface DocketTarget {
@@ -97,7 +98,7 @@ export interface DocketTarget {
   /** files carrying the most scan findings — the "where's the risk" map.
    *  Rendered with per-source links (github blob@judged-sha / npm unpkg)
    *  so the reviewer taps into the suspicious file, not index.json */
-  hotFiles?: { path: string; rules: string; n: number; doc: boolean }[]
+  hotFiles?: { path: string; rules: string; n: number; doc: boolean; line?: number }[]
   /** findings inside doc-like paths — separates signal (code hits) from
    *  the doc-example noise AI reasons keep citing */
   docFindings?: number
@@ -231,7 +232,7 @@ export function docketTargets(
     // reviewer's first question and 8 flat excerpt lines can't answer it.
     // Format is `rule:path — L<n>: <code>` (scan.ts fmtFinding); rule ends
     // at the first ':', path runs to the ' — L' evidence marker.
-    const byFile = new Map<string, { rules: Set<string>; n: number }>()
+    const byFile = new Map<string, { rules: Set<string>; n: number; line: number }>()
     let docFindings = 0
     const DOCISH = /\.(md|mdx|markdown|txt|rst|adoc)$/i
     const DOCDIR = /(^|\/)(docs?|examples?|tests?|__tests__|fixtures?|site)\//i
@@ -242,8 +243,10 @@ export function docketTargets(
       const rule = ci > 0 ? f.slice(0, ci) : f
       const path = (ci > 0 ? f.slice(ci + 1) : f).slice(0, li > ci ? li - ci - 1 : undefined).trim()
       if (!path) continue
-      const rec = byFile.get(path) ?? { rules: new Set<string>(), n: 0 }
+      const rec = byFile.get(path) ?? { rules: new Set<string>(), n: 0, line: 0 }
       rec.rules.add(rule); rec.n++
+      // first finding line per file — renders as :L<n> and anchors github links
+      if (!rec.line && li > ci) rec.line = parseInt(f.slice(li + 4), 10) || 0
       byFile.set(path, rec)
       if (DOCISH.test(path) || DOCDIR.test(path)) docFindings++
     }
@@ -253,6 +256,7 @@ export function docketTargets(
       .map(([path, r]) => ({
         path, n: r.n, rules: [...r.rules].slice(0, 4).join(' '),
         doc: DOCISH.test(path) || DOCDIR.test(path),
+        ...(r.line ? { line: r.line } : {}),
       }))
     const meta: SlotMeta = {
       findings: slot.capabilities.findings.length,
@@ -806,11 +810,27 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // trust a black box. logExcerpt is env-sanitized upstream (xdgEnv strips
   // tokens before plugin code runs) + stripControls'd at merge — publishable.
   if ((vs === 'failed' || vs === 'skipped') && t.verifyLog) {
-    const vlogLines = t.verifyLog.split('\n').map(l => clean(l, 200)).filter(Boolean)
     L.push('- 装测日志摘要：')
+    // 失败速读 — the reviewer shouldn't have to parse runner log syntax to
+    // learn "PluginModule.LoadError = 插件没适配新版宿主". pickFailLine skips
+    // section markers and harness noise; explainVerifyFail turns the
+    // signature into one sentence. Old excerpts (pre-noise-filter merges)
+    // also benefit because the pick/unwrap happens at render time.
+    const failLine = pickFailLine(t.verifyLog)
+    const why = failLine ? explainVerifyFail(undefined, failLine) : ''
+    if (failLine) {
+      L.push(`  - 失败速读：${why ? `${why} — ` : ''}${clean(unwrapLogLine(failLine).slice(0, 240), 240)}`)
+    }
+    // strip `timestamp= level= run=` boilerplate — the message/cause fields
+    // carry the meaning and the prefix was eating most of the line budget,
+    // truncating `cause=` mid-word exactly where the error class lives.
+    // Harness noise baked into legacy excerpts is dropped here too.
+    const vlogLines = t.verifyLog.split('\n')
+      .filter(l => !isHarnessNoise(l))
+      .map(l => clean(unwrapLogLine(l.trim()).slice(0, 260), 260)).filter(Boolean)
     for (const l of vlogLines.slice(0, 8)) L.push(`  - ${l}`)
     if (vlogLines.length > 8) L.push(`  - …共 ${vlogLines.length} 行`)
-    if (t.verifyRunUrl) L.push(`  - [完整运行日志](${clean(t.verifyRunUrl, 300)})`)
+    if (t.verifyRunUrl) L.push(`  - [本次装测完整日志](${clean(t.verifyRunUrl, 300)})`)
   }
   // package identity — "这是什么" before "安不安全". Pending entries have
   // no site page, so the npm/GitHub link IS the only way to see the package.
@@ -870,16 +890,21 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // unpkg@version — tap on mobile, no download, no index.json spelunking.
   // 📄 marks doc-like paths: the usual FP source, still worth a glance.
   if (t.hotFiles?.length) {
-    const fileHref = (path: string): string | undefined => {
-      const p = path.split('/').map(encodeURIComponent).join('/')
+    const fileHref = (path: string, line?: number): string | undefined => {
       if (t.src?.kind === 'github') {
         const repo = t.src.repo ?? t.src.id
         const sha = t.verdictSha ?? t.src.version
+        const p = path.split('/').map(encodeURIComponent).join('/')
         return sha
-          ? `https://github.com/${repo}/blob/${sha}/${p}`
+          ? `https://github.com/${repo}/blob/${sha}/${p}${line ? `#L${line}` : ''}`
           : `https://github.com/${repo}/tree/HEAD/${p}`
       }
       if (t.src?.kind === 'npm') {
+        // npm tarballs wrap every file under package/ — the finding path
+        // carries that prefix but unpkg serves the prefix-stripped tree,
+        // so /pkg@ver/package/x.ts is a 404 while /pkg@ver/x.ts resolves
+        const rel = path.startsWith('package/') ? path.slice(8) : path
+        const p = rel.split('/').map(encodeURIComponent).join('/')
         const v = t.version ?? t.src.version
         return v ? `https://unpkg.com/${t.src.id}@${v}/${p}` : `https://unpkg.com/${t.src.id}/${p}`
       }
@@ -889,8 +914,8 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     L.push(`- 风险文件 TOP${t.hotFiles.length >= 10 ? '+' : ''}（代码 ${codeN} / 文档类 ${t.hotFiles.length - codeN}` +
       `${(t.docFindings ?? 0) > 0 ? `；全部 findings 中文档路径 ${t.docFindings} 条` : ''}）：`)
     for (const f of t.hotFiles) {
-      const href = fileHref(f.path)
-      const name = `\`${clean(f.path, 120)}\``
+      const href = fileHref(f.path, f.line)
+      const name = `\`${clean(f.path, 120)}${f.line ? `:L${f.line}` : ''}\``
       L.push(`  - ${href ? `[${name}](${href})` : name} — ${clean(f.rules, 80)} ×${f.n}${f.doc ? ' 📄' : ''}`)
     }
   }

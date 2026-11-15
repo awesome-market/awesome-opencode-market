@@ -46,6 +46,9 @@ export interface VerifyResult {
   opencodeVersion: string
   verifiedAt: string
   logExcerpt?: string
+  /** per-row link to the producing `verify (N)` job — set by merge, never
+   *  written by shards; lands in index.json's verification.runUrl */
+  jobUrl?: string
   /** true when the shard THREW around the package check (sandbox setup, fs,
    *  spawn) rather than measuring the package — an infrastructure signal,
    *  not a verdict. merge drops these: writing them as 'failed' would burn
