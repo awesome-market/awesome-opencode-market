@@ -58,7 +58,7 @@ import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
-import { pickFailLine, unwrapLogLine, explainVerifyFail } from '../verify/failExplain.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail, egressBlockedExcerpt } from '../verify/failExplain.ts'
 import { isMain } from '../main-guard.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -174,7 +174,13 @@ export function reviewMaterial(e: CatalogIndex['plugins'][number]): Material[] {
     // verify outcome — install/load evidence the LLM could never infer
     {
       id: 'verify', text: `status=${vf.status} level=${vf.level ?? '-'} opencode=${vf.opencodeVersion ?? '-'} at=${vf.verifiedAt ?? '-'}` +
-        (vf.logExcerpt ? `\n${vf.logExcerpt}` : ''),
+        (vf.logExcerpt ? `\n${vf.logExcerpt}` : '') +
+        // egress-blocked failures reach the judge — say plainly that the
+        // network error is sandbox policy so the model doesn't read it as
+        // the package's own defect
+        (vf.status === 'failed' && vf.logExcerpt && egressBlockedExcerpt(vf.logExcerpt)
+          ? '\n[note: sandbox egress is allow-listed — network errors in this log are policy, not evidence the package is broken]'
+          : ''),
     },
     // scan state is load-bearing review evidence: scannedAt null means the
     // scanner NEVER ran — the findings/redFlags blocks below are empty by
@@ -1083,6 +1089,19 @@ export async function main(
    *  self-heal it). Harness rows were never measured — also not terminal. */
   const terminalFailed = (vf: Work['vf']) =>
     vf.status === 'failed' && !isHarnessFailure(vf) && !retryable(vf)
+  /** Sandbox egress is allow-listed — a terminal load failure whose error
+   *  lines are ALL network-blocked signatures (and carry no hard crash
+   *  signature like LoadError/SchemaError on a non-network line) is a
+   *  policy artifact, not package evidence. Same treatment retryable
+   *  failures already get: real LLM review with the verify excerpt in the
+   *  prompt, instead of a mechanical concern that can never self-heal
+   *  (the sandbox will never open the egress). */
+  const egressBlockedFail = (vf: Work['vf']): boolean =>
+    vf?.status === 'failed' && egressBlockedExcerpt(vf.logExcerpt ?? '')
+  /** The mechanical-concern predicate shared by the sort, the L0.5 set,
+   *  the LLM-needed probe, and the emit short-circuit — egress-blocked
+   *  terminal failures are excluded so they reach the judge. */
+  const mechTerminal = (w: Work) => terminalFailed(w.vf) && !egressBlockedFail(w.vf)
   // CI-staged material bundles: a sha-matching bundle replaces the whole
   // material block AND skips the tarball fetch entirely — the daemon never
   // downloads a package CI already unpacked. Files queued for deletion ride
@@ -1127,7 +1146,9 @@ export async function main(
     // the npm tarball URL resolves lazily inside the fetch branch — a staged
     // bundle hit or a twin must not pay the packument lookup for a URL it
     // never downloads
-    const content = (!stagedHit && !twin && pin && !terminalFailed(vf))
+    // egress-blocked terminal failures reach the judge too — they need the
+    // same material fetch as any reviewable candidate
+    const content = (!stagedHit && !twin && pin && (!terminalFailed(vf) || egressBlockedFail(vf)))
       ? await contentMaterial(e.name, pin,
           gh ? (ghPin && ghRepo ? `https://codeload.github.com/${ghRepo}/tar.gz/${ghPin}` : null)
              : await tarballOf(e.name, pin),
@@ -1176,7 +1197,7 @@ export async function main(
   // coverage note) are machine prose like meta/verify/scan — scoring them
   // can only FP into a mechanical concern on text the package never wrote
   const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest', 'content-error'])
-  const reviewWorks = works.filter(w => !w.twin && !terminalFailed(w.vf))
+  const reviewWorks = works.filter(w => !w.twin && !mechTerminal(w))
   const l05Top = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'
   if (reviewWorks.length) {
@@ -1235,14 +1256,14 @@ export async function main(
   // their free concern (a 400+ flagged backlog must not starve verdictless —
   // the LLM draft is a nicety, the block is mechanical).
   works.sort((a, b) => {
-    const g = (w: Work) => (w.twin || terminalFailed(w.vf)) ? 0
+    const g = (w: Work) => (w.twin || mechTerminal(w)) ? 0
       : (w.flagged || l05flagOf(w) !== null) ? 2 : 1
     return g(a) - g(b)
   })
 
   // D-1: a dead omlx costs a 5-min timeout PER candidate — probe once up front.
   // Injecting `ornith` in tests implies the service; real runs ping /models.
-  const needsLlm = works.some(w => !w.twin && !terminalFailed(w.vf))
+  const needsLlm = works.some(w => !w.twin && !mechTerminal(w))
   const ping = deps.ping ?? (deps.ornith ? async () => true : judgeBackend === 'devin' ? devinAlive : omlxAlive)
   // a missing AI_MODEL is an outage equivalent: held, never guessed — the
   // judge's identity arrives via env only (deps.ornith injects it in tests).
@@ -1349,7 +1370,7 @@ export async function main(
     //    evidence is mechanical. A retryable slot stays in the verify queue
     //    (auto-retry may flip it) and gets a real review instead. Harness
     //    rows are also excluded: the package was never measured (infra ≠ package).
-    if (terminalFailed(w.vf)) {
+    if (mechTerminal(w)) {
       // prefer the first error-looking line over a raw head slice — a load
       // log that opens with the plugin's own config dump otherwise puts
       // hundreds of chars of JSON into the reason instead of the failure.

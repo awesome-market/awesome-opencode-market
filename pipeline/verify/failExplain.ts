@@ -38,7 +38,14 @@ export function unwrapLogLine(l: string): string {
   return l
 }
 
+/** Network-blocked signatures — sandbox egress is allow-listed, so these
+ *  mean "policy stopped the request", not "the package is broken". Shared
+ *  by the verify excerpt annotator and diagnose's egress routing. */
+export const EGRESS_BLOCKED = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ECONNRESET|fetch failed|socket hang up/i
+
 const SIGNATURES: [RegExp, string][] = [
+  [EGRESS_BLOCKED,
+    '网络请求被沙箱 egress 白名单拦截——插件初始化需要访问外网，无法在受限环境验证其正常工作（非包本身故障证据）'],
   [/PluginModule\.LoadError|failed to load plugin|plugin absent from|reports the plugin failed/i,
     '插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本）'],
   [/SchemaError/i, '插件导出未通过 opencode 插件契约校验（schema 校验失败）'],
@@ -51,6 +58,23 @@ const SIGNATURES: [RegExp, string][] = [
   [/EACCES|permission denied|EACCES/i, '权限被拒（文件/端口权限或打包路径问题）'],
   [/plugin entry stuck/i, '插件卡在非终态——加载流程未完成'],
 ]
+
+/** Definitive crash signatures — a non-network line carrying one of these
+ *  means the package itself broke, egress noise notwithstanding. A line
+ *  matching BOTH (LoadError wrapping a fetch failure) counts as egress:
+ *  the network block caused the load error. */
+const HARD_FAIL = /PluginModule\.LoadError|SchemaError|MODULE_NOT_FOUND|Cannot find module|SyntaxError|TypeError|npm ERR!|NpmInstallFailed|ENOENT/i
+
+/** True when a failed verify's excerpt shows network-blocked errors and no
+ *  independent hard-crash evidence — sandbox egress policy, not package
+ *  fault. diagnose routes these to the judge instead of a mechanical
+ *  concern that can never self-heal. */
+export function egressBlockedExcerpt(log: string): boolean {
+  const errs = log.split('\n').map(l => l.trim())
+    .filter(l => l && !isHarnessNoise(l) && !isSectionMarker(l) && !l.startsWith('{') && !l.startsWith('['))
+    .filter(l => /error|failed|cannot|exception|denied|timeout|timed out/i.test(l))
+  return errs.some(l => EGRESS_BLOCKED.test(l)) && !errs.some(l => HARD_FAIL.test(l) && !EGRESS_BLOCKED.test(l))
+}
 
 /** One-sentence human explanation of the failure signature; '' when the
  *  excerpt matches nothing known — callers fall back to the raw line. */

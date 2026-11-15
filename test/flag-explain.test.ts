@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { explainFlag } from '../pipeline/scan/flagExplain.ts'
-import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise } from '../pipeline/verify/failExplain.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, egressBlockedExcerpt, EGRESS_BLOCKED } from '../pipeline/verify/failExplain.ts'
 
 describe('explainFlag', () => {
   it('wraps sec-delta flags with the inner rule explainer when known', () => {
@@ -45,5 +45,33 @@ describe('failExplain helpers', () => {
     expect(explainVerifyFail('load', 'Cannot find module "./x"')).toContain('依赖缺失')
     expect(explainVerifyFail('interactive', 'mystery')).toContain('交互式启动检查未通过')
     expect(explainVerifyFail('load', 'mystery')).toBe('')
+  })
+  it('EGRESS_BLOCKED covers the policy signatures, not ambient noise', () => {
+    expect(EGRESS_BLOCKED.test('fetch https://x ECONNREFUSED')).toBe(true)
+    expect(EGRESS_BLOCKED.test('ENOTFOUND api.example.com')).toBe(true)
+    expect(EGRESS_BLOCKED.test('TypeError: fetch failed')).toBe(true)
+    expect(EGRESS_BLOCKED.test('PluginModule.LoadError: contract')).toBe(false)
+  })
+  it('explainVerifyFail maps network signatures to the egress explanation', () => {
+    expect(explainVerifyFail('load', 'fetch https://api.x ECONNREFUSED')).toContain('egress')
+  })
+  it('egressBlockedExcerpt: network-only failures route to review; hard crashes stay mechanical', () => {
+    // pure network failure — sandbox policy, not package evidence
+    expect(egressBlockedExcerpt(
+      '--- errors ---\nplugin init failed: fetch https://api.example.com ECONNREFUSED\nserve reports the plugin failed to load')).toBe(true)
+    // models.dev noise does not count as the plugin's own network error
+    expect(egressBlockedExcerpt(
+      'Failed to fetch models.dev ECONNREFUSED\nfailed to watch directory EACCES')).toBe(false)
+    // a LoadError NOT caused by network is real package evidence
+    expect(egressBlockedExcerpt(
+      'PluginModule.LoadError: export did not satisfy contract\nserve reports the plugin failed to load')).toBe(false)
+    // network noise PLUS an independent crash — the crash wins
+    expect(egressBlockedExcerpt(
+      'fetch https://cdn.example.com ECONNRESET\nSyntaxError: Unexpected token')).toBe(false)
+    // LoadError WRAPPING a fetch failure — network caused the load error
+    expect(egressBlockedExcerpt(
+      'PluginModule.LoadError: fetch failed ECONNREFUSED')).toBe(true)
+    // no error lines at all
+    expect(egressBlockedExcerpt('all quiet')).toBe(false)
   })
 })

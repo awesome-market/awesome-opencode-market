@@ -6,7 +6,7 @@
  *  leaves previously-admitted entries reuse-skipping the new gate forever
  *  (the foreign-host demotion shipped under r9 proved this — r9-stamped
  *  rescan entries kept their slots without ever facing the gate). */
-export const RULESET_VERSION = 'r10'
+export const RULESET_VERSION = 'r11'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -81,11 +81,14 @@ const lineOf = (c: string, i: number): { text: string; off: number } => {
 const DENY_LINE = /FORBIDDEN|EXCLUD|deny|blocklist|sensitive|SANITIZ|protect|BASENAME_PATTERN|GRANT_PATTERN|cannot be (committed|read|granted)|DETECT|signature/i
 
 /** The token is descriptive rather than operational: inside a // or block
- *  comment, inside a guard/deny-pattern table, or inside a quoted string
- *  that is NOT a bare path — quoted content containing whitespace or
- *  shell/regex syntax ('cat ~/.ssh/id_rsa', 'eval(String.fromCharCode(..))')
- *  is an example command, a detection signature, or a test case, not a path
- *  being opened. Bare path strings ('~/.ssh/id_rsa', '.npmrc') contain none
+ *  comment, inside a guard/deny-pattern table, inside a regex literal that
+ *  DETECTS credential paths (escaped `\.ssh`/`\.aws` alternations — the
+ *  plugin's own security scanner signature), or inside a quoted string that
+ *  is NOT a bare
+ *  path — quoted content containing whitespace or shell/regex syntax
+ *  ('cat ~/.ssh/id_rsa', 'eval(String.fromCharCode(..))') is an example
+ *  command, a detection signature, or a test case, not a path being
+ *  opened. Bare path strings ('~/.ssh/id_rsa', '.npmrc') contain none
  *  of those characters and keep their severity — writing/reading that
  *  literal path is the real signal. */
 const inertRef = (c: string, m: RegExpMatchArray): boolean => {
@@ -95,6 +98,9 @@ const inertRef = (c: string, m: RegExpMatchArray): boolean => {
   const before = line.slice(0, li)
   if (/\/\/|\/\*/.test(before)) return true
   if (DENY_LINE.test(line)) return true
+  // escaped inside a regex literal — `\.ssh\/` in a detection pattern is
+  // the scanner matching credential paths, not code opening them
+  if (before.endsWith('\\')) return true
   // inside an unclosed quoted string? count parity per quote type — an
   // odd count means the last quote of that type opened a string that
   // contains the match (a closed earlier string must NOT demote:
@@ -109,9 +115,22 @@ const inertRef = (c: string, m: RegExpMatchArray): boolean => {
   return false
 }
 
-/** severity override honoring both non-execution paths and inert context. */
+/** Type stubs carry comments and signatures only — nothing in a .d.ts
+ *  executes on the consumer's machine. */
+const DTS_FILE = /\.d\.ts$/
+
+/** Pure JS/TS build commands — `prepare: "npm run build"` is the standard
+ *  TypeScript publish hook present in most of the ecosystem; it compiles
+ *  checked-in source rather than fetching or executing external payloads.
+ *  Anything else (curl|bash, node -e, custom scripts, node-gyp native
+ *  builds) keeps its severity. */
+const SAFE_BUILD_CMD =
+  /^\s*"?(?:npm|pnpm|yarn|bun)(?:\s+run)?\s+(?:build|compile|typecheck|prepare|prepublishOnly|prepack)"?\s*$|^\s*"?(?:tsc|vite|rollup|webpack|esbuild|tsup|unbuild|bun)(?:\s[^"|;&]*)?"?\s*$/i
+
+/** severity override honoring non-execution paths, inert context, and
+ *  known-safe build hooks. */
 const demoted = (p: string, c: string, m: RegExpMatchArray): { sev: 'medium' } | Record<never, never> =>
-  testPath(p) || inertRef(c, m) ? { sev: 'medium' } : {}
+  testPath(p) || DTS_FILE.test(p) || inertRef(c, m) ? { sev: 'medium' } : {}
 
 export const RULES: Rule[] = [
   {
@@ -128,7 +147,7 @@ export const RULES: Rule[] = [
       // a fixture package.json under test/ is a test asset, not the shipped
       // manifest — keep as finding, don't gate on it
       return m ? { detail: 'npm lifecycle script (install stage) — code runs at install time',
-        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
+        ...(testPath(p) || SAFE_BUILD_CMD.test(/:\s*"([^"]*)"/.exec(m[0])?.[1] ?? '') ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
     },
   },
   {
@@ -149,7 +168,7 @@ export const RULES: Rule[] = [
       if (!isPkgJson(p) || c == null) return null
       const m = c.match(/"prepare"\s*:\s*"[^"]+"/)
       return m ? { detail: '"prepare" script — runs on git/tarball install',
-        ...(testPath(p) ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
+        ...(testPath(p) || SAFE_BUILD_CMD.test(/:\s*"([^"]*)"/.exec(m[0])?.[1] ?? '') ? { sev: 'medium' as const } : {}), ...srcLine(c, m) } : null
     },
   },
   {
