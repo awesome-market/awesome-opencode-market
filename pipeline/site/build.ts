@@ -71,9 +71,9 @@ export function verifyLabel(e: PluginEntry): { text: string; cls: string; zh: st
   // client has no install button (github plugin-only verifies via
   // `plugin add owner/repo#sha`; AGENTS: failed must say 装不上).
   if (v.status === 'verified' || v.status === 'failed') return verState(v)
-  // 'skipped' decomposes (run.ts construction + publish/merge skipIfFlagged):
-  // CURRENT red flags → the run was vetoed → high risk; unflagged → the slot
-  // was deliberately not run — honest only as the muted no-target label when
+  // 'skipped' decomposes: CURRENT red flags → high risk (a flagged slot with
+  // no installable payload was never measurable); unflagged → the slot was
+  // deliberately not run — honest only as the muted no-target label when
   // nothing can ever be measured, else it re-queues as 'unverified'
   // (verifyQueued re-enters cleared skips).
   if (v.status === 'skipped' && e.capabilities.redFlags.length > 0) return verState(v)

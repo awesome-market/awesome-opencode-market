@@ -351,7 +351,7 @@ describe('mergeEntries — hold surgery', () => {
     expect(out!.capabilities.redFlags).toContain('sec:name-reused')        // identity → display
     expect(out!.capabilities.findings.some(f => f.startsWith('sec-delta'))).toBe(false)
     expect(out!.pendingUpdate!.capabilities.redFlags).toContain('sec-delta:lifecycle-script') // delta → held
-    expect(out!.pendingUpdate!.verification.status).toBe('skipped')        // red-flag downgrade
+    expect(out!.pendingUpdate!.verification.status).toBe('verified')      // measured result survives new flags
   })
   it('rollback compares vs held target — held version does not false-fire', () => {
     const prev = mkEntry('p', { pendingUpdate: mkPu('1.1.0') })

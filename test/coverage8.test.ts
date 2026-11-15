@@ -508,7 +508,7 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
       capabilities: { scannedAt: 't', findings: [], redFlags: ['x'] },
       verification: { status: 'verified', level: 'load', attempts: 1, opencodeVersion: 'oc-old', verifiedAt: '2026-01-01T00:00:00Z' } as never,
     } as Partial<PluginEntry>)
-    expect(hostStaleVerify(flagged)).toBe(false)
+    expect(hostStaleVerify(flagged)).toBe(true)   // flags don't veto re-verify either
     // retryable: attempts-bound only — age alone no longer kills the budget
     // (queue starvation must not mark a never-retried slot terminal)
     expect(retryable({ status: 'failed', retries: 1, verifiedAt: '2026-05-30T00:00:00Z' } as never)).toBe(true)
@@ -521,17 +521,18 @@ describe('publish/merge + plan/merge/tui/gui verify edges', () => {
     // shard weights
     const shards = shard([1, 2, 3, 4, 5], 2, (n) => n)
     expect([...shards.flat()].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5])
-    // planTargets: flagged excluded, no-parts excluded, cap respected
+    // planTargets: flagged payloads queue (flags inform review, don't veto);
+    // no-parts excluded, cap respected
     const idx = mkIdx([
       mkEntry('ok1', { approval: 'pending', pendingUpdate: { version: '1.1.0', heldAt: '2026-01-01T00:00:00Z', reason: 'r', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'unverified' } } as never }),
       mkEntry('flag', { approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: ['x'] } }),
       mkEntry('noparts', { contains: [], approval: 'pending' })   // explicit [] = no installable payload,
     ])
     const targets = planTargets(idx, 48, false, new Date('2026-06-01T00:00:00Z'))
-    expect(targets.every(t => t.name !== 'flag')).toBe(true)
+    expect(targets.some(t => t.name === 'flag')).toBe(true)
     expect(targets.every(t => t.name !== 'noparts')).toBe(true)
   })
-  it('verify/merge.mergeResults + skipIfFlagged paths', async () => {
+  it('verify/merge.mergeResults + reuseVerified paths', async () => {
     
     const idx = mkIdx([mkEntry('p', { approval: 'pending', latestVersion: '1.0.0' }), mkEntry('q')])
     const results = [

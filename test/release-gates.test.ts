@@ -389,17 +389,17 @@ describe('G9: mergeResults honors the honest-label invariant', () => {
     verification: { status: 'unverified' },
     capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['sec:integrity-drift'] },
   })
-  it('displayed slot flagged → verified result becomes skipped', () => {
+  it('displayed slot flagged → verified result stays verified', () => {
     const r = mergeResults(mkIndex([flagged()]), [res('p', '1.0.0')])
-    expect(r.plugins[0]!.verification.status).toBe('skipped')
+    expect(r.plugins[0]!.verification.status).toBe('verified')
   })
-  it('held slot flagged → pu result becomes skipped', () => {
+  it('held slot flagged → pu result stays verified', () => {
     const e = { ...flagged(), pendingUpdate: mkPu('2.0.0', {
       verification: { status: 'unverified' },
       capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['sec:repo-recreated'] },
     }) }
     const r = mergeResults(mkIndex([e]), [res('p', '2.0.0')])
-    expect(r.plugins[0]!.pendingUpdate!.verification.status).toBe('skipped')
+    expect(r.plugins[0]!.pendingUpdate!.verification.status).toBe('verified')
     // the displayed slot's own unverified state is untouched by the held write
     expect(r.plugins[0]!.verification.status).toBe('unverified')
   })

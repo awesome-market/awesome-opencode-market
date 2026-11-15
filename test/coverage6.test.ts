@@ -985,8 +985,8 @@ describe('verdicts + merge + misc uncovered arms', () => {
       },
     })]
     const m = mergeEntries(fresh, idx([prev]), '2.3.0', 'rs')
-    expect(m[0]!.verification.status).toBe('skipped')
-    expect(m[0]!.pendingUpdate!.verification.status).toBe('skipped')
+    expect(m[0]!.verification.status).toBe('verified')
+    expect(m[0]!.pendingUpdate!.verification.status).toBe('verified')
   })
   it('versionCmp: numeric segments + length mismatch', () => {
     expect(versionCmp('1.2', '1.2.1')).toBe(-1)
@@ -1574,12 +1574,12 @@ describe('merge/verdicts/submission/review/notify/discover/site arms', () => {
     expect(tf.redFlags).toContain('sec:repo-recreated')
     expect(tf.redFlags).toContain('sec:name-reused')
   })
-  it('mergeEntries: identity redFlag + verified → skipped (honest label)', () => {
+  it('mergeEntries: identity redFlag + verified → verified kept (flags are review evidence)', () => {
     const prev = e({ source: { kind: 'npm', id: 'p', repoId: 1 }, verification: { status: 'verified' } })
     const fresh = e({ source: { kind: 'npm', id: 'p', repoId: 2 }, verification: { status: 'verified' } })
     const m = mergeEntries([fresh], idx([prev]), '2.3.0')
     expect(m[0]!.capabilities.redFlags).toContain('sec:repo-recreated')
-    expect(m[0]!.verification.status).toBe('skipped')
+    expect(m[0]!.verification.status).toBe('verified')
   })
   it('mergeEntries: fresh entry missing approval → prev approval fills it', () => {
     const prev = e({ approval: 'approved', approvalReason: 'x' })

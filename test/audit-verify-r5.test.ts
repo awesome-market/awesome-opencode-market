@@ -6,12 +6,10 @@
  *     `.at(-1)` parse) or keep the process alive to the 90s urun timeout.
  *     The entry now does writeSync(1)+process.exit(0): the harness result is
  *     always the final line and leftover untrusted handles never fire.
- *  2. merge.ts reuseVerified adoption bypassed skipIfFlagged: a recipient
- *     slot carrying redFlags could adopt a sibling slot's 'verified' — the
- *     same dishonest label mergeResults' writes are barred from producing
- *     (same bytes can carry different flags across a ruleset/metadata skew
- *     between the two slots' scans). Adoption now wraps every outcome in
- *     skipIfFlagged, including an already-'verified' recipient. */
+ *  2. merge.ts reuseVerified adoption once bypassed the flagged-slot label
+ *     rule; both paths now write the same honest label — a measured
+ *     'verified' is factual regardless of the slot's redFlags (flags are
+ *     review evidence, not a verification veto). */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'
@@ -40,8 +38,8 @@ const caps = (redFlags: string[] = []) => ({ scannedAt: 't', findings: [], redFl
 const verf = (status: 'unverified' | 'verified' | 'skipped' | 'failed', extra: Record<string, unknown> = {}) =>
   ({ status, ...extra }) as PluginEntry['verification']
 
-describe('merge reuse: flagged recipient never displays verified', () => {
-  it('flagged display slot adopts the same-bytes donor as skipped, evidence kept', () => {
+describe('merge reuse: flagged recipient adopts verified — flags are review evidence, not a veto', () => {
+  it('flagged display slot adopts the same-bytes donor as verified, evidence kept', () => {
     const e = entry({
       latestVersion: '1.0.0', integrity: 'sha512-SAME',
       capabilities: caps(['sec:test-flag']),
@@ -52,14 +50,13 @@ describe('merge reuse: flagged recipient never displays verified', () => {
     })
     const m = mergeResults(idx([e]), [])
     const v = m.plugins[0]!.verification
-    expect(v.status).toBe('skipped')
-    // the audit trail survives the downgrade — same contract as skipIfFlagged writes
+    expect(v.status).toBe('verified')
     expect(v.integrity).toBe('sha512-SAME')
     expect(v.opencodeVersion).toBe(OPENCODE_VERSION)
     // the unflagged donor slot is untouched
     expect(m.plugins[0]!.pendingUpdate!.verification.status).toBe('verified')
   })
-  it('already-verified recipient on a flagged slot downgrades to skipped', () => {
+  it('already-verified recipient on a flagged slot keeps verified', () => {
     const e = entry({
       latestVersion: '1.0.0', integrity: 'sha512-S',
       capabilities: caps(['sec:x']),
@@ -69,7 +66,7 @@ describe('merge reuse: flagged recipient never displays verified', () => {
     })
     const m = mergeResults(idx([e]), [])
     const v = m.plugins[0]!.verification
-    expect(v.status).toBe('skipped')
+    expect(v.status).toBe('verified')
     expect(v.level).toBe('load')
     expect(v.verifiedAt).toBe('2026-01-01T00:00:00Z')
   })

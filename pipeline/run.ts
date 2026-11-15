@@ -85,8 +85,9 @@ export function replacementOf(msg: string | null): string | null {
  *  unpublish/republish — the single most suspicious supply-chain signal, so
  *  freeze the reviewed anchor and flag the slot instead of silently
  *  re-certifying new bytes. `sec:integrity-drift` rides the normal
- *  sec:* → trustFlags/docket-flag surface; merge's skipIfFlagged keeps the
- *  affected slot honestly 'skipped' until a human decides.
+ *  sec:* → trustFlags/docket-flag surface; the release gate's flagsReviewed
+ *  requirement holds the slot until a human decides — verification itself
+ *  still measures the pinned bytes.
  *  oldSha null → backfill (nothing to compare — anchors didn't exist yet);
  *  newSha null → keep the old anchor (a missing registry value proves nothing). */
 export const DRIFT_FLAG = 'sec:integrity-drift'
@@ -781,8 +782,8 @@ export async function run(opts: RunOptions = {}) {
           // confirmed integrity drift also flags the slot (redFlag → the
           // release gate holds until a human decides) and re-anchors to the
           // bytes actually scanned. verification/heldAt/verdict annotations
-          // stay keyed to the version; merge's skipIfFlagged downgrades the
-          // held slot's verification honestly.
+          // stay keyed to the version; the redFlag holds the slot at the
+          // release gate while verification re-measures the re-anchored bytes.
           let puCaps = heldPin.capabilities
           let puIntegrity = heldPin.integrity ?? null
           const regSha = pk.integrityOf[heldPin.version] ?? null
@@ -996,8 +997,9 @@ export async function run(opts: RunOptions = {}) {
         capabilities: scan,
         // no installable payload → 'skipped' like repo-only entries: the
         // release gate treats it as "deliberately not run", and verifyPartsOf
-        // honors the explicit empty contains (never queues)
-        verification: parts.length === 0 || scan.redFlags.length > 0
+        // honors the explicit empty contains (never queues). Red flags do not
+        // gate the queue — they inform review while the sandbox measures.
+        verification: parts.length === 0
           ? { status: 'skipped', level: 'install' }
           : { status: 'unverified' },
         // engines/peerDependencies from the packument's latest version —
@@ -1319,8 +1321,9 @@ export async function run(opts: RunOptions = {}) {
       // `sub.version`; if HEAD's tree hash moved, the bytes a reviewer saw are
       // gone. This is an identity-level signal → redFlag, not finding: while
       // the entry is still pending it must fail-closed into the human-review
-      // surface (sec:* → flaggedAt → docket flag target → skipIfFlagged), the
-      // same surface sec:integrity-drift rides on npm. Once the entry is
+      // surface (sec:* → flaggedAt → docket flag target → release-gate
+      // flagsReviewed), the same surface sec:integrity-drift rides on npm.
+      // Once the entry is
       // released the verdict-sha anchor (below) takes over — the seed row's
       // stale review sha would otherwise flag forever.
       const drifted = !!(sub?.version && treeRes.sha && sub.version !== treeRes.sha
@@ -1412,11 +1415,11 @@ export async function run(opts: RunOptions = {}) {
         // via `plugin add owner/repo#<commit>` / codeload structure checks.
         // Only an entry with NO installable parts stays 'skipped' — the
         // "deliberately not run" state RELEASABLE admits so a human pass can
-        // still release a docs-only repo. A flagged payload likewise never
-        // executes, so it stays 'skipped' rather than claiming a queue slot.
+        // still release a docs-only repo. Red flags no longer gate the queue:
+        // they inform review while the sandbox measures every payload.
         // Display layers render latestVersion===null as "nothing to install".
         verification: {
-          status: ghParts.length === 0 || scan.redFlags.length > 0 ? 'skipped' : 'unverified',
+          status: ghParts.length === 0 ? 'skipped' : 'unverified',
           level: 'install',
         },
         // repo-root package.json carries engines/peerDependencies too
@@ -1571,7 +1574,7 @@ export async function run(opts: RunOptions = {}) {
       // samePinnedBytes gate can't help here — the stale status arrives
       // inside this fresh entry, not via the prevVer restore). Evidence
       // fields (verifiedAt/runUrl/integrity) stay as the audit trail of what
-      // WAS measured; merge's skipIfFlagged still downgrades if redFlags stand.
+      // WAS measured; any redFlags on the slot hold it at the release gate.
       const moved = !!(tree.sha && e.source.version && tree.sha !== e.source.version)
       // reset only for slots plan can actually re-queue — a no-payload entry
       // (contains:[], or only command/agent/mcp parts) flipped to 'unverified'

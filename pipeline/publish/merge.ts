@@ -345,9 +345,8 @@ export function mergeEntries(
         findings: [...new Set([...out.capabilities.findings, ...idFindings])],
         redFlags: [...new Set([...out.capabilities.redFlags, ...idRed])],
       }
-      if (out.capabilities.redFlags.length > 0 && out.verification.status === 'verified') {
-        out.verification = { status: 'skipped', level: out.verification.level ?? 'install' }
-      }
+      // flags no longer downgrade a measured 'verified' — the result measured
+      // the pinned bytes honestly; flags ride the review surface alongside
     }
     if (dFindings.length || dRed.length) {
       if (out.pendingUpdate) {
@@ -368,24 +367,11 @@ export function mergeEntries(
         }
       }
     }
-    // honest-label invariant: a flagged version never gets run → 'skipped'
-    // ("有高危信号没跑"), not 'unverified' ("还没验"). 'failed' results keep
-    // their real outcome. Applies to both layers — trust flags can add
-    // redFlags after scan time produced 'unverified'.
-    // Evidence survives the downgrade: verifiedAt/runUrl/integrity stay so
-    // the detail page keeps the audit trail of what WAS measured before the
-    // flags appeared — and plan can re-enter a cleared slot honestly.
-    const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
-      flagged && (v.status === 'verified' || v.status === 'unverified')
-        ? { ...v, status: 'skipped', level: v.level ?? 'install' }
-        : v
-    out.verification = skipIfFlagged(out.verification, out.capabilities.redFlags.length > 0)
-    if (out.pendingUpdate) {
-      out.pendingUpdate = {
-        ...out.pendingUpdate,
-        verification: skipIfFlagged(out.pendingUpdate.verification, out.pendingUpdate.capabilities.redFlags.length > 0),
-      }
-    }
+    // honest-label rule — 'skipped' ("有高危信号没跑") is reserved for slots
+    // with NO installable payload. Red flags no longer gate the verify queue:
+    // flagged payloads are measured like any other, so 'unverified' stays
+    // 'unverified' (queued) and a measured 'verified' stays 'verified' —
+    // flags are review evidence shown alongside, not a label downgrade.
     // flag-set clock (R-14 follow-up): runs LAST so every flag writer upstream
     // (trustFlags, remote caps restore, drift/tombstone rescan) is covered. The
     // held slot compares against the remote's SAME held version — a different

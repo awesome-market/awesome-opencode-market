@@ -97,7 +97,7 @@ describe('renderDigest', () => {
       ]),
       verdicts: [], prev: null, now: new Date('2026-01-03T21:00:00Z'),
     })
-    expect(md).toContain('验证积压（queue — 3）')
+    expect(md).toContain('验证积压（queue — 4）')   // flagged entries queue too — flags don't veto
     expect(md).toContain('投稿优先 1')
     expect(md).toContain('近 7 天验证失败 1')
     expect(md).toContain('最老等待 2025-12-20')
