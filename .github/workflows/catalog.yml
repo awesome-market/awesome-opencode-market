@@ -411,13 +411,13 @@ jobs:
           }; }
       # event-driven verify: a real index push may carry fresh pendings —
       # dispatch verify now so install evidence lands within the hour, not at
-      # the next scheduled tick. Best-effort: the 4x/day crons are the backstop,
-      # so a missed dispatch self-heals in ~6h.
+      # the next scheduled tick. Best-effort: the hourly cron is the backstop,
+      # so a missed dispatch self-heals in ~1h.
       - name: dispatch verify for fresh pendings
         if: env.PUBLISHED == '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run verify.yml || echo "::warning::verify dispatch failed — next scheduled verify covers it (~6h)"
+        run: gh workflow run verify.yml || echo "::warning::verify dispatch failed — next scheduled verify covers it (~1h)"
 
   alert:
     needs: [generate, publish]

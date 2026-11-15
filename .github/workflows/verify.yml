@@ -1,15 +1,13 @@
 name: verify
 # scope: prod-only — scheduled verification automation
 on:
-  # 4x/day backstop + event-driven dispatch: catalog dispatches this workflow
+  # hourly backstop + event-driven dispatch: catalog dispatches this workflow
   # on every real index push, so fresh entries meet install evidence within
   # the hour (WF-4). The queue is capped/serialized regardless; extra ticks
-  # only raise daily throughput, they can't multiply shard load.
+  # only raise daily throughput, they can't multiply shard load. An empty
+  # queue plans 0 shards and the matrix skips — off-hours ticks cost minutes.
   schedule:
-    - { cron: '47 4 * * *' }
-    - { cron: '47 10 * * *' }
-    - { cron: '47 16 * * *' }
-    - { cron: '47 22 * * *' }
+    - { cron: '47 * * * *' }
   workflow_dispatch:
     inputs:
       targets:
