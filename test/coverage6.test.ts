@@ -434,6 +434,8 @@ describe('verify/checkTui', () => {
     expect(r.ok).toBe(false)
     expect(r.log).toContain('exited during startup')
     expect(r.log).toContain('panic: plugin init exploded')
+    // the fuller raw stream rides along as reviewer-facing diag
+    expect(r.diag).toContain('panic: plugin init exploded')
   })
   it('alive + blank capture does NOT fall back to pane log', async () => {
     const f = (async (_c: string, args: string[]) => {
