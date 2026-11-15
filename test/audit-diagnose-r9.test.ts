@@ -75,6 +75,44 @@ describe('flag-review policy — mechanical red-flag placeholders re-enter the q
   })
 })
 
+describe('stale verify-fail concerns re-queue on newer measurement', () => {
+  const vfConcern = (at: string) => v({ verdict: 'concern',
+    reason: '装测失败（verify load 级）：插件模块无法被宿主加载', at, source: 'ai' })
+  const failedVf = (verifiedAt: string, retries = 3) =>
+    ({ status: 'failed', level: 'load', verifiedAt, retries }) as PluginEntry['verification']
+  it('a verify-fail concern whose slot measured NEWER evidence re-queues', () => {
+    // verdict judged the 01-02 failure; a 01-05 retest landed verified —
+    // the concern's basis is gone, the entry needs a real verdict
+    const e = entry({ verification: { status: 'verified', level: 'load', verifiedAt: '2026-01-05T00:00:00Z' } as PluginEntry['verification'] })
+    expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toHaveLength(1)
+  })
+  it('a verify-fail concern on UNCHANGED evidence stays decided', () => {
+    const e = entry({ verification: failedVf('2026-01-02T00:00:00Z') })
+    expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toEqual([])
+  })
+  it('a newer TERMINAL failed measurement also re-queues — the rewritten concern carries fresh evidence', () => {
+    const e = entry({ verification: failedVf('2026-01-06T00:00:00Z') })
+    expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toHaveLength(1)
+  })
+  it('a newer RETRYABLE failed measurement still waits for the verify loop', () => {
+    const e = entry({ verification: failedVf('2026-01-06T00:00:00Z', 1) })
+    expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toEqual([])
+  })
+  it('non-verify concerns and human verdicts never re-queue on newer evidence', () => {
+    const e = entry({ verification: { status: 'verified', level: 'load', verifiedAt: '2026-01-05T00:00:00Z' } as PluginEntry['verification'] })
+    const llm = v({ verdict: 'concern', reason: '红旗在案，AI 判 concern：可疑', at: '2026-01-03T00:00:00Z' })
+    expect(unreviewedTargets(idx([e]), [llm])).toEqual([])
+    const human = vfConcern('2026-01-03T00:00:00Z'); human.source = 'human'
+    expect(unreviewedTargets(idx([e]), [human])).toEqual([])
+  })
+  it('a retag-prefixed verify-fail concern still counts as stale-evidence re-queue', () => {
+    const e = entry({ verification: { status: 'verified', level: 'load', verifiedAt: '2026-01-05T00:00:00Z' } as PluginEntry['verification'] })
+    const retagged = vfConcern('2026-01-03T00:00:00Z')
+    retagged.reason = `同版本换包（该键曾有人工裁决，re-tag 自动重审）——${retagged.reason}`
+    expect(unreviewedTargets(idx([e]), [retagged])).toHaveLength(1)
+  })
+})
+
 describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
   const gh = entry({
     name: 'Owner/Repo', slug: 'owner/repo',

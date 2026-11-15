@@ -176,7 +176,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
     expect(cfg.model).toBe('fake/fake-model')
   })
 
-  it('gui feature: bundle evaluated by a nobody subprocess (npx tsx gui.ts)', async () => {
+  it('gui feature: bundle evaluated by a nobody subprocess (node --import tsx gui.ts)', async () => {
     const home = mkdtempSync(join(tmpdir(), 'sb-'))
     const calls: Rec[] = []
     const fake = (async (cmd: string, args: string[]) => {
@@ -200,10 +200,12 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       execFn: fake, spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
-    // wrapper shape: sb.sh env npx tsx <gui.ts> <bundle>
+    // wrapper shape: sb.sh env node --import tsx <gui.ts> <bundle>
+    // (node --import, not npx tsx — npm exec would reify into an unwritable
+    // cache dir under the sandbox uid)
     const guiCall = calls.find(c => c.args.includes('tsx'))
     expect(guiCall!.cmd.endsWith('sb.sh')).toBe(true)
-    expect(guiCall!.args.slice(0, 3)).toEqual(['env', 'npx', 'tsx'])
+    expect(guiCall!.args.slice(0, 4)).toEqual(['env', 'node', '--import', 'tsx'])
   })
 
   it('gui subprocess failing → failed/render with the subprocess error', async () => {
