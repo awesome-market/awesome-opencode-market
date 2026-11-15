@@ -73,6 +73,8 @@ jobs:
           # never conflict with a previously-merged state.json
           BRANCH=reports-automation
           git checkout -qb "$BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -qm "reports: $RDATE daily/weekly/monthly/yearly stats"
           git push -qf origin "$BRANCH"
           PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
