@@ -1,0 +1,71 @@
+name: reports
+# scope: prod-only — public stats pages commit to docs/reports/ on main
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '统计日期 YYYY-MM-DD（默认今天 UTC）'
+        required: false
+        default: ''
+  schedule:
+    - cron: '30 23 * * *'   # 23:30 UTC — UTC 日快结束时统计，数据基本完整
+permissions: {}
+jobs:
+  daily:
+    # same owner whitelist as docket — forks have no catalog branch to read
+    if: github.event_name == 'workflow_dispatch' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency: reports
+    permissions: { contents: write }
+    steps:
+      # renders catalog-controlled text into committed markdown; npm API +
+      # github.com egress for the index fetch
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            api.npmjs.org:443
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: fetch catalog inputs
+        run: |
+          rc=0
+          git ls-remote --exit-code --heads origin catalog >/dev/null 2>&1 || rc=$?
+          case ${rc:-0} in
+            0) git fetch --depth=1 origin catalog -q || { echo "catalog fetch failed"; exit 1; }
+               git show origin/catalog:index.json > /tmp/index.json ;;
+            2) echo "no catalog branch — nothing to report"; exit 0 ;;
+            *) echo "cannot reach origin for catalog" >&2; exit 1 ;;
+          esac
+          # verdicts/digest-state feed the 公示中待上架 count — same
+          # absent-vs-unreadable probe as docket: absent → empty is correct
+          # pre-first-run, exists-but-unreadable → defer rather than report
+          # a silently-wrong queue stat
+          for f in ai-verdicts.jsonl digest-state.json; do
+            if git show "origin/catalog:$f" > "/tmp/$f" 2>/dev/null; then :;
+            elif git cat-file -e "origin/catalog:$f" 2>/dev/null; then
+              echo "$f exists on origin/catalog but git show failed — defer to next tick"; exit 1
+            else touch "/tmp/$f"; fi
+          done
+      - name: render + commit reports
+        env:
+          REPORT_DATE: ${{ inputs.date }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          DATE_ARG=""
+          [ -n "$REPORT_DATE" ] && DATE_ARG="--date $REPORT_DATE"
+          npx tsx pipeline/reports.ts --index /tmp/index.json \
+            --state docs/reports/state.json --out docs/reports \
+            --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json \
+            $DATE_ARG
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/reports
+          git diff --cached --quiet && { echo "no report changes"; exit 0; }
+          git commit -qm "reports: $(date -u +%F) daily/weekly/monthly/yearly stats"
+          git push origin HEAD:${{ github.ref_name }}
