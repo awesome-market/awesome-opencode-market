@@ -54,6 +54,21 @@ describe('audit#4 r9 — epoch-gated re-queue of recycled names', () => {
   })
 })
 
+describe('flag-review policy — mechanical red-flag placeholders re-enter the queue', () => {
+  const mech = v({ verdict: 'concern', reason: '机械红旗待人工：sec:x', at: '2026-01-02T00:00:00Z' })
+  it('a 机械红旗待人工 concern is a placeholder, not a judgment — re-queues', () => {
+    expect(unreviewedTargets(idx([entry()]), [mech])).toHaveLength(1)
+  })
+  it('a REAL ai concern (LLM judged the flags) still counts as reviewed', () => {
+    const real = v({ verdict: 'concern', reason: '红旗在案，AI 判 concern：可疑', at: '2026-01-02T00:00:00Z' })
+    expect(unreviewedTargets(idx([entry()]), [real])).toEqual([])
+  })
+  it('human verdicts are untouched — the placeholder rule is ai-source only', () => {
+    const human = v({ verdict: 'concern', reason: '机械红旗待人工：sec:x', source: 'human', at: '2026-01-02T00:00:00Z' })
+    expect(unreviewedTargets(idx([entry()]), [human])).toEqual([])
+  })
+})
+
 describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
   const gh = entry({
     name: 'Owner/Repo', slug: 'owner/repo',

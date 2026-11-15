@@ -164,7 +164,7 @@ describe('ai/diagnose.main', () => {
     expect(got.model).toBeUndefined()
     expect(called).toBe(false)
   })
-  it('red-flagged entry → concern draft even when LLM says pass', async () => {
+  it('red-flagged entry → AI pass with flagsReviewed when LLM says pass', async () => {
     const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
     await diagnoseMain(argv(ip, vp, op), {
@@ -173,9 +173,79 @@ describe('ai/diagnose.main', () => {
       sha: noSha,
     })
     const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
-    expect(got.verdict).toBe('concern')
-    expect(got.reason).toContain('草稿')
+    // the judge saw the flag lines + material — its pass is a real verdict
+    // carrying the flag-review mark the release gate honors
+    expect(got.verdict).toBe('pass')
+    expect(got.flagsReviewed).toBe(true)
+    expect(got.reason).toContain('红旗已复核')
     expect(got.reason).toContain('没问题')
+  })
+  it('red-flagged entry → real concern when LLM says concern', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const { ip, vp, op } = files([flagged])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => ({ verdict: 'concern', reasonZh: '可疑', reasonEn: 'suspicious' }),
+      sha: noSha,
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('concern')
+    // an LLM-judged concern is FINAL — not the re-eligible placeholder
+    expect(got.reason).not.toContain('机械红旗待人工')
+    expect(got.reason).toContain('可疑')
+  })
+  it('red-flagged + standing real verdict + ornith down → no downgrade emit', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    // force re-review of an already-verdicted key; LLM down must not emit a
+    // placeholder over the standing flag-reviewed pass
+    const prior = v({ name: 'pkg', version: '2.0.0', verdict: 'pass', reason: '红旗已复核', flagsReviewed: true })
+    const { ip, vp, op } = files([flagged], [prior])
+    await diagnoseMain(argv(ip, vp, op, ['--force', '--name', 'pkg']), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
+    })
+    const out = readFileSync(op, 'utf8').trim()
+    expect(out === '' || !out.includes('机械红旗待人工')).toBe(true)
+  })
+  it('flagged + same-sha twin pass WITH flagsReviewed → reuses the cleared pass', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    // identical bytes already flag-reviewed under 1.0.0 — the judgment carries
+    const twinPass = v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: '红旗已复核，干净', sha: 'sha512-same', flagsReviewed: true, at: '2026-01-02T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [twinPass])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.flagsReviewed).toBe(true)
+    expect(got.reusedFrom?.version).toBe('1.0.0')
+  })
+  it('flagged + uncleared twin + standing placeholder → no rewrite, stays queued', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const mech = v({ name: 'pkg', version: '2.0.0', verdict: 'concern', reason: '机械红旗待人工：sec:exec:a.js', at: '2026-01-02T00:00:00Z' })
+    const uncleared = v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: 'old pass', sha: 'sha512-same', at: '2026-01-01T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [mech, uncleared])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    // placeholder already stands — an identical rewrite is jsonl noise
+    expect(readFileSync(op, 'utf8').trim()).toBe('')
+  })
+  it('flagged + standing placeholder + ornith down → keeps placeholder, no downgrade emit', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const mech = v({ name: 'pkg', version: '2.0.0', verdict: 'concern', reason: '机械红旗待人工：sec:exec:a.js', at: '2026-01-02T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [mech])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
+    })
+    expect(readFileSync(op, 'utf8').trim()).toBe('')
   })
   it('red-flagged + ornith down → still concern (fail-safe), flags as reason', async () => {
     const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })

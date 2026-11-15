@@ -222,6 +222,11 @@ export const AiVerdict = z.looseObject({
    *  call it was. Loose passthrough preserved it before; declared so the
    *  audit field is part of the schema contract. */
   reusedFrom: z.looseObject({ version: z.string().nullable(), source: z.enum(['ai', 'human']) }).optional(),
+  /** ai 'pass' that explicitly reviewed the slot's red flags — the release
+   *  gate ignores ai passes on flagged slots UNLESS this marker says the
+   *  model actually engaged the flag evidence (flags are always in the
+   *  review prompt). Absent on legacy/human records → old behavior holds. */
+  flagsReviewed: z.boolean().optional(),
 })
 export type AiVerdict = z.infer<typeof AiVerdict>
 
