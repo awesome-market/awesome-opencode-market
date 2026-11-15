@@ -13,7 +13,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { verifyPackage, checkSkillStructureGit, type ExecFn } from '../pipeline/verify/verify.ts'
+import { verifyPackage, checkSkillStructureGit, gitDepPrepNote, type ExecFn } from '../pipeline/verify/verify.ts'
 import { findGuiBundle } from '../pipeline/verify/gui.ts'
 import { mergeResults } from '../pipeline/verify/merge.ts'
 import { CatalogIndex, type PluginEntry } from '../src/schema.ts'
@@ -79,6 +79,48 @@ describe('audit#3 — verifyPackage refuses unanswerable targets', () => {
     await expect(checkSkillStructureGit(
       mkdtempSync(join(tmpdir(), 'vh-')), noopExec, 'o/r', undefined,
     )).rejects.toThrow('no pinned commit sha')
+  })
+})
+
+describe('audit#4 — gitDepPrepNote names the upstream opencode bug', () => {
+  // pacote's in-clone prepare re-invokes the opencode binary as npm → every
+  // git dep with build/prepare/install-type scripts or workspaces fails
+  // `plugin add` on ≤2.3.0 (anomalyco/opencode#62817). The excerpt must say
+  // "upstream bug", not read as a package defect.
+  const WHY = 'NpmInstallFailedError: Failed to install o/r#abc: git dep preparation failed'
+  const GIT = { repo: 'o/r', sha: 'abc123' }
+  const fakeRun = (pkgJson: string | null, failTar = false) => (async (cmd: string, args: string[]) => {
+    if (failTar) throw new Error('tar exploded')
+    if (cmd === 'tar' && args[0] === 'tzf')
+      return { stdout: pkgJson === null ? 'r-abc/README.md\n' : `r-abc/package.json\nr-abc/src/index.ts\n`, stderr: '' }
+    if (cmd === 'tar' && args[0] === 'xzOf') return { stdout: pkgJson ?? '', stderr: '' }
+    return { stdout: '', stderr: '' }
+  }) as unknown as ExecFn
+
+  it('trigger scripts → upstream-bug annotation naming the scripts', async () => {
+    const note = await gitDepPrepNote(WHY, GIT, fakeRun('{"scripts":{"build":"tsc","test":"vitest"}}'))
+    expect(note).toContain('upstream opencode bug')
+    expect(note).toContain('build')
+    expect(note).not.toContain('test/')
+  })
+  it('workspaces field alone triggers the annotation', async () => {
+    const note = await gitDepPrepNote(WHY, GIT, fakeRun('{"workspaces":["packages/*"],"scripts":{"test":"vitest"}}'))
+    expect(note).toContain('upstream opencode bug')
+    expect(note).toContain('workspaces')
+  })
+  it('no trigger shape → empty note (genuine install failure keeps plain excerpt)', async () => {
+    expect(await gitDepPrepNote(WHY, GIT, fakeRun('{"scripts":{"test":"vitest"},"main":"index.ts"}'))).toBe('')
+    expect(await gitDepPrepNote(WHY, GIT, fakeRun(null))).toBe('')          // no root package.json
+  })
+  it('non-git targets and unrelated errors never fetch or annotate', async () => {
+    expect(await gitDepPrepNote(WHY, undefined, fakeRun('{"scripts":{"build":"x"}}'))).toBe('')
+    expect(await gitDepPrepNote('npm 404', GIT, fakeRun('{"scripts":{"build":"x"}}'))).toBe('')
+    expect(await gitDepPrepNote(WHY, { repo: 'o/r' }, fakeRun('{"scripts":{"build":"x"}}'))).toBe('') // sha-less
+  })
+  it('codeload/tar failure degrades to no note — never blocks the failure path', async () => {
+    expect(await gitDepPrepNote(WHY, GIT, fakeRun('{"scripts":{"build":"x"}}', true))).toBe('')
+    const bad = (async () => ({ stdout: 'not json', stderr: '' })) as unknown as ExecFn
+    expect(await gitDepPrepNote(WHY, GIT, bad)).toBe('')
   })
 })
 

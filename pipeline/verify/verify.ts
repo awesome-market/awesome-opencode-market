@@ -356,6 +356,42 @@ export async function checkSkillStructureGit(
   }
 }
 
+/** pacote's git-dep prepare step is broken upstream: a git plugin whose
+ *  package.json declares build/prepare/install-type scripts or workspaces
+ *  makes `opencode plugin add owner/repo` fail with 'git dep preparation
+ *  failed' on every opencode ≤2.3.0 — the compiled binary re-invokes itself
+ *  as npm for the in-clone install (anomalyco/opencode#62817, fix PR open).
+ *  The package isn't broken; it cannot be installed until opencode ships the
+ *  fix. Detect the trigger shape so the published excerpt says "upstream
+ *  bug" instead of reading as a package failure. Read-only codeload fetch of
+ *  the SAME pinned sha — same exposure class as measuredIntegrity's npm view. */
+const GIT_DEP_PREP_TRIGGERS = new Set([
+  'build', 'prepare', 'preinstall', 'install', 'postinstall',
+  'prepack', 'prepublish', 'prepublishOnly',
+])
+export async function gitDepPrepNote(
+  why: string, git: VerifyTarget['git'] | undefined, run: ExecFn,
+): Promise<string> {
+  if (!git || !git.sha || !/git dep preparation failed/i.test(why)) return ''
+  try {
+    const dir = mkdtempSync(join(tmpdir(), 'gdp-'))
+    const tgz = join(dir, 'repo.tar.gz')
+    await run('curl', ['-sfL', '--proto-redir', '=https', '--max-filesize', String(48 * 1024 * 1024),
+      '--max-time', '60', `https://codeload.github.com/${git.repo}/tar.gz/${git.sha}`, '-o', tgz],
+      { timeout: 90_000 })
+    const { stdout: list } = await run('tar', ['tzf', tgz], { timeout: 30_000 })
+    const member = list.split('\n').find(m => m.split('/').length === 2 && m.endsWith('/package.json'))
+    if (!member) return ''
+    const { stdout } = await run('tar', ['xzOf', tgz, member], { timeout: 15_000 })
+    const pkg = JSON.parse(stdout) as { scripts?: Record<string, string>; workspaces?: unknown }
+    const hits = Object.keys(pkg.scripts ?? {}).filter(k => GIT_DEP_PREP_TRIGGERS.has(k))
+    const ws = pkg.workspaces !== undefined
+    if (!hits.length && !ws) return ''
+    const what = [...hits, ...(ws ? ['workspaces'] : [])].join('/')
+    return `\n[upstream opencode bug: a git dep declaring ${what} makes \`plugin add\` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]`
+  } catch { return '' }
+}
+
 /** Content identity of the bytes this run will install. npm targets ask the
  *  registry for the spec's current dist.integrity — a re-tag between catalog
  *  scan and verify shows up as a different SRI, which merge then flags as
@@ -483,13 +519,14 @@ export async function verifyPackage(
   } catch (e) {
     const why = String((e as { stderr?: string }).stderr ?? (e as Error).message)
     dumpDiag(`spec: ${spec}\ninstall failed:\n${why}`)
+    const note = await gitDepPrepNote(why, opts.git, run)
     return {
       ...base, status: 'failed', level: 'install',
       // the sandbox's egress allowlist means a fetch failure here can be
       // network policy, not a broken package — say so in the published excerpt
       logExcerpt: tail(sb
-        ? `${why}\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]`
-        : why),
+        ? `${why}${note}\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]`
+        : `${why}${note}`),
     }
   }
 

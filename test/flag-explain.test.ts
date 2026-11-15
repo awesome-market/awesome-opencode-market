@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { explainFlag } from '../pipeline/scan/flagExplain.ts'
-import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, egressBlockedExcerpt, EGRESS_BLOCKED } from '../pipeline/verify/failExplain.ts'
+import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, egressBlockedExcerpt, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY, EGRESS_BLOCKED } from '../pipeline/verify/failExplain.ts'
 
 describe('explainFlag', () => {
   it('wraps sec-delta flags with the inner rule explainer when known', () => {
@@ -73,5 +73,12 @@ describe('failExplain helpers', () => {
       'PluginModule.LoadError: fetch failed ECONNREFUSED')).toBe(true)
     // no error lines at all
     expect(egressBlockedExcerpt('all quiet')).toBe(false)
+  })
+  it('upstreamGitDepFail recognizes the verify annotation, ignores plain npm failures', () => {
+    const note = '\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]'
+    expect(upstreamGitDepFail(`NpmInstallFailedError: git dep preparation failed${note}`)).toBe(true)
+    expect(upstreamGitDepFail('NpmInstallFailedError: git dep preparation failed')).toBe(false)
+    expect(upstreamGitDepFail('PluginModule.LoadError: contract')).toBe(false)
+    expect(UPSTREAM_GIT_DEP_WHY).toContain('非包本身问题')
   })
 })
