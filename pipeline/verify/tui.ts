@@ -54,7 +54,11 @@ export async function checkTui(
   // identical session names and the second new-session fails 'duplicate'. The
   // random suffix makes a collision (a harness flake) vanishingly rare.
   const sess = `vtui-${process.pid}-${Date.now().toString(36)}-${Math.floor(Math.random() * 36 ** 4).toString(36)}`
-  const settle = opts.settleMs ?? 8_000
+  // 12s ceiling: poll the pane instead of a fixed sleep — fast TUIs finish
+  // early, slow cold starts get the full window. The old fixed 8s sleep
+  // flaked 'pane nearly empty' on packages that verified fine next wave
+  // (6/76 in run 43673512414).
+  const settle = opts.settleMs ?? 12_000
   // The tmux SERVER starts as the runner uid on the first session-creating
   // command and sources the user config at boot — and `env` here is
   // xdgEnv(uh), so HOME/XDG_CONFIG_HOME point INSIDE the plugin-writable
@@ -96,23 +100,35 @@ export async function checkTui(
     const paneLog = join(sockDir, 'pane.log')
     await run('tmux', ['pipe-pane', '-t', sess, `cat > ${paneLog}`], { env: tenv, timeout: 5_000 }).catch(() => {})
     try {
-      await new Promise(r => setTimeout(r, settle))
       let alive = false
-      try {
-        await run('tmux', ['has-session', '-t', sess], { env: tenv, timeout: 5_000 })
-        alive = true
-      } catch { alive = false }
+      let pane = ''
+      let captured = false
+      const deadline = Date.now() + settle
+      for (;;) {
+        try {
+          await run('tmux', ['has-session', '-t', sess], { env: tenv, timeout: 5_000 })
+          alive = true
+        } catch { alive = false }
+        try {
+          const { stdout } = await run('tmux', ['capture-pane', '-p', '-t', sess], { env: tenv, timeout: 5_000 })
+          pane = stdout
+          captured = true
+        } catch { captured = false }
+        // done early on death or first real paint; a blank-but-alive pane
+        // keeps polling — it may just be a slow cold start
+        if (!alive || pane.trim().length >= 20) break
+        const remaining = deadline - Date.now()
+        if (remaining <= 0) break
+        await new Promise(r => setTimeout(r, Math.min(1_000, remaining)))
+      }
       // the pipe-pane file is the only pane record that survives session
       // death — read its tail once for BOTH the judgment fallback and the
       // reviewer-facing diag dump (raw stream incl. scrollback, escapes intact)
       const paneRaw = readTail(paneLog, 65_536)
-      let pane = ''
-      let captured = false
-      try {
-        const { stdout } = await run('tmux', ['capture-pane', '-p', '-t', sess], { env: tenv, timeout: 5_000 })
-        pane = stdout
-        captured = true
-      } catch { /* session died between probes — the pane log is the fallback */ }
+      // ONLY on capture failure: the pipe-pane file is the surviving record
+      // of what the TUI painted. A successful-but-blank capture must NOT
+      // fall back — raw stream bytes would clear the 'pane nearly empty'
+      // floor and could flip a real fail into a pass.
       if (!captured && paneRaw) pane = paneRaw.slice(-16_384)
       // diag rides along whenever the stream produced anything — verify.ts
       // publishes it as the per-target artifact for failed checks
