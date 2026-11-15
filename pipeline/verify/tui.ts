@@ -48,7 +48,7 @@ export function judgeTuiPane(paneText: string, sessionAlive: boolean): TuiCheck 
 export async function checkTui(
   env: NodeJS.ProcessEnv,
   run: ExecFn,
-  opts: { settleMs?: number; cols?: number; rows?: number; command?: string } = {},
+  opts: { settleMs?: number; cols?: number; rows?: number; command?: string; cwd?: string } = {},
 ): Promise<TuiCheck> {
   // intra-shard lanes share this process+clock — a same-ms pair would mint
   // identical session names and the second new-session fails 'duplicate'. The
@@ -70,7 +70,14 @@ export async function checkTui(
   const tenv = { ...env, TMUX_TMPDIR: sockDir }
   try {
     try {
-      await run('tmux', ['-f', '/dev/null', 'new-session', '-d', '-s', sess, '-x', String(opts.cols ?? 200), '-y', String(opts.rows ?? 50),
+      // -c pins the pane cwd: without it the session inherits the shard's cwd
+      // (the repo checkout) — a nobody-uid TUI then EACCES-stat'ing the
+      // checkout's .git/.hg crashes opencode itself, minting false package
+      // failures (the 2026-11-15 pane-evidence wave). The caller passes the
+      // sandbox home, same cwd the serve check uses.
+      await run('tmux', ['-f', '/dev/null', 'new-session', '-d', '-s', sess,
+        ...(opts.cwd ? ['-c', opts.cwd] : []),
+        '-x', String(opts.cols ?? 200), '-y', String(opts.rows ?? 50),
         opts.command ?? 'opencode'],
         { env: tenv, timeout: 10_000 })
     } catch (e) {
