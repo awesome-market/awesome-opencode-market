@@ -286,14 +286,17 @@ describe('discovery: rate-limit & window handling', () => {
       }
       // every slice fits its own window → one page each; name encodes the
       // slice's lower bound so coverage is visible
-      const lo = q.match(/created:>=([0-9-]+)/)?.[1] ?? 'x'
+      const lo = q.match(/created:([0-9-]+)\.\./)?.[1] ?? 'x'
       return mkRes({ total_count: 40, items: [{ full_name: `o/since-${lo}` }] })
     }
     const r = await searchTopic('t', { fetchFn: f as typeof fetch })
-    // root + exactly two half-slices, both carrying the created qualifiers
+    // root + exactly two half-slices, both carrying the created range —
+    // `A..B` is the only form GitHub's repo search honors (`>=`/`<` are
+    // silently dropped by its query parser)
     expect(calls).toHaveLength(3)
-    expect(calls.filter(u => u.includes('created%3A'))).toHaveLength(2)
-    expect(calls.filter(u => u.includes('created%3A'))[0]).toContain('created%3A%3E%3D')
+    const rangeCalls = calls.filter(u => u.includes('created%3A'))
+    expect(rangeCalls).toHaveLength(2)
+    for (const u of rangeCalls) expect(decodeURIComponent(u)).toMatch(/created:\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2}/)
     // each half contributed its own repo (name carries the slice lower bound;
     // the midpoint date itself depends on the run day — assert shape only)
     expect(r).toHaveLength(2)

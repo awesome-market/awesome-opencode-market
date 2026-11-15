@@ -118,7 +118,9 @@ const fetchSearchJson = async (
       }
     }
     await res.arrayBuffer().catch(() => undefined)
-    if ((res.status === 403 || res.status === 429) && attempt < MAX_SEARCH_RETRIES) {
+    // 403/429 are the shared search budget; 5xx is GitHub's flaky search
+    // backend — both are transient and worth the spaced retry budget
+    if ((res.status === 403 || res.status === 429 || res.status >= 500) && attempt < MAX_SEARCH_RETRIES) {
       const waitMs = test ? 0 : retryWaitMs(res, attempt)
       console.warn(`${label} throttled (${res.status}) — retry ${attempt + 1}/${MAX_SEARCH_RETRIES} in ${Math.ceil(waitMs / 1000)}s`)
       await sleep(waitMs)
@@ -132,10 +134,15 @@ const fetchSearchJson = async (
 /** The repo-search API hard-caps ANY single query at 1000 results — a full
  *  tenth page is the window cutting us off, not discovery finishing. When a
  *  query's total_count exceeds it, the created-date range is bisected until
- *  every slice fits (each slice gets its own 1000 window). Half-open ranges
- *  `>=lo AND <hi` cover exhaustively without boundary dupes; GH_EPOCH
- *  predates GitHub so the first cover is total. MAX_SPLIT_DEPTH bounds the
- *  request count for a pathological topic. */
+ *  every slice fits (each slice gets its own 1000 window). The range MUST
+ *  use `created:A..B` — `created:>=`/`created:<` qualifiers are silently
+ *  dropped by GitHub's search parser (no error, unfiltered items AND
+ *  total_count), which degenerates every slice into the same full query.
+ *  `..` ranges are inclusive at day precision, so adjacent slices overlap
+ *  on the boundary day — the `seen` map dedupes the handful of repos that
+ *  double-report; coverage stays complete. GH_EPOCH predates GitHub so the
+ *  first cover is total. MAX_SPLIT_DEPTH bounds the request count for a
+ *  pathological topic. */
 const SEARCH_WINDOW = 1000
 const MAX_SPLIT_DEPTH = 8
 const GH_EPOCH = Date.parse('2008-01-01T00:00:00Z')
@@ -218,7 +225,12 @@ export async function searchTopic(
   }
 
   const slice = async (lo: number, hi: number, depth: number): Promise<void> => {
-    const q = depth === 0 ? base : `${base} created:>=${isoDay(lo)} created:<${isoDay(hi)}`
+    // `created:A..B` is the ONLY date syntax GitHub's repo search actually
+    // applies — the `>=`/`<` qualifier pair is silently ignored (verified:
+    // `topic:x created:>=2008 created:<2009` returns the unfiltered topic).
+    // hi-1: `..` is inclusive, and `hi` at exact midnight must not pull the
+    // next day's repos in — over-covering beats a coverage hole.
+    const q = depth === 0 ? base : `${base} created:${isoDay(lo)}..${isoDay(hi - 1)}`
     const p1 = await fetchPage(q, 1)
     if (!p1) return
     if (p1.total > SEARCH_WINDOW && depth < MAX_SPLIT_DEPTH && hi - lo > 86_400_000) {
