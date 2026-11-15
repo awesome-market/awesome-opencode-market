@@ -753,7 +753,11 @@ export function reviewPin(
  *  verdict (pass w/ flagsReviewed, or an LLM concern) can be written. */
 export const MECH_FLAG_PREFIX = '机械红旗待人工'
 export const isMechFlagConcern = (v: AiVerdict | undefined): boolean =>
-  v?.verdict === 'concern' && v.source === 'ai' && (v.reason ?? '').startsWith(MECH_FLAG_PREFIX)
+  // includes, not startsWith: emit() prepends the re-tag annotation
+  // (`同版本换包（该键曾有人工裁决…）——`) to placeholder reasons on
+  // human-verdicted keys, so the marker sits mid-string. A genuine verdict
+  // never contains this marker — it is only written by the placeholder paths.
+  v?.verdict === 'concern' && v.source === 'ai' && (v.reason ?? '').includes(MECH_FLAG_PREFIX)
 
 /** Held versions that have NEVER received any verdict. Both held shapes:
  *  pendingUpdate (newer version behind a displayed one) and approval:pending

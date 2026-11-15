@@ -67,6 +67,12 @@ describe('flag-review policy — mechanical red-flag placeholders re-enter the q
     const human = v({ verdict: 'concern', reason: '机械红旗待人工：sec:x', source: 'human', at: '2026-01-02T00:00:00Z' })
     expect(unreviewedTargets(idx([entry()]), [human])).toEqual([])
   })
+  it('a retag-prefixed placeholder still re-queues — emit() prepends the re-tag annotation ahead of the marker', () => {
+    const retagged = v({ verdict: 'concern',
+      reason: '同版本换包（该键曾有人工裁决，re-tag 自动重审）——机械红旗待人工（AI 草稿，LLM 判 pass）：sec:x',
+      at: '2026-01-02T00:00:00Z' })
+    expect(unreviewedTargets(idx([entry()]), [retagged])).toHaveLength(1)
+  })
 })
 
 describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
