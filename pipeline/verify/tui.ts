@@ -5,12 +5,27 @@
  *
  *  Honest boundary (same class as the serve canary): proves the TUI doesn't
  *  die on load; does NOT prove any specific keypath works. */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { closeSync, fstatSync, mkdtempSync, openSync, readSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExecFn } from './verify.ts'
 
-export interface TuiCheck { ok: boolean; log?: string; harness?: boolean }
+export interface TuiCheck { ok: boolean; log?: string; diag?: string; harness?: boolean }
+
+/** Bounded tail-read — pane.log can grow unboundedly under a repainting TUI,
+ *  and readFileSync would pull all of it into memory. */
+function readTail(path: string, max: number): string {
+  try {
+    const fd = openSync(path, 'r')
+    try {
+      const size = fstatSync(fd).size
+      const start = Math.max(0, size - max)
+      const buf = Buffer.alloc(size - start)
+      readSync(fd, buf, 0, buf.length, start)
+      return buf.toString('utf8')
+    } finally { closeSync(fd) }
+  } catch { return '' }
+}
 
 /** Pure judge — unit-testable. Pane text + session liveness → pass/fail.
  *  `paneText` is the best available rendering: live capture-pane output when
@@ -80,6 +95,10 @@ export async function checkTui(
         await run('tmux', ['has-session', '-t', sess], { env: tenv, timeout: 5_000 })
         alive = true
       } catch { alive = false }
+      // the pipe-pane file is the only pane record that survives session
+      // death — read its tail once for BOTH the judgment fallback and the
+      // reviewer-facing diag dump (raw stream incl. scrollback, escapes intact)
+      const paneRaw = readTail(paneLog, 65_536)
       let pane = ''
       let captured = false
       try {
@@ -87,17 +106,10 @@ export async function checkTui(
         pane = stdout
         captured = true
       } catch { /* session died between probes — the pane log is the fallback */ }
-      if (!captured) {
-        // ONLY on capture failure: the pipe-pane file is the surviving record
-        // of what the TUI painted. A successful-but-blank capture must NOT
-        // fall back — raw stream bytes would clear the 'pane nearly empty'
-        // floor and could flip a real fail into a pass.
-        try {
-          const raw = readFileSync(paneLog, 'utf8')
-          pane = raw.length > 16_384 ? raw.slice(-16_384) : raw
-        } catch { /* never piped or already empty */ }
-      }
-      return judgeTuiPane(pane, alive)
+      if (!captured && paneRaw) pane = paneRaw.slice(-16_384)
+      // diag rides along whenever the stream produced anything — verify.ts
+      // publishes it as the per-target artifact for failed checks
+      return { ...judgeTuiPane(pane, alive), ...(paneRaw.trim() ? { diag: paneRaw } : {}) }
     } finally {
       await run('tmux', ['kill-session', '-t', sess], { env: tenv, timeout: 5_000 }).catch(() => {})
     }

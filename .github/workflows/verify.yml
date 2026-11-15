@@ -184,6 +184,10 @@ jobs:
           XDG_DATA_HOME: /tmp/vhome/data
           XDG_CACHE_HOME: /tmp/vhome/cache
           VERIFY_SANDBOX_USER: nobody
+          # per-target full logs for FAILED verifications — the 2KB
+          # logExcerpt can't carry enough evidence for a human to judge
+          # (dead-TUI scrollback, serve output, opencode log tail)
+          VERIFY_DIAG_DIR: /tmp/vlogs
           # repo-variable override without a code edit (bump-drain tuning):
           # unset/empty → the code default (4 lanes) applies
           VERIFY_LANES: ${{ vars.VERIFY_LANES || '' }}
@@ -195,6 +199,14 @@ jobs:
         with:
           name: results-${{ matrix.shard }}
           path: /tmp/results-${{ matrix.shard }}.json
+          retention-days: 7
+      # reviewer-facing deep logs — only exists when the shard produced
+      # failures (dumpDiag writes failed targets only)
+      - if: always() && hashFiles('/tmp/vlogs/*.log') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: vlogs-${{ matrix.shard }}
+          path: /tmp/vlogs/*.log
           retention-days: 7
 
   merge:

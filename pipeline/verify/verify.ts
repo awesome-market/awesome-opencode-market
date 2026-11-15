@@ -394,6 +394,20 @@ export async function verifyPackage(
   }) as ExecFn
   const timeout = opts.timeoutMs ?? 45_000
   const tail = (s: string) => s.slice(-2048)
+  // reviewer-facing full logs: VERIFY_DIAG_DIR set → every FAILED target
+  // drops a per-target file the verify workflow uploads as an artifact.
+  // logExcerpt stays the 2KB published tail; this is the deep evidence a
+  // human needs to actually judge the failure. Never let diagnostics break
+  // a verdict — every failure here is swallowed.
+  const diagDir = process.env.VERIFY_DIAG_DIR
+  const diagFile = `${name.replace(/[^a-zA-Z0-9._@-]+/g, '_')}-${opts.version ?? opts.git?.sha?.slice(0, 12) ?? 'latest'}.log`
+  const dumpDiag = (body: string) => {
+    if (!diagDir) return
+    try {
+      mkdirSync(diagDir, { recursive: true })
+      writeFileSync(join(diagDir, diagFile), body.slice(-524_288))
+    } catch { /* diagnostics must never break verification */ }
+  }
   // installable spec: npm name@version, or github owner/repo#sha — the sha is
   // the commit the catalog pipeline scanned, so verify exercises the REVIEWED
   // bytes rather than whatever HEAD has drifted to (a bare owner/repo install
@@ -451,6 +465,7 @@ export async function verifyPackage(
     const s = opts.git
       ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
       : await checkSkillStructure(uh, urun, spec)
+    if (!s.ok) dumpDiag(`spec: ${spec}\nskill structure check:\n${s.log ?? ''}`)
     return {
       ...base, status: s.ok ? 'verified' : 'failed', level: 'structure',
       ...(s.ok ? {} : { logExcerpt: tail(s.log ?? 'skill structure check failed') }),
@@ -462,6 +477,7 @@ export async function verifyPackage(
     await urun('opencode', ['plugin', 'add', spec], { env, timeout })
   } catch (e) {
     const why = String((e as { stderr?: string }).stderr ?? (e as Error).message)
+    dumpDiag(`spec: ${spec}\ninstall failed:\n${why}`)
     return {
       ...base, status: 'failed', level: 'install',
       // the sandbox's egress allowlist means a fetch failure here can be
@@ -649,6 +665,10 @@ export async function verifyPackage(
     // whole window, hiding `why` and the plugin's own error entirely.
     // Bound it and put the verdict line last so it always survives.
     const apiBrief = api.length > 600 ? `${api.slice(0, 600)}…` : api
+    dumpDiag(`spec: ${spec}\napiNames: ${apiNames.join(', ')}\nverdict: ${why}\n\n` +
+      `--- /api/plugin (head) ---\n${apiBrief}\n\n` +
+      `--- serve output (tail 64k, password redacted) ---\n${safeServeOut}\n\n` +
+      `--- opencode log (tail 256k) ---\n${log}`)
     return { ...base, status: 'failed', level: 'load',
       logExcerpt: tail(`/api/plugin: ${apiBrief}\n${safeServeOut}\n${log}\n${why}`) }
   }
@@ -667,6 +687,7 @@ export async function verifyPackage(
         // instead of writing a false 'failed' (burns retries + feeds the
         // diagnose concern short-circuit on packages never actually tested)
         if (tui.harness) throw new Error(`tui check infrastructure: ${tui.log ?? 'spawn failed'}`)
+        dumpDiag(`spec: ${spec}\ninteractive check failed:\n${tui.diag ?? tui.log ?? 'tui check failed'}`)
         return { ...base, status: 'failed', level: 'interactive', logExcerpt: tail(tui.log ?? 'tui check failed') }
       }
       level = 'interactive'
@@ -678,6 +699,7 @@ export async function verifyPackage(
       // the spec so the finder can compute that dir
       const found = findGuiBundle(uh, name, opts.git ? spec : undefined)
       if ('error' in found) {
+        dumpDiag(`spec: ${spec}\ngui bundle lookup failed:\n${found.error}`)
         return { ...base, status: 'failed', level: 'render', logExcerpt: found.error }
       }
       let gui: { ok: boolean; stage?: string; error?: string }
@@ -696,6 +718,7 @@ export async function verifyPackage(
         gui = await checkGuiBundle(found.src)
       }
       if (!gui.ok) {
+        dumpDiag(`spec: ${spec}\ngui ${gui.stage}: ${gui.error}\nserve tail:\n${tail(serveOut)}`)
         return { ...base, status: 'failed', level: 'render', logExcerpt: `gui ${gui.stage}: ${gui.error}` }
       }
       level = 'render'
@@ -708,6 +731,7 @@ export async function verifyPackage(
         ? await checkSkillStructureGit(uh, urun, opts.git.repo, opts.git.sha)
         : await checkSkillStructure(uh, urun, spec)
       if (!s.ok) {
+        dumpDiag(`spec: ${spec}\nplugin half passed (${level}); skill payload failed:\n${s.log ?? ''}`)
         return {
           ...base, status: 'failed', level,
           logExcerpt: tail(`plugin half passed (${level}); skill payload failed:\n${s.log}`),
