@@ -53,6 +53,25 @@ describe('site honest labels', () => {
     expect(html).not.toContain('<script>x')
     expect(html).toContain('opencode plugin add p')
   })
+  it('detailPage attaches explainers to findings and sec flags', () => {
+    const html = detailPage(mk({
+      capabilities: {
+        scannedAt: 't',
+        findings: [
+          'prepare-script:package.json — L63: "prepare": "npm run build"',
+          'sec:repo-moved-since-release:63915cf91cd1',
+          'network-call:src/x.ts — L1: fetch(u)',
+        ],
+        redFlags: ['prepare-script:package.json — L63: "prepare": "npm run build"', 'sec:repo-moved-since-release:63915cf91cd1'],
+      },
+    }))
+    // raw flag alone tells a reviewer nothing — the explainer sits under it
+    expect(html).toContain('repo HEAD moved after the released pin')
+    expect(html).toContain('auto-runs on git/tarball install')
+    expect(html).toContain('network call — verify the destination')
+    // bilingual data-zh payloads present for the language toggle
+    expect(html).toContain('仓库 HEAD 在上架钉版后移动')
+  })
   it('buildSite writes index + detail pages', async () => {
     const out = mkdtempSync(join(tmpdir(), 'site-'))
     const idx: CatalogIndex = { version: '1', generatedAt: 't', categories: {}, plugins: [mk({ name: 'a' }), mk({ name: 'b' })], removed: [] }

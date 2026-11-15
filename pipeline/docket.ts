@@ -39,6 +39,7 @@ import { titleTarget } from './human-verdict.ts'
 import { candidateHeldAt } from './ai/diagnose.ts'
 import { isMain } from './main-guard.ts'
 import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from './delta.ts'
+import { explainFlag } from './scan/flagExplain.ts'
 import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
 
 export interface DocketTarget {
@@ -660,6 +661,10 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     const flagReason = clean(t.reason ?? '') || 'sec:*'
     L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${flagReason}\``, '',
       '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
+    // bare `sec:repo-moved-since-release:<sha>` is opaque — one line of
+    // "why it fired + what to check" before the evidence sections
+    const flagExpl = t.reason ? explainFlag(t.reason) : null
+    if (flagExpl) L.push(`  ↳ ${clean(flagExpl.zh, 240)}`)
     // with flaggedAt set, a shown verdict provably predates the flag (a
     // postdating one would have decided it) — evidence about the bytes,
     // not this signal; render the ordering explicitly, or admit it's
@@ -846,7 +851,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // embedded twice inside the bilingual reason text
   if (t.redFlagList?.length) {
     L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
-    for (const f of t.redFlagList.slice(0, 20)) L.push(`  - ${clean(f, 300)}`)
+    for (const f of t.redFlagList.slice(0, 20)) {
+      L.push(`  - ${clean(f, 300)}`)
+      // `sec:repo-moved-since-release:<sha>` alone tells a maintainer
+      // nothing — the explainer carries "为什么报警 + 去核实什么"
+      const ex = explainFlag(f)
+      if (ex) L.push(`    ↳ ${clean(ex.zh, 240)}`)
+    }
     if (t.redFlagList.length > 20) L.push(`  - …另 ${t.redFlagList.length - 20} 条见 index.json`)
   }
   if (t.scanPreview?.length) {

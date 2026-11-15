@@ -9,6 +9,7 @@ import type { PluginEntry } from '../../src/schema.ts'
 import { loadVerdicts, atCmp, stripFlagTail } from '../verdicts.ts'
 import { readJsonCapped } from '../fetch/npm.ts'
 import { isMain } from '../main-guard.ts'
+import { explainFlag } from '../scan/flagExplain.ts'
 
 type Caps = PluginEntry['capabilities']
 type Ver = PluginEntry['verification']
@@ -333,7 +334,15 @@ export function detailPage(e: PluginEntry, verdicts?: AiVerdict[], landed?: Set<
     const summaryZh = caps.redFlags.length
       ? `${zhLabel}（${caps.findings.length} 条，其中 ${caps.redFlags.length} 个高危信号）`
       : `${zhLabel}（${caps.findings.length} 条）`
-    return `<details><summary>${bi(summary, summaryZh)}</summary><ul>${caps.findings.map(f => `<li><code>${esc(f)}</code>${rf.has(f) ? ` <span class=bad data-en="red flag" data-zh="高危信号">red flag</span>` : ''}</li>`).join('')}</ul></details>`
+    // raw `rule:file — L:n: line` strings answer WHAT matched but not WHY it
+    // matters — attach the rule/sec-flag explainer so a plain-language
+    // "查什么" sits under each line (AGENTS 好理解)
+    const row = (f: string): string => {
+      const ex = explainFlag(f)
+      const note = ex ? `<br><span class=muted data-en="${esc(ex.en)}" data-zh="${esc(ex.zh)}">${esc(ex.en)}</span>` : ''
+      return `<li><code>${esc(f)}</code>${rf.has(f) ? ` <span class=bad data-en="red flag" data-zh="高危信号">red flag</span>` : ''}${note}</li>`
+    }
+    return `<details><summary>${bi(summary, summaryZh)}</summary><ul>${caps.findings.map(row).join('')}</ul></details>`
   }
   // scannedAt:null must not read as "checked, nothing found" — the scan
   // status row carries the label, but the findings block repeating "none"
