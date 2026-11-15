@@ -399,7 +399,12 @@ npx tsx pipeline/ai/diagnose.ts \
 # appended straight into ASSESS_SPOOL (durable per-emit like verdicts). Its
 # view = catalog file ∪ unpushed spool so a failed push never re-burns the
 # judge. Non-fatal by design: a delta failure must not block verdict pushes.
-{ git show origin/catalog:flag-assessments.jsonl 2>/dev/null; cat "$ASSESS_SPOOL" 2>/dev/null; } \
+# Read the catalog-side assessments from the $CAT worktree file, NOT
+# `git show origin/catalog:` — this runs with cwd=$CODE (pinned main-only
+# checkout, no catalog ref), so git-show fails silently and the view comes
+# out empty: every sweep then re-judges and re-pushes every assessment.
+# $CAT was reset --hard to the fetched tip at run start, so its file == remote.
+{ cat "$CAT/flag-assessments.jsonl" 2>/dev/null; cat "$ASSESS_SPOOL" 2>/dev/null; } \
   | sort -u > "$VASSESS" 2>/dev/null || : > "$VASSESS"
 npx tsx pipeline/ai/flag-delta.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" \
