@@ -131,7 +131,7 @@ describe('mergeEntries two-layer keys (I-2)', () => {
       source: { kind: 'npm', id: 'a', repo: 'o/r', repoId: 999 },   // repojacking fires
     })
     const [m] = mergeEntries([fresh], mkIndex([prev]), '2.3.0', RULESET_VERSION)
-    expect(m!.verification.status).toBe('skipped')
+    expect(m!.verification.status).toBe('verified')
     expect(m!.capabilities.redFlags).toContain('sec:repo-recreated')
   })
 })

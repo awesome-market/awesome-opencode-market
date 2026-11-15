@@ -79,16 +79,13 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
   }
 }
 
-// honest-label invariant — the same rule mergeEntries' skipIfFlagged applies
-// on the catalog path: a slot that gained redFlags between plan and merge
-// must not display 'verified' (the flags may describe bytes the run never
-// measured). 'failed' keeps its real outcome — it IS a measurement.
-// Evidence survives the downgrade: verifiedAt/runUrl/integrity/opencodeVersion
-// stay so the detail page keeps the audit trail of what WAS measured.
-const skipIfFlagged = (v: PluginEntry['verification'], flagged: boolean): PluginEntry['verification'] =>
-  flagged && v.status === 'verified'
-    ? { ...v, status: 'skipped', level: v.level ?? 'install' }
-    : v
+// honest-label note — red flags no longer downgrade a measured result:
+// 'verified' is a factual claim ("已实测可装可用") about the pinned bytes,
+// and flags are per-slot review evidence displayed alongside it. Flagged
+// slots now enter the verify queue like any other payload, so a flagged
+// 'verified' is an honest, informative state — the release gate's
+// flagsReviewed requirement is what keeps flagged bytes gated, not the
+// verification label. 'failed'/'skipped' keep their real outcomes.
 
 export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUrl?: string): CatalogIndex {
   const byName = new Map<string, VerifyResult[]>()
@@ -161,18 +158,16 @@ export function mergeResults(index: CatalogIndex, results: VerifyResult[], runUr
       if (r.version && p.pendingUpdate?.version === r.version) {
         const pu = out.pendingUpdate!
         if (!fresher(pu.verification))
-          out = { ...out, pendingUpdate: { ...pu, verification: skipIfFlagged(
-            toVerification(driftCheck(pu.integrity), runUrl, pu.verification),
-            pu.capabilities.redFlags.length > 0) } }
+          out = { ...out, pendingUpdate: { ...pu, verification:
+            toVerification(driftCheck(pu.integrity), runUrl, pu.verification) } }
       } else if (r.version ? r.version === out.latestVersion : !out.pendingUpdate) {
         // versioned display match — or a legacy version-less result, which
         // is only unambiguous when NO hold exists (with a pendingUpdate it
         // can't say which version it measured → drop rather than risk
         // writing the held slot's verdict onto the displayed one)
         if (!fresher(out.verification))
-          out = { ...out, verification: skipIfFlagged(
-            toVerification(driftCheck(slotAnchor(out, 'display')), runUrl, out.verification),
-            out.capabilities.redFlags.length > 0) }
+          out = { ...out, verification:
+            toVerification(driftCheck(slotAnchor(out, 'display')), runUrl, out.verification) }
       }
       // version matches neither slot → stale result (npm moved on mid-flight), drop
     }
@@ -196,24 +191,16 @@ function reuseVerified(plugins: PluginEntry[]): PluginEntry[] {
       .filter((v): v is NonNullable<typeof v> =>
         v?.status === 'verified' && !!v.integrity && v.opencodeVersion === OPENCODE_VERSION)
     if (!donors.length) return p
-    // adoption is a slot write like any other — the honest-label rule
-    // mergeResults applies to measured results applies here too: a recipient
-    // slot carrying redFlags must not display 'verified' (same bytes can
-    // carry different flags across a ruleset/metadata skew between the two
-    // slots' scans). Evidence fields survive the downgrade, same as writes.
-    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification'],
-      flagged: boolean): PluginEntry['verification'] => {
-      // skipIfFlagged wraps EVERY outcome — an already-'verified' recipient
-      // on a flagged slot is the same dishonest label a fresh write would be.
-      if (!anchor || ver.status === 'verified') return skipIfFlagged(ver, flagged)
+    // adoption writes the same honest label a measured result would: flags
+    // don't downgrade 'verified' — they are review evidence, not a veto.
+    const adopt = (anchor: string | null | undefined, ver: PluginEntry['verification']): PluginEntry['verification'] => {
+      if (!anchor || ver.status === 'verified') return ver
       const donor = donors.find(d => d.integrity === anchor)
-      return donor ? skipIfFlagged({ ...donor }, flagged) : ver
+      return donor ? { ...donor } : ver
     }
-    const display = adopt(slotAnchor(p, 'display'), p.verification,
-      p.capabilities.redFlags.length > 0)
+    const display = adopt(slotAnchor(p, 'display'), p.verification)
     const pu = p.pendingUpdate
-      ? adopt(p.pendingUpdate.integrity, p.pendingUpdate.verification,
-          p.pendingUpdate.capabilities.redFlags.length > 0)
+      ? adopt(p.pendingUpdate.integrity, p.pendingUpdate.verification)
       : undefined
     if (display === p.verification && (!p.pendingUpdate || pu === p.pendingUpdate.verification)) return p
     return {

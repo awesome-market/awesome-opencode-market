@@ -141,9 +141,10 @@ describe('trustFlags + mergeEntries identity-delta arms', () => {
     // prev undefined → empty
     expect(trustFlags(undefined, fresh)).toEqual({ findings: [], redFlags: [] })
   })
-  it('mergeEntries: verified+new-redFlags→skipped; verified+findings-only stays; prevVer layer restore', async () => {
+  it('mergeEntries: verified+new-redFlags→verified kept; verified+findings-only stays; prevVer layer restore', async () => {
     const { mergeResults } = await import('../pipeline/verify/merge.ts')
-    // identity red flag on a VERIFIED displayed entry → verification downgraded to skipped
+    // identity red flag on a VERIFIED displayed entry → measured result kept
+    // (flags are review evidence; they no longer downgrade the label)
     const old = mkIdx([mkEntry('p', {
       approval: 'approved', firstSeenAt: '2020-01-01T00:00:00Z', createdAt: '2019-01-01T00:00:00Z',
       verification: { status: 'verified', level: 'load', opencodeVersion: 'oc1', verifiedAt: 't' },
@@ -156,7 +157,7 @@ describe('trustFlags + mergeEntries identity-delta arms', () => {
     })
     const merged = mergeEntries([fresh], old, 'oc1', 'r1')
     expect(merged[0]!.capabilities.redFlags).toContain('sec:name-reused')
-    expect(merged[0]!.verification.status).toBe('skipped')
+    expect(merged[0]!.verification.status).toBe('verified')
     // findings-only (maintainer change) on verified → stays verified (no redFlags)
     const old2 = mkIdx([mkEntry('q', {
       approval: 'approved', maintainers: ['a'], firstSeenAt: '2020-01-01T00:00:00Z',

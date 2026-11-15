@@ -128,7 +128,7 @@ describe('N-2: github-kind byte anchoring — verdict.sha pins source.version', 
     const idx = await run({ outPath: join(dir, 'i.json'), oldIndexPath: oldPath, verdictsPath: verdicts, fetchFn: f, now: '2026-03-05T00:00:00Z' })
     const e = idx.plugins.find(p => p.name === 'o/rel')!
     expect(e.capabilities.redFlags.some(x => x.startsWith('sec:repo-moved-since-release:'))).toBe(true)
-    expect(e.verification.status).toBe('skipped')   // skipIfFlagged honest downgrade
+    expect(e.verification.status).toBe('unverified')   // flags don't veto — queued for measurement
   })
 })
 

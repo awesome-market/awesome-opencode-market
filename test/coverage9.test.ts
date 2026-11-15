@@ -516,7 +516,7 @@ describe('verify/tui + merge + plan residuals', () => {
       { name: 's', version: '1.0.0', status: 'verified', level: 'load', opencodeVersion: 'oc1', verifiedAt: 't' },
     ]
     const out = mergeResults(idx, results as never)
-    expect(out.plugins.find(e => e.name === 'f')!.verification.status).toBe('skipped')
+    expect(out.plugins.find(e => e.name === 'f')!.verification.status).toBe('verified')
     expect(out.plugins.find(e => e.name === 's')!.verification.status).toBe('verified')
     const { hostStaleVerify, verifyTargetOf } = await import('../pipeline/verify/plan.ts')
     // no version → hostStaleVerify false regardless

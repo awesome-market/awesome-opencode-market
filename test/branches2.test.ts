@@ -114,7 +114,7 @@ describe('branches round 2', () => {
     const out = join(mkdtempSync(join(tmpdir(), 'ro-')), 'i.json')
     const idx = await run({ outPath: out, fetchFn: f, now: 't' })
     const e = idx.plugins[0]!
-    expect(e.verification.status).toBe('skipped')
+    expect(e.verification.status).toBe('unverified')   // flags inform review, don't veto the queue
     expect(e.capabilities.redFlags.length).toBeGreaterThan(0)
     // dual-nature: an npm package IS a plugin artifact, and its SKILL.md adds
     // the skill part — contains now lists both, not just 'skill'

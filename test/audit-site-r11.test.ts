@@ -5,8 +5,9 @@
  *  1. verifyLabel now surfaces REAL verify outcomes unconditionally —
  *     verified/failed are measurements, not install-path claims (github
  *     plugin-only verifies via `plugin add owner/repo#sha`). 'skipped'
- *     decomposes on CURRENT redFlags (merge.ts skipIfFlagged invariant):
- *     flagged → 'skipped (high risk)'; unflagged → re-queues as 'unverified'
+ *     decomposes on CURRENT redFlags (run.ts construction + site verifyLabel):
+ *     skipped+flagged → 'skipped (high risk)'; unflagged skip → re-queues as
+ *     'unverified'
  *     when a target exists, else muted 'nothing to install'. 'unverified'
  *     shows while a verify target exists (hasInstallPath OR hasVerifyTarget:
  *     plugin|skill parts + npm version or pinned github sha).

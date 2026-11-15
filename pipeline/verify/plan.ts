@@ -78,7 +78,12 @@ export function verifyQueued(
   // 'verified' would endorse unscanned code (nothing anchors the drift check
   // either). It stays unverified until the slot re-pins.
   if (t.git && (!t.git.repo || !t.git.sha)) return false
-  if (t.flagged) return false
+  // red flags do NOT veto verification: they are review evidence, not a
+  // reason to skip measurement — the shard sandbox (nobody user, env/egress
+  // allowlists) is the containment boundary for ALL packages equally, and a
+  // flagged slot kept 'skipped' forever can never earn install/load evidence
+  // even after a pass verdict clears it. Condemned bytes stay excluded by
+  // the concern-verdict check below.
   // entries with no verifiable payload are never queued — the predicate must
   // match planTargets' parts filter or the digest §④ backlog over-counts
   const parts = verifyPartsOf(e)
@@ -135,7 +140,7 @@ export function hostStaleVerify(
   tomb?: Map<string, string>,
 ): boolean {
   const t = verifyTargetOf(e)
-  if ((!t.version && !t.git) || t.flagged || !t.hostStale) return false
+  if ((!t.version && !t.git) || !t.hostStale) return false
   // a condemned slot is out of the re-verify backlog too — the queue predicate
   // drops it, so counting it here would over-report the staleHost tier
   if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb)?.verdict === 'concern') return false
@@ -160,11 +165,14 @@ export function planTargets(index: CatalogIndex, cap = 48, retest = false, now =
     const t = verifyTargetOf(p)
     // retest (manual `targets` dispatch) may re-run failed/verified versions;
     // recent failed slots also re-enter automatically while retries < 3 (V-3).
-    // Flagged stays excluded in every mode: red-flagged code never executes here.
-    if ((!t.version && !t.git) || t.flagged || (t.git && (!t.git.repo || !t.git.sha))) continue
-    // host-version drift, cleared-flag skips, and retryable failures all fold
-    // into the one queue predicate — verdict-condemned slots drop out inside
-    // it unless a manual --retest asks for them back
+    // Red flags no longer exclude targets — they inform review, the sandbox
+    // measures every installable payload; concern verdicts still drop out
+    // inside verifyQueued.
+    if ((!t.version && !t.git) || (t.git && (!t.git.repo || !t.git.sha))) continue
+    // host-version drift, skipped slots (flag-vetoed legacy rows and
+    // payload-gained entries), and retryable failures all fold into the one
+    // queue predicate — verdict-condemned slots drop out inside it unless a
+    // manual --retest asks for them back
     if (!retest && !verifyQueued(p, now, latest, latestHuman, tomb)) continue
     const parts = verifyPartsOf(p)
     // no plugin artifact AND no skill payload — nothing exists to honestly

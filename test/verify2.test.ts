@@ -195,11 +195,13 @@ describe('verify/plan', () => {
     expect(verifyQueued(skill)).toBe(true)
     expect(verifyQueued(dual)).toBe(true)
   })
-  it('skips verified, flagged, and version-less entries', () => {
+  it('skips verified and version-less entries; flagged payloads queue', () => {
     const verified = entry({ name: 'a', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
     const flagged = entry({ name: 'b', verification: verf('unverified'), capabilities: caps(['x:y']) })
     const noVer = entry({ name: 'c', latestVersion: null, verification: verf('unverified') })
-    expect(planTargets(idx([verified, flagged, noVer]))).toEqual([])
+    // flags inform review, they do not veto measurement — the sandbox is the
+    // containment boundary for every payload alike
+    expect(planTargets(idx([verified, flagged, noVer])).map(t => t.name)).toEqual(['b'])
   })
   it('host-version drift: verified@different opencodeVersion re-queues (P1-6)', () => {
     const stale = entry({ name: 'stale', verification: verf('verified', { opencodeVersion: '9.9.9' }) })
@@ -210,16 +212,17 @@ describe('verify/plan', () => {
     // stale-host tier outranks the normal queue; the current-host verify stays out
     expect(got.map(t => t.name)).toEqual(['stale', 'legacy', 'fresh'])
   })
-  it('retest mode re-runs failed/verified but NEVER flagged targets', () => {
+  it('retest mode re-runs failed/verified; flagged targets queue like any payload', () => {
     const failed = entry({ name: 'a', verification: verf('failed') })
     const verified = entry({ name: 'b', verification: verf('verified', { opencodeVersion: OPENCODE_VERSION }) })
     const flagged = entry({ name: 'c', verification: verf('failed'), capabilities: caps(['r:f']) })
     const skipped = entry({ name: 'd', verification: verf('skipped'), capabilities: caps(['r:f']) })
     // 'a' has unused retry budget (retries absent → 0) — it auto-requeues;
-    // verified-current and flagged stay out either way
-    expect(planTargets(idx([failed, verified, flagged, skipped])).map(t => t.name)).toEqual(['a'])
+    // 'c' failed with budget left → retryable; 'd' skipped → re-queues;
+    // only verified-current stays out
+    expect(planTargets(idx([failed, verified, flagged, skipped])).map(t => t.name)).toEqual(['a', 'c', 'd'])
     const got = planTargets(idx([failed, verified, flagged, skipped]), 48, true)
-    expect(got.map(t => t.name)).toEqual(['a', 'b'])   // flagged targets stay out — pinned version included
+    expect(got.map(t => t.name)).toEqual(['a', 'b', 'c', 'd'])
     expect(got[0]!.version).toBe('1.0.0')
   })
   it('failed slots re-enter the queue while attempts remain (V-3 bounded retry)', () => {
@@ -247,12 +250,12 @@ describe('verify/plan', () => {
     // display slot verified, held slot failed-once-more-eligible → targets the held version
     expect(planTargets(idx([e]), 48, false, now)).toEqual([{ name: 'p', version: '2.0.0', parts: ['plugin'] }])
   })
-  it('held flagged version is skipped (flag lives on pendingUpdate.capabilities)', () => {
+  it('held flagged version queues — flags live on pendingUpdate.capabilities but do not veto', () => {
     const e = entry({
       verification: verf('verified'),
       pendingUpdate: { version: '1.1.0', capabilities: caps(['sec-delta:x']), verification: verf('unverified'), heldAt: 't' },
     })
-    expect(planTargets(idx([e]))).toEqual([])
+    expect(planTargets(idx([e]))).toEqual([{ name: 'p', version: '1.1.0', parts: ['plugin'] }])
   })
   it('cap slices deterministically', () => {
     const es = Array.from({ length: 50 }, (_, i) =>
@@ -325,7 +328,7 @@ describe('verify/plan', () => {
     expect(verifyQueued(e)).toBe(true)
   })
   it('cleared-flag skipped slots re-queue instead of staying stale', () => {
-    // skipIfFlagged leaves 'skipped' behind when red flags clear — the label
+    // legacy flag-vetoed 'skipped' rows re-queue once flags clear — the label
     // "没跑" would otherwise persist forever on a slot that can now be tested
     const e = entry({ name: 'cleared', verification: verf('skipped', { level: 'install' }) })
     expect(verifyQueued(e)).toBe(true)
@@ -735,7 +738,7 @@ describe('verify/merge drift, freshness, reuse', () => {
     expect(m.plugins[0]!.verification.status).toBe('failed')
     expect(m.plugins[0]!.verification.verifiedAt).toBe('2026-01-05T00:00:00Z')
   })
-  it('skipIfFlagged downgrade preserves the measured evidence trail', () => {
+  it('flagged slot keeps the measured verified label — flags are review evidence, not a veto', () => {
     const e = entry({
       verification: verf('unverified'),
       capabilities: caps(['sec:flag']),
@@ -744,7 +747,7 @@ describe('verify/merge drift, freshness, reuse', () => {
       { name: 'p', version: '1.0.0', status: 'verified', integrity: 'sha512-X', ...base },
     ], 'https://run/url')
     const v = m.plugins[0]!.verification
-    expect(v.status).toBe('skipped')
+    expect(v.status).toBe('verified')
     expect(v.verifiedAt).toBe('2026-01-02T00:00:00Z')
     expect(v.integrity).toBe('sha512-X')
     expect(v.runUrl).toBe('https://run/url')

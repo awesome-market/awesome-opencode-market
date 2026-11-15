@@ -289,12 +289,12 @@ describe('run: JSONL seed declared metadata', () => {
     }) as typeof fetch
     const idx = await run({ outPath: join(dir, 'i.json'), seedPath: seed, fetchFn: f, now: 't' })
     const e = idx.plugins.find(p => p.name === 'o/drift')!
-    // identity-level signal → redFlag (flag surface + skipIfFlagged), not a
-    // buried finding — the moved bytes fail-closed into human review; the
-    // embedded sha makes each subsequent move a NEW flag set
+    // identity-level signal → redFlag (flag surface), not a buried finding —
+    // the moved bytes fail-closed into human review AND queue for measurement
+    // (flags inform review; they don't veto the sandbox)
     expect(e.capabilities.redFlags.some(x => x.startsWith('sec:repo-moved-since-review:'))).toBe(true)
     expect(e.capabilities.findings.some(x => x.startsWith('sec:repo-moved-since-review'))).toBe(false)
-    expect(e.verification.status).toBe('skipped')
+    expect(e.verification.status).toBe('unverified')
   })
 
   it('dead seeds are skipped — no candidate injection, no scan budget', async () => {

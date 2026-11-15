@@ -502,11 +502,12 @@ describe('publish/merge residual branches', () => {
     const { mergeResults } = await import('../pipeline/verify/merge.ts')
     const out = mergeResults(idx, results as never)
     expect(out.plugins[0]!.verification.status).toBe('verified')
-    // flagged slot + verified result without level → skipped, level ?? 'install'
+    // flagged slot + verified result → verified kept (flags are review
+    // evidence, not a label downgrade); level passes through verbatim
     const flaggedIdx = mkIdx([mkEntry('fl', { approval: 'pending', capabilities: { scannedAt: 't', findings: [], redFlags: ['x'] } })])
-    const out2 = mergeResults(flaggedIdx, [{ name: 'fl', version: '1.0.0', status: 'verified' }] as never)
-    expect(out2.plugins[0]!.verification.status).toBe('skipped')
-    expect(out2.plugins[0]!.verification.level).toBe('install')
+    const out2 = mergeResults(flaggedIdx, [{ name: 'fl', version: '1.0.0', status: 'verified', level: 'load', opencodeVersion: 'oc1', verifiedAt: 't' }] as never)
+    expect(out2.plugins[0]!.verification.status).toBe('verified')
+    expect(out2.plugins[0]!.verification.level).toBe('load')
     // buildIndex without opts.now + category ?? [] + unknown catId filtered
     const eCat = mkEntry('cat', { category: ['tools', 'bogus'] as never, approval: 'pending' })
     const eNoCat = { ...mkEntry('nc'), category: undefined } as unknown as PluginEntry
