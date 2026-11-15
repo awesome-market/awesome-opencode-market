@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { classifyDelta, isRiskyDeltaPath, parseCompare, fetchCompare, type DeltaFile } from '../pipeline/delta.ts'
@@ -565,4 +565,66 @@ describe('flag-delta main — truncated compare disclosure', () => {
     expect(sawPartial).toBe(true)
     expect(loadAssessments(s.spool)[0]!.truncated).toBe(true)
   })
+})
+
+
+// ---------- devinJudge via AI_BACKEND=devin + fake devin binary on PATH ----------
+describe('devinJudge (env-selected, no deps.judge)', () => {
+  const withDevinEnv = async (binBody: string, fn: () => Promise<void>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'fake-devin-'))
+    writeFileSync(join(dir, 'devin'), `#!/bin/sh\n${binBody}`)
+    chmodSync(join(dir, 'devin'), 0o755)
+    const origPath = process.env.PATH
+    const origBackend = process.env.AI_BACKEND
+    const origModel = process.env.AI_MODEL
+    process.env.PATH = `${dir}:${origPath ?? ''}`
+    process.env.AI_BACKEND = 'devin'
+    delete process.env.AI_MODEL
+    try { await fn() } finally {
+      process.env.PATH = origPath
+      if (origBackend === undefined) delete process.env.AI_BACKEND; else process.env.AI_BACKEND = origBackend
+      if (origModel === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = origModel
+    }
+  }
+  const cmp = { aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+    commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: false }
+
+  it('AI_BACKEND=devin routes the judge through the devin CLI', async () => {
+    const s = setup([ghEntry()])
+    await withDevinEnv(`printf '%s' '{"verdict":"pass","reason_zh":"仅文档","reason_en":"docs-only"}'`, async () => {
+      await flagDeltaMain([...args(s), '--limit', '5'], { compareFn: async () => ({ ...cmp }) })
+    })
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai?.verdict).toBe('pass')
+    expect(a.ai?.reasonEn).toBe('docs-only')
+  }, 30_000)
+
+  it('devin prose output → retry once then unparseable → ai:null', async () => {
+    const s = setup([ghEntry()])
+    await withDevinEnv(`printf '%s' 'I cannot decide'`, async () => {
+      await flagDeltaMain([...args(s), '--limit', '5'], { compareFn: async () => ({ ...cmp }) })
+    })
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai).toBeNull()
+    expect(a.aiNote).toContain('judge-error')
+  }, 30_000)
+
+  it('devin CLI missing → judge-error, not a crash', async () => {
+    const s = setup([ghEntry()])
+    // PATH without devin: restrict to a dir with no binaries
+    const dir = mkdtempSync(join(tmpdir(), 'empty-path-'))
+    const origPath = process.env.PATH
+    const origBackend = process.env.AI_BACKEND
+    process.env.PATH = dir
+    process.env.AI_BACKEND = 'devin'
+    try {
+      await flagDeltaMain([...args(s), '--limit', '5'], { compareFn: async () => ({ ...cmp }) })
+    } finally {
+      process.env.PATH = origPath
+      if (origBackend === undefined) delete process.env.AI_BACKEND; else process.env.AI_BACKEND = origBackend
+    }
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai).toBeNull()
+    expect(a.aiNote).toContain('judge-error')
+  }, 30_000)
 })
