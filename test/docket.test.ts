@@ -686,8 +686,9 @@ describe('docket main', () => {
     const idxPath = join(dir, 'index.json')
     const vPath = join(dir, 'v.jsonl')
     writeFileSync(idxPath, JSON.stringify(idx([e()])))
-    // pkg@1.0.0 still wanted (ai pass) → pkg@0.9.0's issue is superseded;
-    // gone/ghost isn't in the index at all → tombstoned
+    // pkg@1.0.0 still wanted (ai pass) → the NEWEST same-name issue (#12)
+    // is adopted + retitled in place; the older same-name duplicate (#8)
+    // closes as superseded. gone/ghost isn't in the index → tombstoned.
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -699,6 +700,8 @@ describe('docket main', () => {
         { number: 10, title: '[review]', labels: [], body: 'x' },
         // already carries review:decided and no pending → no label edit needed
         { number: 11, title: '[review] gone/ghost2', labels: [{ name: 'review:decided' }], body: 'x' },
+        // newest same-name issue → adopted by pkg@1.0.0 and retitled, not closed
+        { number: 12, title: '[review] pkg@0.8.0', labels: [{ name: 'review:pending' }], body: 'x' },
       ])
       return ''
     }
@@ -720,12 +723,55 @@ describe('docket main', () => {
     expect(comments).toContain('评审目标已变更')
     expect(comments).toContain('已不在 catalog 索引中')
     // #11 already decided: no label edit wasted on it
-    expect(calls.some(c => c.includes('edit') && c.includes('11'))).toBe(false)
+    expect(calls.some(c => c[1] === 'edit' && c[4] === '11')).toBe(false)
+    // #12 adopted by the wanted pkg@1.0.0 target — retitled in place, never
+    // closed/recreated: the same issue number carries forward (K-drift)
+    const edits12 = calls.filter(c => c[1] === 'edit' && c[4] === '12').map(c => c.join(' ')).join('\n')
+    expect(edits12).toContain('--title [review] pkg@1.0.0')
+    expect(calls.some(c => c.includes('close') && c[4] === '12')).toBe(false)
+    expect(calls.some(c => c.includes('create'))).toBe(false)
     const { readFileSync } = await import('node:fs')
     const sm = readFileSync(summary, 'utf8')
     expect(sm).toContain('review-docket')
     expect(sm).toContain('关闭 4')
-    expect(sm).toContain('新开 1')
+    expect(sm).toContain('新开 0')
+    expect(sm).toContain('更新 1')
+  })
+
+  it('version-drift adoption never steals an issue whose title is still wanted — two-slot name keeps one ticket each', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk8-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    // approved+flagged entry with an update in flight → TWO wanted targets
+    // under one name: flag@1.0.0 and concern@2.0.0 (concern outranks flag as
+    // the name's canonical). The open pkg@1.0.0 issue is the FLAG slot's own
+    // ticket — the concern target must create its own, not retitle it away.
+    writeFileSync(idxPath, JSON.stringify(idx([e({
+      approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:demo-flag'], flaggedAt: '2026-06-01T00:00:00Z' },
+      pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
+    })])))
+    writeFileSync(vPath, JSON.stringify(v({ version: '2.0.0', verdict: 'concern' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([
+        { number: 20, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'flag issue' },
+      ])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    expect(calls.some(c => c.includes('create') && c.join(' ').includes('[review] pkg@2.0.0'))).toBe(true)
+    expect(calls.filter(c => c[1] === 'edit' && c[4] === '20').map(c => c.join(' ')).join('\n')).not.toContain('--title')
+    expect(calls.some(c => c.includes('close'))).toBe(false)
   })
 
   it('listing at the cap warns loudly instead of truncating silently', async () => {

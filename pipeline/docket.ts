@@ -1058,6 +1058,23 @@ export async function main(
   const canonical = new Map<string, OpenIssue>()
   for (const [title, l] of openByTitle)
     canonical.set(title, l.reduce((a, b) => (b.number > a.number ? b : a)))
+  // newest open issue per NAME (titleTarget-parsed) — the version-drift
+  // fallback. A version bump used to close the old issue + open a fresh one,
+  // losing discussion and churning hundreds of tickets per release wave;
+  // now the same-name issue is retitled in place. Sentinel titles
+  // (parenthesized aggregates) return null from titleTarget and can never
+  // be name-claimed — they only exact-match.
+  const canonicalByName = new Map<string, OpenIssue>()
+  for (const i of open) {
+    const t = titleTarget(i.title)
+    if (!t) continue
+    const k = t.name.toLowerCase()
+    const cur = canonicalByName.get(k)
+    if (!cur || i.number > cur.number) canonicalByName.set(k, i)
+  }
+  // issue numbers the wanted loop adopted via name-fallback — the close
+  // pass must skip them (their stale title is not in `wanted`)
+  const claimed = new Set<number>()
 
   const created: string[] = []
   const updated: string[] = []
@@ -1066,7 +1083,30 @@ export async function main(
   const ops: Op[] = []
 
   for (const [title, t] of wanted) {
-    const ex = canonical.get(title)
+    let ex = canonical.get(title)
+    // version-drift adoption: no exact-title issue, but the same package
+    // has an open ticket at an older version — retitle it in place instead
+    // of close+create. Only the name's rank-canonical target may claim
+    // (wantedByName is first-write-wins in pass→none→concern→flag order),
+    // and never steal an issue whose own title is still wanted — a name
+    // with two live slots (e.g. candidate + pendingUpdate) keeps one
+    // ticket per slot.
+    let retitle = false
+    if (!ex && wantedByName.get(t.name.toLowerCase()) === t) {
+      const byName = canonicalByName.get(t.name.toLowerCase())
+      // but never adopt a ticket whose OWN key was already decided — a
+      // verdict landing on pkg@1.0.0 completes that ticket's lifecycle; it
+      // must close '已决议', not morph into the next version's review. Same
+      // governing check closeReason uses, so the two paths can't disagree.
+      const tt = byName ? titleTarget(byName.title) : null
+      const issueDecided = !!tt && !!(epochGoverning(latestV.get(vkey(tt.name, tt.ver || null)), tt.name, tomb)
+        || brakeFor(humanV, tt.name, tt.ver || null, tomb))
+      if (byName && !wanted.has(byName.title) && !issueDecided) {
+        ex = byName
+        retitle = true
+        claimed.add(byName.number)
+      }
+    }
     if (!ex) {
       console.log(`[docket] create ${title}`)
       const args = ['issue', 'create', '-R', repo, '--title', title,
@@ -1108,6 +1148,9 @@ export async function main(
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()
     const edit = ['issue', 'edit', '-R', repo, String(ex.number)]
+    // adopted via name-fallback: the title itself is the drift — retitle in
+    // place so the ticket's comments/number carry forward to the new key
+    if (retitle) edit.push('--title', title)
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
@@ -1122,7 +1165,7 @@ export async function main(
     if (curLabels.has('review:decided')) edit.push('--remove-label', 'review:decided')
     if (bodyDrift) edit.push('--body', body)
     if (edit.length > 5) {
-      console.log(`[docket] update #${ex.number} ${title}${staleAi.length || missingAi ? ` (ai → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}${stuck ? ` (stuck ${stuck})` : ''}`)
+      console.log(`[docket] update #${ex.number} ${retitle ? `${ex.title} → ` : ''}${title}${staleAi.length || missingAi ? ` (ai → ${wantAi ?? 'none'})` : ''}${bodyDrift ? ' (body drift)' : ''}${stuck ? ` (stuck ${stuck})` : ''}`)
       if (dry) { updated.push(title); continue }
       const curAssignees = new Set((ex.assignees ?? []).map(a => a.login))
       ops.push({ kind: 'update', title, run: async () => {
@@ -1202,6 +1245,9 @@ export async function main(
 
   for (const i of open) {
     if (wanted.has(i.title) && canonical.get(i.title) === i) continue
+    // name-fallback adoption already retitles this ticket — its stale title
+    // isn't in `wanted`, but the issue is very much alive
+    if (claimed.has(i.number)) continue
     const why = wanted.has(i.title) ? '重复审核单（同目标已有在办单）' : closeReason(i)
     console.log(`[docket] close #${i.number} ${i.title} (${why})`)
     if (dry) { closed.push(i.title); continue }
