@@ -106,6 +106,13 @@ export interface DocketTarget {
   /** package source for out-of-issue links — npm → npmjs/unpkg, github →
    *  repo + blob@pin links */
   src?: { kind: 'npm' | 'github'; id: string; repo?: string; version?: string }
+  /** the package's own claimed description — AI mismatch objections are
+   *  judged against this text, so the reviewer needs it verbatim */
+  description?: string
+  /** pendingUpdate slots only: the RELEASED ref this update replaces —
+   *  npm → last approved version, github → last pinned sha. Renders the
+   *  diff/compare link that answers "what changed" without a tarball pull */
+  prevRef?: { kind: 'version' | 'sha'; value: string }
   stars?: number | null
   /** full red-flag enumeration (bounded at render, not here) — the flags are
    *  the substance of a mechanical-flag issue; a 4-item excerpt can't carry
@@ -277,6 +284,17 @@ export function docketTargets(
         ...(e.source.repo ? { repo: e.source.repo } : {}),
         ...(e.source.version ? { version: e.source.version } : {}),
       } } : {}),
+      ...(e.description?.en ?? e.description?.zh
+        ? { description: (e.description.en ?? e.description.zh) as string }
+        : {}),
+      // held slot → the issue is about the UPDATE, so carry the released ref
+      // it replaces: npm lastVersion / github pin sha — the diff link needs
+      // BOTH ends, and the candidate half is already t.version
+      ...(slot !== e && (e.latestVersion || e.source?.version)
+        ? { prevRef: e.source?.kind === 'github'
+            ? { kind: 'sha' as const, value: e.source.version ?? '' }
+            : { kind: 'version' as const, value: e.latestVersion ?? '' } }
+        : {}),
       ...(e.metrics?.stars != null ? { stars: e.metrics.stars } : {}),
     }
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
@@ -720,6 +738,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     L.push(`- 当前 AI 判定：**${t.verdict}**${reasonZh ? ` — ${reasonZh}` : ''}`)
     const reasonEn = t.reasonEn ? clean(stripFlagTail(t.reasonEn)) : ''
     if (reasonEn) L.push(`  - ${reasonEn}`)
+    // LLM 判 pass 被机械规则拦下 ≠ AI 主动判 concern——判词理由里嵌着
+    // "LLM 判 pass" 标记。点名这层区别：审查者只需抽查拦截信号本身，
+    // 不用重审整包——这是队列里最快的可放行集合
+    if (t.verdict === 'concern' && /LLM 判 pass/.test(t.reason ?? ''))
+      L.push('- 🟢 **AI 判词本体为 pass**——本单仅被机械信号（红旗清单/L0.5 注入检测等）拦下：抽查下方对应证据行，确认误报即 `verdict:pass` 放行')
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
       // a standing human pass COVERS the flag exemption (§7 humanPassCovers):
       // the gate releases under that authority — "只能人工放行" would tell the
@@ -795,6 +818,17 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       t.stars != null ? `★${t.stars.toLocaleString('en-US')}` : null,
     ].filter(Boolean).join(' · ')
     L.push(`- 包来源：${pkg}${bits ? ` · ${bits}` : ''}`)
+  }
+  // the claimed description verbatim — "描述与功能不符" objections can't be
+  // checked without the text the AI objected to
+  if (t.description) L.push(`- 清单自述：「${clean(t.description, 300)}」`)
+  // held-update targets: WHAT changed is the review subject — a blind
+  // "new version" verdict asks the maintainer to diff two tarballs by hand
+  if (t.prevRef?.value && t.src) {
+    if (t.prevRef.kind === 'version')
+      L.push(`- 更新内容：[${clean(t.prevRef.value, 40)} → ${clean(t.version ?? '?', 40)} 逐文件 diff](https://diff.intrinsic.com/${t.src.id}/${encodeURIComponent(t.prevRef.value)}/${encodeURIComponent(t.version ?? '')})`)
+    else if (t.src.kind === 'github')
+      L.push(`- 更新内容：[${t.prevRef.value.slice(0, 10)}… → ${(t.version ?? '?').slice(0, 10)}… 变更对比](https://github.com/${t.src.repo ?? t.src.id}/compare/${encodeURIComponent(t.prevRef.value)}...${encodeURIComponent(t.version ?? '')})`)
   }
   if (t.unscanned) {
     L.push('- 静态扫描：**未运行**（findings/redFlags 为空是缺数据，不是无发现）')
