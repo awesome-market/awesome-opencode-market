@@ -737,7 +737,11 @@ export async function verifyPackage(
         // lands on the nobody uid, which still cannot touch the results file
         const guiEntry = fileURLToPath(new URL('./gui.ts', import.meta.url))
         try {
-          const { stdout } = await urun('npx', ['tsx', guiEntry, found.path],
+          // node --import tsx, NOT `npx tsx`: npm exec reifies into a cache
+          // dir the sandbox uid can't always write (EACCES spawn sh) and may
+          // hit the network for a package already in devDependencies. --import
+          // resolves tsx straight from the checkout's node_modules — read-only.
+          const { stdout } = await urun('node', ['--import', 'tsx', guiEntry, found.path],
             { cwd: process.cwd(), timeout: 90_000 })
           gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
         } catch (e) {

@@ -765,6 +765,28 @@ export const isMechFlagConcern = (v: AiVerdict | undefined): boolean =>
   // never contains this marker — it is only written by the placeholder paths.
   v?.verdict === 'concern' && v.source === 'ai' && (v.reason ?? '').includes(MECH_FLAG_PREFIX)
 
+/** The verify-fail short-circuit's reason shape — `装测失败（verify <level> 级）：…`.
+ *  Regex (not anchored): the re-tag annotation may precede it, same as the
+ *  flag placeholder. */
+export const VERIFY_FAIL_RE = /装测失败（verify \w+ 级）/
+export const isVerifyFailConcern = (v: AiVerdict | undefined): boolean =>
+  v?.verdict === 'concern' && v.source === 'ai' && VERIFY_FAIL_RE.test(v.reason ?? '')
+
+/** A verify-fail concern asserts "装不上" against ONE measurement
+ *  (vf.verifiedAt at verdict time). When the slot carries NEWER evidence —
+ *  a retest after a harness fix, a host-version re-verify — the verdict
+ *  judges a measurement that no longer describes the slot: re-queue so the
+ *  entry earns an honest verdict on the new evidence (verified → real
+ *  review; failed again → the same mechanical concern rewrites cheaply,
+ *  no LLM call). Without this a harness-caused 'failed' mints a permanent
+ *  human-debt concern even after the package measures clean. */
+export const staleVerifyFail = (
+  v: AiVerdict | undefined,
+  vf: { verifiedAt?: string | undefined } | undefined,
+): boolean =>
+  isVerifyFailConcern(v) && !!vf?.verifiedAt && !!v?.at
+  && Date.parse(vf.verifiedAt) > Date.parse(v.at)
+
 /** Held versions that have NEVER received any verdict. Both held shapes:
  *  pendingUpdate (newer version behind a displayed one) and approval:pending
  *  on the entry itself (first version never released). ANY existing verdict —
@@ -810,8 +832,9 @@ export function unreviewedTargets(
     // Re-queue it so the model can actually decide (pass w/ flagsReviewed
     // or a real concern); once any real verdict lands this exclusion holds
     // again. Human verdicts and AI judgments are untouched.
+    const vf = candidateSlot(e)?.verification ?? e.verification
     const gov = epochGoverning(seen.get(vkey(e.name, ver)), e.name, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov)) return false
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
@@ -825,7 +848,6 @@ export function unreviewedTargets(
     // re-pins every slot) the entire queue would stall behind the measure
     // loop — a throttle that buys no safety, since the cooldown lives in the
     // digest window and maturity gate, not in measurement order.
-    const vf = candidateSlot(e)?.verification ?? e.verification
     if (!opts.ahead) {
       // A retryable 'failed' slot still belongs to the verify loop (V-3): the
       // auto-retry may flip it to verified, and a premature short-circuit
