@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { searchByKeyword, discoverNpm } from '../pipeline/discover/npm.ts'
-import { searchTopic, searchCode, discoverGithub, normalizeRepoUrl, ghHeaders } from '../pipeline/discover/github.ts'
+import { searchTopic, searchCode, discoverGithub, normalizeRepoUrl, ghHeaders, retryWaitMs } from '../pipeline/discover/github.ts'
 import { filterByStars, repoToNpm } from '../pipeline/discover/seed.ts'
 import { preAdmit, looksLikeTemplateSpam, hasPluginEvidence, hasRepoEvidence } from '../pipeline/discover/filter.ts'
 
@@ -349,10 +349,39 @@ describe('discovery: rate-limit & window handling', () => {
     expect(r2).toEqual([])
   })
 
-  it('searchCode: 403 retried once then truncates', async () => {
+  it('searchCode: 403 retried then truncates after the retry budget', async () => {
     let calls = 0
     const r = await searchCode('q', { fetchFn: (async () => { calls++; return mkRes({}, 403) }) as typeof fetch })
-    expect(calls).toBe(2)
+    expect(calls).toBe(4) // 1 + 3 retries, then truncate — no endless hammering
     expect(r).toEqual([])
+  })
+
+  it('searchTopic: 403 retries recover a later page instead of truncating', async () => {
+    let calls = 0
+    const f = async () => {
+      calls++
+      return calls < 3 ? mkRes({}, 403) : mkRes({ items: [{ full_name: 'o/a' }], total_count: 1 })
+    }
+    const r = await searchTopic('t', { fetchFn: f as typeof fetch })
+    expect(calls).toBe(3)
+    expect(r.map(x => x.fullName)).toEqual(['o/a'])
+  })
+
+  it('searchTopic: persistent 403 truncates after the retry budget', async () => {
+    let calls = 0
+    const r = await searchTopic('t', { fetchFn: (async () => { calls++; return mkRes({}, 403) }) as typeof fetch })
+    expect(calls).toBe(4)
+    expect(r).toEqual([])
+  })
+
+  it('retryWaitMs: retry-after wins, then reset window, then backoff', () => {
+    const res = (h: Record<string, string>) => new Response('', { status: 403, headers: h })
+    expect(retryWaitMs(res({ 'retry-after': '7' }), 0)).toBe(7_000)
+    const reset = Math.floor(Date.now() / 1000) + 30
+    expect(retryWaitMs(res({ 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) }), 0))
+      .toBeGreaterThan(25_000)
+    expect(retryWaitMs(res({}), 0)).toBe(15_000)
+    expect(retryWaitMs(res({}), 2)).toBe(60_000)
+    expect(retryWaitMs(res({ 'retry-after': '500' }), 0)).toBe(90_000) // capped
   })
 })

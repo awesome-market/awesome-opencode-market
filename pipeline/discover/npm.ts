@@ -26,6 +26,9 @@ export async function searchByKeyword(
   opts: { size?: number; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<NpmSearchResult[]> {
   const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
+  // run.ts always forwards its own `f` — which IS global fetch in production —
+  // so `opts.fetchFn ?` cannot detect tests; only a non-`fetch` fetch is fake
+  const test = opts.fetchFn !== undefined && opts.fetchFn !== fetch
   const size = opts.size ?? 250
   const maxPages = opts.maxPages ?? 10 // registry caps ~1000 results anyway
   const out: NpmSearchResult[] = []
@@ -46,9 +49,10 @@ export async function searchByKeyword(
         if (!res.ok) {
           if ((res.status === 429 || res.status >= 500) && !retried) {
             retried = true
+            await res.arrayBuffer().catch(() => undefined)
             const ra = Number.parseInt(res.headers.get('retry-after') ?? '', 10)
             const wait = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 30) : 3
-            await sleep(opts.fetchFn ? 0 : wait * 1000)
+            await sleep(test ? 0 : wait * 1000)
             continue
           }
           console.warn(`[discover:npm] '${keyword}' page ${page} failed (${res.status}) — results truncated`)
