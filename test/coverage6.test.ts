@@ -208,6 +208,45 @@ describe('ai/diagnose.main', () => {
     const out = readFileSync(op, 'utf8').trim()
     expect(out === '' || !out.includes('机械红旗待人工')).toBe(true)
   })
+  it('flagged + same-sha twin pass WITH flagsReviewed → reuses the cleared pass', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    // identical bytes already flag-reviewed under 1.0.0 — the judgment carries
+    const twinPass = v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: '红旗已复核，干净', sha: 'sha512-same', flagsReviewed: true, at: '2026-01-02T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [twinPass])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    const got = JSON.parse(readFileSync(op, 'utf8').trim()) as AiVerdict
+    expect(got.verdict).toBe('pass')
+    expect(got.flagsReviewed).toBe(true)
+    expect(got.reusedFrom?.version).toBe('1.0.0')
+  })
+  it('flagged + uncleared twin + standing placeholder → no rewrite, stays queued', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const mech = v({ name: 'pkg', version: '2.0.0', verdict: 'concern', reason: '机械红旗待人工：sec:exec:a.js', at: '2026-01-02T00:00:00Z' })
+    const uncleared = v({ name: 'pkg', version: '1.0.0', verdict: 'pass', reason: 'old pass', sha: 'sha512-same', at: '2026-01-01T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [mech, uncleared])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('must not be called') },
+      sha: () => 'sha512-same',
+    })
+    // placeholder already stands — an identical rewrite is jsonl noise
+    expect(readFileSync(op, 'utf8').trim()).toBe('')
+  })
+  it('flagged + standing placeholder + ornith down → keeps placeholder, no downgrade emit', async () => {
+    const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
+    const mech = v({ name: 'pkg', version: '2.0.0', verdict: 'concern', reason: '机械红旗待人工：sec:exec:a.js', at: '2026-01-02T00:00:00Z' })
+    const { ip, vp, op } = files([flagged], [mech])
+    await diagnoseMain(argv(ip, vp, op), {
+      l05: () => l05Map(),
+      ornith: async () => { throw new Error('omlx down') },
+      sha: noSha,
+    })
+    expect(readFileSync(op, 'utf8').trim()).toBe('')
+  })
   it('red-flagged + ornith down → still concern (fail-safe), flags as reason', async () => {
     const flagged = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:exec:a.js'] }, verification: { status: 'skipped' }, heldAt: 't' } })
     const { ip, vp, op } = files([flagged])
