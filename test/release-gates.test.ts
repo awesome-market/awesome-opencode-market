@@ -411,6 +411,13 @@ describe('G9: mergeResults honors the honest-label invariant', () => {
     const r = mergeResults(mkIndex([mkEntry('p', { verification: { status: 'unverified' } })]), [res('p', '1.0.0')])
     expect(r.plugins[0]!.verification.status).toBe('verified')
   })
+  it('per-row jobUrl overrides the run-level runUrl param', () => {
+    const withJob = { ...res('p', '1.0.0'), jobUrl: 'https://example.com/run/1/job/42' }
+    const r = mergeResults(mkIndex([mkEntry('p', { verification: { status: 'unverified' } })]), [withJob], 'https://example.com/run/1')
+    expect(r.plugins[0]!.verification.runUrl).toBe('https://example.com/run/1/job/42')
+    const noJob = mergeResults(mkIndex([mkEntry('p', { verification: { status: 'unverified' } })]), [res('p', '1.0.0')], 'https://example.com/run/1')
+    expect(noJob.plugins[0]!.verification.runUrl).toBe('https://example.com/run/1')
+  })
 })
 
 // ————— explainEntry mirrors the new gates —————

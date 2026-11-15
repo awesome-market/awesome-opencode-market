@@ -1655,7 +1655,7 @@ describe('issue evidence enrichment', () => {
     expect(body).toContain('📄')
     expect(body).toContain('装测日志摘要')
     expect(body).toContain('404 Not Found')
-    expect(body).toContain('[完整运行日志](https://example.com/run/1)')
+    expect(body).toContain('[本次装测完整日志](https://example.com/run/1)')
   })
   it('github source links blob at verdictSha; no src → plain paths', () => {
     const gh = e({
@@ -1667,11 +1667,41 @@ describe('issue evidence enrichment', () => {
     const t = docketTargets(idx([gh]), [v({ name: 'o/r', version: null, verdict: 'concern', sha: 'cafebabe5678' })])[0]!
     const body = issueBody(t)
     expect(body).toContain('[GitHub 仓库](https://github.com/o/r)')
-    expect(body).toContain('https://github.com/o/r/blob/cafebabe5678/a/b.js')
+    // first finding line anchors the blob link and labels the path :L<n>
+    expect(body).toContain('https://github.com/o/r/blob/cafebabe5678/a/b.js#L1')
+    expect(body).toContain('`a/b.js:L1`')
     // unverified + no log → no 装测日志摘要 section
     expect(body).not.toContain('装测日志摘要')
     const bare = issueBody({ name: 'p', version: '1', verdict: 'concern', hotFiles: [{ path: 'x.js', rules: 'r', n: 1, doc: false }] })
     expect(bare).toContain('`x.js`')
     expect(bare).not.toContain('unpkg.com')
+  })
+  it('npm tarball `package/` prefix is stripped from unpkg links', () => {
+    // npm packs wrap every file under package/; unpkg serves the stripped
+    // tree — /pkg@v/package/index.ts 404s while /pkg@v/index.ts resolves
+    const ent = findingsEntry()
+    ent.capabilities.findings = ['network-call:package/index.ts — L223: fetch(u)']
+    const t = docketTargets(idx([ent]), [v({ verdict: 'concern' })])[0]!
+    const body = issueBody(t)
+    expect(body).toContain('https://unpkg.com/pkg@1.0.0/index.ts')
+    expect(body).not.toContain('unpkg.com/pkg@1.0.0/package/index.ts')
+    expect(body).toContain('`package/index.ts:L223`')
+  })
+  it('失败速读 unwraps message/cause and explains the signature', () => {
+    const ent = findingsEntry()
+    ent.verification = {
+      status: 'failed', level: 'load',
+      logExcerpt: '--- errors ---\ntimestamp=t level=ERROR run=x message="failed to watch directory" error="EACCES"\ntimestamp=t level=WARN run=x message="failed to load plugin" target=pkg@1.0.0 cause="Cause([Fail(PluginModule.LoadError: Plugin m"\n--- stream tail ---\nwatcher stopped',
+      runUrl: 'https://example.com/run/1',
+    }
+    const body = issueBody(docketTargets(idx([ent]), [v({ verdict: 'concern' })])[0]!)
+    // watcher EACCES noise must not be picked as the failure line — the
+    // plugin's own LoadError is the evidence
+    expect(body).toContain('失败速读：插件模块无法被宿主加载')
+    expect(body).toContain('failed to load plugin')
+    expect(body).toContain('PluginModule.LoadError')
+    // structured fields unwrap — raw timestamp/run boilerplate is gone
+    expect(body).toContain('- failed to load plugin')
+    expect(body).not.toContain('timestamp=t')
   })
 })

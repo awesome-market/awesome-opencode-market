@@ -5,6 +5,7 @@
  *  slot holds are stale (npm moved on) and are dropped. */
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { env } from 'node:process'
 import { z } from 'zod'
 import { CatalogIndex, type PluginEntry } from '../../src/schema.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
@@ -31,6 +32,10 @@ export const VerifyResultFile = z.object({
   // final CatalogIndex.parse and hard-fail the WHOLE merge (every valid row
   // in the batch dies with it). Bound here so the poisoned row drops alone.
   logExcerpt: z.string().max(2048).optional(),
+  // per-row link to the producing `verify (N)` job — set by merge from
+  // /tmp/jobs.json so the published runUrl opens the failing shard's log
+  // view, not the whole-run job list
+  jobUrl: z.string().max(500).optional(),
   // shard threw around the package check — infrastructure signal, dropped below
   harness: z.boolean().optional(),
 })
@@ -61,7 +66,7 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
     opencodeVersion: r.opencodeVersion,
     verifiedAt: r.verifiedAt,
     ...(r.integrity ? { integrity: r.integrity } : {}),
-    ...(runUrl ? { runUrl } : {}),
+    ...(r.jobUrl ?? runUrl ? { runUrl: r.jobUrl ?? runUrl } : {}),
     ...(excerpt ? { logExcerpt: excerpt } : {}),
     // consecutive-failure counter — plan lets a recent failure back into the
     // queue while retries < 3 (V-3). Cleared whenever the status isn't failed.
@@ -228,6 +233,19 @@ if (isMain(import.meta.url)) {
   // an absent dir is a legitimately empty shard set (all targets flagged,
   // every shard timed out pre-flush) — merge zero rows, not a crash
   const files = existsSync(resultsDir!) ? readdirSync(resultsDir!) : []
+  // shard → job html_url — the workflow resolves /tmp/jobs.json once per
+  // run; a missing/corrupt map degrades each row to the run-level RUN_URL
+  const jobUrls = (() => {
+    try {
+      const rows = JSON.parse(readFileSync(env.JOBS_JSON ?? '/tmp/jobs.json', 'utf8')) as { name?: string; html_url?: string }[]
+      const m = new Map<string, string>()
+      for (const j of rows) {
+        const shard = /^verify \((\d+)\)$/.exec(j.name ?? '')?.[1]
+        if (shard && j.html_url) m.set(shard, j.html_url)
+      }
+      return m
+    } catch { return new Map<string, string>() }
+  })()
   for (const f of files.filter(f => f.startsWith('results-'))) {
     // one corrupt shard artifact (truncated upload, non-JSON stray file) must
     // not take the WHOLE merge down — skip the file, keep the valid shards
@@ -240,9 +258,13 @@ if (isMain(import.meta.url)) {
       continue
     }
     if (!Array.isArray(raw)) { console.warn(`${f}: not a result array — skipped`); dropped++; continue }
+    // results-<N>.json came from matrix job `verify (N)` — tag every row in
+    // the file with that job's URL so a reviewer lands on the right log view
+    const shardNo = /^results-(\d+)\.json$/.exec(f)?.[1]
+    const jobUrl = shardNo !== undefined ? jobUrls.get(shardNo) : undefined
     for (const r of raw) {
       const p = VerifyResultFile.safeParse(r)
-      if (p.success) results.push(p.data as VerifyResult)
+      if (p.success) results.push(jobUrl ? { ...p.data, jobUrl } as VerifyResult : p.data as VerifyResult)
       else { console.warn(`${f}: malformed result dropped (${JSON.stringify(r).slice(0, 120)})`); dropped++ }
     }
   }
