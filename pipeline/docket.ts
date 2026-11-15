@@ -1004,14 +1004,24 @@ export async function main(
       const op = ops[cursor++]!
       try { await op.run() } catch (err) {
         // secondary-rate-limit bursts are transient pacing, not real
-        // failures — back off once and retry before recording, or a single
-        // burst fails a whole close batch the next tick has to redo
+        // failures — back off with growing waits and retry before recording,
+        // or a single sustained burst fails a whole close batch the next
+        // tick has to redo (run 43673747835: one 20s retry wasn't enough
+        // during mass-close churn → pipeline-alert #3936)
+        let last: unknown = err
         if (/too quickly|rate.?limit|secondary/i.test(String(err))) {
-          await sleep(20_000)
-          try { await op.run(); continue } catch (e2) { err = e2 }
+          for (const wait of [20_000, 40_000, 60_000]) {
+            await sleep(wait)
+            try { await op.run(); last = null; break } catch (e2) {
+              last = e2
+              if (!/too quickly|rate.?limit|secondary/i.test(String(e2))) break
+            }
+          }
         }
-        failures.push(`${op.kind} ${op.title}`)
-        console.error(`[docket] ${op.kind} failed: ${op.title}`, err)
+        if (last) {
+          failures.push(`${op.kind} ${op.title}`)
+          console.error(`[docket] ${op.kind} failed: ${op.title}`, last)
+        }
       }
     }
   }))
