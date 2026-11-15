@@ -81,5 +81,8 @@ jobs:
           [ -n "$PR" ] || PR=$(gh pr create --head "$BRANCH" --base main \
             --title "reports: $RDATE marketplace stats" \
             --body "Automated docs/reports update ($RDATE). Merges itself once CI is green." | grep -o '[0-9]*$')
-          gh pr checks "$PR" --watch --interval 20
+          # no CI wait: GITHUB_TOKEN-created PRs never trigger pull_request
+          # workflows (anti-recursion), and protect-main requires a PR but
+          # no status checks — merge straight through. docs/reports is
+          # generated output; the renderer itself already ran above.
           gh pr merge "$PR" --squash --delete-branch
