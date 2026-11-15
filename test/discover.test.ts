@@ -303,6 +303,30 @@ describe('discovery: rate-limit & window handling', () => {
     for (const x of r) expect(x.fullName).toMatch(/^o\/since-\d{4}-\d{2}-\d{2}$/)
   })
 
+  it('searchTopic: oversized leaf sweeps BOTH ends — asc window recovers the tail', async () => {
+    const calls: string[] = []
+    const f = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input)); calls.push(String(input))
+      const q = url.searchParams.get('q') ?? ''
+      const page = Number(url.searchParams.get('page') ?? '1')
+      const order = url.searchParams.get('order') ?? 'desc'
+      const m = q.match(/created:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/)
+      const width = m ? (Date.parse(m[2]!) - Date.parse(m[1]!)) / 86_400_000 : 1e9
+      if (!m || width > 60) {
+        // keep the tree splitting until slices narrow to ~weeks
+        return mkRes({ total_count: 2500, items: [{ full_name: 'o/root' }] })
+      }
+      // narrow leaf: 1500 > the 1000 window — desc and asc each serve full
+      // 100-item pages of DISTINCT names so the union proves coverage
+      const items = Array.from({ length: 100 }, (_, i) => ({ full_name: `o/${order}-${page}-${i}` }))
+      return mkRes({ total_count: 1500, items })
+    }
+    const r = await searchTopic('t', { fetchFn: f as typeof fetch })
+    expect(calls.some(u => u.includes('order=asc'))).toBe(true)
+    // a single-end sweep caps at 1000; both ends must exceed it
+    expect(r.length).toBeGreaterThan(1000)
+  })
+
   it('searchTopic: ≤window total never emits a created qualifier', async () => {
     const calls: string[] = []
     const f = async (input: RequestInfo | URL) => {
@@ -348,7 +372,7 @@ describe('discovery: rate-limit & window handling', () => {
 
     let calls2 = 0
     const r2 = await searchByKeyword('k', { fetchFn: (async () => { calls2++; return mkRes({}, 429) }) as typeof fetch })
-    expect(calls2).toBe(2) // one retry, no endless hammering
+    expect(calls2).toBe(4) // retry budget spent (1 + 3), then truncate — no endless hammering
     expect(r2).toEqual([])
   })
 

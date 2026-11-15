@@ -144,7 +144,7 @@ const fetchSearchJson = async (
  *  first cover is total. MAX_SPLIT_DEPTH bounds the request count for a
  *  pathological topic. */
 const SEARCH_WINDOW = 1000
-const MAX_SPLIT_DEPTH = 8
+const MAX_SPLIT_DEPTH = 10                  // ~6.7-day leaves over the epoch — dense topics (~200 repos/day peaks) fit under the window; deeper only buys request burn
 const GH_EPOCH = Date.parse('2008-01-01T00:00:00Z')
 
 // search/repositories and search/code share the same item-shape contract:
@@ -177,12 +177,12 @@ export async function searchTopic(
   const base = `topic:${topic} fork:false`
   const seen = new Map<string, GhRepo>()
 
-  const fetchPage = async (q: string, page: number): Promise<{ items: GhRepo[]; total: number } | null> => {
-    const url = `${GH_API}/search/repositories?q=${encodeURIComponent(q)}&sort=updated&per_page=100&page=${page}`
+  const fetchPage = async (q: string, page: number, order: 'asc' | 'desc' = 'desc'): Promise<{ items: GhRepo[]; total: number } | null> => {
+    const url = `${GH_API}/search/repositories?q=${encodeURIComponent(q)}&sort=updated&order=${order}&per_page=100&page=${page}`
     // a mid-pagination failure must be loud — the candidate tail silently
     // vanished otherwise (truncation telemetry lives in fetchSearchJson)
     const body = await fetchSearchJson(
-      url, `[discover:github] '${topic}' page ${page}`, opts,
+      url, `[discover:github] '${topic}' page ${page}${order === 'asc' ? ' (asc)' : ''}`, opts,
       opts.token ? SEARCH_GAP_MS : CODE_SEARCH_GAP_MS,
     )
     if (body === null) return null
@@ -201,25 +201,24 @@ export async function searchTopic(
     return { items: out, total: numOr(obj?.total_count) ?? 0 }
   }
 
-  // sweep one ≤window slice; fetchPage(page 1) already consumed by slice().
+  // sweep one slice in ONE ordering direction; fetchPage(page 1) already
+  // consumed by slice(). Returns whether the window cut a tail — the caller
+  // decides whether the opposite end recovers it before any warn.
   // total=0 means the count was missing/unreadable — fall back to paging
   // until a short page, the pre-bisection semantics.
-  const sweep = async (q: string, total: number, first: GhRepo[]): Promise<void> => {
+  const sweep = async (q: string, total: number, first: GhRepo[], order: 'asc' | 'desc'): Promise<boolean> => {
     const windowTotal = total > 0 ? Math.min(total, SEARCH_WINDOW) : maxPages * 100
     let page = 1, items = first
     for (;;) {
       for (const r of items) seen.set(r.fullName.toLowerCase(), r)
-      if (items.length < 100) return
+      if (items.length < 100) return false
       if (page >= Math.min(maxPages, Math.ceil(windowTotal / 100))) {
-        // window-cap truncation warned by slice(); this is the page cap —
-        // page*100 < windowTotal is exact for known totals, a full last
+        // page*100 < windowTotal is exact for known totals; a full last
         // page is the best signal when the count never arrived
-        const dropped = total > 0 ? page * 100 < windowTotal : items.length === 100
-        if (dropped) console.warn(`[discover:github] '${topic}' page cap — tail results dropped`)
-        return
+        return total > 0 ? page * 100 < windowTotal : items.length === 100
       }
-      const p = await fetchPage(q, page + 1)
-      if (!p) return
+      const p = await fetchPage(q, page + 1, order)
+      if (!p) return true
       items = p.items; page++
     }
   }
@@ -239,9 +238,24 @@ export async function searchTopic(
       await slice(mid, hi, depth + 1)
       return
     }
-    if (p1.total > SEARCH_WINDOW)
-      console.warn(`[discover:github] '${topic}' created:${isoDay(lo)}..${isoDay(hi)} still exceeds the search window (${p1.total}) — tail dropped`)
-    await sweep(q, p1.total, p1.items)
+    if (p1.total > SEARCH_WINDOW) {
+      // A leaf that still outgrows the window at the depth floor gets BOTH
+      // ends of the updated ordering — desc's 1000 most-recently-updated
+      // plus asc's 1000 least-recently-updated, deduped by `seen`. Only the
+      // middle beyond 2000 can still drop, and that is what the warn counts.
+      console.warn(`[discover:github] '${topic}' created:${isoDay(lo)}..${isoDay(hi - 1)} exceeds the window (${p1.total}) — sweeping both ends`)
+      // total > window means desc's own window always truncates — the asc
+      // end runs unconditionally; real loss = a fetch died or the middle
+      // beyond both windows (slice > 2×1000)
+      const descFailed = await sweep(q, p1.total, p1.items, 'desc')
+      const a1 = await fetchPage(q, 1, 'asc')
+      const dropped = descFailed || !a1 || await sweep(q, a1.total, a1.items, 'asc')
+        || p1.total > 2 * SEARCH_WINDOW
+      if (dropped) console.warn(`[discover:github] '${topic}' created:${isoDay(lo)}..${isoDay(hi - 1)} still exceeds both windows (${p1.total}) — tail dropped`)
+      return
+    }
+    if (await sweep(q, p1.total, p1.items, 'desc'))
+      console.warn(`[discover:github] '${topic}' page cap — tail results dropped`)
   }
   await slice(GH_EPOCH, Date.now(), 0)
   return [...seen.values()]
