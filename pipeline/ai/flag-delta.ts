@@ -142,6 +142,23 @@ function judgeMaterial(repo: string, a: { flag: string; oldSha: string; newSha: 
   return { summary, commits, patches: parts.join('\n\n') || '(no patches available)', patchOmitted }
 }
 
+/* v8 ignore next 14 -- CLI plumbing: die() exits the process, so usage-error
+ *  arms can't be unit-tested in-process; the wrapper always passes valid args */
+function parseArgs(args: string[]) {
+  const die = (m: string): never => { console.error(m); exit(1) }
+  const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
+  const numArg = (k: string, d: number) => { const n = Number(arg(k) ?? d); return Number.isFinite(n) && n >= 0 ? n : die(`usage: ${k} must be a non-negative number`) }
+  const usage = 'usage: --index <p> --verdicts <p> --assessments <p> --spool <p> [--limit N] [--dry]'
+  return {
+    idxPath: arg('--index') ?? die(usage),
+    verdictsPath: arg('--verdicts') ?? die(usage),
+    assessPath: arg('--assessments'),
+    spoolPath: arg('--spool'),
+    dry: args.includes('--dry'),
+    limit: numArg('--limit', 30),
+  }
+}
+
 export async function main(
   args: string[] = process.argv,
   deps: {
@@ -150,16 +167,7 @@ export async function main(
     transport?: (args: string[]) => Promise<string>
   } = {},
 ): Promise<void> {
-  const die = (m: string): never => { console.error(m); exit(1) }
-  const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
-  const numArg = (k: string, d: number) => { const n = Number(arg(k) ?? d); return Number.isFinite(n) && n >= 0 ? n : die(`usage: ${k} must be a non-negative number`) }
-  const usage = 'usage: --index <p> --verdicts <p> --assessments <p> --spool <p> [--limit N] [--dry]'
-  const idxPath = arg('--index') ?? die(usage)
-  const verdictsPath = arg('--verdicts') ?? die(usage)
-  const assessPath = arg('--assessments')
-  const spoolPath = arg('--spool')
-  const dry = args.includes('--dry')
-  const limit = numArg('--limit', 30)
+  const { idxPath, verdictsPath, assessPath, spoolPath, dry, limit } = parseArgs(args)
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const human = latestHumanVerdicts(loadVerdicts(verdictsPath))
@@ -170,8 +178,11 @@ export async function main(
   // fresh line and latest-by-at wins downstream.
   const assessed = new Set([...priorAssess.entries()].filter(([, a]) => a.ai !== null).map(([k]) => k))
 
+  // v8 ignore next -- production-only fallback arm: the real gh-CLI transport
+  // needs gh+network; tests always inject transport or compareFn
+  const liveTransport = deps.transport ?? ghApiTransport()
   const compareFn = deps.compareFn ?? ((r: string, b: string, h: string) =>
-    fetchCompare(r, b, h, deps.transport ?? ghApiTransport()))
+    fetchCompare(r, b, h, liveTransport))
   const judge: JudgeFn | null = deps.judge ?? (
     env.AI_MODEL
       ? omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), env.AI_MODEL, env.AI_API_KEY ?? '')
@@ -182,7 +193,7 @@ export async function main(
   const works: { e: CatalogIndex['plugins'][number]; flag: string; repo: string; oldSha: string; newSha: string }[] = []
   for (const e of idx.plugins) {
     if (e.approval !== 'approved' && e.approval !== 'legacy') continue
-    if (e.source?.kind !== 'github' || !e.source.version) continue
+    if (e.source.kind !== 'github' || !e.source.version) continue
     const flags = e.capabilities.redFlags.filter(f => MOVED_FLAG_RE.test(f))
     if (!flags.length) continue
     const hv = epochGoverning(human.get(vkey(e.name, null)), e.name, tomb)

@@ -137,6 +137,9 @@ export async function fetchCompare(
  *  the user's auth so public-API rate limits don't apply. Falls back to an
  *  unauthenticated fetch when gh is absent — 60/hr is plenty for the rare
  *  flag-drift population. */
+/* v8 ignore next 16 -- transport shim: the gh-CLI leg needs a real gh+network
+ *  and the fetch fallback is the same shape; both are exercised in production,
+ *  neither is unit-testable without mocking child_process. */
 export function ghApiTransport(): (args: string[]) => Promise<string> {
   return async (args: string[]) => {
     try {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { classifyDelta, isRiskyDeltaPath, type DeltaFile } from '../pipeline/delta.ts'
+import { classifyDelta, isRiskyDeltaPath, parseCompare, fetchCompare, type DeltaFile } from '../pipeline/delta.ts'
 import { issueBody, type CompareInfo } from '../pipeline/docket.ts'
 import { main as flagDeltaMain, loadAssessments, latestAssessments, type FlagAssessment } from '../pipeline/ai/flag-delta.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
@@ -280,5 +280,289 @@ describe('loadAssessments / latestAssessments', () => {
     const nw = assess({ at: '2026-11-16T00:00:00Z' })
     const m = latestAssessments([old, nw])
     expect(m.get('o/plugin\0sec:repo-moved-since-release:bbb2222cccc')!.ai!.verdict).toBe('pass')
+  })
+})
+
+// ---------- parseCompare / fetchCompare ----------
+
+describe('parseCompare', () => {
+  const payload = {
+    ahead_by: 7, total_commits: 9,
+    commits: [
+      { sha: 'abcdef1234567890', commit: { message: 'subject line\n\nbody' } },
+      { sha: 'short1', commit: {} },
+    ],
+    files: [
+      { filename: 'a.ts', status: 'modified', additions: 5, deletions: 2, patch: '@@ x' },
+      { filename: 'b.png', status: 'added', additions: 0, deletions: 0 },
+    ],
+  }
+  it('parses commits (subject only, sha capped), files, totals', () => {
+    const c = parseCompare(payload)!
+    expect(c.aheadBy).toBe(7)
+    expect(c.commitsTotal).toBe(9)
+    expect(c.commits[0]).toEqual({ sha: 'abcdef123456', msg: 'subject line' })
+    expect(c.commits[1]).toEqual({ sha: 'short1', msg: '' })
+    expect(c.files[0]).toEqual({ path: 'a.ts', status: 'modified', add: 5, del: 2, patch: '@@ x' })
+    expect(c.files[1]!.patch).toBeUndefined()
+    expect(c.additions).toBe(5)
+    expect(c.deletions).toBe(2)
+    expect(c.truncated).toBe(false)
+  })
+  it('rejects non-compare payloads', () => {
+    for (const bad of [null, 'x', {}, { commits: [] }, { commits: [], files: 'no' }, { commits: 'x', files: [] }]) {
+      expect(parseCompare(bad), JSON.stringify(bad)).toBeNull()
+    }
+  })
+  it('defaults ahead_by/total_commits from array lengths', () => {
+    const c = parseCompare({ commits: payload.commits, files: payload.files })!
+    expect(c.aheadBy).toBe(2)
+    expect(c.commitsTotal).toBe(2)
+  })
+  it('caps lists and flags truncation', () => {
+    const many = { commits: Array(30).fill({ sha: 's', commit: { message: 'm' } }),
+      files: Array(80).fill({ filename: 'f', status: 'modified', additions: 1, deletions: 0 }) }
+    const c = parseCompare(many)!
+    expect(c.commits).toHaveLength(20)
+    expect(c.files).toHaveLength(60)
+    expect(c.filesTotal).toBe(80)
+    expect(c.truncated).toBe(true)
+    const capped = parseCompare(many, { commits: 5, files: 10 })!
+    expect(capped.commits).toHaveLength(5)
+    expect(capped.files).toHaveLength(10)
+  })
+})
+
+describe('fetchCompare', () => {
+  it('returns parsed compare on success', async () => {
+    const c = await fetchCompare('o/r', 'a', 'b', async () => JSON.stringify({
+      ahead_by: 1, commits: [{ sha: 'x', commit: { message: 'm' } }],
+      files: [{ filename: 'f', status: 'modified', additions: 1, deletions: 0 }],
+    }))
+    expect(c?.aheadBy).toBe(1)
+  })
+  it('returns null on transport error and on invalid JSON', async () => {
+    expect(await fetchCompare('o/r', 'a', 'b', async () => { throw new Error('net down') })).toBeNull()
+    expect(await fetchCompare('o/r', 'a', 'b', async () => 'not json')).toBeNull()
+    expect(await fetchCompare('o/r', 'a', 'b', async () => '{}')).toBeNull()
+  })
+})
+
+// ---------- omlxJudge via env + fetch stub (end-to-end through main) ----------
+
+describe('omlxJudge (env-selected, no deps.judge)', () => {
+  const withFetch = async (impl: () => Promise<unknown>, fn: () => Promise<void>) => {
+    const origFetch = globalThis.fetch
+    const origModel = process.env.AI_MODEL
+    process.env.AI_MODEL = 'test-model'
+    globalThis.fetch = impl as typeof fetch
+    try { await fn() } finally {
+      globalThis.fetch = origFetch
+      if (origModel === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = origModel
+    }
+  }
+  const okResp = (content: string) => ({
+    ok: true, headers: { get: () => null }, body: undefined,
+    json: async () => ({ choices: [{ message: { content } }] }),
+  })
+  it('parses a pass verdict into the assessment', async () => {
+    const s = setup([ghEntry()])
+    await withFetch(async () => okResp('{"verdict":"pass","reason_zh":"仅版本更新","reason_en":"version bump"}'), async () => {
+      await flagDeltaMain([...args(s), '--limit', '5'], {
+        compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+          commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: false }),
+      })
+    })
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai?.verdict).toBe('pass')
+    expect(a.ai?.reasonZh).toBe('仅版本更新')
+  })
+  it('unparseable model output → judge-error note, retried next run', async () => {
+    const s = setup([ghEntry()])
+    await withFetch(async () => okResp('I cannot decide, ask a human'), async () => {
+      await flagDeltaMain([...args(s), '--limit', '5'], {
+        compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, del: 0 as never, deletions: 0,
+          commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0 }], truncated: false }),
+      })
+    })
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai).toBeNull()
+    expect(a.aiNote).toContain('judge-error')
+  })
+  it('non-ok HTTP status → judge-error', async () => {
+    const s = setup([ghEntry()])
+    await withFetch(async () => ({ ok: false, status: 500, headers: { get: () => null }, body: undefined, json: async () => ({}) }), async () => {
+      await flagDeltaMain([...args(s), '--limit', '5'], {
+        compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+          commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0 }], truncated: false }),
+      })
+    })
+    expect(loadAssessments(s.spool)[0]!.aiNote).toContain('judge-error')
+  })
+})
+
+describe('flag-delta main — remaining branches', () => {
+  it('limit slices the queue; repo falls back to entry name', async () => {
+    const s = setup([ghEntry({ name: 'solo/repo', source: { kind: 'github', id: 'solo/repo', version: 'newsha999888777' } }),
+      ghEntry({ name: 'o/second', source: { kind: 'github', id: 'o/second', repo: 'o/second', version: 'newsha999888777' } })],
+      [humanPass,
+        { name: 'solo/repo', version: null, verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'human', sha: 'oldsha111222333' },
+        { name: 'o/second', version: null, verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'human', sha: 'oldsha111222333' }])
+    const repos: string[] = []
+    await flagDeltaMain([...args(s), '--limit', '1'], {
+      compareFn: async (r) => { repos.push(r); return null },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(repos).toHaveLength(1)
+    expect(repos[0]).toBe('solo/repo')   // source.repo absent → e.name
+  })
+  it('non-Error judge throw still records aiNote', async () => {
+    const s = setup([ghEntry()])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+        commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0 }], truncated: false }),
+      judge: async () => { throw 'string-failure' as never },
+    })
+    expect(loadAssessments(s.spool)[0]!.aiNote).toContain('judge-error')
+  })
+  it('oversized patch and patch-less files land in patchOmitted', async () => {
+    const s = setup([ghEntry()])
+    const huge = 'x'.repeat(30 * 1024)
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 3, additions: 3, deletions: 0,
+        commits: [], files: [
+          { path: 'a.ts', status: 'modified', add: 1, del: 0, patch: huge },
+          { path: 'b.ts', status: 'modified', add: 1, del: 0 },
+          { path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@ ok' },
+        ], truncated: false }),
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    const a = loadAssessments(s.spool)[0]!
+    const omitted = a.files.filter(f => f.patchOmitted).map(f => f.path).sort()
+    expect(omitted).toEqual(['a.ts', 'b.ts'])
+  })
+  it('no AI_MODEL and no deps.judge → ai:null judge-unavailable (still records stats)', async () => {
+    const s = setup([ghEntry()])
+    const orig = process.env.AI_MODEL
+    delete process.env.AI_MODEL
+    try {
+      await flagDeltaMain([...args(s), '--limit', '5'], {
+        compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+          commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: false }),
+      })
+    } finally { if (orig !== undefined) process.env.AI_MODEL = orig }
+    const a = loadAssessments(s.spool)[0]!
+    expect(a.ai).toBeNull()
+    expect(a.aiNote).toBe('judge-unavailable')
+    expect(a.aheadBy).toBe(1)
+  })
+})
+
+describe('coverage edges', () => {
+  it('parseCompare tolerates fully-missing optional fields', () => {
+    const c = parseCompare({ commits: [{}], files: [{}] })!
+    expect(c.commits[0]).toEqual({ sha: '', msg: '' })
+    expect(c.files[0]).toEqual({ path: '', status: '', add: 0, del: 0 })
+    expect(c.aheadBy).toBe(1)
+    expect(c.additions).toBe(0)
+  })
+  it('main() default compareFn path via injected transport', async () => {
+    const s = setup([ghEntry()])
+    const seen: string[] = []
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      // no compareFn → exercises the fetchCompare+transport default arm
+      transport: async a => { seen.push(a[1] ?? ''); return JSON.stringify({
+        ahead_by: 1, commits: [{ sha: 'x', commit: { message: 'm' } }],
+        files: [{ filename: 'README.md', status: 'modified', additions: 1, deletions: 0 }],
+      }) },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(seen[0]).toContain('repos/o/plugin/compare/')
+    expect(loadAssessments(s.spool)).toHaveLength(1)
+  })
+})
+
+describe('flag-delta main — final edges', () => {
+  it('github source without version is skipped', async () => {
+    const s = setup([ghEntry({ source: { kind: 'github', id: 'o/plugin', repo: 'o/plugin' } })],
+      [humanPass])
+    let compares = 0
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => { compares++; return null },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(compares).toBe(0)
+  })
+  it('no --spool and not --dry → assessment counted but nothing persisted', async () => {
+    const s = setup([ghEntry()])
+    const noSpool = ['--index', s.idx, '--verdicts', s.vd, '--assessments', s.ad, '--limit', '5']
+    await flagDeltaMain(noSpool, {
+      compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+        commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: false }),
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(existsSync(s.spool)).toBe(false)
+  })
+})
+
+describe('flag-delta main — verdict/assessments absence', () => {
+  it('flagged entry with NO human verdict has no sha anchor → skipped', async () => {
+    const s = setup([ghEntry()], [])   // empty verdicts file
+    let compares = 0
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => { compares++; return null },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(compares).toBe(0)
+  })
+  it('runs without --assessments (prior state empty)', async () => {
+    const s = setup([ghEntry()])
+    const noAssess = ['--index', s.idx, '--verdicts', s.vd, '--spool', s.spool, '--limit', '5']
+    await flagDeltaMain(noAssess, {
+      compareFn: async () => ({ aheadBy: 1, commitsTotal: 1, filesTotal: 1, additions: 1, deletions: 0,
+        commits: [], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: false }),
+      judge: async () => ({ verdict: 'pass', reasonZh: 'ok', reasonEn: 'ok' }),
+    })
+    expect(loadAssessments(s.spool)).toHaveLength(1)
+  })
+})
+
+describe('flag-delta main — sha-less human verdict', () => {
+  it('human verdict without sha cannot anchor a compare → skipped', async () => {
+    const s = setup([ghEntry()],
+      [{ name: 'o/plugin', version: null, verdict: 'pass', at: '2026-11-14T00:00:00Z', source: 'human' }])
+    let compares = 0
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => { compares++; return null },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(compares).toBe(0)
+  })
+})
+
+describe('flag-delta main — non-moved flags', () => {
+  it('approved github entry without repo-moved flags is skipped', async () => {
+    const s = setup([ghEntry({ capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-recreated'] } })],
+      [humanPass])
+    let compares = 0
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => { compares++; return null },
+      judge: async () => ({ verdict: 'pass', reasonZh: '', reasonEn: '' }),
+    })
+    expect(compares).toBe(0)
+  })
+})
+
+describe('flag-delta main — truncated compare disclosure', () => {
+  it('truncated compare flags partial-delta in judge material and assessment', async () => {
+    const s = setup([ghEntry()])
+    let sawPartial = false
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => ({ aheadBy: 50, commitsTotal: 50, filesTotal: 60, additions: 999, deletions: 0,
+        commits: [{ sha: 'c', msg: 'm' }], files: [{ path: 'README.md', status: 'modified', add: 1, del: 0, patch: '@@' }], truncated: true }),
+      judge: async m => { sawPartial = m.summary.includes('PARTIAL delta'); return { verdict: 'pass', reasonZh: '', reasonEn: '' } },
+    })
+    expect(sawPartial).toBe(true)
+    expect(loadAssessments(s.spool)[0]!.truncated).toBe(true)
   })
 })
