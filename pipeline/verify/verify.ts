@@ -671,15 +671,25 @@ export async function verifyPackage(
     // actual load error (SchemaError, missing module, exit) sits mid-stream,
     // so a raw 'last 2KB' shows noise and the cause scrolls off. Pull the
     // error-shaped lines out explicitly, bounded so `why` still survives.
-    const errLines = `${safeServeOut}\n${log}`.split('\n')
-      .filter(l => /level=ERROR|\berror\b|\bError:|failed|panic|Cannot find|SyntaxError|TypeError|SchemaError|ENOENT|denied/i.test(l))
-      .slice(-15).join('\n').slice(-1200)
+    // apiBrief stays dumpDiag-only: the 600B registry JSON was eating most
+    // of the published 2KB and issues rendered it as meaningless garbage.
+    const NOISE = /models\.dev|failed to watch directory|watcher (started|stopped|subscribe)/i
+    const errAll = `${safeServeOut}\n${log}`.split('\n')
+      .filter(l => /level=ERROR|\berror\b|\bError:|failed|panic|Cannot find|SyntaxError|TypeError|SchemaError|ENOENT|denied/i.test(l)
+        && !NOISE.test(l))
+    // plugin-mentioning errors first — the package's own load error is the
+    // verdict evidence; ambient serve errors (model fetch, unrelated
+    // plugins) are context at best
+    const hints = apiNames.map(n => n.toLowerCase())
+    const pkgErr = errAll.filter(l => hints.some(h => l.toLowerCase().includes(h)))
+    const errLines = [...pkgErr.slice(-8), ...errAll.filter(l => !pkgErr.includes(l)).slice(-7)]
+      .join('\n').slice(-1400)
     dumpDiag(`spec: ${spec}\napiNames: ${apiNames.join(', ')}\nverdict: ${why}\n\n` +
       `--- /api/plugin (head) ---\n${apiBrief}\n\n` +
       `--- serve output (tail 64k, password redacted) ---\n${safeServeOut}\n\n` +
       `--- opencode log (tail 256k) ---\n${log}`)
     return { ...base, status: 'failed', level: 'load',
-      logExcerpt: tail(`/api/plugin: ${apiBrief}\n${errLines ? `--- errors ---\n${errLines}\n` : ''}--- stream tail ---\n${log.slice(-300)}\n${why}`) }
+      logExcerpt: tail(`${errLines ? `--- errors ---\n${errLines}\n` : ''}--- stream tail ---\n${log.slice(-300)}\n${why}`) }
   }
 
   try {

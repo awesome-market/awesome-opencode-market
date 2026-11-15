@@ -26,7 +26,7 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e()]), [v()])
     // 't' fixtures are unparseable → heldAt is OMITTED, never rendered as garbage
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' }, description: 'a pkg' }])
   })
   it('ai pass maturity phase follows digest-state membership', () => {
     const ver = v()
@@ -40,7 +40,8 @@ describe('docketTargets', () => {
       pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
     })]), [v({ version: '2.0.0', verdict: 'concern' })])
     expect(t).toEqual([{ name: 'pkg', version: '2.0.0', verdict: 'concern', verification: 'verified', maturity: 'pending-announce',
-      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, sitePage: true, scannedAt: 't', src: { kind: 'npm', id: 'pkg' },
+      description: 'a pkg', prevRef: { kind: 'version', value: '1.0.0' } }])
   })
   it('human verdict already rules → no docket entry', () => {
     expect(docketTargets(idx([e()]), [v({ source: 'human' })])).toEqual([])
@@ -71,7 +72,8 @@ describe('docketTargets', () => {
       capabilities: { scannedAt: '2020-06-01T00:00:00Z', findings: [], redFlags: [] },
     })]), [], null, { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z', scannedAt: '2020-06-01T00:00:00Z', src: { kind: 'npm', id: 'pkg' } }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2020-06-01T00:00:00Z', scannedAt: '2020-06-01T00:00:00Z', src: { kind: 'npm', id: 'pkg' },
+      description: 'a pkg' }])
   })
   it('unparseable hold clock → fail-VISIBLE none issue, never silent suppression', () => {
     const t = docketTargets(idx([e({
@@ -186,7 +188,8 @@ describe('docketTargets', () => {
     const t = docketTargets(idx([e({ firstSeenAt: '2026-01-01T00:00:00Z' })]), [], null,
       { now: '2026-01-05T00:00:00Z' })
     expect(t).toEqual([{ name: 'pkg', version: '1.0.0', verdict: 'none', verification: 'verified',
-      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z', scannedAt: 't', src: { kind: 'npm', id: 'pkg' } }])
+      slug: 'o/pkg', findings: 0, redFlags: 0, heldAt: '2026-01-01T00:00:00Z', scannedAt: 't', src: { kind: 'npm', id: 'pkg' },
+      description: 'a pkg' }])
   })
   it('young hold without verdict stays AI-owned — no issue inside the age window', () => {
     expect(docketTargets(idx([e({ firstSeenAt: '2026-01-04T00:00:00Z' })]), [], null,
@@ -258,6 +261,34 @@ describe('issueBody', () => {
     expect(body).toContain('待日报公告')
     const b2 = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', maturity: 'announced' })
     expect(b2).toContain('待放行闸')
+  })
+  it('concern where LLM itself judged pass is called out as flag-blocked, not ai concern', () => {
+    const body = issueBody({
+      name: 'p', version: '1', verdict: 'concern',
+      reason: '机械红旗待人工（AI 草稿，LLM 判 pass）：扫描均为预期行为 sec:x',
+    })
+    expect(body).toContain('AI 判词本体为 pass')
+    expect(body).toContain('verdict:pass')
+    const real = issueBody({ name: 'p', version: '1', verdict: 'concern', reason: 'AI 判 concern：可疑' })
+    expect(real).not.toContain('AI 判词本体为 pass')
+  })
+  it('issueBody renders manifest description + pending-update diff link (npm + github)', () => {
+    const npm = issueBody({
+      name: 'pkg', version: '2.0.0', verdict: 'concern',
+      description: 'lints things', prevRef: { kind: 'version', value: '1.0.0' },
+      src: { kind: 'npm', id: 'pkg' },
+    })
+    expect(npm).toContain('清单自述：「lints things」')
+    expect(npm).toContain('diff.intrinsic.com/pkg/1.0.0/2.0.0')
+    const gh = issueBody({
+      name: 'o/r', version: 'def5678', verdict: 'concern',
+      prevRef: { kind: 'sha', value: 'abc1234' },
+      src: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc1234' },
+    })
+    expect(gh).toContain('github.com/o/r/compare/abc1234...def5678')
+    const noUpdate = issueBody({ name: 'p', version: '1', verdict: 'pass' })
+    expect(noUpdate).not.toContain('清单自述')
+    expect(noUpdate).not.toContain('更新内容')
   })
   it('ai pass on a flagged/unscanned slot never promises 按班放行 in the maturity line', () => {
     const flagged = issueBody({ name: 'p', version: '1.0.0', verdict: 'pass', redFlags: 2, maturity: 'announced' })
@@ -512,7 +543,8 @@ describe('docket main', () => {
     // derives from GH_REPO
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' },
+        description: 'a pkg' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -624,7 +656,8 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' },
+        description: 'a pkg' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
@@ -853,7 +886,8 @@ describe('docket main', () => {
     writeFileSync(vPath, JSON.stringify(v()) + '\n')
     const wantBody = issueBody(
       { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
-        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' } },
+        slug: 'o/pkg', findings: 0, redFlags: 0, scannedAt: 't', src: { kind: 'npm', id: 'pkg' },
+        description: 'a pkg' },
       { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
     const calls: string[][] = []
     const ghFn = (args: string[]) => {
