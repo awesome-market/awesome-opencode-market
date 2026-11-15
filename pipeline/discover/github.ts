@@ -45,6 +45,90 @@ export function ghHeaders(token?: string): Record<string, string> {
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 
+/** Injected fetch is the only reliable test signal: run.ts always forwards
+ *  its own `f`, which IS the global fetch in production — so
+ *  `opts.fetchFn ? 0 : delay` collapsed every rate-limit sleep to 0 for the
+ *  real run (that is what let a >1000-result topic's bisection burst past
+ *  the search pool and cascade into page-after-page 403s). Only tests ever
+ *  pass a fetch that isn't `fetch`. */
+const testish = (opts: { fetchFn?: typeof fetch }): boolean =>
+  opts.fetchFn !== undefined && opts.fetchFn !== fetch
+
+/** Shared pacing across EVERY search call — the authed search pool is
+ *  30 req/min (10 req/min for code search, refused outright unauthenticated)
+ *  and secondary limits punish bursts. A >1000-result topic's created-date
+ *  bisection probes a page-1 per slice; without a global floor the 2-way
+ *  topic pool plus slices burst past the budget and the rest of the crawl
+ *  403s out. Reservation is atomic because the bump runs before the await. */
+const SEARCH_GAP_MS = 2_200
+const CODE_SEARCH_GAP_MS = 6_100
+let nextSearchSlot = 0
+const paceSearch = async (gapMs: number): Promise<void> => {
+  const now = Date.now()
+  const slot = Math.max(now, nextSearchSlot)
+  nextSearchSlot = slot + gapMs
+  if (slot > now) await sleep(slot - now)
+}
+
+const MAX_SEARCH_RETRIES = 3
+
+/** Header-aware throttle wait: Retry-After wins; a spent primary budget
+ *  (remaining 0) waits for its reset window; anything else backs off
+ *  exponentially into the ~60s secondary-limit cooldown. */
+export const retryWaitMs = (
+  res: { headers: { get(k: string): string | null } },
+  attempt: number,
+): number => {
+  const ra = Number(res.headers.get('retry-after'))
+  if (Number.isFinite(ra) && ra > 0) return Math.min(ra * 1000, 90_000)
+  if (res.headers.get('x-ratelimit-remaining') === '0') {
+    const reset = Number(res.headers.get('x-ratelimit-reset'))
+    if (reset > 0) return Math.min(Math.max(reset * 1000 - Date.now(), 1_000), 90_000)
+  }
+  return Math.min(15_000 * 2 ** attempt, 90_000)
+}
+
+/** One paced + retried search GET shared by topic and code search. Errors
+ *  warn-and-truncate (run.ts awaits discovery bare — a throw kills the
+ *  whole catalog run); the failed body is drained so keep-alive sockets
+ *  recycle instead of stalling the pool. */
+const fetchSearchJson = async (
+  url: string,
+  label: string,
+  opts: { token?: string | undefined; fetchFn?: typeof fetch },
+  gapMs: number,
+): Promise<unknown | null> => {
+  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
+  const test = testish(opts)
+  for (let attempt = 0; ; attempt++) {
+    if (!test) await paceSearch(gapMs)
+    let res: Response
+    try {
+      res = await f(url, { headers: ghHeaders(opts.token) })
+    } catch (e) {
+      console.warn(`${label} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+      return null
+    }
+    if (res.ok) {
+      try {
+        return await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
+      } catch (e) {
+        console.warn(`${label} failed (${e instanceof Error ? e.message : e}) — results truncated`)
+        return null
+      }
+    }
+    await res.arrayBuffer().catch(() => undefined)
+    if ((res.status === 403 || res.status === 429) && attempt < MAX_SEARCH_RETRIES) {
+      const waitMs = test ? 0 : retryWaitMs(res, attempt)
+      console.warn(`${label} throttled (${res.status}) — retry ${attempt + 1}/${MAX_SEARCH_RETRIES} in ${Math.ceil(waitMs / 1000)}s`)
+      await sleep(waitMs)
+      continue
+    }
+    console.warn(`${label} failed (${res.status}) — results truncated`)
+    return null
+  }
+}
+
 /** The repo-search API hard-caps ANY single query at 1000 results — a full
  *  tenth page is the window cutting us off, not discovery finishing. When a
  *  query's total_count exceeds it, the created-date range is bisected until
@@ -79,7 +163,6 @@ export async function searchTopic(
   topic: string,
   opts: { token?: string | undefined; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<GhRepo[]> {
-  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const maxPages = opts.maxPages ?? 10
   // fork:false is a zero-cost server-side filter — mirror forks only ever
   // produce duplicate content entries (submission-seeded forks still get in,
@@ -89,19 +172,13 @@ export async function searchTopic(
 
   const fetchPage = async (q: string, page: number): Promise<{ items: GhRepo[]; total: number } | null> => {
     const url = `${GH_API}/search/repositories?q=${encodeURIComponent(q)}&sort=updated&per_page=100&page=${page}`
-    let body: unknown
-    try {
-      const res = await f(url, { headers: ghHeaders(opts.token) })
-      // a mid-pagination failure must be loud — the candidate tail silently
-      // vanished otherwise (truncation telemetry). fetch throws and JSON
-      // parse/oversize errors take the same path: run.ts awaits discovery
-      // bare, so an uncaught rejection here kills the whole catalog run
-      if (!res.ok) { console.warn(`[discover:github] '${topic}' page ${page} failed (${res.status}) — results truncated`); return null }
-      body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
-    } catch (e) {
-      console.warn(`[discover:github] '${topic}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
-      return null
-    }
+    // a mid-pagination failure must be loud — the candidate tail silently
+    // vanished otherwise (truncation telemetry lives in fetchSearchJson)
+    const body = await fetchSearchJson(
+      url, `[discover:github] '${topic}' page ${page}`, opts,
+      opts.token ? SEARCH_GAP_MS : CODE_SEARCH_GAP_MS,
+    )
+    if (body === null) return null
     const obj = body && typeof body === 'object' && !Array.isArray(body)
       ? body as { items?: unknown; total_count?: unknown } : null
     const raw = obj?.items
@@ -178,35 +255,13 @@ export async function searchCode(
   query: string,
   opts: { token?: string | undefined; maxPages?: number; fetchFn?: typeof fetch } = {},
 ): Promise<GhRepo[]> {
-  const f = withTimeout(opts.fetchFn ?? fetch, 15_000)
   const out: GhRepo[] = []
   for (let page = 1; page <= (opts.maxPages ?? 2); page++) {
     const url = `${GH_API}/search/code?q=${encodeURIComponent(query)}&per_page=100&page=${page}`
-    let body: unknown
-    let retried = false
-    for (;;) {
-      try {
-        const res = await f(url, { headers: ghHeaders(opts.token) })
-        // mid-pagination failure must be loud — same truncation telemetry as
-        // the topic path; throws/parse errors take the same warn+truncate
-        // path (run.ts awaits discovery bare — an uncaught rejection kills
-        // the run). 403/429 are the shared search budget talking — one
-        // spaced retry recovers most of them; anything else truncates.
-        if (!res.ok) {
-          if ((res.status === 403 || res.status === 429) && !retried) {
-            retried = true; await sleep(opts.fetchFn ? 0 : 15_000); continue
-          }
-          console.warn(`[discover:github] code search '${query}' page ${page} failed (${res.status}) — results truncated`)
-          break
-        }
-        body = await readJsonCapped<unknown>(res, 8 * 1024 * 1024)
-      } catch (e) {
-        console.warn(`[discover:github] code search '${query}' page ${page} failed (${e instanceof Error ? e.message : e}) — results truncated`)
-        break
-      }
-      break
-    }
-    if (body === undefined) break
+    const body = await fetchSearchJson(
+      url, `[discover:github] code search '${query}' page ${page}`, opts, CODE_SEARCH_GAP_MS,
+    )
+    if (body === null) break
     // same malformed-doc contract as searchTopic — non-object body/items
     // degrades; each hit needs a string repository.full_name (the dedupe
     // key). Repository objects can be partial — fields the API omits stay
@@ -248,7 +303,7 @@ export async function discoverGithub(
         const key = r.fullName.toLowerCase()
         if (!map.has(key)) map.set(key, { ...r, discoveredVia: ['code-search'] })
       }
-      await sleep(opts.fetchFn ? 0 : 2_000)
+      await sleep(testish(opts) ? 0 : 2_000)
     }
   }
   // 2-way concurrency stays well under the search API's secondary rate limits
