@@ -192,7 +192,7 @@ export function docketTargets(
   index: CatalogIndex,
   verdicts: AiVerdict[],
   digest?: DigestState | null,
-  opts: { now?: string; paused?: boolean } = {},
+  opts: { now?: string; paused?: boolean; assessments?: Map<string, FlagAssessment> | undefined } = {},
 ): DocketTarget[] {
   const now = Date.parse(opts.now ?? new Date().toISOString())
   const latest = latestVerdicts(verdicts)
@@ -332,7 +332,16 @@ export function docketTargets(
       const flag = e.capabilities.flaggedAt
       const postdates = (v: AiVerdict | undefined) =>
         v !== undefined && flag !== undefined && atCmp(v.at, flag) > 0
+      // a provably-inert drift (flag-delta autoResolved: every file docs/
+      // assets, compare untruncated, zero risky paths, zero flagged-file
+      // overlap, judge pass) retires the flag without spending the human
+      // slot — the assessment key embeds the flag's sha, so only a verdict
+      // about THIS drift counts, same freshness semantics as flaggedAt
+      // assessment key mirrors latestAssessments: name\0flag — the flag
+      // string embeds the drift's newSha so only THIS drift's judgment counts
+      const aKey = (f: string) => `${e.name.toLowerCase()}\0${f}`
       const decided = postdates(hv) || postdates(hvPkg)
+        || flags.some(f => opts.assessments?.get(aKey(f))?.autoResolved === 'trivial')
       if (flags.length && !decided) {
         const prior = hv ?? hvPkg
         // repo-moved-since-release carries its own evidence need: WHICH
@@ -574,6 +583,10 @@ const VERI_ZH: Record<string, string> = {
  *  instead of leaving creation-time text stale. */
 export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   const L: string[] = [`## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '']
+  /** set by the flag branch's compare block — how many flagged FILES the
+   *  delta touched; the standing-flag group below reads it to say "已覆盖"
+   *  instead of re-dumping paths at the maintainer */
+  let deltaFlagTouched: { flagged: number; touched: number } | null = null
   // reason/scan text is model- or plugin-influenced content rendered into
   // the maintainer's highest-trust surface — escape markdown/HTML the same
   // way digest.ts does (links, code spans, fake headings all stay inert),
@@ -721,6 +734,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       )
       if (flagFiles.size) {
         const touched = cmp.files.filter(f => flagFiles.has(f.path))
+        deltaFlagTouched = { flagged: flagFiles.size, touched: touched.length }
         L.push(touched.length === 0
           ? `- ✅ 本次 delta 未触及已 flag 文件（${flagFiles.size} 个——被标记的代码未变${cmp.truncated ? `；compare 截断，仅核对前 ${cmp.files.length} 个文件` : ''}）`
           : `- ⚠️ 本次 delta 触及 ${touched.length} 个已 flag 文件：${touched.slice(0, 5).map(f => `\`${clean(f.path, 120)}\``).join('、')}${touched.length > 5 ? ' …' : ''}——被标记的代码有改动，重点对照`)
@@ -939,9 +953,20 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push(`  · 身份/触发信号（${ident.length} 条——裁决须晚于信号观察时点）：`)
       for (const f of ident.slice(0, 10)) item(f)
       if (ident.length > 10) L.push(`  · …另 ${ident.length - 10} 条`)
-      L.push(`  · 存量扫描旗标（${scan.length} 条 · 整树静态规则命中——非本次触发信号${t.humanVerdict ? '；是否被此前人工判词覆盖请对照上方' : ''}）：`)
-      for (const f of scan.slice(0, 15)) item(f)
-      if (scan.length > 15) L.push(`  · …另 ${scan.length - 15} 条见 index.json`)
+      const covered = deltaFlagTouched?.touched === 0 && t.humanVerdict !== undefined
+      const coverNote = covered
+        ? '；被标记代码自人工裁决以来未变——判词覆盖仍有效，不用重看'
+        : t.humanVerdict ? '；是否被此前人工判词覆盖请对照上方' : ''
+      L.push(`  · 存量扫描旗标（${scan.length} 条 · 整树静态规则命中——非本次触发信号${coverNote}）：`)
+      if (scan.length > 3) {
+        // a path dump is audit data, not a reading list — rule counts up
+        // front, the full enumeration lives one tap away
+        const byRule = new Map<string, number>()
+        for (const f of scan) { const r = f.split(':')[0] ?? f; byRule.set(r, (byRule.get(r) ?? 0) + 1) }
+        L.push(`    按规则：${[...byRule].map(([r, n]) => `${r} ×${n}`).join('、')}——逐条清单见${detailPage ? '详情页' : 'index.json'}`)
+      } else {
+        for (const f of scan) item(f)
+      }
     } else {
       L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
       for (const f of t.redFlagList.slice(0, 20)) item(f)
@@ -1094,7 +1119,7 @@ export async function main(
   // then aggregates into the standing issue instead of spamming per-version
   // ones, and the body says "declared pause" rather than "looks dead"
   const paused = existsSync(join(dirname(idxPath), 'diagnose.paused'))
-  const targets = docketTargets(index, verdicts, digest, { paused })
+  const targets = docketTargets(index, verdicts, digest, { paused, assessments })
   // mechanical 装测失败 concerns never become issues — they're measurement
   // echoes that drain via re-measure, not human decisions. The rolling
   // surface is docs/reports/verify-fail.md + the standing 日报 issue; here
@@ -1419,7 +1444,15 @@ export async function main(
     // mirrors docketTargets' repo-only test: a malformed '' reads as
     // version-less there, so it must read as version-less here too
     if (e.approval === 'pending' && !e.latestVersion) return '并入 repo-only 积压总单'
-    if (!(e.approval === 'pending' || e.pendingUpdate)) return '该版本已放行'
+    if (!(e.approval === 'pending' || e.pendingUpdate)) {
+      // a live entry whose sec:* flag retired by a PROVABLY-inert drift —
+      // say the flag resolved itself, not the vague "已放行" (no release
+      // happened) or the scarier "尚无裁决"
+      const auto = e.capabilities.redFlags.filter(f => f.startsWith('sec:'))
+        .some(f => assessments?.get(`${e.name.toLowerCase()}\0${f}`)?.autoResolved === 'trivial')
+      if (auto) return 'delta 机械判定无执行面变化（全文档/资源类、compare 未截断、AI 初筛 pass）——flag 自动解除'
+      return '该版本已放行'
+    }
     return '评审目标已离开队列（版本位移或在押时钟重置），该版本尚无裁决——如需先行人工裁决请在本单评论'
   }
 

@@ -9,7 +9,9 @@
  *     question a repo-moved flag actually asks. Now: flag-file ∩
  *     compare-file line, with truncation honesty. */
 import { describe, it, expect } from 'vitest'
-import { issueBody, type DocketTarget, type CompareInfo } from '../pipeline/docket.ts'
+import { issueBody, docketTargets, type DocketTarget, type CompareInfo } from '../pipeline/docket.ts'
+import type { FlagAssessment } from '../pipeline/ai/flag-delta.ts'
+import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const flagT = (over: Partial<DocketTarget> = {}): DocketTarget => ({
   name: 'mnema-work/mnema', version: null, verdict: 'flag',
@@ -110,5 +112,68 @@ describe('issueBody — delta ∩ flagged files', () => {
   it('truncated compare scopes the all-clear honestly', () => {
     const body = issueBody(flagT(), { compare: cmp([], { truncated: true }) })
     expect(body).toContain('compare 截断，仅核对前 0 个文件')
+  })
+})
+
+// ---------- auto-resolve: provably-inert drift retires the flag ----------
+
+const ghFlagEntry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
+  name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['github-topic'],
+  source: { kind: 'github', id: 'pkg', repo: 'o/pkg', version: 'bbb2222' },
+  description: { en: 'x' }, category: [], license: null, deprecated: false, replacement: null,
+  deprecatedMessage: null, createdAt: null, modifiedAt: null, maintainers: [], distTags: {},
+  firstSeenAt: 't', latestVersion: null, publishedAt: null,
+  metrics: { stars: null, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 't' },
+  capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-moved-since-release:bbb2222'], flaggedAt: '2026-01-02T00:00:00Z' },
+  verification: { status: 'verified' }, compat: {}, approval: 'approved',
+  ...over,
+})
+const ghIdx = (plugins: PluginEntry[]): CatalogIndex => ({
+  version: '1', generatedAt: '2026-01-01T00:00:00Z', categories: {}, plugins, removed: [],
+})
+const aMap = (a: Partial<FlagAssessment>): Map<string, FlagAssessment> =>
+  new Map([['pkg\0sec:repo-moved-since-release:bbb2222', a as FlagAssessment]])
+
+describe('docketTargets — autoResolved trivial drift', () => {
+  it('retires the flag without a human slot', () => {
+    const t = docketTargets(ghIdx([ghFlagEntry()]), [], null,
+      { assessments: aMap({ autoResolved: 'trivial' }) })
+    expect(t).toEqual([])
+  })
+  it('assessment lacking autoResolved does NOT retire — key carries the sha', () => {
+    const t = docketTargets(ghIdx([ghFlagEntry()]), [], null,
+      { assessments: aMap({ ai: { verdict: 'pass', reasonZh: '', reasonEn: '' } }) })
+    expect(t.some(x => x.verdict === 'flag')).toBe(true)
+  })
+  it('no assessments map → flag surface unchanged', () => {
+    expect(docketTargets(ghIdx([ghFlagEntry()]), []).some(x => x.verdict === 'flag')).toBe(true)
+  })
+})
+
+// ---------- standing-flag presentation ----------
+
+describe('issueBody — standing flags collapse + coverage', () => {
+  const manyFlags = flagT({ redFlagList: [
+    'sec:repo-moved-since-release:b26623dca283',
+    'binary-blob:a/f1.json', 'binary-blob:a/f2.json',
+    'credential-read:b/x.ts — L1: read()', 'credential-read:b/y.ts — L2: read()',
+  ] })
+  it('>3 standing flags collapse to rule counts — no path dump', () => {
+    const body = issueBody(manyFlags)
+    expect(body).toContain('按规则：binary-blob ×2、credential-read ×2')
+    expect(body).toContain('逐条清单见')
+    expect(body).not.toContain('a/f1.json')
+  })
+  it('untouched flagged files + human verdict → 判词覆盖仍有效', () => {
+    const body = issueBody(manyFlags, {
+      compare: cmp([{ path: 'README.md', status: 'modified', add: 1, del: 0, risky: false }]),
+    })
+    expect(body).toContain('判词覆盖仍有效')
+    expect(body).toContain('按规则：')
+  })
+  it('≤3 standing flags still list inline', () => {
+    const body = issueBody(flagT())
+    expect(body).toContain('binary-blob:packages/chain')
+    expect(body).not.toContain('按规则：')
   })
 })
