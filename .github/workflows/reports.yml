@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency: reports
-    permissions: { contents: write, pull-requests: write }
+    permissions: { contents: write, pull-requests: write, issues: write }
     steps:
       # renders catalog-controlled text into committed markdown; npm API +
       # github.com egress for the index fetch
@@ -86,3 +86,22 @@ jobs:
           # no status checks — merge straight through. docs/reports is
           # generated output; the renderer itself already ran above.
           gh pr merge "$PR" --squash --delete-branch
+      - name: upsert verify-fail 日报 issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # one standing issue summarizes docs/reports/verify-fail.md and is
+          # edited in place every day — replaces the retired per-entry
+          # concern:verify issues (mechanical measurements, not human work)
+          gh label create report:verify-fail --color 0e8a16 \
+            --description "机械装测失败日报（docs/reports/verify-fail.md 的汇总单）" --force
+          ISS=$(gh issue list --repo "$GITHUB_REPOSITORY" --label report:verify-fail \
+            --state open --json number --jq '.[0].number // empty')
+          if [ -n "$ISS" ]; then
+            gh issue edit "$ISS" --repo "$GITHUB_REPOSITORY" \
+              --body-file docs/reports/verify-fail-issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "装测失败日报" --label report:verify-fail \
+              --body-file docs/reports/verify-fail-issue.md
+          fi

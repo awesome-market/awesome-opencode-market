@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { computeDaily, dailyBody, monthlyBody, yearlyBody, loadState, shiftDate, emptyState, type ReportState, type DailySnap } from '../pipeline/reports.ts'
+import { computeDaily, dailyBody, monthlyBody, yearlyBody, loadState, shiftDate, emptyState, verifyFailRows, verifyFailBody, verifyFailIssueBody, type ReportState, type DailySnap } from '../pipeline/reports.ts'
 import { main } from '../pipeline/reports.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
+import type { DocketTarget } from '../pipeline/docket.ts'
 
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
@@ -304,5 +305,66 @@ describe('main — arg defaults and env repo', () => {
     await main(['x', '--index', idxPath, '--state', stPath, '--out', out, '--date', '2026-11-15',
       '--verdicts', vPath], { downloadsFn: async () => 1 })
     expect(existsSync(join(out, 'daily', '2026-11-15.md'))).toBe(true)
+  })
+})
+
+describe('verify-fail 日报', () => {
+  const t = (name: string, version: string | null, verdict: 'pass'|'concern'|'none'|'flag', reason?: string): DocketTarget =>
+    ({ name, version, verdict, ...(reason !== undefined ? { reason } : {}) })
+
+  it('verifyFailRows：只收机械装测失败，解析阶段', () => {
+    const rows = verifyFailRows([
+      t('a', '1.0', 'concern', '装测失败（verify load 级）：插件模块无法被宿主加载 — LoadError'),
+      t('b', '2.0', 'concern', '装测失败（verify install 级）：npm 404'),
+      t('c', '1.0', 'concern', 'LLM 判 concern：postinstall 可疑'),   // non-mechanical → out
+      t('d', '1.0', 'pass'),
+      t('e', null, 'concern'),                                         // no reason → not 装测失败
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows.map(r => r.stage)).toEqual(['install', 'load'])        // sorted by stage then name
+    expect(rows[0]!.name).toBe('b')
+    expect(rows[1]!.summary).toContain('插件模块无法被宿主加载')
+  })
+
+  it('verifyFailBody：阶段计数 + 明细表 + 非安全判定声明', () => {
+    const body = verifyFailBody([
+      { name: 'a', version: '1.0', stage: 'load', summary: 'x' },
+      { name: 'b', version: null, stage: 'load', summary: 'y' },
+      { name: 'c', version: '2', stage: 'install', summary: 'z | pipe' },
+    ], '2026-11-16', 'o/r')
+    expect(body).toContain('**3**')
+    expect(body).toContain('**load** 2')
+    expect(body).toContain('**install** 1')
+    expect(body).toContain('| a | 1.0 | load |')
+    expect(body).toContain('z \\| pipe')            // pipes escaped for the table
+    expect(body).toContain('不是安全判定')
+    expect(body).toContain('concern%3Averify')
+  })
+
+  it('verifyFailIssueBody：汇总 + 前20截断 + 日报链接', () => {
+    const rows = Array.from({ length: 25 }, (_, i) => ({ name: `p${i}`, version: '1', stage: 'load', summary: 's' }))
+    const body = verifyFailIssueBody(rows, '2026-11-16', 'o/r')
+    expect(body).toContain('**当前 25 个装测失败条目**')
+    expect(body).toContain('样本（前 20')
+    expect(body).toContain('docs/reports/verify-fail.md')
+    expect((body.match(/`p\d+`/g) ?? []).length).toBe(20)
+  })
+
+  it('main() 生成 verify-fail.md + verify-fail-issue.md（verdicts 驱动）', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rep-vf-'))
+    const idxPath = join(dir, 'i.json'), stPath = join(dir, 'state.json'), out = join(dir, 'out')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ approval: 'pending' })])))
+    writeFileSync(vPath, JSON.stringify({
+      name: 'pkg', version: '1.0.0', verdict: 'concern', at: '2026-11-15T00:00:00Z', source: 'ai',
+      reason: '装测失败（verify load 级）：x',
+    }) + '\n')
+    await main(['x', '--index', idxPath, '--state', stPath, '--out', out, '--date', '2026-11-15',
+      '--verdicts', vPath], { downloadsFn: async () => 1 })
+    const vf = readFileSync(join(out, 'verify-fail.md'), 'utf8')
+    expect(vf).toContain('装测失败日报 — 2026-11-15')
+    expect(vf).toContain('| pkg | 1.0.0 | load |')
+    const iss = readFileSync(join(out, 'verify-fail-issue.md'), 'utf8')
+    expect(iss).toContain('**当前 1 个装测失败条目**')
   })
 })

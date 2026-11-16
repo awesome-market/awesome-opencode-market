@@ -1042,13 +1042,20 @@ export async function main(
   // ones, and the body says "declared pause" rather than "looks dead"
   const paused = existsSync(join(dirname(idxPath), 'diagnose.paused'))
   const targets = docketTargets(index, verdicts, digest, { paused })
+  // mechanical 装测失败 concerns never become issues — they're measurement
+  // echoes that drain via re-measure, not human decisions. The rolling
+  // surface is docs/reports/verify-fail.md + the standing 日报 issue; here
+  // they're filtered OUT of wanted so existing concern:verify issues fall
+  // into the close pass with a pointer instead of lingering.
+  const isMech = (t: DocketTarget) => t.verdict === 'concern' && (t.reason ?? '').startsWith('装测失败')
+  const issued = targets.filter(t => !isMech(t))
   // last-write-wins per title: targets arrive in rank order pass→none→
   // concern→flag, so on a same-title collision (reachable when an approved
   // entry's pendingUpdate.version === latestVersion — flag target and held
   // target share name@ver) the FLAG target, the most urgent surface, owns
   // the issue body. First-wins would let a routine hold shadow a live
   // sec:* signal — wrong direction for the highest-trust surface.
-  const wanted = new Map(targets.map(t => [issueTitle(t), t]))
+  const wanted = new Map(issued.map(t => [issueTitle(t), t]))
   // first-write-wins by NAME for closeReason's "当前：" pointer — deliberately
   // NOT the same winner as `wanted`: naming the routine held-version target
   // is more informative there than naming the flag twin (and for true
@@ -1056,7 +1063,7 @@ export async function main(
   // Keys lowercase — a hand-drifted title's casing must still find the live
   // target (vkey already canonicalizes verdict identity the same way)
   const wantedByName = new Map<string, DocketTarget>()
-  for (const t of targets) { const k = t.name.toLowerCase(); if (!wantedByName.has(k)) wantedByName.set(k, t) }
+  for (const t of issued) { const k = t.name.toLowerCase(); if (!wantedByName.has(k)) wantedByName.set(k, t) }
   // repo-moved flag evidence: fetch each target's compare ONCE per sync —
   // flag targets are rare (identity signals), so a handful of API calls per
   // hourly tick is nothing next to the issue-list call already made. A
@@ -1108,7 +1115,9 @@ export async function main(
     && (((t.redFlags ?? 0) > 0 && !t.flagsReviewed) || !!t.unscanned)
   // concern-class labels — searchable buckets under ai:concern so the maintainer
   // can triage "mechanical vs needs-eyes" without reading every body:
-  //   concern:verify = mechanical 装测失败 (auto-drains via re-measure)
+  //   concern:verify = mechanical 装测失败 — LEGACY label: targets no longer
+  //                    mint issues (docs/reports/verify-fail.md is the live
+  //                    surface); old ones converge closed via closeReason
   //   concern:l05    = L0.5 injection-signal hit (human)
   //   concern:flags  = flag evidence awaiting a human (机械红旗 placeholder,
   //                    or the flag-kind target itself)
@@ -1323,6 +1332,11 @@ export async function main(
     // the aggregate check precedes same-name: a row inside the standing
     // issue is the precise reason, "target changed" only when it isn't one
     if (t && aggregated.has(`${t.name.toLowerCase()}\0${t.ver}`)) return '并入未评审积压总单'
+    // mechanical verify-fail issues retired in favour of the rolling日报 —
+    // say WHERE the list lives, not the generic "verdict decided" (the entry
+    // is still pending and still failing; its surface just moved)
+    if ((i.labels ?? []).some(l => l.name === 'concern:verify'))
+      return '机械装测失败并入装测日报：docs/reports/verify-fail.md + 日报 issue（翻案靠重测或人工 verdict）'
     const e = t ? byName.get(t.name.toLowerCase()) : undefined
     if (!t || !e) return '该版本/条目已不在 catalog 索引中'
     // "verdict 已决议" must be TRUE — read the ISSUE's own key, so a
