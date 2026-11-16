@@ -15,6 +15,8 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { unreviewedTargets, main as diagnoseMain } from '../pipeline/ai/diagnose.ts'
+import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { HARNESS_GEN } from '../pipeline/verify/verify.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const idx = (plugins: PluginEntry[], removed: CatalogIndex['removed'] = []): CatalogIndex => ({
@@ -91,7 +93,7 @@ describe('stale verify-fail concerns re-queue on newer measurement', () => {
     expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toEqual([])
   })
   it('a newer TERMINAL failed measurement also re-queues — the rewritten concern carries fresh evidence', () => {
-    const e = entry({ verification: failedVf('2026-01-06T00:00:00Z') })
+    const e = entry({ verification: { ...failedVf('2026-01-06T00:00:00Z'), opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN } })
     expect(unreviewedTargets(idx([e]), [vfConcern('2026-01-03T00:00:00Z')])).toHaveLength(1)
   })
   it('a newer RETRYABLE failed measurement still waits for the verify loop', () => {
@@ -225,5 +227,22 @@ describe('flag-blocked AI passes re-queue for a flag-aware verdict', () => {
   })
   it('a clean-slot pass stays decided — nothing is blocked', () => {
     expect(unreviewedTargets(idx([entry()]), [v({})])).toEqual([])
+  })
+})
+
+describe('unreviewedTargets — re-measure pending defer gate', () => {
+  const failedCur = { status: 'failed' as const, level: 'load' as const,
+    opencodeVersion: OPENCODE_VERSION, verifiedAt: '2026-01-01T00:00:00Z', retries: 3 }
+  it('a gen-stale failed slot defers review — the verify loop owns it', () => {
+    const e = entry({ verification: { ...failedCur, harnessGen: 1 } })
+    expect(unreviewedTargets(idx([e]), [])).toEqual([])
+  })
+  it('a current-gen terminal failed slot reviews now (mech concern path)', () => {
+    const e = entry({ verification: { ...failedCur, harnessGen: HARNESS_GEN } })
+    expect(unreviewedTargets(idx([e]), [])).toHaveLength(1)
+  })
+  it('a no-payload gen-stale failed slot still reviews — verify would never re-measure it', () => {
+    const e = entry({ contains: [], verification: { ...failedCur, harnessGen: 1 } })
+    expect(unreviewedTargets(idx([e]), [])).toHaveLength(1)
   })
 })

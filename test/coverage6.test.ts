@@ -6,13 +6,14 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, trunca
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 import { main as diagnoseMain, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { main as digestMain } from '../pipeline/ai/digest.ts'
 import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
-import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
+import { verifyPackage, HARNESS_GEN, type SpawnFn } from '../pipeline/verify/verify.ts'
 import { checkGuiBundle, findGuiBundle, resolveExportTarget } from '../pipeline/verify/gui.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
@@ -149,7 +150,7 @@ describe('ai/diagnose.main', () => {
     expect(readFileSync(op, 'utf8')).toBe('')
   })
   it('verify-failed → direct concern with excerpt, LLM never called', async () => {
-    const failed = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3 }, heldAt: 't' } })
+    const failed = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'boom on load', retries: 3, opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN }, heldAt: 't' } })
     const { ip, vp, op } = files([failed])
     let called = false
     await diagnoseMain(argv(ip, vp, op), {

@@ -5,7 +5,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CatalogIndex, type AiVerdict, type PluginEntry } from '../../src/schema.ts'
-import { candidateHeldAt } from '../ai/diagnose.ts'
+import { candidateHeldAt, isVerifyFailConcern } from '../ai/diagnose.ts'
+import { HARNESS_GEN } from './verify.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
 import { loadVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, tombEpochs, candidateSlot } from '../verdicts.ts'
 import type { VerifyTarget } from './verify.ts'
@@ -91,7 +92,15 @@ export function verifyQueued(
   // a standing concern (slot-keyed or package brake) already judged these
   // bytes — re-verifying re-measures a condemned verdict. The verdict moving
   // re-enters the slot naturally; only --retest bypasses.
-  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb)?.verdict === 'concern') return false
+  // EXCEPTION: the mechanical 装测失败 concern is not a judgment — it is the
+  // failed measurement echoed back as a verdict line. Treating it as
+  // condemnation deadlocks: the concern blocks re-measurement, so the stale
+  // evidence never refreshes, so the concern stands forever — even when the
+  // HARNESS was the thing at fault. A measurement echo carries no opinion
+  // the staleness gates below can't re-decide: when the slot re-fails under
+  // the current harness, the same concern rewrites cheaply.
+  const vd = latest ? slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb) : undefined
+  if (vd?.verdict === 'concern' && !isVerifyFailConcern(vd)) return false
   const ver = t.verification
   // 'skipped' only exists because red flags vetoed a run — flags gone means
   // the skip reason no longer describes the slot, so it re-queues for an
@@ -107,7 +116,15 @@ export function verifyQueued(
     && ver.level !== 'structure'
     && ver.opencodeVersion !== 'unknown'
     && ver.opencodeVersion !== OPENCODE_VERSION
-  return t.unverified || ver?.status === 'skipped' || retryable(ver) || t.hostStale || hostStaleFail
+  // harness-bump amnesty, same shape as hostStaleFail but keyed on the
+  // MEASUREMENT generation: a harness change (sandbox perms, gui stubs,
+  // render contract) can flip a failure the old harness minted. Absent
+  // harnessGen = pre-generation record = older than any bump. This is also
+  // the escape hatch for the mech-concern deadlock above: the retry budget
+  // is spent, but the measurement predates the fixed harness.
+  const harnessStaleFail = ver?.status === 'failed'
+    && (ver.harnessGen ?? 0) < HARNESS_GEN
+  return t.unverified || ver?.status === 'skipped' || retryable(ver) || t.hostStale || hostStaleFail || harnessStaleFail
 }
 
 /** The installable parts a verify run must prove, normalized from `contains`.
@@ -142,8 +159,12 @@ export function hostStaleVerify(
   const t = verifyTargetOf(e)
   if ((!t.version && !t.git) || !t.hostStale) return false
   // a condemned slot is out of the re-verify backlog too — the queue predicate
-  // drops it, so counting it here would over-report the staleHost tier
-  if (latest && slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb)?.verdict === 'concern') return false
+  // drops it, so counting it here would over-report the staleHost tier.
+  // Mechanical verify-fail concerns don't condemn (same exemption as
+  // verifyQueued — a measurement echo, not a judgment): the slot re-enters
+  // the queue on its own staleness gates, so counting it here stays honest.
+  const vd = latest ? slotVerdict(latest, latestHuman ?? new Map(), e.name, t.version, tomb) : undefined
+  if (vd?.verdict === 'concern' && !isVerifyFailConcern(vd)) return false
   const parts = verifyPartsOf(e)
   return parts.includes('plugin') || parts.includes('skill')
 }

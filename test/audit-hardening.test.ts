@@ -12,6 +12,8 @@ import {
   L05_CANARY_BENIGN, L05_CANARY_HOSTILE,
 } from '../pipeline/ai/diagnose.ts'
 import { renderDigest } from '../pipeline/ai/digest.ts'
+import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { HARNESS_GEN } from '../pipeline/verify/verify.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
 
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -219,7 +221,8 @@ describe('contentMaterial — rank selection beats tar ordering', () => {
 
 describe('retryable vs terminal verify-failed (shared V-3 predicate)', () => {
   const failed = (verifiedAt: string, retries: number, name = 'pkg') =>
-    held({ verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', verifiedAt, retries } }, name)
+    held({ verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', verifiedAt, retries,
+      opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN } }, name)
 
   it('unreviewedTargets defers a retryable failure — the verify loop still owns the slot', () => {
     const recent = new Date(Date.now() - 3600_000).toISOString()           // 1h ago

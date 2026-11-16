@@ -12,6 +12,7 @@ import { judgeTuiPane } from '../pipeline/verify/tui.ts'
 import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { HARNESS_GEN } from '../pipeline/verify/verify.ts'
 import { vkey } from '../pipeline/verdicts.ts'
 
 /** serve reports dead on arrival — a test must never boot a real `opencode`
@@ -235,7 +236,7 @@ describe('verify/plan', () => {
     const stale = entry({ name: 'stale', verification: { status: 'failed', verifiedAt: '2025-12-01T00:00:00Z' } })
     // budget spent on the CURRENT host → terminal (hostStaleFail amnesty only
     // applies to failures measured on an old host)
-    const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3, opencodeVersion: OPENCODE_VERSION } })
+    const exhausted = entry({ name: 'exhausted', verification: { status: 'failed', verifiedAt: '2026-01-07T00:00:00Z', retries: 3, opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN } })
     const noDate = entry({ name: 'nodate', verification: { status: 'failed' } })
     const got = planTargets(idx([fresh, legacy, stale, exhausted, noDate]), 48, false, now)
     // everything under 3 attempts re-enters; only the exhausted slot is terminal

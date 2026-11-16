@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import { verifyQueued, planTargets } from '../pipeline/verify/plan.ts'
 import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { HARNESS_GEN } from '../pipeline/verify/verify.ts'
 import { latestVerdicts, latestHumanVerdicts } from '../pipeline/verdicts.ts'
 import type { AiVerdict, PluginEntry } from '../src/schema.ts'
 
@@ -33,15 +34,15 @@ describe('hostStaleFail: terminal failure on an old host re-queues once', () => 
     expect(planTargets(idx([entry()])).map(t => t.name)).toEqual(['p'])
   })
   it('failed@3 on the CURRENT host → stays terminal (no amnesty needed)', () => {
-    const e = entry({ verification: { status: 'failed', level: 'load', opencodeVersion: OPENCODE_VERSION, verifiedAt: 't', retries: 3 } })
+    const e = entry({ verification: { status: 'failed', level: 'load', opencodeVersion: OPENCODE_VERSION, verifiedAt: 't', retries: 3, harnessGen: HARNESS_GEN } })
     expect(verifyQueued(e)).toBe(false)
   })
   it('failed with unknown host → NOT stale (unknown ≠ provably off-host)', () => {
-    const e = entry({ verification: { status: 'failed', level: 'load', opencodeVersion: 'unknown', verifiedAt: 't', retries: 3 } })
+    const e = entry({ verification: { status: 'failed', level: 'load', opencodeVersion: 'unknown', verifiedAt: 't', retries: 3, harnessGen: HARNESS_GEN } })
     expect(verifyQueued(e)).toBe(false)
   })
   it('structure-level fail on old host → stays out (never ran the host)', () => {
-    const e = entry({ verification: { status: 'failed', level: 'structure', opencodeVersion: 'oc-old', verifiedAt: 't', retries: 3 } })
+    const e = entry({ verification: { status: 'failed', level: 'structure', opencodeVersion: 'oc-old', verifiedAt: 't', retries: 3, harnessGen: HARNESS_GEN } })
     expect(verifyQueued(e)).toBe(false)
   })
   it('budget NOT yet spent on old host → queued via retryable anyway', () => {
@@ -55,5 +56,45 @@ describe('hostStaleFail: terminal failure on an old host re-queues once', () => 
   it('a standing concern verdict still vetoes the amnesty', () => {
     const vs: AiVerdict[] = [{ name: 'p', version: '2.0.0', verdict: 'concern', at: '2026-01-02T00:00:00Z', source: 'human' }]
     expect(verifyQueued(entry(), new Date(), latestVerdicts(vs), latestHumanVerdicts(vs), new Map())).toBe(false)
+  })
+})
+
+describe('harnessStaleFail + mechanical-concern exemption', () => {
+  const cur: PluginEntry['verification'] = { status: 'failed', level: 'load',
+    opencodeVersion: OPENCODE_VERSION, verifiedAt: '2026-01-01T00:00:00Z', retries: 3 }
+  const mechConcern: AiVerdict = { name: 'p', version: '2.0.0', verdict: 'concern',
+    at: '2026-01-02T00:00:00Z', source: 'ai',
+    reason: '装测失败（verify load 级）：插件模块无法被宿主加载' }
+  it('failed@3 on current host but OLD harness gen → queued (amnesty)', () => {
+    const e = entry({ verification: { ...cur, harnessGen: 1 } })
+    expect(verifyQueued(e)).toBe(true)
+  })
+  it('failed@3 on current host and current harness gen → terminal', () => {
+    const e = entry({ verification: { ...cur, harnessGen: HARNESS_GEN } })
+    expect(verifyQueued(e)).toBe(false)
+  })
+  it('failed@3 with NO harnessGen (legacy record) → treated as old → queued', () => {
+    expect(verifyQueued(entry({ verification: { ...cur } }))).toBe(true)
+  })
+  it('a mechanical verify-fail concern does NOT veto the amnesty — it is the measurement echoed, not a judgment', () => {
+    const e = entry({ verification: { ...cur, harnessGen: 1 } })
+    const vs: AiVerdict[] = [mechConcern]
+    expect(verifyQueued(e, new Date(), latestVerdicts(vs), latestHumanVerdicts(vs), new Map())).toBe(true)
+  })
+  it('an LLM-judged concern still vetoes — it is a judgment, not a measurement echo', () => {
+    const vs: AiVerdict[] = [{ ...mechConcern, reason: '红旗在案，AI 判 concern：可疑' }]
+    const e = entry({ verification: { ...cur, harnessGen: 1 } })
+    expect(verifyQueued(e, new Date(), latestVerdicts(vs), latestHumanVerdicts(vs), new Map())).toBe(false)
+  })
+  it('a mech concern on CURRENT harness gen with spent budget → still terminal (no churn)', () => {
+    const e = entry({ verification: { ...cur, harnessGen: HARNESS_GEN } })
+    const vs: AiVerdict[] = [mechConcern]
+    expect(verifyQueued(e, new Date(), latestVerdicts(vs), latestHumanVerdicts(vs), new Map())).toBe(false)
+  })
+  it('a retag-prefixed mech concern still exempts — emit() prepends the annotation', () => {
+    const vs: AiVerdict[] = [{ ...mechConcern,
+      reason: '同版本换包（该键曾有人工裁决，re-tag 自动重审）——装测失败（verify load 级）：装不上' }]
+    const e = entry({ verification: { ...cur, harnessGen: 1 } })
+    expect(verifyQueued(e, new Date(), latestVerdicts(vs), latestHumanVerdicts(vs), new Map())).toBe(true)
   })
 })

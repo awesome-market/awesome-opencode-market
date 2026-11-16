@@ -57,7 +57,20 @@ export interface VerifyResult {
    *  on packages that were never actually tested (the 2025-11-04 incident:
    *  a sandbox perms bug recorded 48 innocent packages as install-failed). */
   harness?: boolean
+  /** harness generation that produced this measurement — merge stamps it on
+   *  the published verification record so plan can grant a one-shot amnesty
+   *  re-measure to 'failed' results minted under an older generation. Bump
+   *  whenever the harness's own semantics change (sandbox perms, gui stubs,
+   *  render contract): every pre-change failure becomes suspect until
+   *  re-measured under the new generation. */
+  harnessGen?: number
 }
+
+/** Current harness measurement generation. Gen 1 = pre-generation records
+ *  (implicit). Gen 2 = 0755 verify-home traversal + jsdom browser stubs
+ *  (ResizeObserver/matchMedia/PointerEvent/idle callbacks) + empty-element
+ *  renders legal under stub data + argv-eating CLI explanations. */
+export const HARNESS_GEN = 2
 
 /** Shard input unit (verify.yml plan emits these). Legacy string shards coerce. */
 export interface VerifyTarget {
@@ -492,6 +505,7 @@ export async function verifyPackage(
     ...(opts.version ? { version: opts.version } : {}),
     ...(integrity ? { integrity } : {}),
     opencodeVersion: opts.opencodeVersion ?? await ocVersion(env, urun).catch(() => 'unknown'),
+    harnessGen: HARNESS_GEN,
     verifiedAt: new Date().toISOString(),
   }
 
