@@ -13,6 +13,15 @@ on:
     # stale for up to an hour after every digest
     workflows: [catalog, verify, digest]
     types: [completed]
+  workflow_call:
+    # full-run.yml tails the chain with this — nested uses: emits no
+    # workflow_run event for the callees, so without an explicit call the
+    # docket would lag a full-run publish by up to an hour (hourly cron).
+    inputs:
+      dry:
+        description: '只打印动作，不建/改/关 issue'
+        type: boolean
+        default: false
   schedule:
     - cron: '40 * * * *'   # hourly catch-up (after verify/catalog land)
 permissions: {}
