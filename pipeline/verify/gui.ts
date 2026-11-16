@@ -11,11 +11,18 @@
  *  Whitelisted requires: @opencode/plugin/gui (stub), effect, solid-js* (real,
  *  renderer-side modules the host provides). Anything else → load failure. */
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync, writeSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { existsSync, mkdirSync, copyFileSync, readdirSync, readFileSync, statSync, writeSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import vm from 'node:vm'
 import { JSDOM } from 'jsdom'
 import { isMain } from '../main-guard.ts'
+
+const execFileP = promisify(execFile)
 
 export interface GuiCheck {
   ok: boolean
@@ -24,6 +31,42 @@ export interface GuiCheck {
   error?: string
   registrations?: string[]
   rendered?: number
+}
+
+/** The gui-eval subprocess runs UNTRUSTED bundle code as the sandbox uid —
+ *  but the harness itself (gui.ts, tsx, jsdom) lived under the repo checkout,
+ *  which the sandbox uid cannot necessarily read: `node --import tsx` from
+ *  the checkout resolved ERR_MODULE_NOT_FOUND on every render check (83/83
+ *  failed/render in the catalog). Stage a minimal runtime under os.tmpdir()
+ *  — world-traversable — once per shard process: our two pipeline files plus
+ *  tsx/jsdom installed at the versions this checkout actually uses. Returns
+ *  null on any staging failure so the caller falls back to repo paths
+ *  (local dev, where the uid can read the checkout, keeps working). */
+export interface GuiRuntime { cwd: string; guiEntry: string }
+export type GuiExecFn = (cmd: string, args: string[], o?: { timeout?: number; maxBuffer?: number }) => Promise<{ stdout: string; stderr: string }>
+let runtimePromise: Promise<GuiRuntime | null> | null = null
+export function guiRuntime(exec: GuiExecFn = execFileP as GuiExecFn): Promise<GuiRuntime | null> {
+  const p = runtimePromise ?? (async (): Promise<GuiRuntime | null> => {
+    try {
+      const rt = join(tmpdir(), `om-gui-rt-${process.pid}`)
+      const vdir = join(rt, 'pipeline', 'verify')
+      mkdirSync(vdir, { recursive: true })
+      copyFileSync(fileURLToPath(import.meta.url), join(vdir, 'gui.ts'))
+      copyFileSync(fileURLToPath(new URL('../main-guard.ts', import.meta.url)), join(rt, 'pipeline', 'main-guard.ts'))
+      // pin to the versions THIS checkout resolved — the harness behavior
+      // (tsx transpile, jsdom DOM) should match what the repo tests against
+      const req = createRequire(import.meta.url)
+      const ver = (p: string) => (req(`${p}/package.json`) as { version: string }).version
+      await exec('npm', ['install', '--prefix', rt, '--no-save', '--no-audit', '--no-fund',
+        '--ignore-scripts', '--loglevel=error', `tsx@${ver('tsx')}`, `jsdom@${ver('jsdom')}`],
+        { timeout: 180_000, maxBuffer: 4 * 1024 * 1024 })
+      return { cwd: rt, guiEntry: join(vdir, 'gui.ts') }
+    } catch { return null }
+  })()
+  runtimePromise = p
+  // a failed stage (npm blip) must not disable staging for the whole shard —
+  // clear the cache so the next gui target retries
+  return p.then(r => { if (r === null) runtimePromise = null; return r })
 }
 
 const GUI_GLOBALS = [

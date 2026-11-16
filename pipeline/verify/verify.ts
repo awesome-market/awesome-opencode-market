@@ -760,7 +760,7 @@ export async function verifyPackage(
     }
 
     if (feats.includes('gui')) {
-      const { checkGuiBundle, findGuiBundle } = await import('./gui.ts')
+      const { checkGuiBundle, findGuiBundle, guiRuntime } = await import('./gui.ts')
       // git installs cache under git-<slug>-<hash>, not name@version — pass
       // the spec so the finder can compute that dir
       const found = findGuiBundle(uh, name, opts.git ? spec : undefined)
@@ -771,15 +771,20 @@ export async function verifyPackage(
       let gui: { ok: boolean; stage?: string; error?: string }
       if (sb) {
         // evaluate the bundle OUTSIDE the shard process: a vm-realm escape then
-        // lands on the nobody uid, which still cannot touch the results file
-        const guiEntry = fileURLToPath(new URL('./gui.ts', import.meta.url))
+        // lands on the nobody uid, which still cannot touch the results file.
+        // staged runtime first: the sandbox uid can't necessarily read the
+        // repo checkout (node --import tsx → ERR_MODULE_NOT_FOUND killed every
+        // render check). guiRuntime copies gui.ts+main-guard.ts and installs
+        // tsx/jsdom under tmpdir — world-traversable — once per shard process.
+        // null → repo paths (local dev, readable checkout).
+        const rt = await guiRuntime(run)
+        const guiEntry = rt?.guiEntry ?? fileURLToPath(new URL('./gui.ts', import.meta.url))
         try {
           // node --import tsx, NOT `npx tsx`: npm exec reifies into a cache
           // dir the sandbox uid can't always write (EACCES spawn sh) and may
-          // hit the network for a package already in devDependencies. --import
-          // resolves tsx straight from the checkout's node_modules — read-only.
+          // hit the network for a package already in devDependencies.
           const { stdout } = await urun('node', ['--import', 'tsx', guiEntry, found.path],
-            { cwd: process.cwd(), timeout: 90_000 })
+            { cwd: rt?.cwd ?? process.cwd(), timeout: 90_000 })
           gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
         } catch (e) {
           gui = { ok: false, stage: 'evaluate', error: `gui subprocess: ${String(e).slice(0, 500)}` }
