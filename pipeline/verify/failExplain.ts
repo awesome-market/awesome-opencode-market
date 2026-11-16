@@ -49,6 +49,8 @@ const SIGNATURES: [RegExp, string][] = [
   [/PluginModule\.LoadError|failed to load plugin|plugin absent from|reports the plugin failed/i,
     '插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本）'],
   [/SchemaError/i, '插件导出未通过 opencode 插件契约校验（schema 校验失败）'],
+  [/unknown command 'serve'|unknown option '--port'|Invalid port '0'/i,
+    '插件入口疑似是 CLI 程序——宿主加载入口模块时顶层 program.parse() 吞掉宿主 argv（包把命令行工具当插件入口打包，真包缺陷）'],
   [/MODULE_NOT_FOUND|Cannot find module/i, '依赖缺失——代码引用了不在包内的模块'],
   [/NpmInstallFailed|dep.*preparation.*failed|npm ERR!/i, '依赖安装失败（npm/git 拉取或包准备阶段报错）'],
   [/SyntaxError/i, '语法错误——插件代码无法解析'],
