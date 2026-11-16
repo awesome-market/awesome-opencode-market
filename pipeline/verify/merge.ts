@@ -38,6 +38,9 @@ export const VerifyResultFile = z.object({
   jobUrl: z.string().max(500).optional(),
   // shard threw around the package check — infrastructure signal, dropped below
   harness: z.boolean().optional(),
+  // harness generation stamp — survives into index.json so plan can amnesty
+  // failed measurements minted under an older generation (harnessStaleFail)
+  harnessGen: z.number().int().optional(),
 })
 
 /** The content identity a slot pins: the held/displayed tarball SRI for npm
@@ -65,6 +68,7 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
     level: r.level,
     opencodeVersion: r.opencodeVersion,
     verifiedAt: r.verifiedAt,
+    ...(r.harnessGen ? { harnessGen: r.harnessGen } : {}),
     ...(r.integrity ? { integrity: r.integrity } : {}),
     ...(r.jobUrl ?? runUrl ? { runUrl: r.jobUrl ?? runUrl } : {}),
     ...(excerpt ? { logExcerpt: excerpt } : {}),

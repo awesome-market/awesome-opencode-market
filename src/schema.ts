@@ -64,6 +64,13 @@ export const Verification = z.looseObject({
   /** consecutive failed verify attempts recorded by verify merge — cleared on
    *  any non-failed result. plan re-queues recent failures while retries < 3 (V-3). */
   retries: z.number().int().optional(),
+  /** verify harness generation the measurement ran under — bumped when the
+   *  harness itself changes semantics (sandbox perms, gui stubs, render
+   *  contract). plan grants one amnesty re-measure per bump to 'failed'
+   *  records minted under an older generation, the same way a host-version
+   *  bump re-queues stale measurements (hostStaleFail). Absent = legacy,
+   *  treated as generation 0. */
+  harnessGen: z.number().int().optional(),
 })
 
 /** AI/human review state (AI-DIAGNOSIS §4).

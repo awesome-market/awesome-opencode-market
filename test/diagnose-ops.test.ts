@@ -10,6 +10,8 @@ import { join } from 'node:path'
 import { main as diagnoseMain, materialPrompt, MATERIAL_BUDGET, L05_CANARY_BENIGN, L05_CANARY_HOSTILE } from '../pipeline/ai/diagnose.ts'
 import { renderDigest } from '../pipeline/ai/digest.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
+import { OPENCODE_VERSION } from '../pipeline/publish/merge.ts'
+import { HARNESS_GEN } from '../pipeline/verify/verify.ts'
 
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
@@ -28,7 +30,7 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
 })
 const held = e({ approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
 const flaggedHeld = e({ name: 'bad', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: ['net:exfil'] }, verification: { status: 'verified' }, heldAt: '2026-01-01T00:00:00Z' } })
-const failedHeld = e({ name: 'broken', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3 }, heldAt: '2026-01-01T00:00:00Z' } })
+const failedHeld = e({ name: 'broken', approval: 'approved', pendingUpdate: { version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'failed', level: 'install', logExcerpt: 'npm 404', retries: 3, opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN }, heldAt: '2026-01-01T00:00:00Z' } })
 const v = (over: Partial<AiVerdict> = {}): AiVerdict => ({
   name: 'pkg', version: '2.0.0', verdict: 'pass', at: '2026-01-01T00:00:00Z', source: 'ai', ...over,
 })
@@ -102,7 +104,7 @@ describe('D-1 omlx preflight', () => {
     const egressFailed = e({ name: 'netpkg', approval: 'approved', pendingUpdate: {
       version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'failed', level: 'load', retries: 3,
-        logExcerpt: '--- errors ---\nlevel=ERROR message="plugin init failed" cause="fetch https://api.example.com ECONNREFUSED"\n--- stream tail ---\nserve reports the plugin failed to load' },
+        logExcerpt: '--- errors ---\nlevel=ERROR message="plugin init failed" cause="fetch https://api.example.com ECONNREFUSED"\n--- stream tail ---\nserve reports the plugin failed to load', opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN },
       heldAt: '2026-01-01T00:00:00Z' } })
     let ornithCalls = 0
     const { argv, op } = files([egressFailed])
@@ -122,7 +124,7 @@ describe('D-1 omlx preflight', () => {
     const crashFailed = e({ name: 'crashpkg', approval: 'approved', pendingUpdate: {
       version: '2.0.0', capabilities: { scannedAt: 't', findings: [], redFlags: [] },
       verification: { status: 'failed', level: 'load', retries: 3,
-        logExcerpt: '--- errors ---\nPluginModule.LoadError: export did not satisfy contract\nserve reports the plugin failed to load' },
+        logExcerpt: '--- errors ---\nPluginModule.LoadError: export did not satisfy contract\nserve reports the plugin failed to load', opencodeVersion: OPENCODE_VERSION, harnessGen: HARNESS_GEN },
       heldAt: '2026-01-01T00:00:00Z' } })
     let ornithCalls = 0
     const { argv, op } = files([crashFailed])

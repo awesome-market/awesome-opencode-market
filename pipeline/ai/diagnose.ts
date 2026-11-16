@@ -54,10 +54,12 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { t as tarList } from 'tar'
-import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
+import { CatalogIndex, AiVerdict, type PluginEntry } from '../../src/schema.ts'
 import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable, humanPassCovers } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
+import { HARNESS_GEN } from '../verify/verify.ts'
+import { OPENCODE_VERSION } from '../publish/merge.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, egressBlockedExcerpt, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from '../verify/failExplain.ts'
 import { isMain } from '../main-guard.ts'
 
@@ -787,6 +789,18 @@ export const staleVerifyFail = (
   isVerifyFailConcern(v) && !!vf?.verifiedAt && !!v?.at
   && Date.parse(vf.verifiedAt) > Date.parse(v.at)
 
+/** Mirror of plan.ts's verifyPartsOf membership check (can't import plan —
+ *  plan already imports this module). True when the candidate slot still
+ *  carries an installable plugin/skill payload verify could measure; a slot
+ *  whose contains shrank post-measure must not defer review on a re-measure
+ *  that will never be queued. */
+const hasVerifiableParts = (e: PluginEntry): boolean => {
+  const slot = candidateSlot(e)
+  const c = slot?.contains ?? e.contains
+  const parts = c !== undefined ? c : [e.type === 'skill' ? 'skill' : 'plugin']
+  return parts.includes('plugin') || parts.includes('skill')
+}
+
 /** Held versions that have NEVER received any verdict. Both held shapes:
  *  pendingUpdate (newer version behind a displayed one) and approval:pending
  *  on the entry itself (first version never released). ANY existing verdict —
@@ -871,7 +885,20 @@ export function unreviewedTargets(
       // writes the mechanical concern. This is a correctness brake, not a
       // throttle. Harness-error rows were never measured — they review
       // normally.
-      if (vf.status === 'failed' && !isHarnessFailure(vf) && retryable(vf)) return false
+      // Amnesty re-measures belong to the verify loop the same way: a
+      // host-bump (hostStaleFail) or harness-generation bump (harnessStaleFail)
+      // re-queue means the recorded measurement is about to refresh under new
+      // machinery — a verdict minted on the stale evidence would be corrected
+      // by staleVerifyFail anyway, so deferring skips the churn. The field
+      // checks mirror plan.ts's verifyQueued conditions (can't import it —
+      // plan→diagnose edge already exists); the parts gate keeps a slot whose
+      // payload shrank post-measure out of the defer — verifyQueued would
+      // never queue it, so deferring would make it invisible forever.
+      if (vf.status === 'failed' && !isHarnessFailure(vf) && hasVerifiableParts(e)
+          && (retryable(vf)
+            || (vf.level !== 'structure' && vf.opencodeVersion !== 'unknown'
+              && vf.opencodeVersion !== OPENCODE_VERSION)
+            || (vf.harnessGen ?? 0) < HARNESS_GEN)) return false
     }
     return true
   }).sort((a, b) => (candidateHeldAt(a) || 0) - (candidateHeldAt(b) || 0))
