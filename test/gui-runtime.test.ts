@@ -10,7 +10,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { guiRuntime, type GuiExecFn } from '../pipeline/verify/gui.ts'
 
-const okExec: GuiExecFn = async () => ({ stdout: '', stderr: '' })
 const failExec: GuiExecFn = async () => { throw new Error('npm exploded') }
 
 describe('guiRuntime staging', () => {
@@ -18,7 +17,9 @@ describe('guiRuntime staging', () => {
     expect(await guiRuntime(failExec)).toBeNull()
   })
   it('the next call re-stages instead of serving the cached failure', async () => {
-    const rt = await guiRuntime(okExec)
+    const seen: string[][] = []
+    const capture: GuiExecFn = async (_c, args) => { seen.push(args); return { stdout: '', stderr: '' } }
+    const rt = await guiRuntime(capture)
     expect(rt).not.toBeNull()
     expect(rt!.cwd).toContain('om-gui-rt-')
     expect(existsSync(join(rt!.cwd, 'pipeline', 'verify', 'gui.ts'))).toBe(true)
@@ -27,5 +28,12 @@ describe('guiRuntime staging', () => {
     expect(readFileSync(join(rt!.cwd, 'pipeline', 'verify', 'gui.ts'), 'utf8')).toContain('checkGuiBundle')
     // and the singleton is now sticky — a later failing exec is ignored
     expect(await guiRuntime(failExec)).toEqual(rt)
+    // the staged runtime MUST carry the gui host modules — without effect/
+    // solid-js every solid-js bundle fails the whitelist (harness false-fail)
+    const inst = seen.flat().join(' ')
+    expect(inst).toContain('effect@')
+    expect(inst).toContain('solid-js@')
+    expect(inst).toContain('tsx@')
+    expect(inst).toContain('jsdom@')
   })
 })

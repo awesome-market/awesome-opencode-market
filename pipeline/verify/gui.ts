@@ -39,7 +39,8 @@ export interface GuiCheck {
  *  the checkout resolved ERR_MODULE_NOT_FOUND on every render check (83/83
  *  failed/render in the catalog). Stage a minimal runtime under os.tmpdir()
  *  — world-traversable — once per shard process: our two pipeline files plus
- *  tsx/jsdom installed at the versions this checkout actually uses. Returns
+ *  tsx/jsdom/effect/solid-js installed at the versions this checkout actually
+ *  uses. Returns
  *  null on any staging failure so the caller falls back to repo paths
  *  (local dev, where the uid can read the checkout, keeps working). */
 export interface GuiRuntime { cwd: string; guiEntry: string }
@@ -54,11 +55,16 @@ export function guiRuntime(exec: GuiExecFn = execFileP as GuiExecFn): Promise<Gu
       copyFileSync(fileURLToPath(import.meta.url), join(vdir, 'gui.ts'))
       copyFileSync(fileURLToPath(new URL('../main-guard.ts', import.meta.url)), join(rt, 'pipeline', 'main-guard.ts'))
       // pin to the versions THIS checkout resolved — the harness behavior
-      // (tsx transpile, jsdom DOM) should match what the repo tests against
+      // (tsx transpile, jsdom DOM, and the host modules the whitelist maps:
+      // effect + solid-js*) should match what the repo tests against. A
+      // staged runtime WITHOUT them makes every solid-js gui bundle fail
+      // 'module not in gui host whitelist' — a harness false-failure, not a
+      // package defect (the first staged-runtime wave: 80/80 render fails).
       const req = createRequire(import.meta.url)
       const ver = (p: string) => (req(`${p}/package.json`) as { version: string }).version
       await exec('npm', ['install', '--prefix', rt, '--no-save', '--no-audit', '--no-fund',
-        '--ignore-scripts', '--loglevel=error', `tsx@${ver('tsx')}`, `jsdom@${ver('jsdom')}`],
+        '--ignore-scripts', '--loglevel=error',
+        `tsx@${ver('tsx')}`, `jsdom@${ver('jsdom')}`, `effect@${ver('effect')}`, `solid-js@${ver('solid-js')}`],
         { timeout: 180_000, maxBuffer: 4 * 1024 * 1024 })
       return { cwd: rt, guiEntry: join(vdir, 'gui.ts') }
     } catch { return null }
