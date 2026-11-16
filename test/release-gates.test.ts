@@ -615,3 +615,80 @@ describe('grandfathered release (≥30d public + ≥10★)', () => {
     expect(s[0]!.why).toContain('老插件免公示')
   })
 })
+
+// ————— full-run fast maturity: ≥30d packages release same-day, opt-in only —————
+describe('full-run fast maturity (opts.fastMatureAgeMs)', () => {
+  const AGE = 30 * 24 * 60 * 60 * 1000
+  const OPTS = { fastMatureAgeMs: AGE }
+  const stars = (n: number | null) => ({ stars: n, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 'x' })
+  const pending = (over: Partial<PluginEntry> = {}) => mkEntry('p', { approval: 'pending', ...over })
+  const pass = () => mkVerdict('p', '1.0.0', 'pass', BEFORE)
+  // announced TODAY: akey sits in dayAnnounced — the objection window is open
+  const announcedToday = (v: AiVerdict) => digestStateOf(DIGEST, [v], [akey(v)])
+
+  it('old + 0-star + announced today → releases under the flag', () => {
+    const e = pending({ metrics: stars(0) })
+    const v = pass()
+    const r = applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS)
+    expect(r.index.plugins[0]!.approval).toBe('approved')
+    expect(r.releases).toEqual(['p@1.0.0'])
+  })
+  it('same slot WITHOUT the flag → window still applies (daily folds unchanged)', () => {
+    const e = pending({ metrics: stars(0) })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v)).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('a <30d package keeps the window even under the flag', () => {
+    const e = pending({ createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), metrics: stars(0) })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('missing createdAt fails closed — unverifiable age stays in the window', () => {
+    const e = pending({ createdAt: null, metrics: stars(0) })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('a NEVER-announced pass does not fast-release — 公示后 is required', () => {
+    const e = pending({ metrics: stars(0) })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], null, OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('verify=failed is still not releasable — the flag only waives the window', () => {
+    const e = pending({ metrics: stars(0), verification: { status: 'failed', level: 'load' } })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('sec:maintainer-changed keeps the window — hijack shape is exempt', () => {
+    const e = pending({
+      metrics: stars(0),
+      capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: ['sec:maintainer-changed'], redFlags: [] },
+    })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('a hollow ai pass on a red-flagged entry stays ignored under the flag', () => {
+    const e = pending({
+      metrics: stars(0),
+      capabilities: { scannedAt: 't', rulesetVersion: 'r', findings: [], redFlags: ['network-call:a.ts'] },
+    })
+    const v = pass()
+    expect(applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS).index.plugins[0]!.approval).toBe('pending')
+  })
+  it('held pendingUpdate keeps its window under the flag — promotions are exempt', () => {
+    const e = mkEntry('p', { metrics: stars(0), pendingUpdate: mkPu('1.1.0') })
+    const v = mkVerdict('p', '1.1.0', 'pass', BEFORE)
+    const r = applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS)
+    expect(r.index.plugins[0]!.latestVersion).toBe('1.0.0')
+    expect(r.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
+  })
+  it('github-kind old entry releases under the flag (skipped verification is releasable)', () => {
+    const e = pending({
+      source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc123' },
+      latestVersion: null, metrics: stars(0),
+      verification: { status: 'skipped', level: 'load' },
+    })
+    const v = mkVerdict('p', null, 'pass', BEFORE)
+    const r = applyMatureVerdicts(mkIndex([e]), [v], announcedToday(v), OPTS)
+    expect(r.index.plugins[0]!.approval).toBe('approved')
+  })
+})

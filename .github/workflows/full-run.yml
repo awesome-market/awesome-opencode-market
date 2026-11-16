@@ -16,7 +16,13 @@ name: full-run
 # 每个阶段都是独立 job 引用原 workflow（workflow_call），内部重试/并发锁/
 # 权限全部沿用原定义——这里没有第二份实现可漂移。
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      fast_mature:
+        description: '勾选后 ≥30 天包龄的判词当日公告当日放行（维护者变更/版本提升槽仍保窗）'
+        type: boolean
+        default: false
+        required: false
 
 permissions: {}
 
@@ -46,6 +52,10 @@ jobs:
     needs: digest
     uses: ./.github/workflows/catalog.yml
     secrets: inherit
+    with:
+      # 勾选 fast_mature 后 ≥30d 包龄公示后直接放行——full-run 公告与放行
+      # 同链，异议窗只对新面孔有意义；日常 cron fold 不受影响
+      fast_mature: ${{ inputs.fast_mature }}
     permissions:
       contents: write
       issues: write

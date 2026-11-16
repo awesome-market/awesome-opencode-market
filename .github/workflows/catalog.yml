@@ -13,12 +13,18 @@ on:
         type: boolean
         default: false
         required: false
+      fast_mature:
+        description: '≥30 天包龄的判词当日公告当日放行（公示后不等一天；日常 cron 留 false 保完整异议窗）'
+        type: boolean
+        default: false
+        required: false
   # reusable entry for full-run.yml — redeclared so force_publish is a real
   # false for callers that pass nothing (undeclared → null, still falsy but
   # explicit is cheaper than trusting coercion)
   workflow_call:
     inputs:
       force_publish: { required: false, type: boolean, default: false }
+      fast_mature: { required: false, type: boolean, default: false }
 permissions: {}               # job-level grants below
 jobs:
   generate:
@@ -124,7 +130,7 @@ jobs:
           # issues can't render file+code without it): 300/hr drains it in ~13h
           # instead of ~8 days at the default 20. vars override once caught up.
           CATALOG_RESCAN_BUDGET: ${{ vars.CATALOG_RESCAN_BUDGET || 300 }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}${{ inputs.fast_mature && ' --fast-mature' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out
