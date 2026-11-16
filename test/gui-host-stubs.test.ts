@@ -83,6 +83,57 @@ describe('gui host-module fallback stubs', () => {
     expect(r.registrations).toEqual(['FileTree'])
   })
 
+  it('ctx.add accepts both object and factory forms (real overloaded signature)', async () => {
+    const src = wrap(`
+      const { Panel, Command } = require('@opencode/plugin/gui')
+      // object form: ctx.add(Command, { id, title, run })
+      ctx.add(Command, { id: 'c1', run: () => {} })
+      // factory form: ctx.add(Panel, () => ({ render }))
+      ctx.add(Panel, () => ({ render: () => { const e = document.createElement('div'); e.textContent = 'p'; return e } }))
+      // factory returning undefined: conditional registration — must not crash
+      ctx.add(Command, () => undefined)
+      // returns a Cleanup like the host
+      const cleanup = ctx.add(Command, () => ({ id: 'c2' }))
+      cleanup()
+    `)
+    const r = await checkGuiBundle(src)
+    expect(r.ok).toBe(true)
+    expect(r.registrations).toEqual(['Command', 'Panel', 'Command', 'Command'])
+  })
+
+  it('@opencode/plugin root and deeper real subpaths resolve', async () => {
+    const src = wrap(`
+      const plugin = require('@opencode/plugin')
+      const review = require('@opencode/plugin/gui/review')
+      const runtime = require('@opencode/plugin/runtime')
+      plugin.anything?.(); review.Anything?.(); runtime.whatever?.()
+      ctx.add({ cname: 'P', name: 'P' }, () => ({ render: () => { const e = document.createElement('div'); e.textContent = 'p'; return e } }))
+    `)
+    const r = await checkGuiBundle(src)
+    expect(r.ok).toBe(true)
+  })
+
+  it('@opencode/plugin/gui/* paths the host null-blocks still fail the whitelist', async () => {
+    const src = `require('@opencode/plugin/gui/host')
+module.exports = { default: { setup(ctx) { ctx.add({ cname: 'P', name: 'P' }, () => ({})) } } }`
+    const r = await checkGuiBundle(src)
+    expect(r.ok).toBe(false)
+    expect(r.stage).toBe('whitelist')
+    expect(r.error).toContain('@opencode/plugin/gui/host')
+  })
+
+  it('unmodeled ctx properties resolve as stubs instead of crashing setup', async () => {
+    const src = wrap(`
+      ctx.layout.open('panel:main')
+      ctx.toasts.show('hi')
+      const label = ctx.t('some.key')
+      ctx.storage.get('k')
+      ctx.add({ cname: 'P', name: 'P' }, () => ({ render: () => { const e = document.createElement('div'); e.textContent = 'p'; return e } }))
+    `)
+    const r = await checkGuiBundle(src)
+    expect(r.ok).toBe(true)
+  })
+
   it('host globals that ARE modeled still win over the fallback', async () => {
     const src = wrap(`
       const gui = require('@opencode/plugin/gui')
