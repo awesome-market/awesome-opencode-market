@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { classifyDelta, isRiskyDeltaPath, parseCompare, fetchCompare, type DeltaFile } from '../pipeline/delta.ts'
+import { classifyDelta, isRiskyDeltaPath, isTrivialDeltaPath, parseCompare, fetchCompare, type DeltaFile } from '../pipeline/delta.ts'
 import { issueBody, type CompareInfo } from '../pipeline/docket.ts'
 import { main as flagDeltaMain, loadAssessments, latestAssessments, type FlagAssessment } from '../pipeline/ai/flag-delta.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
@@ -32,6 +32,15 @@ describe('classifyDelta / isRiskyDeltaPath', () => {
   it('riskyFiles lists risky paths, deduped by path', () => {
     const cls = classifyDelta([df('package.json'), df('.github/workflows/a.yml'), df('src/x.ts')])
     expect(cls.riskyFiles.sort()).toEqual(['.github/workflows/a.yml', 'package.json'])
+  })
+  it('agent-instruction files veto triviality at ANY depth — prompt-injection surface', () => {
+    for (const p of ['SKILL.md', 'docs/SKILL.md', 'CLAUDE.md', 'docs/AGENTS.md',
+      '.cursorrules', '.windsurfrules', '.cursor/rules/x.md', '.claude/settings.json',
+      '.github/copilot-instructions.md']) {
+      expect(isTrivialDeltaPath(p), p).toBe(false)
+    }
+    expect(isTrivialDeltaPath('README.md')).toBe(true)
+    expect(isTrivialDeltaPath('docs/guide.md')).toBe(true)
   })
 })
 
@@ -263,6 +272,59 @@ describe('flag-delta main', () => {
     const a = loadAssessments(s.spool)[0]!
     expect(a.ai).toBeNull()
     expect(a.aiNote).toContain('judge-error')
+  })
+})
+
+describe('autoResolved — provably-inert drift retires itself', () => {
+  const trivialCmp = (files: { path: string; patch?: string }[], over = {}) => ({
+    aheadBy: 1, commitsTotal: 1, filesTotal: files.length, additions: 5, deletions: 1,
+    commits: [{ sha: 'c', msg: 'docs' }],
+    files: files.map(f => ({ path: f.path, status: 'modified', add: 5, del: 1, ...(f.patch ? { patch: f.patch } : {}) })),
+    truncated: false, ...over,
+  })
+  const pass = { verdict: 'pass' as const, reasonZh: '纯文档', reasonEn: 'docs only' }
+
+  it('all-docs delta + judge pass → autoResolved trivial', async () => {
+    const s = setup([ghEntry()])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => trivialCmp([{ path: 'README.md', patch: '@@ docs' }, { path: 'docs/a.md', patch: '@@' }]),
+      judge: async () => pass,
+    })
+    expect(loadAssessments(s.spool)[0]!.autoResolved).toBe('trivial')
+  })
+  it('judge concern on a trivial delta → NO auto-resolve', async () => {
+    const s = setup([ghEntry()])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => trivialCmp([{ path: 'README.md', patch: '@@' }]),
+      judge: async () => ({ verdict: 'concern' as const, reasonZh: 'docs 藏注入', reasonEn: 'injection in docs' }),
+    })
+    expect(loadAssessments(s.spool)[0]!.autoResolved).toBeUndefined()
+  })
+  it('judge unavailable (ai:null) → no auto-resolve, retried later', async () => {
+    const s = setup([ghEntry()])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => trivialCmp([{ path: 'README.md', patch: '@@' }]),
+      judge: async () => { throw new Error('down') },
+    })
+    expect(loadAssessments(s.spool)[0]!.autoResolved).toBeUndefined()
+  })
+  it('truncated compare → no auto-resolve (unseen files stay human)', async () => {
+    const s = setup([ghEntry()])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => trivialCmp([{ path: 'README.md' }], { truncated: true }),
+      judge: async () => pass,
+    })
+    expect(loadAssessments(s.spool)[0]!.autoResolved).toBeUndefined()
+  })
+  it('delta touching a flagged file → no auto-resolve', async () => {
+    const e2 = ghEntry({ capabilities: { scannedAt: 't', findings: [], flaggedAt: '2026-11-15T00:00:00Z',
+      redFlags: ['sec:repo-moved-since-release:newsha999888777', 'exec:docs/run.md — L1: x'] } })
+    const s = setup([e2])
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => trivialCmp([{ path: 'docs/run.md', patch: '@@' }]),
+      judge: async () => pass,
+    })
+    expect(loadAssessments(s.spool)[0]!.autoResolved).toBeUndefined()
   })
 })
 

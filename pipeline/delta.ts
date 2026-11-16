@@ -67,9 +67,13 @@ export const isRiskyDeltaPath = (p: string): boolean => RISKY_FILE_RE.test(p)
 const TRIVIAL_PATH_RE = /^(?:README|CHANGELOG|HISTORY|LICENSE|NOTICE|CHANGELOG-|docs?\/|assets?\/|images?\/|locales?\/|\.github\/(?:ISSUE|PULL)_TEMPLATE)/i
 const TRIVIAL_EXT_RE = /\.(?:md|markdown|rst|adoc|txt|png|jpe?g|gif|svg|webp|ico|pdf|mp3|wav|mp4|mov|woff2?)$/i
 const CODE_DIR_RE = /(?:^|\/)(?:skills?|plugins?|commands?|agents?|hooks?|mcp|scripts?|bin|workflows?|actions?|tools?|src|lib|test|tests?)\//i
+/** agent-instruction surfaces at ANY depth are functional content — a
+ *  docs/SKILL.md or a root CLAUDE.md is prompt-injection payload aimed at
+ *  the review pipeline itself, never "inert docs". */
+const AGENT_FILE_RE = /(?:^|\/)(?:SKILL|AGENTS?|CLAUDE|GEMINI|AGENT|COPILOT-INSTRUCTIONS)\.md$|(?:^|\/)\.(?:cursorrules|windsurfrules|clinerules)|(?:^|\/)\.cursor\/|(?:^|\/)\.claude\//i
 
 export const isTrivialDeltaPath = (p: string): boolean =>
-  !CODE_DIR_RE.test(p) && (TRIVIAL_PATH_RE.test(p) || TRIVIAL_EXT_RE.test(p))
+  !CODE_DIR_RE.test(p) && !AGENT_FILE_RE.test(p) && (TRIVIAL_PATH_RE.test(p) || TRIVIAL_EXT_RE.test(p))
 
 export interface DeltaClass {
   /** every changed file passed isTrivialDeltaPath — mechanical "no

@@ -51,6 +51,13 @@ export interface FlagAssessment {
   /** why ai is null — judge-unavailable retries next run (ai:null lines do
    *  NOT count as assessed); judge-skipped:* is terminal for this flag */
   aiNote?: string
+  /** 'trivial' = the drift PROVABLY touched no executable surface — every
+   *  file passed isTrivialDeltaPath, compare untruncated, zero risky paths,
+   *  zero overlap with the entry's flagged files — AND the judge still
+   *  returned pass on the actual content. The docket retires the flag on
+   *  this marker alone: a human verdict adds nothing when the installable
+   *  bytes provably didn't change. Anything less stays human-decided. */
+  autoResolved?: 'trivial'
 }
 
 export function loadAssessments(path?: string): FlagAssessment[] {
@@ -283,6 +290,19 @@ export async function main(
       try { ai = await judge({ summary: mat.summary, commits: mat.commits, patches: mat.patches }, !cls.trivial) }
       catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
     } else aiNote = 'judge-unavailable'
+    // auto-resolve bar: provably inert delta AND a pass on the actual
+    // content. ai:null (judge down) never auto-resolves — the flag waits
+    // for a retry or a human, same conservative default as everywhere.
+    const flagFiles = new Set(
+      w.e.capabilities.redFlags
+        .filter(f => !f.startsWith('sec:') && !f.startsWith('sec-delta:'))
+        .map(f => f.split(' — ')[0]!.slice(f.indexOf(':') + 1)),
+    )
+    const autoResolved: FlagAssessment['autoResolved'] =
+      cls.trivial && !cmp.truncated && cls.riskyFiles.length === 0
+        && !cmp.files.some(f => flagFiles.has(f.path))
+        && ai?.verdict === 'pass'
+        ? 'trivial' : undefined
     const a: FlagAssessment = {
       name: w.e.name, flag: w.flag, repo: w.repo, oldSha: w.oldSha, newSha: w.newSha,
       at: new Date().toISOString(),
@@ -293,13 +313,13 @@ export async function main(
         risky: isRiskyDeltaPath(f.path), ...(mat.patchOmitted.has(f.path) ? { patchOmitted: true } : {}),
       })),
       riskyFiles: cls.riskyFiles, trivial: cls.trivial, truncated: cmp.truncated,
-      ai, ...(aiNote ? { aiNote } : {}),
+      ai, ...(aiNote ? { aiNote } : {}), ...(autoResolved ? { autoResolved } : {}),
     }
     const line = JSON.stringify(a)
     if (dry) console.log(line)
     else if (spoolPath) appendFileSync(spoolPath, line + '\n')
     wrote++
-    console.log(`[flag-delta] ${w.e.name} ${w.flag.slice(0, 44)} → ${ai ? ai.verdict : 'no-ai'}${cls.trivial ? ' (trivial)' : ''} [${i + 1}/${queue.length}]`)
+    console.log(`[flag-delta] ${w.e.name} ${w.flag.slice(0, 44)} → ${ai ? ai.verdict : 'no-ai'}${cls.trivial ? ' (trivial)' : ''}${autoResolved ? ' AUTO-RESOLVE' : ''} [${i + 1}/${queue.length}]`)
   }
   console.log(`[flag-delta] wrote ${wrote} assessments${dry ? ' (dry — nothing persisted)' : ''}`)
 }
