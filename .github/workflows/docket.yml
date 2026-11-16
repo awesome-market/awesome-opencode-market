@@ -72,6 +72,10 @@ jobs:
             "verdict:concern|D93F0B|人工拦截——手机点选" \
             "ai:pass|C5DEF5|AI 判 pass（信息标签）" \
             "ai:concern|F9D0C4|AI 判 concern（信息标签）" \
+            "concern:verify|D4C5F9|机械装测失败——重测自动消化，通常不需要人工" \
+            "concern:l05|FFD8B5|L0.5 注入信号命中——需人工复核" \
+            "concern:flags|FFB3B3|红旗证据待人工（机械占位/身份级红旗）" \
+            "concern:llm|F9D0C4|LLM 判 concern——需人工复核" \
             "review:human|B60205|放行闸无 AI 通道——必须人工 verdict 才能收敛"; do
             IFS='|' read -r name color desc <<< "$spec"
             # ensure-only: all labels already exist on the repo, so a

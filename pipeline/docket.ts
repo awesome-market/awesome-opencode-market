@@ -1106,6 +1106,22 @@ export async function main(
     t.verdict === 'pass'
     && t.humanVerdict?.verdict !== 'pass' && t.humanVerdict?.verdict !== 'concern'
     && (((t.redFlags ?? 0) > 0 && !t.flagsReviewed) || !!t.unscanned)
+  // concern-class labels — searchable buckets under ai:concern so the maintainer
+  // can triage "mechanical vs needs-eyes" without reading every body:
+  //   concern:verify = mechanical 装测失败 (auto-drains via re-measure)
+  //   concern:l05    = L0.5 injection-signal hit (human)
+  //   concern:flags  = flag evidence awaiting a human (机械红旗 placeholder,
+  //                    or the flag-kind target itself)
+  //   concern:llm    = LLM-judged concern (human)
+  const concernLabel = (t: DocketTarget): string | null => {
+    if (t.verdict === 'flag') return 'concern:flags'
+    if (t.verdict !== 'concern') return null
+    const r = t.reason ?? ''
+    if (r.startsWith('装测失败')) return 'concern:verify'
+    if (r.startsWith('L0.5 命中')) return 'concern:l05'
+    if (r.startsWith('机械红旗')) return 'concern:flags'
+    return 'concern:llm'
+  }
   const assignBestEffort = async (issue: string | number, only?: string[]) => {
     if (!assignees.length) return
     const want = only ?? assignees
@@ -1197,8 +1213,10 @@ export async function main(
     }
     if (!ex) {
       console.log(`[docket] create ${title}`)
+      const cl = concernLabel(t)
       const args = ['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
+        ...(cl ? ['--label', cl] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
         '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null })]
       if (dry) { created.push(title); continue }
@@ -1223,6 +1241,11 @@ export async function main(
     const wantAi = t.verdict === 'pass' || t.verdict === 'concern' ? `ai:${t.verdict}` : null
     const staleAi = [...curLabels].filter(l => l.startsWith('ai:') && l !== wantAi)
     const missingAi = wantAi && !curLabels.has(wantAi) ? wantAi : null
+    // concern-class labels ride the same drift rule — a re-measure flipping
+    // 装测失败 → llm-judged (or concern → pass) must not leave the old bucket
+    const wantConcern = concernLabel(t)
+    const staleConcern = [...curLabels].filter(l => l.startsWith('concern:') && l !== wantConcern)
+    const missingConcern = wantConcern && !curLabels.has(wantConcern) ? wantConcern : null
     // EVERY stuck verdict:* label folds into the body, not just the first —
     // verdict:blocked counts too: it means the last label attempt failed to
     // resolve (concern.yml already commented once, but the standing body is
@@ -1241,6 +1264,8 @@ export async function main(
     if (retitle) edit.push('--title', title)
     for (const l of staleAi) edit.push('--remove-label', l)
     if (missingAi) edit.push('--add-label', missingAi)
+    for (const l of staleConcern) edit.push('--remove-label', l)
+    if (missingConcern) edit.push('--add-label', missingConcern)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
     // same drift rule as ai:* — a rescan clearing the flags (or a landing
     // human verdict) retires the human-only gate, so the label must follow
