@@ -1697,6 +1697,17 @@ describe('issue evidence enrichment', () => {
     expect(t.verifyRunUrl).toBe('https://example.com/run/1')
     expect(t.stars).toBe(42)
   })
+  it('scanPreview sorts code-path findings before doc-path ones', () => {
+    const t = docketTargets(idx([findingsEntry()]), [v({ verdict: 'concern' })])[0]!
+    // README/docs hits are context, not behavior — they must not bury the
+    // real code signals under alphabetical order (#6256 excerpt showed
+    // CHANGELOG/docs first and hid the live spawn hit below the fold)
+    const paths = t.scanPreview!.map(s => s.split(':')[1]?.split(' ')[0] ?? '')
+    const docIdx = paths.findIndex(p => /\.(md|txt|rst)$/i.test(p) || /(^|\/)docs?\//.test(p))
+    expect(paths.slice(0, docIdx === -1 ? paths.length : docIdx)
+      .every(p => !/\.(md|txt|rst)$/i.test(p) && !/(^|\/)docs?\//.test(p))).toBe(true)
+    expect(t.scanPreview![0]).toContain('src/index.js')
+  })
   it('flag-listed findings are excluded from hotFiles (they render in 红旗清单)', () => {
     const ent = findingsEntry()
     ent.capabilities.redFlags = ['network-call:src/net.js — L5: http.get(u)']
