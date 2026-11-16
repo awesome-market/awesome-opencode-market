@@ -227,10 +227,14 @@ const shq = (v: string) => `'${v.replace(/'/g, `'\\''`)}'`
  *  bundles) then runs as a uid that CANNOT write the shard's results file nor
  *  read the shard process env. */
 async function setupSandbox(home: string, user: string, run: ExecFn): Promise<Sandbox> {
-  chmodSync(home, 0o711)
+  chmodSync(home, 0o755)
   const uh = join(home, 'u')
-  // home stays 0711 runner-owned — nobody can traverse but NOT create entries
-  // (the runner-owned plugins.json evidence lives beside uh). Making uh as
+  // home stays 0755 runner-owned — nobody can traverse AND list but NOT create
+  // entries (the runner-owned plugins.json evidence lives beside uh; nothing
+  // read-sensitive sits at this level — env is scrubbed, secrets never land).
+  // 0711 denied readdir: opencode's ancestor walk (AGENTS.md/config scan) and
+  // its dir watcher EACCES'd on home itself — real hosts run as the user, who
+  // can always read their own project root. Making uh as
   // nobody (`sudo -u mkdir`) therefore EACCESes on a real runner: create it
   // as the runner, then hand ownership to the sandbox uid.
   mkdirSync(uh, { recursive: true })

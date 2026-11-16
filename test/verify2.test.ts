@@ -461,13 +461,13 @@ describe('gui harness', () => {
       } })`)
     expect(r).toMatchObject({ ok: false, stage: 'render' })
   })
-  it('empty element → render failure', async () => {
+  it('empty element → legal (stub props yield no collection data)', async () => {
     const r = await checkGuiBundle(`
       const { Plugin, Panel } = require('@opencode/plugin/gui')
       module.exports.default = Plugin.define({ setup(ctx) {
         ctx.add(Panel, () => ({ render: () => document.createElement('div') }))
       } })`)
-    expect(r).toMatchObject({ ok: false, stage: 'render' })
+    expect(r).toMatchObject({ ok: true, rendered: 0, emptyRenders: ['Panel'] })
   })
   it('setup registering nothing → setup failure', async () => {
     const r = await checkGuiBundle(`

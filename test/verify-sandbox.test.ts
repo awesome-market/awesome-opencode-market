@@ -103,7 +103,7 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       execFn: fakeOs(calls), spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     // uh handed to the sandbox uid via chown (nobody can't create inside a
-    // 0711 runner-owned home); chmod + process sweep happened
+    // runner-owned 0755 home — no w bit); chmod + process sweep happened
     expect(calls.some(c => c.cmd === 'sudo' && c.args[0] === '-n' && c.args[1] === 'chown'
       && c.args[2] === 'nobody' && c.args[3] === join(home, 'u'))).toBe(true)
     expect(calls.some(c => c.cmd === 'sudo' && c.args.slice(0, 3).join(' ') === '-n -u nobody')).toBe(true)

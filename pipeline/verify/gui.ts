@@ -31,6 +31,10 @@ export interface GuiCheck {
   error?: string
   registrations?: string[]
   rendered?: number
+  /** render() calls that returned a valid but EMPTY element — counted
+   *  separately so 'rendered:0 + emptyRenders:[Panel]' reads differently
+   *  from a command-only contribution in diagnostics */
+  emptyRenders?: string[]
 }
 
 /** The gui-eval subprocess runs UNTRUSTED bundle code as the sandbox uid —
@@ -87,6 +91,12 @@ const GUI_GLOBALS = [
   'HTMLAnchorElement', 'HTMLImageElement', 'HTMLFormElement', 'HTMLSelectElement',
   'HTMLLIElement', 'HTMLUListElement', 'HTMLOListElement', 'HTMLTableElement',
   'HTMLVideoElement', 'HTMLCanvasElement', 'HTMLTemplateElement', 'HTMLSlotElement',
+  // jsdom gaps we backfill via JSDOM_STUBS below — real browsers have these,
+  // so a bundle feature-using them is host-legal; leaving them absent mints
+  // a harness failure, not a package verdict (observed: 'ResizeObserver is
+  // not defined', 'window.matchMedia is not a function')
+  'ResizeObserver', 'IntersectionObserver', 'matchMedia', 'requestIdleCallback',
+  'cancelIdleCallback', 'PointerEvent',
 ] as const
 // host-provided conveniences a legit gui bundle may use — still NOT process,
 // require, dynamic import(), or any node builtin
@@ -147,6 +157,25 @@ export function errorDetail(e: unknown): string {
 export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boolean } = {}): Promise<GuiCheck> {
   const dom = new JSDOM('', { pretendToBeVisual: true, url: 'https://verify.local/' })
   const w = dom.window as unknown as Record<string, unknown>
+  // jsdom gaps: backfill browser globals jsdom doesn't implement so the
+  // GUI_GLOBALS copy loop below (and the sandbox copy) pick them up — the
+  // loops skip undefined. matchMedia reports 'no match' — a bundle that
+  // branches on it takes its narrow/dark/unsupported path, same as it would
+  // under a real headless host; observers never fire (fixtures carry no
+  // layout data either way).
+  const JSDOM_STUBS: Record<string, unknown> = {
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} takeRecords() { return [] } },
+    matchMedia: (q: string) => ({
+      matches: false, media: q, onchange: null,
+      addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+      dispatchEvent: () => false,
+    }),
+    requestIdleCallback: (cb: (...a: unknown[]) => unknown) => setTimeout(cb, 0),
+    cancelIdleCallback: (id: number) => clearTimeout(id),
+    PointerEvent: w['MouseEvent'] ?? class {},
+  }
+  for (const [k, v] of Object.entries(JSDOM_STUBS)) if (w[k] === undefined) w[k] = v
   if (opts.domGlobals) {
     const g = globalThis as Record<string, unknown>
     for (const k of GUI_GLOBALS) {
@@ -399,6 +428,7 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // ---- let async IPC settle, then render every contribution ----
     await new Promise(r => setTimeout(r, 500))
     let rendered = 0
+    const emptyRenders: string[] = []
     // contributions' render(props) receives real props on the host
     // (PanelProps.tab/session are reactive getters, screen/focus/close…);
     // passing nothing crashes every bundle that reads them. A deepStub prop
@@ -441,8 +471,14 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
         return { ok: false, stage: 'render', error: `${reg.kind}.render() returned ${typeof el}, not a DOM Node`, registrations: registrations.map(r => r.kind) }
       }
       const elem = el as InstanceType<typeof dom.window.HTMLElement>
+      // An EMPTY element is not a failure: data-driven UI renders its
+      // empty/loading state under stub fixtures (the stubs yield no real
+      // collection data, so `{items.map(...)}` produces nothing — the real
+      // host's props do). What we verify is that the bundle loaded, setup
+      // registered, and render() returned a DOM Node without throwing.
       if (elem.querySelectorAll('*').length === 0 && !(elem.textContent ?? '').trim()) {
-        return { ok: false, stage: 'render', error: `${reg.kind}.render() produced an empty element`, registrations: registrations.map(r => r.kind) }
+        emptyRenders.push(reg.kind)
+        continue
       }
       rendered++
     }
@@ -450,7 +486,7 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // (Command/MenuItem/Style-only plugins have nothing to render — that is
     // a legal shape per registries.d.ts, not a package defect). Failing here
     // would call valid command-only plugins broken.
-    return { ok: true, registrations: registrations.map(r => r.kind), rendered }
+    return { ok: true, registrations: registrations.map(r => r.kind), rendered, emptyRenders }
   } finally {
     dom.window.close()
   }
