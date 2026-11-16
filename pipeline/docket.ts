@@ -354,6 +354,10 @@ export function docketTargets(
               } }
             : {}),
           verification: e.verification.status,
+          // which bytes verification actually covered — install follows
+          // HEAD so the pin may have drifted past the verified sha; the
+          // body pairs this with newSha to say "验的是哪份字节"
+          ...(e.verification.integrity ? { integrity: e.verification.integrity } : {}),
           findings: e.capabilities.findings.length,
           redFlags: e.capabilities.redFlags.length,
           redFlagList: e.capabilities.redFlags,
@@ -705,6 +709,22 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
         if (cmp.commitsTotal > cmp.commits.length) L.push(`  · …共 ${cmp.commitsTotal} commits`)
       }
       L.push(`- 对比：${cmp.url} · [文件视图](${cmp.filesUrl})`)
+      // crossed evidence: the standing flags pin FILES (`rule:path — L<n>`);
+      // intersecting them with the delta's file list answers "did the
+      // flagged code change" — the question the flag list alone can't. A
+      // truncated compare only saw its first files, so '未触及' there is
+      // scoped honesty, not a clean bill.
+      const flagFiles = new Set(
+        (t.redFlagList ?? [])
+          .filter(f => !f.startsWith('sec:') && !f.startsWith('sec-delta:'))
+          .map(f => f.split(' — ')[0]!.slice(f.indexOf(':') + 1)),
+      )
+      if (flagFiles.size) {
+        const touched = cmp.files.filter(f => flagFiles.has(f.path))
+        L.push(touched.length === 0
+          ? `- ✅ 本次 delta 未触及已 flag 文件（${flagFiles.size} 个——被标记的代码未变${cmp.truncated ? `；compare 截断，仅核对前 ${cmp.files.length} 个文件` : ''}）`
+          : `- ⚠️ 本次 delta 触及 ${touched.length} 个已 flag 文件：${touched.slice(0, 5).map(f => `\`${clean(f.path, 120)}\``).join('、')}${touched.length > 5 ? ' …' : ''}——被标记的代码有改动，重点对照`)
+      }
     } else if (t.flagDelta?.oldSha && t.flagDelta.newSha) {
       // sha pair known but compare fetch failed — still give the maintainer
       // the manual path rather than a dead end
@@ -773,7 +793,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push(t.humanVerdict?.verdict === 'pass'
         ? '- ⚠️ 本版本**从未跑过静态扫描**——没扫到不等于安全：AI 对未扫描槽无放行权，但人工 pass 已判，覆盖豁免按成熟相位放行'
         : '- ⚠️ 本版本**从未跑过静态扫描**（扫描失败或超限）——没扫到不等于安全：AI pass 已被忽略规则拦截，**只能人工放行**（勾 `verdict:pass`）或维持拦截（勾 `verdict:concern`）')
-    } else if (t.verdict === 'concern') {
+    } else if (t.verdict === 'concern' && !/LLM 判 pass/.test(t.reason ?? '')) {
+      // 🟢 line already fired above for LLM-pass-mechanical-block concerns —
+      // "AI concern 已拦截" would contradict it (the LLM didn't concern)
       L.push('- AI concern 已拦截放行——无人翻案则该版本保持 held；人工 pass 可放行，人工 concern 锁死。')
     }
   }
@@ -816,7 +838,21 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       (t.humanVerdict.verdict === 'concern' && t.verdict === 'pass'
         ? '（在押刹车——AI 新判 pass 不会自动放行，本单为复审）' : ''))
   }
-  L.push(`- 验证状态：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}`)
+  if (t.verdict === 'flag') {
+    // install follows HEAD — the status describes the CURRENT pin's bytes,
+    // and a verify-merge can land between the docket's index snapshot and
+    // the read. Name whose bytes were measured or "已上架 + 还没验" reads
+    // as a contradiction (the released entry was tested; the drifted pin
+    // is what's pending).
+    const pin = t.flagDelta?.newSha?.slice(0, 10)
+    const verSha = t.integrity?.slice(0, 10)
+    const mismatch = verSha && pin && verSha !== pin
+      ? `——装测覆盖的是 ${verSha}…，非当前钉版` : ''
+    const pend = vs === 'unverified' ? '——verify 班按新 HEAD 跑，结果落地后本单自动更新' : ''
+    L.push(`- 验证状态（当前钉版${pin ? ` \`${pin}…\`` : ''}）：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}${mismatch}${pend}`)
+  } else {
+    L.push(`- 验证状态：${VERI_ZH[vs] ?? vs}${VERI_ZH[vs] ? `（${vs}）` : ''}`)
+  }
   // verify evidence — '装不上/跳过' without the log asks the maintainer to
   // trust a black box. logExcerpt is env-sanitized upstream (xdgEnv strips
   // tokens before plugin code runs) + stripControls'd at merge — publishable.
@@ -885,15 +921,32 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // (bounded for tracker sanity), not a 4-item excerpt + a truncated copy
   // embedded twice inside the bilingual reason text
   if (t.redFlagList?.length) {
-    L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
-    for (const f of t.redFlagList.slice(0, 20)) {
+    const item = (f: string) => {
       L.push(`  - ${clean(f, 300)}`)
       // `sec:repo-moved-since-release:<sha>` alone tells a maintainer
       // nothing — the explainer carries "为什么报警 + 去核实什么"
       const ex = explainFlag(f)
       if (ex) L.push(`    ↳ ${clean(ex.zh, 240)}`)
     }
-    if (t.redFlagList.length > 20) L.push(`  - …另 ${t.redFlagList.length - 20} 条见 index.json`)
+    // two provenances share one list: sec:* identity signals (the trigger)
+    // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
+    // they read as N fresh alarms — a maintainer sees "3 doc commits" next
+    // to "6 red flags" and can't tell which the delta introduced.
+    const ident = t.redFlagList.filter(f => f.startsWith('sec:') || f.startsWith('sec-delta:'))
+    const scan = t.redFlagList.filter(f => !f.startsWith('sec:') && !f.startsWith('sec-delta:'))
+    if (ident.length && scan.length) {
+      L.push(`- 红旗清单（${t.redFlagList.length} 条 · 两类来源）：`)
+      L.push(`  · 身份/触发信号（${ident.length} 条——裁决须晚于信号观察时点）：`)
+      for (const f of ident.slice(0, 10)) item(f)
+      if (ident.length > 10) L.push(`  · …另 ${ident.length - 10} 条`)
+      L.push(`  · 存量扫描旗标（${scan.length} 条 · 整树静态规则命中——非本次触发信号${t.humanVerdict ? '；是否被此前人工判词覆盖请对照上方' : ''}）：`)
+      for (const f of scan.slice(0, 15)) item(f)
+      if (scan.length > 15) L.push(`  · …另 ${scan.length - 15} 条见 index.json`)
+    } else {
+      L.push(`- 红旗清单（${t.redFlagList.length} 条）：`)
+      for (const f of t.redFlagList.slice(0, 20)) item(f)
+      if (t.redFlagList.length > 20) L.push(`  - …另 ${t.redFlagList.length - 20} 条见 index.json`)
+    }
   }
   if (t.scanPreview?.length) {
     L.push(`- 扫描摘录（前几条，完整清单见${detailPage ? '详情页' : 'index.json'}）：`)
