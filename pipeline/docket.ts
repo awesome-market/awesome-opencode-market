@@ -686,12 +686,15 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     // render LITERALLY inside this code span; the constant fallback bypasses
     // it ('sec:*' is ours, not external text) so it doesn't degrade to sec:\*
     const flagReason = clean(t.reason ?? '') || 'sec:*'
-    L.push(`- 当前状态：**已上架**条目命中身份级信号：\`${flagReason}\``, '',
-      '  AI 不复审已上架版本——人工 `verdict:concern` 即刻刹车（条目回 pending），人工 `verdict:pass` 确认放行。')
-    // bare `sec:repo-moved-since-release:<sha>` is opaque — one line of
-    // "why it fired + what to check" before the evidence sections
+    // plain words first — WHAT happened and WHAT'S asked; the sec:* id
+    // drops to a detail line. A maintainer should be able to act on the
+    // opener alone instead of parsing flag-name jargon.
     const flagExpl = t.reason ? explainFlag(t.reason) : null
-    if (flagExpl) L.push(`  ↳ ${clean(flagExpl.zh, 240)}`)
+    L.push(flagExpl
+      ? `- 发生了什么：${clean(flagExpl.zh, 240)}`
+      : `- 发生了什么：**已上架**条目命中身份级信号 \`${flagReason}\`——需要人工核实`,
+      '- 要你做什么：对照下方证据判断——`verdict:pass` 确认良性保持上架，`verdict:concern` 立即回 pending 下架',
+      `  ↳ 信号：\`${flagReason}\`（身份级信号——AI 不复审已上架版本，只有人工判词能解除）`)
     // with flaggedAt set, a shown verdict provably predates the flag (a
     // postdating one would have decided it) — evidence about the bytes,
     // not this signal; render the ordering explicitly, or admit it's
@@ -740,9 +743,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
           : `- ⚠️ 本次 delta 触及 ${touched.length} 个已 flag 文件：${touched.slice(0, 5).map(f => `\`${clean(f.path, 120)}\``).join('、')}${touched.length > 5 ? ' …' : ''}——被标记的代码有改动，重点对照`)
       }
     } else if (t.flagDelta?.oldSha && t.flagDelta.newSha) {
-      // sha pair known but compare fetch failed — still give the maintainer
-      // the manual path rather than a dead end
-      L.push('', `- 对比（compare 取数失败，请手动打开）：https://github.com/${clean(t.flagDelta.repo, 140)}/compare/${t.flagDelta.oldSha}...${t.flagDelta.newSha}`)
+      // sha pair known but compare fetch failed — the delta block and AI
+      // pre-read both depend on it, so say the body is evidence-thin, that
+      // the fetch retries itself, and that deferring the verdict beats a
+      // blind call. Still hand over the manual link.
+      L.push('',
+        '- ⚠️ 对比取数失败（API 临时故障——下轮渲染自动重试）：判断材料（delta 明细与 AI 判读）随取数补齐',
+        `- 可以暂缓裁决等补齐，或手动打开：https://github.com/${clean(t.flagDelta.repo, 140)}/compare/${t.flagDelta.oldSha}...${t.flagDelta.newSha}`)
     }
     // AI 初筛: flag-delta's assessment of THIS flag's commit range. Advisory
     // only — rendered as evidence for the human verdict, explicitly labelled

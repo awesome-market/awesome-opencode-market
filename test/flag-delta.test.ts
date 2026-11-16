@@ -100,14 +100,14 @@ describe('issueBody — compare evidence', () => {
   })
   it('falls back to a manual compare link when fetch failed but shas exist', () => {
     const body = issueBody(flagTarget(), { compare: null })
-    expect(body).toContain('compare 取数失败')
+    expect(body).toContain('对比取数失败')
     expect(body).toContain('https://github.com/o/plugin/compare/aaa1111...bbb2222cccc3333')
     expect(body).not.toContain('这次变了什么')
   })
   it('no compare and no sha pair → flag-name-only (legacy behavior)', () => {
     const body = issueBody({ name: 'o/p', version: null, verdict: 'flag', reason: 'sec:x', redFlagList: ['sec:x'] }, {})
     expect(body).not.toContain('这次变了什么')
-    expect(body).not.toContain('compare 取数失败')
+    expect(body).not.toContain('对比取数失败')
   })
   it('truncated compare payload is disclosed', () => {
     const body = issueBody(flagTarget(), { compare: cmpInfo({ truncated: true }) })

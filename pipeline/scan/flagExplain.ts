@@ -65,7 +65,7 @@ const RULES: Record<string, FlagExplain> = {
 // is the flag id before its own ':value' payload
 const SEC: Record<string, FlagExplain> = {
   'repo-moved-since-release': {
-    zh: '仓库 HEAD 在上架钉版后移动（参数为新提交 sha）——install 跟随 HEAD，装到的会是未复审字节；对照上方 delta 块核实变更是否良性',
+    zh: '仓库 HEAD 在上架钉版后移动（参数为新提交 sha）——install 跟随 HEAD，装到的会是未复审字节；对照下方 delta 块核实变更是否良性',
     en: 'repo HEAD moved after the released pin (value = new sha) — installs follow HEAD, so new bytes are unreviewed; check the delta above',
   },
   'repo-moved-since-review': {
