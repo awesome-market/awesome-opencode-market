@@ -2,11 +2,13 @@ name: full-run
 # scope: prod-only — one-shot manual release chain
 #
 # 人工全量放行链：手动触发一次，顺次跑
-#   verify  → digest → catalog
+#   verify  → digest → catalog → docket
 #
 # verify 是最长杆（装测+merge 结果回 catalog）；digest 在其后公告当日判词
 # 启动成熟时钟；catalog 最后 fold——此时 verify 结果和 digest-state 都已
-# 就位，grandfathered + 已成熟 + 验证通过的条目当轮放行。
+# 就位，grandfathered + 已成熟 + 验证通过的条目当轮放行。docket 收尾关单
+# ——嵌套 uses: 不产生 callee 的 workflow_run 事件，不显式挂尾就得等它
+# 自己的整点 cron，放行了 issue 还开着。
 #
 # 串行而非并行是刻意的：catalog 必须看到 verify merge 后的 index，提前跑
 # 只会读到旧状态白忙一轮。任一环失败即停——判词链断在中间比假装放行安全。
@@ -48,3 +50,13 @@ jobs:
       contents: write
       issues: write
       actions: write
+
+  # 关单尾环：catalog publish 后同步 [review] 队列。needs: catalog 而非
+  # needs: [digest, catalog]——digest 是 catalog 的前置，传递已保证。
+  docket:
+    needs: catalog
+    uses: ./.github/workflows/docket.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      issues: write
