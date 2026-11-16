@@ -80,6 +80,9 @@ const GUI_GLOBALS = [
   'HTMLTextAreaElement', 'Node', 'Element', 'SVGElement', 'DocumentFragment', 'CustomEvent',
   'Event', 'KeyboardEvent', 'MouseEvent', 'MutationObserver', 'localStorage', 'sessionStorage',
   'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle', 'DOMParser', 'XMLSerializer',
+  // constructors real bundles instanceof/extend against
+  'Document', 'Range', 'NodeFilter', 'XPathEvaluator', 'XPathResult', 'ShadowRoot',
+  'DOMTokenList', 'HTMLCollection', 'NodeList', 'FileReader', 'Blob', 'File', 'FormData',
 ] as const
 // host-provided conveniences a legit gui bundle may use — still NOT process,
 // require, dynamic import(), or any node builtin
@@ -102,6 +105,23 @@ const GUI_BUNDLE_MAX = 8 * 1024 * 1024
  *  untrusted setup()/render() (sync loops are already bound by the vm timeout). */
 function deadline<T>(p: Promise<T> | T, ms: number, label: string): Promise<T> {
   return Promise.race([Promise.resolve(p), new Promise<never>((_, rj) => setTimeout(() => rj(new Error(`${label} timed out`)), ms))])
+}
+
+/** Error→string that digs through `.cause`. Solid-js wraps errors thrown
+ *  inside reactive computations via castError() — and errors created inside
+ *  the vm realm are NOT instanceof the host realm's Error, so a vm-realm
+ *  TypeError surfaces as 'Unknown error' with the REAL message hiding in
+ *  .cause. Duck-type (message:string) rather than instanceof for exactly
+ *  that cross-realm reason. */
+export function errorDetail(e: unknown): string {
+  const parts: string[] = []
+  let cur: unknown = e
+  for (let i = 0; i < 3 && cur != null; i++) {
+    const msg = typeof (cur as { message?: unknown }).message === 'string' ? (cur as { message: string }).message : String(cur)
+    if (!parts.includes(msg)) parts.push(msg)
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return parts.join(' (cause: ') + (parts.length > 1 ? ')'.repeat(parts.length - 1) : '')
 }
 
 /** Run a gui bundle's setup+render inside a fresh jsdom, evaluated in a
@@ -141,6 +161,28 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // plugin-specific fixtures don't scale, so gui code exercises its
     // empty-data render path. Defined before the host-module proxies below —
     // they reference it lazily through closures.
+    // Two-tier stubs: solid's insertExpression unwraps JSX functions with
+    // `while (typeof v === 'function') v = v()` — if a stub value lands in a
+    // JSX slot and stub() returns another FUNCTION, the host's own unwrapper
+    // loops forever (observed: every 'render timed out' was this). deepStub
+    // is callable but its apply returns objStub — a non-callable object whose
+    // property access still returns deepStub, so a.b().c.d() chains keep
+    // working while the unwrapper terminates after one call.
+    const objStub: unknown = new Proxy({}, {
+      get(_t, k) {
+        if (k === Symbol.iterator) return function* () { /* empty */ }
+        if (k === 'length' || k === 'size') return 0
+        if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
+        if (k === 'then') return undefined
+        // solid checks `value.nodeType` before insertBefore — a truthy stub
+        // here makes the host's own DOM code throw 'not of type Node';
+        // falsy falls through to the ignored-value branch, which is what a
+        // stub in a JSX slot should do (renders nothing, keeps going)
+        if (k === 'nodeType') return undefined
+        return deepStub
+      },
+      has: () => true,
+    })
     const deepStub: unknown = new Proxy(function () {}, {
       get(_t, k) {
         if (k === Symbol.iterator) return function* () { /* empty */ }
@@ -149,7 +191,7 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
         if (k === 'then') return undefined // keep the stub non-thenable
         return deepStub
       },
-      apply: () => deepStub,
+      apply: () => objStub,
       has: () => true,
     })
     let Plugin: unknown, Ipc: unknown, contributionKinds: Record<string, { name: string }>
@@ -294,7 +336,10 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
         registrations.push({ kind: kind?.cname ?? kind?.name ?? 'unknown', contrib: (contrib ?? {}) as Record<string, unknown> })
         return () => {}
       },
-      sessions: { current: () => null, all: () => [] },
+      // current() must return a stub, not null — bundles read
+      // `ctx.sessions.current().session` inside reactive memos and a null
+      // here masquerades as a plugin crash in render()
+      sessions: { current: () => deepStub, all: () => [] },
       config: () => ({}),
       log: () => {},
     })
@@ -308,7 +353,7 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
       // must still count, or every async plugin fails this gate falsely
       await deadline(vm.runInContext('__def.setup(__ctx)', vctx, { timeout: STAGE_TIMEOUT }) as Promise<unknown>, STAGE_TIMEOUT, 'setup')
     } catch (e) {
-      return { ok: false, stage: 'setup', error: (e as Error).message, registrations: registrations.map(r => r.kind) }
+      return { ok: false, stage: 'setup', error: errorDetail(e), registrations: registrations.map(r => r.kind) }
     }
     if (registrations.length === 0) {
       return { ok: false, stage: 'setup', error: 'setup() registered no contributions', registrations: [] }
@@ -317,6 +362,11 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // ---- let async IPC settle, then render every contribution ----
     await new Promise(r => setTimeout(r, 500))
     let rendered = 0
+    // contributions' render(props) receives real props on the host
+    // (PanelProps.tab/session are reactive getters, screen/focus/close…);
+    // passing nothing crashes every bundle that reads them. A deepStub prop
+    // object covers the whole PanelProps surface.
+    sandbox.__props = deepStub
     for (let i = 0; i < registrations.length; i++) {
       const reg = registrations[i]!
       const render = reg.contrib['render']
@@ -324,12 +374,24 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
       sandbox.__contrib = reg.contrib
       let el: unknown
       try {
-        el = await deadline(vm.runInContext('__contrib.render()', vctx, { timeout: STAGE_TIMEOUT }) as Promise<unknown>, STAGE_TIMEOUT, `${reg.kind}.render`)
+        el = await deadline(vm.runInContext('__contrib.render(__props)', vctx, { timeout: STAGE_TIMEOUT }) as Promise<unknown>, STAGE_TIMEOUT, `${reg.kind}.render`)
       } catch (e) {
-        return { ok: false, stage: 'render', error: `${reg.kind}.render threw: ${(e as Error).message}`, registrations: registrations.map(r => r.kind) }
+        return { ok: false, stage: 'render', error: `${reg.kind}.render threw: ${errorDetail(e)}`, registrations: registrations.map(r => r.kind) }
       }
-      if (!(el instanceof dom.window.HTMLElement)) {
-        return { ok: false, stage: 'render', error: `${reg.kind}.render() returned ${typeof el}, not HTMLElement`, registrations: registrations.map(r => r.kind) }
+      // JSX.Element legitimately includes a component function — mount it
+      // through the real Solid renderer instead of failing on typeof
+      if (typeof el === 'function' && solidWeb) {
+        const mount = dom.window.document.createElement('div')
+        try {
+          (solidWeb as { render: (code: () => unknown, into: unknown) => unknown }).render(el as () => unknown, mount)
+        } catch (e) {
+          return { ok: false, stage: 'render', error: `${reg.kind}.render component mount threw: ${errorDetail(e)}`, registrations: registrations.map(r => r.kind) }
+        }
+        el = mount
+      }
+      // Node covers HTMLElement, DocumentFragment, Text — all valid JSX output
+      if (!(el instanceof dom.window.Node)) {
+        return { ok: false, stage: 'render', error: `${reg.kind}.render() returned ${typeof el}, not a DOM Node`, registrations: registrations.map(r => r.kind) }
       }
       const elem = el as InstanceType<typeof dom.window.HTMLElement>
       if (elem.querySelectorAll('*').length === 0 && !(elem.textContent ?? '').trim()) {
@@ -337,9 +399,10 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
       }
       rendered++
     }
-    if (rendered === 0) {
-      return { ok: false, stage: 'render', error: 'no contribution exposed a render() function', registrations: registrations.map(r => r.kind) }
-    }
+    // setup succeeded and ≥1 contribution registered but none are renderable
+    // (Command/MenuItem/Style-only plugins have nothing to render — that is
+    // a legal shape per registries.d.ts, not a package defect). Failing here
+    // would call valid command-only plugins broken.
     return { ok: true, registrations: registrations.map(r => r.kind), rendered }
   } finally {
     dom.window.close()

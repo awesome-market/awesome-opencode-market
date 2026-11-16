@@ -597,11 +597,11 @@ describe('verify/gui remaining branches', () => {
     expect(r).toMatchObject({ ok: false, stage: 'setup' })
     expect(r.error).toContain('setup boom')
   })
-  it('contribution with no render() → render failure', async () => {
+  it('contribution with no render() → ok, rendered 0 (nothing renderable is legal)', async () => {
     const r = await checkGuiBundle(`
       const { Plugin, Panel } = require('@opencode/plugin/gui')
       module.exports.default = Plugin.define({ setup(ctx) { ctx.add(Panel, () => ({})) } })`)
-    expect(r).toMatchObject({ ok: false, stage: 'render' })
+    expect(r).toMatchObject({ ok: true, rendered: 0 })
   })
   it('findGuiBundle: scoped cache layout + error paths', () => {
     const h = tmp('fg-')
