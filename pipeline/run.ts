@@ -1364,17 +1364,26 @@ export async function run(opts: RunOptions = {}) {
         }
       }
       // type drives the site badge: declared wins; otherwise a repo whose only
-      // artifact is skills (no root package.json, no .opencode plugin path)
-      // is a skill repo, not a plugin
+      // artifact is skills is a skill repo, not a plugin
       const pluginArtifact = [...treeRes.paths].some(p => /(^|\/)\.opencode\/(plugin|plugins)\//.test(p))
-      const type: PluginEntry['type'] = sub?.type === 'skill' ? 'skill'
-        : (hasSkill && !treeRes.paths.has('package.json') && !pluginArtifact ? 'skill' : 'plugin')
       const feats = detectFeatures({ exports: repoPkg.pkg?.exports, main: repoPkg.pkg?.main ?? null, files: scanFiles })
-      // contains = parts list: 'plugin' when plugin code/artifact evidence
-      // exists (a plugin repo needs a host install path, npm or manual), plus
+      // 'plugin add owner/repo' installs the repo ROOT — npm git specs carry
+      // no subdirectory syntax, so a plugin package nested under
+      // plugins/<x>/ or a .opencode/ dir below root can never satisfy it.
+      // The 'plugin' part requires a ROOT package.json; nested-only plugin
+      // evidence previously minted entries that could never verify (every
+      // install attempt ends ENOENT package.json → mechanical concern loop).
+      const pluginPart = treeRes.paths.has('package.json') && (pluginArtifact || feats.length > 0)
+      // badge: a root package.json makes `plugin add o/r` installable at all,
+      // so a root-package repo stays plugin-shaped even when nothing yet marks
+      // it as a plugin (contains stays evidence-gated below); nested-only
+      // evidence with no root package can only ever be skill/manual material
+      const type: PluginEntry['type'] = sub?.type === 'skill' ? 'skill'
+        : (treeRes.paths.has('package.json') ? 'plugin' : 'skill')
+      // contains = parts list: 'plugin' for a root-installable package, plus
       // 'skill' for skill artifacts — drives client install routing
       const ghParts: NonNullable<PluginEntry['contains']> = [
-        ...(pluginArtifact || feats.length ? ['plugin' as const] : []),
+        ...(pluginPart ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
       // marketMeta/submission categories are author-controlled — whitelist

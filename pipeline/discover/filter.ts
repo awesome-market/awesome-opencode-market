@@ -97,7 +97,10 @@ export function hasRepoEvidence(
   if (has(/(^|\/)opencode\.jsonc?$/)) via.push('opencode-config')
   const skillFile = has(/(^|\/)SKILL\.md$/)
   if (skillFile) via.push('skill-file')
-  const pkg = has(/(^|\/)package\.json$/)
+  // ROOT package.json only — the github install spec is `plugin add o/r`,
+  // which reifies the repo root; a package.json nested under plugins/<x>/
+  // is not an installable artifact for an owner/repo entry
+  const pkg = has(/^package\.json$/)
   if (pkg) via.push('package')
   const pluginArtifact = has(/(^|\/)\.opencode\/(plugin|plugins|skills)\//)
   if (pluginArtifact) via.push('opencode-artifact')
