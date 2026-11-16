@@ -58,6 +58,10 @@ export interface DocketTarget {
    *  show a standing human brake (R-4) instead of implying the AI verdict is
    *  the only word on the table */
   humanVerdict?: AiVerdict
+  /** the governing AI pass engaged the flag evidence — the release gate
+   *  exempts it from the flagged-slot lock, so the slot is NOT human-only.
+   *  Without it the same pass is ignored on a flagged slot (humanRequired) */
+  flagsReviewed?: boolean
   /** digest-announce phase for ai verdicts — '已裁决·待日报公告' vs
    *  '已公告·待放行闸' vs 'maturing' (in the LATEST digest — the objection
    *  window is still open; maturity arrives with the next render) so the
@@ -399,6 +403,7 @@ export function docketTargets(
             ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
             ...(hv ? { humanVerdict: hv } : {}),
             ...(rec.sha ? { verdictSha: rec.sha } : {}),
+            ...(rec.flagsReviewed ? { flagsReviewed: true } : {}),
             maturity: !announced.has(akey(rec)) ? 'pending-announce'
               : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
             ...meta,
@@ -437,6 +442,7 @@ export function docketTargets(
       ...(rec.reasonEn ? { reasonEn: rec.reasonEn } : {}),
       ...(hv ? { humanVerdict: hv } : {}),
       ...(rec.sha ? { verdictSha: rec.sha } : {}),
+      ...(rec.flagsReviewed ? { flagsReviewed: true } : {}),
       maturity: !announced.has(akey(rec)) ? 'pending-announce'
         : dayAnnounced.has(akey(rec)) ? 'maturing' : 'announced',
       ...meta,
@@ -753,10 +759,14 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     if (t.verdict === 'concern' && /LLM 判 pass/.test(t.reason ?? ''))
       L.push('- 🟢 **AI 判词本体为 pass**——本单仅被机械信号（红旗清单/L0.5 注入检测等）拦下：抽查下方对应证据行，确认误报即 `verdict:pass` 放行')
     if (t.verdict === 'pass' && (t.redFlags ?? 0) > 0) {
-      // a standing human pass COVERS the flag exemption (§7 humanPassCovers):
-      // the gate releases under that authority — "只能人工放行" would tell the
-      // maintainer to act on a slot that already resolves itself
-      L.push(t.humanVerdict?.verdict === 'pass'
+      // two exemptions keep a flagged slot off the human path — a standing
+      // human pass COVERS the flag lock (§7 humanPassCovers), and a
+      // flagsReviewed pass engaged the flag evidence and holds release
+      // authority itself. "只能人工放行" on either would tell the maintainer
+      // to act on a slot that already resolves itself
+      L.push(t.flagsReviewed
+        ? `- ⚠️ 静态扫描红旗 ${t.redFlags} 项——AI 判词已复核红旗证据（flagsReviewed），对旗标槽有放行权，按成熟相位放行`
+        : t.humanVerdict?.verdict === 'pass'
         ? `- ⚠️ 静态扫描红旗 ${t.redFlags} 项——人工 pass 已就此槽位判过：AI 对旗标槽无放行权，但人工判词覆盖豁免，按成熟相位放行`
         : `- ⚠️ 静态扫描红旗 ${t.redFlags} 项：AI pass 已被忽略规则拦截——本版本**只能人工放行**（勾 \`verdict:pass\`）或维持拦截（勾 \`verdict:concern\`）`)
     } else if (t.verdict === 'pass' && t.unscanned) {
@@ -775,10 +785,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     // re-review (same honesty rule as digest's phase tag). Report the FIRST
     // blocker in gate order and always name the next action.
     const shaMismatch = t.verdictSha !== undefined && t.integrity != null && t.verdictSha !== t.integrity
-    // the flag/unscanned lock only binds while no human pass covers the key —
-    // a covered slot releases under the human's authority on the normal phase
+    // the flag lock only binds a pass that never engaged the flag evidence
+    // (no flagsReviewed) while no human pass covers the key — a covered or
+    // flag-reviewed slot releases on the normal phase
     const blocker =
-      ((t.redFlags ?? 0) > 0 || t.unscanned) && t.humanVerdict?.verdict !== 'pass'
+      (((t.redFlags ?? 0) > 0 && !t.flagsReviewed) || t.unscanned) && t.humanVerdict?.verdict !== 'pass'
         ? '但放行闸被旗标/未扫描锁定：AI 对该槽位无放行权，只能人工 verdict:pass 放行'
       : vs === 'failed' ? '但装测未过——放行闸不会按此裁决生效：修复后评论 `/retest` 重验，或人工改判'
       : vs === 'unverified' ? '但还没验——装测通过前放行闸不会放行（等 verify 班或人工 verdict:pass）'
@@ -1085,13 +1096,16 @@ export async function main(
     t.verdict === 'flag' || t.verdict === 'concern' || (paused && t.name === NONE_BACKLOG)
   // flagged/unscanned slot carrying only an AI pass — the release gate refuses
   // AI authority on it (same first-blocker check as the body 放行闸 line), so
-  // the issue can ONLY converge via a human verdict:pass. A covering human
-  // pass releases under the human's authority; a human concern is already
-  // decided — neither still needs a human.
+  // the issue can ONLY converge via a human verdict:pass. Two escapes keep the
+  // slot off the human path: a covering human pass releases under the human's
+  // authority (a human concern is already decided — neither still needs a
+  // human); a pass carrying flagsReviewed engaged the flag evidence and holds
+  // release authority itself (unscanned has no such exemption — no review
+  // conjures a scan).
   const humanRequired = (t: DocketTarget) =>
     t.verdict === 'pass'
     && t.humanVerdict?.verdict !== 'pass' && t.humanVerdict?.verdict !== 'concern'
-    && ((t.redFlags ?? 0) > 0 || !!t.unscanned)
+    && (((t.redFlags ?? 0) > 0 && !t.flagsReviewed) || !!t.unscanned)
   const assignBestEffort = async (issue: string | number, only?: string[]) => {
     if (!assignees.length) return
     const want = only ?? assignees

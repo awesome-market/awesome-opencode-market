@@ -201,3 +201,29 @@ describe('audit#4 r9 — github-kind entries review at the pinned commit', () =>
     expect(got.ids).toContain('content:SKILL.md') // codeload wrapper root was stripped correctly
   })
 })
+
+describe('flag-blocked AI passes re-queue for a flag-aware verdict', () => {
+  const flagged = (o: Partial<PluginEntry> = {}) => entry({
+    capabilities: { scannedAt: '2026-01-01T00:00:00Z', findings: [], redFlags: ['sec:x'] }, ...o,
+  })
+  it('a pass the gate ignores (flags, no flagsReviewed, no human cover) re-queues', () => {
+    expect(unreviewedTargets(idx([flagged()]), [v({})])).toHaveLength(1)
+  })
+  it('a flagsReviewed pass holds release authority — stays decided', () => {
+    expect(unreviewedTargets(idx([flagged()]), [v({ flagsReviewed: true })])).toEqual([])
+  })
+  it('a covering human pass releases under its own authority — no re-queue', () => {
+    // the AI pass must be the GOVERNING (latest) verdict or it never reaches
+    // the flag-blocked check — human cover is queried only under a hollow
+    // ai pass
+    const vs = [v({ at: '2026-01-03T00:00:00Z' }), v({ source: 'human', at: '2026-01-02T00:00:00Z' })]
+    expect(unreviewedTargets(idx([flagged()]), vs)).toEqual([])
+  })
+  it('an unscanned slot stays decided — no re-review conjures a scan', () => {
+    const e = entry({ capabilities: { scannedAt: null, findings: [], redFlags: [] } })
+    expect(unreviewedTargets(idx([e]), [v({})])).toEqual([])
+  })
+  it('a clean-slot pass stays decided — nothing is blocked', () => {
+    expect(unreviewedTargets(idx([entry()]), [v({})])).toEqual([])
+  })
+})
