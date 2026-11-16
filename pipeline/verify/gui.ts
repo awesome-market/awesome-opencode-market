@@ -201,6 +201,7 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // legit store-using bundle fails setup() for a harness mistake
     const solidStore = await import('solid-js/store').catch(() => null)
     const reqmap: Record<string, unknown> = {
+      '@opencode/plugin': hostModule({}),
       '@opencode/plugin/gui': hostModule({
         Plugin, Ipc, Panel, SettingsPage, Command, MenuItem, Tab,
       }),
@@ -209,14 +210,34 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
       // unmodeled-surface problem, same fallback (1 whitelist fail observed)
       '@opencode/client/solid': hostModule({}),
     }
-    if (effectModule) reqmap['effect'] = effectModule
+    if (effectModule) {
+      reqmap['effect'] = effectModule
+      // @opencode/plugin/effect re-exports the host's effect — give bundles
+      // the REAL module, not a stub
+      reqmap['@opencode/plugin/effect'] = effectModule
+    }
     if (solidModule) {
       reqmap['solid-js'] = solidModule
       if (solidWeb) reqmap['solid-js/web'] = solidWeb
       if (solidStore) reqmap['solid-js/store'] = solidStore
     }
+    // @opencode/plugin@2.3.0's real export surface: '.' + './*' wildcard over
+    // every dist file, while './gui/*' is null-blocked except the explicit
+    // subpaths. Model that exactly — a require outside either list is NOT
+    // importable on the real host either, so the whitelist error stands.
+    const PLUGIN_SUBS = new Set([
+      'rpc', 'tui', 'host', 'effect', 'runtime', 'runtime-modules', 'app',
+      'options', 'permission', 'storage', 'worktree', 'promise',
+      'source', 'source.node', 'source.bun', 'source.package',
+    ])
+    const GUI_SUBS = new Set(['review', 'main', 'vite', 'browser', 'builtin', 'updater', 'file'])
     const req = (name: string): unknown => {
       if (name in reqmap) return reqmap[name]
+      if (name.startsWith('@opencode/plugin/gui/')) {
+        if (GUI_SUBS.has(name.slice(21))) return hostModule({})
+        throw new Error(`module not in gui host whitelist: ${name}`)
+      }
+      if (name.startsWith('@opencode/plugin/') && PLUGIN_SUBS.has(name.slice(17))) return hostModule({})
       throw new Error(`module not in gui host whitelist: ${name}`)
     }
 
@@ -257,15 +278,26 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     }
 
     // ---- run setup against the fake host ----
-    const ctx = {
+    // The real SetupContext is a large surface (layout/sessions/screen/t/ui/
+    // toasts/dialogs/storage/provide/use/… — every host API is a property);
+    // a bundle reading an unmodeled one died 'X of undefined' at setup.
+    // Same fix as the module proxies: modeled keys stay real, unknown keys
+    // resolve callable contrib stubs.
+    const ctx = hostModule({
       main: () => new Proxy({}, { get: () => async () => deepStub }),
-      add: (kind: { cname?: string; name: string } | undefined, factory: () => Record<string, unknown>) => {
-        registrations.push({ kind: kind?.cname ?? kind?.name ?? 'unknown', contrib: factory() })
+      // real signature is overloaded: add(registry, () => item) OR
+      // add(registry, item) — and the factory may return undefined for
+      // conditional registrations (core.d.ts: `() => (shown() ? pill :
+      // undefined)`). Returns a Cleanup like the host.
+      add: (kind: { cname?: string; name: string } | undefined, item: unknown) => {
+        const contrib = typeof item === 'function' ? (item as () => unknown)() : item
+        registrations.push({ kind: kind?.cname ?? kind?.name ?? 'unknown', contrib: (contrib ?? {}) as Record<string, unknown> })
+        return () => {}
       },
       sessions: { current: () => null, all: () => [] },
       config: () => ({}),
       log: () => {},
-    }
+    })
     // run setup inside the realm too — a sync `while(1)` in plugin code must
     // die by the vm timeout, not hang the shard (Promise.race can't preempt
     // a blocked event loop)
