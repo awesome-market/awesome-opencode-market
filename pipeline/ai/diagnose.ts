@@ -55,7 +55,7 @@ import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
 import { t as tarList } from 'tar'
 import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
-import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable } from '../verdicts.ts'
+import { candidateVer, candidateSlot, latestVerdicts, latestHumanVerdicts, loadVerdicts, vkey, atCmp, brakeFor, tombEpochs, epochGoverning, rankable, humanPassCovers } from '../verdicts.ts'
 import { fetchPackument, fetchTarball, readJsonCapped, type Packument } from '../fetch/npm.ts'
 import { retryable } from '../verify/retryable.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, egressBlockedExcerpt, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from '../verify/failExplain.ts'
@@ -834,7 +834,21 @@ export function unreviewedTargets(
     // again. Human verdicts and AI judgments are untouched.
     const vf = candidateSlot(e)?.verification ?? e.verification
     const gov = epochGoverning(seen.get(vkey(e.name, ver)), e.name, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf)) return false
+    // An AI pass the release gate IGNORES (flagged slot, verdict lacks
+    // flagsReviewed, no covering human pass) has no release authority and can
+    // never gain it by aging — the docket would pin the slot on a human
+    // verdict forever. Re-queue it so the model re-reviews WITH the flag
+    // blocks in context: a fresh pass carries flagsReviewed and earns the
+    // normal release path, or the model rules concern honestly. Unscanned
+    // slots are NOT re-queued — no re-review conjures a scan; those stay
+    // human-only by design. Human-covered keys are untouched: the gate
+    // releases under the human's authority already.
+    const flags = (candidateSlot(e) ?? e).capabilities.redFlags
+    const flagBlockedPass =
+      gov?.verdict === 'pass' && gov.source === 'ai' && !gov.flagsReviewed
+      && flags.length > 0
+      && !humanPassCovers(human, e.name, ver, tomb)
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as

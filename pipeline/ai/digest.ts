@@ -400,10 +400,13 @@ export function renderDigest({ index, verdicts, prev, now, paused = false, healt
     // a release that structurally won't happen without a human verdict.
     // Except when a standing human pass covers the same key: that IS the
     // human verdict, and the live ai line rides its authority to release.
+    // A flagsReviewed pass holds the same authority itself — it engaged the
+    // flag evidence, so the gate exempts it from the flag lock (unscanned has
+    // no such exemption).
     const caps = candidateSlot(e)?.capabilities ?? e.capabilities
     if (rec?.verdict === 'pass' && rec.source === 'ai' && ver !== undefined
         && !humanPassCovers(latestHuman, e.name, ver, tomb)
-        && (caps.redFlags.length > 0 || caps.scannedAt === null))
+        && ((caps.redFlags.length > 0 && !rec.flagsReviewed) || caps.scannedAt === null))
       return 'AI pass 被旗标/未扫描拦截·需人工'
     if (rec?.verdict === 'pass') {
       // gate order: maturity is checked before RELEASABLE — an unannounced

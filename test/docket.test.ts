@@ -664,6 +664,67 @@ describe('docket main', () => {
     } finally { process.env.GH_REPO = saved }
   })
 
+  it('flagged slot + flagsReviewed pass → NO review:human (the pass holds release authority)', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk3k-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const flagged = e({ capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v({ flagsReviewed: true })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => { calls.push(args); return args.includes('list') ? '[]' : '' }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))!.join(' ')
+    expect(create).toContain('--label review:pending')
+    expect(create).not.toContain('--label review:human')
+    // the body must not claim "只能人工放行" — the flag-reviewed pass releases
+    const bodyArg = calls.find(c => c.includes('create'))!.join('\n')
+    expect(bodyArg).toContain('已复核红旗')
+    expect(bodyArg).not.toContain('只能人工放行')
+  })
+
+  it('flagsReviewed pass + stale review:human label → label removed on sync', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk3l-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const flagged = e({ capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v({ flagsReviewed: true })) + '\n')
+    const wantBody = issueBody(
+      { name: 'pkg', version: '1.0.0', verdict: 'pass', verification: 'verified', maturity: 'pending-announce',
+        slug: 'o/pkg', findings: 0, redFlags: 1, redFlagList: ['sec:x'], flagsReviewed: true },
+      { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([{
+        number: 3, title: '[review] pkg@1.0.0',
+        labels: [{ name: 'review:pending' }, { name: 'ai:pass' }, { name: 'review:human' }],
+        body: wantBody,
+      }])
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+    expect(edits).toContain('--remove-label review:human')
+  })
+
   it('a wanted issue still carrying review:decided gets it stripped — pending+decided never coexist', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
