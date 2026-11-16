@@ -231,21 +231,33 @@ export function docketTargets(
     const flagSet = new Set(slot.capabilities.redFlags)
     // 8 items ≈ cover the typical findings set in-issue — the reviewer's
     // standard is judging from evidence lines without downloading the pkg
-    const preview = [...new Set(slot.capabilities.findings.filter(f => !flagSet.has(f)))].slice(0, 8)
+    // doc-path findings are CONTEXT (install-pipe examples, fixture IPs),
+    // not behavior — alphabetical order buried real code signals under
+    // CHANGELOG.md/docs/ entries. Excerpt sorts code paths first, stable.
+    const DOCISH = /\.(md|mdx|markdown|txt|rst|adoc)$/i
+    const DOCDIR = /(^|\/)(docs?|examples?|tests?|__tests__|fixtures?|site)\//i
+    const findingPath = (f: string): string => {
+      const ci = f.indexOf(':')
+      const li = f.indexOf(' — L')
+      return (ci > 0 ? f.slice(ci + 1) : f).slice(0, li > ci ? li - ci - 1 : undefined).trim()
+    }
+    const preview = [...new Set(slot.capabilities.findings.filter(f => !flagSet.has(f)))]
+      .map((f, i) => ({ f, i, doc: DOCISH.test(findingPath(f)) || DOCDIR.test(findingPath(f)) }))
+      .sort((a, b) => Number(a.doc) - Number(b.doc) || a.i - b.i)
+      .slice(0, 8)
+      .map(x => x.f)
     // per-file rollup of the SAME findings — "which files are risky" is the
     // reviewer's first question and 8 flat excerpt lines can't answer it.
     // Format is `rule:path — L<n>: <code>` (scan.ts fmtFinding); rule ends
     // at the first ':', path runs to the ' — L' evidence marker.
     const byFile = new Map<string, { rules: Set<string>; n: number; line: number }>()
     let docFindings = 0
-    const DOCISH = /\.(md|mdx|markdown|txt|rst|adoc)$/i
-    const DOCDIR = /(^|\/)(docs?|examples?|tests?|__tests__|fixtures?|site)\//i
     for (const f of slot.capabilities.findings) {
       if (flagSet.has(f)) continue
       const ci = f.indexOf(':')
       const li = f.indexOf(' — L')
       const rule = ci > 0 ? f.slice(0, ci) : f
-      const path = (ci > 0 ? f.slice(ci + 1) : f).slice(0, li > ci ? li - ci - 1 : undefined).trim()
+      const path = findingPath(f)
       if (!path) continue
       const rec = byFile.get(path) ?? { rules: new Set<string>(), n: 0, line: 0 }
       rec.rules.add(rule); rec.n++
