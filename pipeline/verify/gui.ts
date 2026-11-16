@@ -83,6 +83,10 @@ const GUI_GLOBALS = [
   // constructors real bundles instanceof/extend against
   'Document', 'Range', 'NodeFilter', 'XPathEvaluator', 'XPathResult', 'ShadowRoot',
   'DOMTokenList', 'HTMLCollection', 'NodeList', 'FileReader', 'Blob', 'File', 'FormData',
+  'HTMLHeadElement', 'HTMLBodyElement', 'HTMLDivElement', 'HTMLSpanElement',
+  'HTMLAnchorElement', 'HTMLImageElement', 'HTMLFormElement', 'HTMLSelectElement',
+  'HTMLLIElement', 'HTMLUListElement', 'HTMLOListElement', 'HTMLTableElement',
+  'HTMLVideoElement', 'HTMLCanvasElement', 'HTMLTemplateElement', 'HTMLSlotElement',
 ] as const
 // host-provided conveniences a legit gui bundle may use — still NOT process,
 // require, dynamic import(), or any node builtin
@@ -90,6 +94,9 @@ const HOST_GLOBALS = [
   'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask',
   'console', 'URL', 'URLSearchParams', 'TextEncoder', 'TextDecoder', 'structuredClone',
   'fetch', 'AbortSignal', 'AbortController', 'btoa', 'atob', 'performance',
+  // crypto is a BROWSER api too — getRandomValues/randomUUID are legit gui
+  // usage (node:crypto the MODULE stays whitelist-blocked)
+  'crypto', 'indexedDB', 'isSecureContext', 'location', 'history',
 ] as const
 
 const EVAL_TIMEOUT = 5_000
@@ -168,12 +175,37 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
     // is callable but its apply returns objStub — a non-callable object whose
     // property access still returns deepStub, so a.b().c.d() chains keep
     // working while the unwrapper terminates after one call.
+    // valStub: the VALUE a promise-ish stub resolves to — identical surface
+    // to objStub but then=undefined. Resolving a promise with a thenable
+    // re-invokes .then on it: `resolve(objStub)` would loop forever
+    // (PromiseResolveThenableJob reschedules). Resolving with valStub
+    // terminates resolution while keeping property chains working.
+    // valStub stays CALLABLE (await api(); fn() is a real host pattern — the
+    // JSX unwrap is safe because calling it returns non-callable objStub),
+    // but its .then must be undefined or promise resolution loops forever
+    const valStub: unknown = new Proxy(function () {}, {
+      get(_t, k) {
+        if (k === Symbol.iterator) return function* () { /* empty */ }
+        if (k === 'length' || k === 'size') return 0
+        if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
+        if (k === 'then' || k === 'nodeType') return undefined
+        return deepStub
+      },
+      apply: () => objStub,
+      has: () => true,
+    })
     const objStub: unknown = new Proxy({}, {
       get(_t, k) {
         if (k === Symbol.iterator) return function* () { /* empty */ }
         if (k === 'length' || k === 'size') return 0
         if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
-        if (k === 'then') return undefined
+        // .then must WORK, not be absent — bundles chain host promises
+        // (`rpc().status().then(...)`) and a missing .then crashes as
+        // 'then is not a function'. Self-resolving to the NON-thenable
+        // valStub makes `await objStub` → valStub and `objStub.then(cb)` →
+        // cb(valStub). (Module-level proxies keep then=undefined — a
+        // thenable module object would hang `await require(...)`.)
+        if (k === 'then') return (res: unknown) => typeof res === 'function' ? (res as (v: unknown) => unknown)(valStub) : objStub
         // solid checks `value.nodeType` before insertBefore — a truthy stub
         // here makes the host's own DOM code throw 'not of type Node';
         // falsy falls through to the ignored-value branch, which is what a
@@ -188,7 +220,10 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
         if (k === Symbol.iterator) return function* () { /* empty */ }
         if (k === 'length' || k === 'size') return 0
         if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
-        if (k === 'then') return undefined // keep the stub non-thenable
+        // thenable same as objStub: `stub.foo.then(...)` chains resolve to
+        // the non-thenable valStub. solid's JSX unwrap never reaches .then —
+        // it calls the function itself first (`v = v()` → objStub).
+        if (k === 'then') return (res: unknown) => typeof res === 'function' ? (res as (v: unknown) => unknown)(valStub) : objStub
         return deepStub
       },
       apply: () => objStub,
@@ -339,7 +374,9 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
       // current() must return a stub, not null — bundles read
       // `ctx.sessions.current().session` inside reactive memos and a null
       // here masquerades as a plugin crash in render()
-      sessions: { current: () => deepStub, all: () => [] },
+      // sessions is itself a permissive surface — .list/.get/.watch and
+      // friends beyond the modeled current()/all() resolve to contrib stubs
+      sessions: hostModule({ current: () => deepStub, all: () => [] }),
       config: () => ({}),
       log: () => {},
     })
@@ -388,6 +425,16 @@ export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boo
           return { ok: false, stage: 'render', error: `${reg.kind}.render component mount threw: ${errorDetail(e)}`, registrations: registrations.map(r => r.kind) }
         }
         el = mount
+      }
+      // a JSX fragment compiles to an ARRAY of children — valid per
+      // JSX.Element; adopt the nodes into a container for the checks below
+      if (Array.isArray(el)) {
+        if (el.length === 0 || el.some(x => !(x instanceof dom.window.Node))) {
+          return { ok: false, stage: 'render', error: `${reg.kind}.render() returned a ${el.length ? 'mixed non-Node' : 'empty'} array`, registrations: registrations.map(r => r.kind) }
+        }
+        const frag = dom.window.document.createElement('div')
+        for (const x of el) frag.appendChild(x as InstanceType<typeof dom.window.Node>)
+        el = frag
       }
       // Node covers HTMLElement, DocumentFragment, Text — all valid JSX output
       if (!(el instanceof dom.window.Node)) {

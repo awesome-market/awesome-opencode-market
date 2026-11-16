@@ -13,7 +13,7 @@ import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
 import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
-import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
+import { checkGuiBundle, findGuiBundle, resolveExportTarget } from '../pipeline/verify/gui.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
 import { run } from '../pipeline/run.ts'
@@ -1112,6 +1112,75 @@ describe('gui deepStub + ctx accessors', () => {
       } })`)
     expect(r.ok).toBe(true)
     expect(r.registrations).toEqual(['Panel', 'CustomKind'])
+  })
+  it('stub thenable tiers resolve without hanging; valStub callable → objStub', async () => {
+    const r = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ async setup(ctx) {
+        const client = ctx.main({})
+        // deepStub.then → valStub; valStub.then → undefined (non-thenable)
+        const v = await client.status()       // resolves valStub (then=undefined arm hit by resolution)
+        if (v === undefined) throw new Error('await did not resolve')
+        ctx.sessions.current().then(s => s)  // stub-object .then arm → valStub
+        await ctx.sessions.current()         // await stub → deepStub.then → valStub
+        const c = await client.other()
+        c(1)                                 // valStub apply → objStub
+        ctx.sessions.watch()                 // unmodeled accessor → contrib stub
+        await ctx.sessions.list()            // sessions hostModule proxy member
+        ctx.add(Panel, () => ({ render: () => { const d = document.createElement('div'); d.textContent = 't'; return d } }))
+      } })`)
+    expect(r.ok).toBe(true)
+  })
+  it('render returning a component function mounts via solidWeb; mount throw → render fail', async () => {
+    // domGlobals:true — the mount path runs solidWeb.render in the HOST
+    // realm, which reads document/window off globalThis (same posture the
+    // gui subprocess takes)
+    const fn = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => () => { const d = document.createElement('p'); d.textContent = 'c'; return d } }))
+      } })`, { domGlobals: true })
+    expect(fn.ok).toBe(true)
+    const throws = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => () => { throw new Error('mount boom') } }))
+      } })`, { domGlobals: true })
+    expect(throws).toMatchObject({ ok: false, stage: 'render' })
+    expect(throws.error).toContain('mount')
+  })
+  it('resolveExportTarget: nested conditions, arrays, types-skip, all-miss null', () => {
+    expect(resolveExportTarget({ import: { default: './x.js' } })).toBe('./x.js')
+    expect(resolveExportTarget({ types: './x.d.ts', default: './x.js' })).toBe('./x.js')
+    expect(resolveExportTarget(['./a.d.ts', './b.js'])).toBe('./b.js')
+    expect(resolveExportTarget({ custom: { import: { default: './deep.js' } } })).toBe('./deep.js')
+    expect(resolveExportTarget({ types: './x.d.ts' })).toBeNull()
+    expect(resolveExportTarget([])).toBeNull()
+    expect(resolveExportTarget('./x.d.ts')).toBeNull()
+    expect(resolveExportTarget({ a: { b: { c: { d: { e: { f: './too-deep.js' } } } } } })).toBeNull()
+    expect(resolveExportTarget(42 as unknown)).toBeNull()
+  })
+  it('render returning a Node array (JSX fragment) → ok; non-Node array → fail', async () => {
+    const frag = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => [document.createElement('div'), document.createElement('span')] }))
+      } })`)
+    expect(frag.ok).toBe(true)
+    const bad = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => [document.createElement('div'), {}] }))
+      } })`)
+    expect(bad).toMatchObject({ ok: false, stage: 'render' })
+    expect(bad.error).toContain('non-Node')
+    const empty = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => [] }))
+      } })`)
+    expect(empty).toMatchObject({ ok: false, stage: 'render' })
+    expect(empty.error).toContain('empty')
   })
   it('mod.exports (no .default) still evaluates', async () => {
     const r = await checkGuiBundle(`
