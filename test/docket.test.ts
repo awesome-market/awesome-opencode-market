@@ -1769,7 +1769,8 @@ describe('issue evidence enrichment', () => {
 
 // ————— concern:* class labels — searchable buckets under ai:concern —————
 describe('concern-class labels', () => {
-  const runMain = async (verdicts: AiVerdict[], issues: object[] = []) => {
+  const runMain = async (verdicts: AiVerdict[], issues: object[] = [],
+    opts: { entry?: PluginEntry; assignee?: string } = {}) => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
@@ -1777,7 +1778,7 @@ describe('concern-class labels', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dcl-'))
     const idxPath = join(dir, 'index.json')
     const vPath = join(dir, 'v.jsonl')
-    writeFileSync(idxPath, JSON.stringify(idx([e()])))
+    writeFileSync(idxPath, JSON.stringify(idx([opts.entry ?? e()])))
     writeFileSync(vPath, verdicts.map(x => JSON.stringify(x)).join('\n') + '\n')
     const calls: string[][] = []
     const ghFn = async (args: string[]) => {
@@ -1786,9 +1787,15 @@ describe('concern-class labels', () => {
       return ''
     }
     const saved = process.env.GH_REPO
+    const savedA = process.env.DOCKET_ASSIGNEE
     process.env.GH_REPO = 'o/r'
+    if (opts.assignee) process.env.DOCKET_ASSIGNEE = opts.assignee
     try { await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn) }
-    finally { process.env.GH_REPO = saved }
+    finally {
+      process.env.GH_REPO = saved
+      if (savedA === undefined) delete process.env.DOCKET_ASSIGNEE
+      else process.env.DOCKET_ASSIGNEE = savedA
+    }
     return calls
   }
   const concernV = (reason: string) => v({ verdict: 'concern', reason })
@@ -1855,5 +1862,50 @@ describe('concern-class labels', () => {
     const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
     expect(edits).toContain('--remove-label concern:verify')
     expect(edits).toContain('--add-label ai:pass')
+  })
+  it('concern without a reason still classifies → concern:llm', async () => {
+    const calls = await runMain([v({ verdict: 'concern' })])
+    const create = calls.filter(c => c.includes('create')).map(c => c.join(' ')).join('\n')
+    expect(create).toContain('--label concern:llm')
+  })
+  it('drift: issue already carrying the right concern:* needs no label edits', async () => {
+    const calls = await runMain([concernV('LLM 判 concern：重写用户配置')], [{
+      number: 9, title: '[review] pkg@1.0.0',
+      labels: [{ name: 'review:pending' }, { name: 'ai:concern' }, { name: 'concern:llm' }],
+      body: 'x',
+    }])
+    const edits = calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')
+    expect(edits).not.toContain('--remove-label concern:')
+    expect(edits).not.toContain('--add-label concern:')
+  })
+  it('unscanned slot + ai pass → review:human (no AI authority on a slot that was never scanned)', async () => {
+    const calls = await runMain([v()], [], {
+      entry: e({ capabilities: { scannedAt: null, findings: [], redFlags: [] } }) })
+    const create = calls.filter(c => c.includes('create')).map(c => c.join(' ')).join('\n')
+    expect(create).toContain('--label review:human')
+  })
+  it('urgent issue missing its notification assignee gets a ping even with zero drift', async () => {
+    const flagged = e({ approval: 'approved', publishedAt: '2026-01-01T00:00:00Z',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] } })
+    const t = docketTargets(idx([flagged]), [])[0]!
+    const wantBody = issueBody(t, { repo: 'o/r', pagesBase: 'https://o.github.io/r' })
+    const calls = await runMain([], [{
+      number: 9, title: '[review] pkg@1.0.0',
+      labels: [{ name: 'review:pending' }, { name: 'concern:flags' }],
+      body: wantBody, assignees: [],
+    }], { entry: flagged, assignee: 'maint1' })
+    const assigns = calls.filter(c => c.join(' ').includes('--add-assignee'))
+    expect(assigns.length).toBe(1)
+    expect(assigns[0]!.join(' ')).toContain('maint1')
+    expect(assigns[0]!.join(' ')).toContain('9')
+  })
+  it('same-title duplicates keep the newest number even listed ascending', async () => {
+    const calls = await runMain([v()], [
+      { number: 3, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'x' },
+      { number: 9, title: '[review] pkg@1.0.0', labels: [{ name: 'review:pending' }], body: 'x' },
+    ])
+    // #9 is canonical — #3 is the duplicate that gets closed
+    expect(calls.some(c => c.includes('close') && c.includes('3'))).toBe(true)
+    expect(calls.some(c => c.includes('close') && c.includes('9'))).toBe(false)
   })
 })
