@@ -20,7 +20,7 @@ import { exit } from 'node:process'
 import { isMain } from './main-guard.ts'
 import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import { readJsonCapped } from './fetch/npm.ts'
-import { docketTargets } from './docket.ts'
+import { docketTargets, type DocketTarget } from './docket.ts'
 import { loadVerdicts, loadDigestState } from './verdicts.ts'
 
 export interface DailySnap {
@@ -223,6 +223,82 @@ ${table(days)}
 `
 }
 
+/* ---- verify-fail daily (concern:verify 的落点) ----
+ * Mechanical 装测失败 verdicts used to mint one [review] issue each — 500+
+ * measurement echoes drowning the human queue. They now live here instead:
+ * a rolling markdown in docs/reports/ plus one standing issue summarizing it.
+ * Population = the same targets docket would have issued on: governing
+ * concern verdicts whose reason starts 装测失败. */
+
+export interface VerifyFailRow {
+  name: string
+  version: string | null
+  stage: string      // load|install|render|structure|… parsed from the reason
+  summary: string    // reason tail after the stage header
+}
+
+/** 装测失败（verify load 级）：<说明> — the parenthesized stage is the only
+ *  stable structure in a free-text reason; unparseable rows bucket 'other' */
+const VF_STAGE = /装测失败（verify (\S+) 级）：([\s\S]*)/
+export function verifyFailRows(targets: DocketTarget[]): VerifyFailRow[] {
+  return targets
+    .filter(t => t.verdict === 'concern' && (t.reason ?? '').startsWith('装测失败'))
+    .map(t => {
+      const m = VF_STAGE.exec(t.reason ?? '')
+      return {
+        name: t.name, version: t.version ?? null,
+        stage: m?.[1] ?? 'other',
+        summary: (m?.[2] ?? t.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 160),
+      }
+    })
+    .sort((a, b) => a.stage.localeCompare(b.stage) || a.name.localeCompare(b.name))
+}
+
+export function verifyFailBody(rows: VerifyFailRow[], date: string, repo?: string): string {
+  const byStage = new Map<string, number>()
+  for (const r of rows) byStage.set(r.stage, (byStage.get(r.stage) ?? 0) + 1)
+  const stageLine = [...byStage.entries()].sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `**${s}** ${n}`).join(' · ') || '无'
+  const tableRows = rows.map(r =>
+    `| ${r.name} | ${r.version ?? '—'} | ${r.stage} | ${r.summary.replace(/\|/g, '\\|')} |`).join('\n')
+  return `# 装测失败日报 — ${date}
+
+> 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
+> 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
+
+## 汇总
+- 当前装测失败条目：**${rows.length}**
+- 按阶段：${stageLine}
+
+## 明细
+| 包 | 版本 | 阶段 | 原因摘要 |
+|---|---|---|---|
+${tableRows || '| _暂无_ | | | |'}
+
+> 数据源：catalog 分支 index.json + ai-verdicts.jsonl（governing concern 判词 reason 以 装测失败 开头的目标）。
+${repo ? `> 对应历史 issue：closed issues label:concern:verify → https://github.com/${repo}/issues?q=is%3Aissue+label%3Aconcern%3Averify` : ''}
+`
+}
+
+/** standing-issue body — the summary half of verifyFailBody, kept under the
+ *  issue-size comfort bound; the full table lives in the markdown file */
+export function verifyFailIssueBody(rows: VerifyFailRow[], date: string, repo?: string): string {
+  const byStage = new Map<string, number>()
+  for (const r of rows) byStage.set(r.stage, (byStage.get(r.stage) ?? 0) + 1)
+  const stageLine = [...byStage.entries()].sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `**${s}** ${n}`).join(' · ') || '无'
+  const top = rows.slice(0, 20).map(r => `- \`${r.name}\`${r.version ? `@${r.version}` : ''} — ${r.stage}: ${r.summary.slice(0, 80)}`).join('\n')
+  const doc = repo ? `https://github.com/${repo}/blob/main/docs/reports/verify-fail.md` : undefined
+  return `机械装测测量结果日报（${date} 更新）——逐条 issue 已停用，全表见 ${doc ?? 'docs/reports/verify-fail.md'}
+
+**当前 ${rows.length} 个装测失败条目** · ${stageLine}
+
+这些条目是 verify 实测"装不上/加载失败"的测量回声，不是安全判定：重测翻 verified 或人工 verdict 后自动离开日报。历史 issue 见 label:concern:verify（已关闭）。
+
+${rows.length > 20 ? `### 样本（前 20，全表见日报文件）\n${top}` : `### 全表\n${top || '_暂无_'}`}
+`
+}
+
 export function shiftDate(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
@@ -261,8 +337,15 @@ export async function main(
   const dl = deps.downloadsFn ?? ((names: string[]) => fetchNpmDownloads(names))
   const { snap, state } = await computeDaily(idx, date, prev, dl, review)
 
+  // 装测失败日报 — same verdict-driven population as docket's old per-issue
+  // mechanical concerns; without verdict inputs the report says 0 rather than
+  // guessing from verification.status (failed-but-unjudged is not the queue)
+  const vfRows = review ? verifyFailRows(docketTargets(idx, review.verdicts, review.digest)) : []
+
   const writes: [string, string][] = [
     [join(outDir, 'daily', `${date}.md`), dailyBody(snap, state, repo)],
+    [join(outDir, 'verify-fail.md'), verifyFailBody(vfRows, date, repo)],
+    [join(outDir, 'verify-fail-issue.md'), verifyFailIssueBody(vfRows, date, repo)],
     // weekly view = trailing 7d already inside daily body; month/year files
     // are (re)generated whenever their period is touched so a backfill run
     // repairs them too

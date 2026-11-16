@@ -1800,12 +1800,21 @@ describe('concern-class labels', () => {
   }
   const concernV = (reason: string) => v({ verdict: 'concern', reason })
 
-  it('create: 装测失败 → concern:verify', async () => {
+  it('机械装测失败不再开单——进 docs/reports/verify-fail.md 日报', async () => {
     const calls = await runMain([concernV('装测失败（verify load 级）：serve reports the plugin failed to load')])
     const create = calls.filter(c => c.includes('create')).map(c => c.join(' ')).join('\n')
-    expect(create).toContain('--label ai:concern')
-    expect(create).toContain('--label concern:verify')
-    expect(create).not.toContain('--label concern:llm')
+    expect(create).toBe('')
+  })
+  it('存量 concern:verify issue 关单并入日报', async () => {
+    const calls = await runMain([concernV('装测失败（verify load 级）：x')], [{
+      number: 9, title: '[review] pkg@1.0.0',
+      labels: [{ name: 'review:pending' }, { name: 'ai:concern' }, { name: 'concern:verify' }],
+      body: 'x',
+    }])
+    const close = calls.filter(c => c.includes('close')).map(c => c.join(' ')).join('\n')
+    const comment = calls.filter(c => c.includes('comment')).map(c => c.join(' ')).join('\n')
+    expect(close).toContain('issue close -R o/r 9')
+    expect(comment).toContain('装测日报')
   })
   it('create: L0.5 命中 → concern:l05', async () => {
     const calls = await runMain([concernV('L0.5 命中注入信号（score 0.9 ≥ 0.662，块 x）；LLM 判 concern：y')])
