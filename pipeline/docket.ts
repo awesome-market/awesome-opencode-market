@@ -1170,6 +1170,24 @@ export async function main(
   await Promise.all(targets.map(async t => {
     const d = t.flagDelta
     if (!d?.oldSha || !d.newSha || !d.repo) return
+    // prefer the persisted flag-delta assessment — it already fetched
+    // THIS compare and stored commits+files+patchOmitted. Rendering from
+    // it: ONE fetch total, delta block and AI 初筛 guaranteed the same
+    // snapshot, and the body never goes bare from a render-time hiccup
+    // (#6296/#6320). Live fetch stays the fallback for unassessed flags.
+    const asmt = t.reason ? assessments?.get(`${t.name.toLowerCase()}\0${t.reason}`) : undefined
+    if (asmt && asmt.files.length > 0) {
+      const base = `https://github.com/${d.repo}/compare/${d.oldSha}...${d.newSha}`
+      compareOf.set(issueTitle(t), {
+        url: base, filesUrl: `${base}/files`,
+        aheadBy: asmt.aheadBy, commitsTotal: asmt.commitsTotal,
+        commits: asmt.commits, filesTotal: asmt.filesChanged,
+        additions: asmt.additions, deletions: asmt.deletions,
+        files: asmt.files.map(f => ({ path: f.path, status: f.status, add: f.add, del: f.del, risky: f.risky })),
+        riskyCount: asmt.riskyFiles.length, truncated: asmt.truncated,
+      })
+      return
+    }
     const cmp = await fetchCompare(d.repo, d.oldSha, d.newSha, async a => String(await ghFn(a)))
     if (!cmp) return
     const cls = classifyDelta(cmp.files)

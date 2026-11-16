@@ -1624,11 +1624,51 @@ describe('main — repo-moved flag compare evidence', () => {
     expect(create).toBeTruthy()
     const body = create![create!.indexOf('--body') + 1]!
     expect(body).toContain('### 🔍 这次变了什么')
-    expect(body).toContain('bump version to 1.1.0')
+    // delta block renders from the STORED assessment — 'bump version' is
+    // its commit msg; the live compare mock ('bump version to 1.1.0')
+    // must never be consulted when an assessment exists
+    expect(body).toContain('bump version')
+    expect(calls.some(c => c[0] === 'api' && c[1]?.includes('/compare/'))).toBe(false)
     expect(body).toContain('/compare/oldsha111222333...newsha999888777/files')
     expect(body).toContain('### 🤖 AI 初筛')
     expect(body).toContain('仅文档更新')
     expect(body).toContain('advisory')
+  })
+  it('no stored assessment → delta block falls back to a live compare fetch', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk-cmp-live-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    const flagged = e({
+      name: 'o/plugin', slug: 'o/plugin', approval: 'approved', latestVersion: null,
+      source: { kind: 'github', id: 'o/plugin', repo: 'o/plugin', version: 'newsha999888777' },
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:repo-moved-since-release:newsha999888777'], flaggedAt: '2026-11-15T00:00:00Z' },
+    })
+    writeFileSync(idxPath, JSON.stringify(idx([flagged])))
+    writeFileSync(vPath, JSON.stringify(v({ name: 'o/plugin', version: null, source: 'human', sha: 'oldsha111222333', at: '2026-11-14T00:00:00Z' })) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => {
+      calls.push(args)
+      if (args.includes('list')) return JSON.stringify([])
+      if (args[0] === 'api' && args[1]?.includes('/compare/')) return JSON.stringify({
+        ahead_by: 2, total_commits: 2,
+        commits: [{ sha: 'abc123456789', commit: { message: 'bump version to 1.1.0' } }],
+        files: [{ filename: 'README.md', status: 'modified', additions: 5, deletions: 1, patch: '@@ docs' }],
+      })
+      return ''
+    }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))
+    const body = create![create!.indexOf('--body') + 1]!
+    expect(calls.some(c => c[0] === 'api' && c[1]?.includes('/compare/'))).toBe(true)
+    expect(body).toContain('bump version to 1.1.0')
   })
   it('compare fetch failure degrades to manual link; corrupt assessments warn not fail', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')
