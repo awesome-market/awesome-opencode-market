@@ -783,7 +783,12 @@ export async function verifyPackage(
           // node --import tsx, NOT `npx tsx`: npm exec reifies into a cache
           // dir the sandbox uid can't always write (EACCES spawn sh) and may
           // hit the network for a package already in devDependencies.
-          const { stdout } = await urun('node', ['--import', 'tsx', guiEntry, found.path],
+          // --conditions=browser: solid-js/web resolves its SERVER build under
+          // plain node (isServer=true → every client API throws 'Client-only
+          // API called on the server side'). The gui eval simulates the
+          // browser host, so resolve the browser builds — jsdom/effect/tsx
+          // have no conflicting browser export.
+          const { stdout } = await urun('node', ['--conditions=browser', '--import', 'tsx', guiEntry, found.path],
             { cwd: rt?.cwd ?? process.cwd(), timeout: 90_000 })
           gui = JSON.parse(stdout.trim().split('\n').at(-1)!) as typeof gui
         } catch (e) {

@@ -108,13 +108,50 @@ function deadline<T>(p: Promise<T> | T, ms: number, label: string): Promise<T> {
  *  node:vm realm so the module whitelist is REAL: the bundle has no
  *  process/require/import()/node builtins — only the globals we inject.
  *  (A `new Function` eval would leave all host globals reachable.)
- *  No globalThis mutation either — the old swap/restore machinery is gone. */
-export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
+ *  No globalThis mutation in the default path — the old swap/restore
+ *  machinery is gone. The dedicated subprocess entry passes domGlobals:true:
+ *  solid-js/web's BROWSER build (selected via --conditions=browser) resolves
+ *  `document`/`window` on Node's globalThis at CALL time, so the jsdom globals
+ *  must exist there too — pollution is contained because the subprocess
+ *  evaluates exactly one bundle then hard-exits.
+ *  ONLY GUI_GLOBALS are installed: HOST_GLOBALS (setTimeout & friends) must
+ *  stay Node's — jsdom's window.setTimeout internally calls the bare global
+ *  setTimeout, so clobbering it recurses until stack overflow. */
+export async function checkGuiBundle(bundleSrc: string, opts: { domGlobals?: boolean } = {}): Promise<GuiCheck> {
   const dom = new JSDOM('', { pretendToBeVisual: true, url: 'https://verify.local/' })
   const w = dom.window as unknown as Record<string, unknown>
+  if (opts.domGlobals) {
+    const g = globalThis as Record<string, unknown>
+    for (const k of GUI_GLOBALS) {
+      let v: unknown
+      try { v = w[k] } catch { continue } // e.g. localStorage on opaque origins
+      if (v === undefined) continue
+      try { g[k] = v } catch {
+        // Node 21+ ships getter-only globals (navigator…) — plain assignment
+        // throws; redefine when configurable, else keep the host value
+        try { Object.defineProperty(g, k, { value: v, writable: true, configurable: true }) } catch { /* keep host */ }
+      }
+    }
+  }
   const registrations: { kind: string; contrib: Record<string, unknown> }[] = []
   try {
     // ---- whitelist require ----
+    // deep stub: every unmodeled host-API method resolves a self-similar stub
+    // that never crashes on access/call, iterates empty, length 0 —
+    // plugin-specific fixtures don't scale, so gui code exercises its
+    // empty-data render path. Defined before the host-module proxies below —
+    // they reference it lazily through closures.
+    const deepStub: unknown = new Proxy(function () {}, {
+      get(_t, k) {
+        if (k === Symbol.iterator) return function* () { /* empty */ }
+        if (k === 'length' || k === 'size') return 0
+        if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
+        if (k === 'then') return undefined // keep the stub non-thenable
+        return deepStub
+      },
+      apply: () => deepStub,
+      has: () => true,
+    })
     let Plugin: unknown, Ipc: unknown, contributionKinds: Record<string, { name: string }>
     class Contrib { static cname = 'Contribution' }
     class Panel extends Contrib { static override cname = 'Panel' }
@@ -125,6 +162,37 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     contributionKinds = { Panel, SettingsPage, Command, MenuItem, Tab }
     Plugin = { define: (def: unknown) => def }
     Ipc = { define: (desc: unknown) => desc }
+    // @opencode/plugin/rpc re-exports Rpc from @opencode/schema/rpc — same
+    // define-tag shape as Ipc; 35/52 whitelist fails in the first honest
+    // render wave were bundles legitimately requiring it
+    const Rpc = { define: (desc: unknown) => desc }
+    // The real @opencode/plugin/gui surface is far larger than the modeled
+    // contract (Badge/FileTree/Pairing/usePlugin/usePanel/createKeyed/...).
+    // A bundle requiring an unmodeled export used to die 'cname of undefined'
+    // inside ctx.add — a harness false-fail. Unknown names get a callable
+    // stub that also carries a cname tag so ctx.add(Whatever, f) registers;
+    // known keys keep their precise stubs (Plugin.define MUST stay identity —
+    // a deepStub return would silently eat the plugin definition).
+    const contribStub = (name: string): unknown => new Proxy(function () {}, {
+      get(_t, k) {
+        if (k === 'cname' || k === 'name') return name
+        if (k === Symbol.iterator) return function* () { /* empty */ }
+        if (k === 'length' || k === 'size') return 0
+        if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => name
+        if (k === 'then') return undefined
+        return deepStub
+      },
+      apply: () => deepStub,
+      construct: () => deepStub as object,
+      has: () => true,
+    })
+    const hostModule = (base: Record<string, unknown>): unknown => new Proxy(base, {
+      // 'then' must stay undefined — a truthy callable then makes the module
+      // object a thenable and `await require('@opencode/plugin/gui')` hangs
+      // until the stage timeout instead of resolving
+      get(t, k) { return k === 'then' ? undefined : (k in t ? t[k as string] : contribStub(String(k))) },
+      has: () => true,
+    })
     const effectModule = await import('effect').catch(() => null)
     const solidModule = await import('solid-js').catch(() => null)
     const solidWeb = await import('solid-js/web').catch(() => null)
@@ -133,9 +201,13 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     // legit store-using bundle fails setup() for a harness mistake
     const solidStore = await import('solid-js/store').catch(() => null)
     const reqmap: Record<string, unknown> = {
-      '@opencode/plugin/gui': {
+      '@opencode/plugin/gui': hostModule({
         Plugin, Ipc, Panel, SettingsPage, Command, MenuItem, Tab,
-      },
+      }),
+      '@opencode/plugin/rpc': hostModule({ Rpc }),
+      // the solid client bindings gui plugins use to reach the host — same
+      // unmodeled-surface problem, same fallback (1 whitelist fail observed)
+      '@opencode/client/solid': hostModule({}),
     }
     if (effectModule) reqmap['effect'] = effectModule
     if (solidModule) {
@@ -185,24 +257,10 @@ export async function checkGuiBundle(bundleSrc: string): Promise<GuiCheck> {
     }
 
     // ---- run setup against the fake host ----
-    // deep stub: every IPC method resolves a self-similar stub that never
-    // crashes on access/call, iterates empty, length 0 — plugin-specific
-    // fixtures don't scale, so gui code exercises its empty-data render path.
-    const deepStub: unknown = new Proxy(function () {}, {
-      get(_t, k) {
-        if (k === Symbol.iterator) return function* () { /* empty */ }
-        if (k === 'length' || k === 'size') return 0
-        if (k === Symbol.toPrimitive || k === 'toString' || k === 'valueOf') return () => ''
-        if (k === 'then') return undefined // keep the stub non-thenable
-        return deepStub
-      },
-      apply: () => deepStub,
-      has: () => true,
-    })
     const ctx = {
       main: () => new Proxy({}, { get: () => async () => deepStub }),
-      add: (kind: { cname?: string; name: string }, factory: () => Record<string, unknown>) => {
-        registrations.push({ kind: kind.cname ?? kind.name ?? String(kind), contrib: factory() })
+      add: (kind: { cname?: string; name: string } | undefined, factory: () => Record<string, unknown>) => {
+        registrations.push({ kind: kind?.cname ?? kind?.name ?? 'unknown', contrib: factory() })
       },
       sessions: { current: () => null, all: () => [] },
       config: () => ({}),
@@ -416,6 +474,6 @@ if (isMain(import.meta.url)) {
     writeSync(1, JSON.stringify(r) + '\n')
     process.exit(0)
   }
-  checkGuiBundle(readFileSync(process.argv[2]!, 'utf8'))
+  checkGuiBundle(readFileSync(process.argv[2]!, 'utf8'), { domGlobals: true })
     .then(out, e => out({ ok: false, stage: 'evaluate', error: String(e) }))
 }
