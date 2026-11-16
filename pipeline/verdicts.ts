@@ -285,6 +285,25 @@ export const grandfathered = (
     && (e.metrics?.stars ?? 0) >= GRANDFATHER_MIN_STARS
 }
 
+/** Full-run fast maturity (ops policy): a pass on a package publicly live ≥
+ *  `ms` releases in the same run it is announced — the objection window
+ *  exists for fresh names; months of public presence don't need the extra
+ *  day. Stricter than `grandfathered` in one respect: the announcement is
+ *  still required ('公示后'放行) — a never-announced verdict stays held.
+ *  Enabled only via applyMatureVerdicts' opts (full-run.yml's opt-in
+ *  fast_mature input), so daily folds keep the full window; unverifiable
+ *  age (no createdAt) fails closed, and a changed maintainer roster
+ *  (sec:maintainer-changed — the account-hijack shape the window exists
+ *  for) keeps the wait. Same displayed-slot-only scoping as
+ *  grandfathered — a held pendingUpdate keeps its window. */
+export const establishedAge = (
+  e: { createdAt?: string | null | undefined }, ms: number,
+  now = Date.now(),
+): boolean => {
+  const t = Date.parse(e.createdAt ?? '')
+  return Number.isFinite(t) && t <= now - ms
+}
+
 export interface VerdictApplyResult {
   index: CatalogIndex
   /** "name@version" promoted to display by this application */
@@ -312,6 +331,7 @@ export function applyMatureVerdicts(
   index: CatalogIndex,
   verdicts: AiVerdict[],
   digest: DigestState | null,
+  opts: { fastMatureAgeMs?: number | undefined } = {},
 ): VerdictApplyResult {
   const latest = latestVerdicts(verdicts)
   const releases: string[] = []
@@ -409,7 +429,11 @@ export function applyMatureVerdicts(
           // that stale rationale
           if (e.approvalReason && e.approvalReason !== 'awaiting-review')
             e = { ...e, approvalReason: 'awaiting-review' }
-          if ((mature(v) || grandfathered(e))
+          if ((mature(v) || grandfathered(e)
+            || (opts.fastMatureAgeMs !== undefined && announced.has(akey(v)) && establishedAge(e, opts.fastMatureAgeMs)
+              // a changed maintainer roster is the account-hijack shape the
+              // window exists for — sec:maintainer-changed keeps the wait
+              && !e.capabilities.findings.includes('sec:maintainer-changed')))
             && !(v.source === 'ai' && !humanPassCovers(latestHuman, e.name, e.latestVersion, latestTomb)
               && ((e.capabilities.redFlags.length > 0 && !v.flagsReviewed) || e.capabilities.scannedAt === null))
             && shaOk(v, shaAnchor(e))

@@ -9,7 +9,7 @@ import { fetchRepoMeta, fetchMarketMeta, fetchRepoTree, fetchRepoPackage, fetchR
 import { scanTarball, fmtFinding } from './scan/scan.ts'
 import { RULESET_VERSION } from './scan/rules.ts'
 import { buildIndex, OPENCODE_VERSION } from './publish/merge.ts'
-import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs, candidateSlot } from './verdicts.ts'
+import { loadVerdicts, loadDigestState, applyMatureVerdicts, latestVerdicts, latestHumanVerdicts, slotVerdict, vkey, tombEpochs, candidateSlot, GRANDFATHER_AGE_MS } from './verdicts.ts'
 import { retryable, verifyPartsOf } from './verify/plan.ts'
 import { mapPool } from './pool.ts'
 import { slugOf } from './publish/slug.ts'
@@ -34,6 +34,10 @@ export interface RunOptions {
   /** workflow_dispatch escape hatch: publish despite a red corruption gate
    *  (legitimate mass-deprecation/removal events otherwise dead-lock every run) */
   forceGate?: boolean | undefined
+  /** full-run fast maturity: passes announced THIS run on packages publicly
+   *  live ≥ this age release in the same fold ('公示后直接放行'). Daily
+   *  folds pass nothing and keep the full objection window. */
+  fastMatureAgeMs?: number | undefined
   /** catalog-branch metrics-history.json — rolling ~95d per-entry snapshots
    *  of {stars, npmDownloads30d}; read+updated+rewritten each run so
    *  metrics.starsDelta30d is computable (absent → history feature off) */
@@ -169,7 +173,7 @@ export async function run(opts: RunOptions = {}) {
     for (const [k, v] of latestHumanVerdicts(verdicts)) latestHumanByKey.set(k, v)
     const digest = loadDigestState(opts.digestStatePath)
     if (verdicts.length || digest !== null || verdictBad.bad) {
-      const applied = applyMatureVerdicts(old, verdicts, digest)
+      const applied = applyMatureVerdicts(old, verdicts, digest, { fastMatureAgeMs: opts.fastMatureAgeMs })
       old = applied.index
       console.log(`verdicts: ${verdicts.length} loaded${verdictBad.bad ? `, malformed=${verdictBad.bad}` : ''}, lastDigestAt=${digest?.lastDigestAt ?? '-inf'} announced=${digest?.announced.length ?? 0} → released [${applied.releases.join(', ')}], held ${applied.held.length}`)
     }
@@ -1774,5 +1778,6 @@ if (isMain(import.meta.url)) {
     seedOutcomesPath: arg('--seed-outcomes'),
     metricsHistPath: arg('--metrics-history'),
     ...(process.argv.includes('--force-gate') ? { forceGate: true } : {}),
+    ...(process.argv.includes('--fast-mature') ? { fastMatureAgeMs: GRANDFATHER_AGE_MS } : {}),
   }).catch(e => { console.error(e); process.exit(1) })
 }
