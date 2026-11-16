@@ -200,12 +200,13 @@ describe('verifyPackage sandboxed (sandboxUser)', () => {
       execFn: fake, spawnFn: serveSpawn(calls) })
     expect(r.status).toBe('verified')
     expect(r.level).toBe('render')
-    // wrapper shape: sb.sh env node --import tsx <gui.ts> <bundle>
+    // wrapper shape: sb.sh env node --conditions=browser --import tsx <gui.ts> <bundle>
     // (node --import, not npx tsx — npm exec would reify into an unwritable
-    // cache dir under the sandbox uid)
+    // cache dir under the sandbox uid; --conditions=browser makes solid-js
+    // resolve its client build — the server build throws on every client API)
     const guiCall = calls.find(c => c.args.includes('tsx'))
     expect(guiCall!.cmd.endsWith('sb.sh')).toBe(true)
-    expect(guiCall!.args.slice(0, 4)).toEqual(['env', 'node', '--import', 'tsx'])
+    expect(guiCall!.args.slice(0, 5)).toEqual(['env', 'node', '--conditions=browser', '--import', 'tsx'])
   })
 
   it('gui subprocess failing → failed/render with the subprocess error', async () => {
