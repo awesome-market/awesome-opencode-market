@@ -474,7 +474,7 @@ describe('issueBody', () => {
   it('flag verdict headline carries the flag explainer', () => {
     const t = docketTargets(idx([e()]), [])
     const body = issueBody({ ...t[0]!, verdict: 'flag', reason: 'sec:repo-recreated' })
-    expect(body).toContain('↳ 仓库被删除重建')
+    expect(body).toContain('发生了什么：仓库被删除重建')
   })
   it('stripFlagTail never touches real prose or LLM-draft payloads', () => {
     // an LLM-draft reason ends in prose, not type:path pairs — must survive intact
@@ -1661,7 +1661,7 @@ describe('main — repo-moved flag compare evidence', () => {
     } finally { process.env.GH_REPO = saved }
     const create = calls.find(c => c.includes('create'))
     const body = create![create!.indexOf('--body') + 1]!
-    expect(body).toContain('compare 取数失败')
+    expect(body).toContain('对比取数失败')
     expect(body).toContain('oldsha111222333...newsha999888777')
     expect(body).not.toContain('AI 初筛')
   })
