@@ -43,6 +43,10 @@ const RULES: Record<string, FlagExplain> = {
     zh: '读取凭据/keychain/环境密钥的路径——核实读取后的去向（只本地使用还是外发）',
     en: 'reads credential/keychain paths — verify the secret stays local and is never transmitted',
   },
+  'install-pipe': {
+    zh: '文档/说明里让用户执行远程脚本的安装方式（curl|bash）——用户侧行为，非插件运行时外联；安装面本身值得人工知悉',
+    en: 'doc tells the USER to pipe a remote script to a shell (curl|bash) — user-side install method, not plugin runtime egress; still worth knowing',
+  },
   'child-process': {
     zh: '启动子进程——核实执行的命令是否固定、参数是否被外部输入污染',
     en: 'spawns a child process — verify the command is fixed and its args can\'t be polluted by input',

