@@ -13,7 +13,7 @@ import { main as docketMain } from '../pipeline/docket.ts'
 import { main as notifyMain } from '../pipeline/notify-published.ts'
 import { checkTui } from '../pipeline/verify/tui.ts'
 import { verifyPackage, type SpawnFn } from '../pipeline/verify/verify.ts'
-import { checkGuiBundle, findGuiBundle } from '../pipeline/verify/gui.ts'
+import { checkGuiBundle, findGuiBundle, resolveExportTarget } from '../pipeline/verify/gui.ts'
 import { fetchRepoMeta, fetchRepoTree, fetchRepoPackageName, fetchMarketMeta } from '../pipeline/fetch/github.ts'
 import { fetchPackument, fetchTarball, withTimeout } from '../pipeline/fetch/npm.ts'
 import { run } from '../pipeline/run.ts'
@@ -1130,6 +1130,35 @@ describe('gui deepStub + ctx accessors', () => {
         ctx.add(Panel, () => ({ render: () => { const d = document.createElement('div'); d.textContent = 't'; return d } }))
       } })`)
     expect(r.ok).toBe(true)
+  })
+  it('render returning a component function mounts via solidWeb; mount throw → render fail', async () => {
+    // domGlobals:true — the mount path runs solidWeb.render in the HOST
+    // realm, which reads document/window off globalThis (same posture the
+    // gui subprocess takes)
+    const fn = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => () => { const d = document.createElement('p'); d.textContent = 'c'; return d } }))
+      } })`, { domGlobals: true })
+    expect(fn.ok).toBe(true)
+    const throws = await checkGuiBundle(`
+      const { Plugin, Panel } = require('@opencode/plugin/gui')
+      module.exports.default = Plugin.define({ setup(ctx) {
+        ctx.add(Panel, () => ({ render: () => () => { throw new Error('mount boom') } }))
+      } })`, { domGlobals: true })
+    expect(throws).toMatchObject({ ok: false, stage: 'render' })
+    expect(throws.error).toContain('mount')
+  })
+  it('resolveExportTarget: nested conditions, arrays, types-skip, all-miss null', () => {
+    expect(resolveExportTarget({ import: { default: './x.js' } })).toBe('./x.js')
+    expect(resolveExportTarget({ types: './x.d.ts', default: './x.js' })).toBe('./x.js')
+    expect(resolveExportTarget(['./a.d.ts', './b.js'])).toBe('./b.js')
+    expect(resolveExportTarget({ custom: { import: { default: './deep.js' } } })).toBe('./deep.js')
+    expect(resolveExportTarget({ types: './x.d.ts' })).toBeNull()
+    expect(resolveExportTarget([])).toBeNull()
+    expect(resolveExportTarget('./x.d.ts')).toBeNull()
+    expect(resolveExportTarget({ a: { b: { c: { d: { e: { f: './too-deep.js' } } } } } })).toBeNull()
+    expect(resolveExportTarget(42 as unknown)).toBeNull()
   })
   it('render returning a Node array (JSX fragment) → ok; non-Node array → fail', async () => {
     const frag = await checkGuiBundle(`
