@@ -177,7 +177,7 @@ describe('github-kind hardening', () => {
     // .opencode/skills — a nested SKILL.md must still tag the entry
     const f = ghBase(
       url => url.includes('/git/trees/')
-        ? new Response(JSON.stringify({ tree: [{ path: 'skills/x/SKILL.md' }] }))
+        ? new Response(JSON.stringify({ tree: [{ path: 'skills/x/SKILL.md' }, { path: 'package.json' }] }))
         : null,
       () => new Response(new Uint8Array(mkTgz())),
     )
@@ -196,6 +196,27 @@ describe('github-kind hardening', () => {
     expect(skillOnly.plugins.find(p => p.name === 'o/r')?.type).toBe('skill')
     const withPkg = await run({ outPath: join(d, 'b.json'), fetchFn: withTree([{ path: 'skills/x/SKILL.md' }, { path: 'package.json' }]), now: 't' })
     expect(withPkg.plugins.find(p => p.name === 'o/r')?.type).toBe('plugin')
+  })
+
+  it('plugin code nested under plugins/<x>/ with no root package.json claims no plugin part', async () => {
+    // `plugin add owner/repo` reifies the repo ROOT — a packaged plugin dir
+    // deep in the tree (uncscode/particula shape: plugins/x/opencode/ inside a
+    // Python repo) is real opencode evidence but unreachable by the install
+    // spec. Previously it minted contains:['plugin'] → ENOENT install loop.
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [
+          { path: 'plugins/x/opencode/package.json' },
+          { path: 'plugins/x/opencode/index.js' },
+          { path: 'plugins/x/skills/y/SKILL.md' },
+        ] }))
+        : null,
+      () => new Response(new Uint8Array(mkTgz())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'np-')), 'i.json'), fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'o/r')
+    expect(e?.type).toBe('skill')
+    expect(e?.contains).toEqual(['skill'])
   })
 
   it('hold surgery splits contains per version — candidate parts on pendingUpdate, displayed parts stay on entry', async () => {
