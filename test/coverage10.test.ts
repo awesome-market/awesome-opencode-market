@@ -214,11 +214,13 @@ describe('checkGuiBundle stage coverage', () => {
     } } }`
     const r4 = await checkGuiBundle(badEl)
     expect(r4.error).toContain('not a DOM Node')
-    // render returns empty element
+    // render returns empty element — legal under stub props (data-driven UI
+    // renders empty without real collections); counted via emptyRenders
     const empty = `module.exports = { default: { setup(ctx) {
       ctx.add({ name: 'Panel' }, () => ({ render: () => document.createElement('div') }))
     } } }`
-    expect((await checkGuiBundle(empty)).error).toContain('empty element')
+    const r5 = await checkGuiBundle(empty)
+    expect(r5).toMatchObject({ ok: true, rendered: 0, emptyRenders: ['Panel'] })
     // setup throws → stage setup
     const badSetup = `module.exports = { default: { setup() { throw new Error('setup boom') } } }`
     const r6 = await checkGuiBundle(badSetup)
