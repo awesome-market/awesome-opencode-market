@@ -195,14 +195,14 @@ describe('checkGuiBundle stage coverage', () => {
     const r1 = await checkGuiBundle(good)
     expect(r1.ok).toBe(true)
     expect(r1.rendered).toBe(1)
-    // contribution factory returns object without render → skipped → rendered 0
+    // contribution factory returns object without render → non-renderable
+    // kind — command-only plugins legitimately have nothing to render
     const noRender = `module.exports = { default: { setup(ctx) {
       ctx.add({ name: 'Tab' }, () => ({}))
     } } }`
     const r2 = await checkGuiBundle(noRender)
-    expect(r2.ok).toBe(false)
-    expect(r2.stage).toBe('render')
-    expect(r2.error).toContain('no contribution exposed a render()')
+    expect(r2.ok).toBe(true)
+    expect(r2.rendered).toBe(0)
     // render throws → stage render error
     const throws = `module.exports = { default: { setup(ctx) {
       ctx.add({ name: 'Panel' }, () => ({ render: () => { throw new Error('x') } }))
@@ -213,7 +213,7 @@ describe('checkGuiBundle stage coverage', () => {
       ctx.add({ name: 'Panel' }, () => ({ render: () => 42 }))
     } } }`
     const r4 = await checkGuiBundle(badEl)
-    expect(r4.error).toContain('not HTMLElement')
+    expect(r4.error).toContain('not a DOM Node')
     // render returns empty element
     const empty = `module.exports = { default: { setup(ctx) {
       ctx.add({ name: 'Panel' }, () => ({ render: () => document.createElement('div') }))
