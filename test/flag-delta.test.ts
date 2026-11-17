@@ -232,6 +232,33 @@ describe('flag-delta main', () => {
     const spooled = existsSync(s.spool) ? readFileSync(s.spool, 'utf8') : ''
     expect(spooled).toContain('compare-fetch-failed')
   })
+  it('final budget attempt judges flag+metadata alone — a verdict, not silent death', async () => {
+    const failed = (i: number) => JSON.stringify(assess({
+      flag: 'sec:repo-moved-since-release:newsha999888777', newSha: 'newsha999888777',
+      ai: null, aiNote: 'compare-fetch-failed', at: `2026-11-16T0${i}:00:00Z` }))
+    const s = setup([ghEntry()], [humanPass], [1, 2, 3, 4].map(i => failed(i)))
+    const seen: string[] = []
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => null,
+      judge: async m => { seen.push(m.patches); return { verdict: 'concern', reasonZh: '无法核实', reasonEn: 'unverifiable' } },
+    })
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toContain('retries exhausted')
+    const lines = readFileSync(s.spool, 'utf8').trim().split('\n').map(l => JSON.parse(l) as FlagAssessment)
+    expect(lines[0]!.ai?.verdict).toBe('concern')
+  })
+  it('dead keys (≥5 failed attempts) never re-enter the queue', async () => {
+    const failed = (i: number) => JSON.stringify(assess({
+      flag: 'sec:repo-moved-since-release:newsha999888777', newSha: 'newsha999888777',
+      ai: null, aiNote: 'compare-fetch-failed', at: `2026-11-16T0${i}:00:00Z` }))
+    const s = setup([ghEntry()], [humanPass], [1, 2, 3, 4, 5].map(i => failed(i)))
+    let compareCalls = 0
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => { compareCalls++; return null },
+      judge: async () => ({ verdict: 'pass' as const, reasonZh: '', reasonEn: '' }),
+    })
+    expect(compareCalls).toBe(0)
+  })
   it('excludes pending entries, non-github sources, and sha-matched pins', async () => {
     const s = setup([
       ghEntry({ name: 'o/pending', approval: 'pending' }),
