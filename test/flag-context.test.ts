@@ -145,8 +145,10 @@ describe('flag-context main', () => {
       judge: okJudge,
     })
     const out = loadFlagContexts(s.spool)
-    expect(out.find(a => a.name === 'pkg')!.aiNote).toBe('context-too-large')
-    expect(out.find(a => a.name === 'ghost')!.aiNote).toBe('no-source-url')
+    // deterministic absences now judge the flag's own embedded excerpt —
+    // a permanently-oversize bundle used to retry forever and starve the queue
+    expect(out.find(a => a.name === 'pkg')!.ai?.verdict).toBe('pass')
+    expect(out.find(a => a.name === 'ghost')!.ai?.verdict).toBe('pass')
   })
 
   it('mega-lines crop the window around the hit instead of eating the whole cap', async () => {
@@ -269,8 +271,10 @@ describe('flag-context main', () => {
       await flagCtxMain([...args(s), '--limit', '5'], { judge: async () => { judged++; return { verdict: 'pass' as const, reasonZh: '', reasonEn: '' } } })
     } finally { globalThis.fetch = origFetch }
     const out = loadFlagContexts(s.spool)
-    expect(out.map(a => a.aiNote).sort()).toEqual(['context-fetch-failed', 'context-fetch-failed', 'context-too-large'])
-    expect(judged).toBe(0)
+    // >256KB is a deterministic absence — the flag's own excerpt is judged
+    // instead of retrying a fetch that can never win
+    expect(out.map(a => a.aiNote ?? 'verdict').sort()).toEqual(['context-fetch-failed', 'context-fetch-failed', 'verdict'])
+    expect(judged).toBe(1)
   })
 
   it('AI_BACKEND=devin assembles the devin judge — uninvoked when fetch fails', async () => {
@@ -335,5 +339,46 @@ describe('finding-level pre-reads — the 风险文件 rows get judged too', () 
     const s = setup([entry({ capabilities: { scannedAt: 't', findings, redFlags: [] } })])
     await flagCtxMain([...args(s), '--limit', '20'], { fetchFn: async () => FILE, judge: okJudge })
     expect(loadFlagContexts(s.spool)).toHaveLength(10)
+  })
+})
+
+describe('retry budget — permanently-failing keys die instead of starving the queue', () => {
+  const FLAG_DEAD = 'network-call:pkg/dead.js — L9: fetch(x)'
+  const FLAG_LIVE = 'network-call:pkg/live.js — L9: fetch(x)'
+  const nullLine = (name: string, flag: string, aiNote: string, at: string) =>
+    JSON.stringify({ name, version: '1.0.0', flag, rule: 'network-call', path: 'p', line: 9, at, ai: null, aiNote })
+
+  it('a fetch-failed key at 5 attempts is dead — slots reach live entries behind it', async () => {
+    const dead = entry({ name: 'adead', slug: 'adead',
+      capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_DEAD] } })
+    const live = entry({ name: 'zlive', slug: 'zlive',
+      capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_LIVE] } })
+    // 5 prior fetch-failed attempts on adead's flag — alphabetically-first
+    // and permanently failing: without the budget it eats the slot forever
+    const prior = Array.from({ length: 5 }, (_, i) =>
+      nullLine('adead', FLAG_DEAD, 'context-fetch-failed', `2026-01-0${i + 1}T00:00:00Z`))
+    const s = setup([dead, live], [], prior)
+    await flagCtxMain([...args(s), '--limit', '1'], { fetchFn: async () => null, judge: okJudge })
+    const out = loadFlagContexts(s.spool)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.flag).toBe(FLAG_LIVE)   // dead key skipped, queue advanced
+  })
+
+  it('under-budget fetch-failed still retries; judge-unavailable never dies', async () => {
+    const e = entry({ name: 'a', slug: 'a',
+      capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_DEAD] } })
+    const s = setup([e], [], Array.from({ length: 4 }, (_, i) =>
+      nullLine('a', FLAG_DEAD, 'context-fetch-failed', `2026-01-0${i + 1}T00:00:00Z`)))
+    await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: async () => null, judge: okJudge })
+    const out = loadFlagContexts(s.spool)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.aiNote).toBe('context-fetch-failed')   // attempt 5 written — next run it's dead
+    // judge-unavailable is the environment's fault — never terminal
+    const s2 = setup([entry({ name: 'b', slug: 'b',
+      capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_LIVE] } })], [],
+      Array.from({ length: 9 }, (_, i) =>
+        nullLine('b', FLAG_LIVE, 'judge-unavailable', `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`)))
+    await flagCtxMain([...args(s2), '--limit', '5'], { fetchFn: async () => 'L9: fetch(x)', judge: okJudge })
+    expect(loadFlagContexts(s2.spool)[0]!.ai?.verdict).toBe('pass')
   })
 })
