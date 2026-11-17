@@ -55,6 +55,11 @@ export const Verification = z.looseObject({
   opencodeVersion: z.string().optional(),
   verifiedAt: z.string().optional(),
   runUrl: z.string().optional(),
+  /** per-package full verify log — catalog:verify-logs/<file> blob URL, set
+   *  when the failed target dumped a diag log. The docket's 完整日志 link
+   *  prefers this over the shard-job runUrl (a job verifies ~12 targets —
+   *  its page is a batch wall, unreadable on mobile). */
+  logUrl: z.string().optional(),
   logExcerpt: z.string().max(2048).optional(),
   /** SRI (npm) or commit sha (github-kind) of the bytes the verify run actually
    *  measured — the anchor content-addressed reuse + drift checks key on. A

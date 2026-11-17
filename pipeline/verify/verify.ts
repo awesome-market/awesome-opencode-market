@@ -50,6 +50,11 @@ export interface VerifyResult {
   /** per-row link to the producing `verify (N)` job — set by merge, never
    *  written by shards; lands in index.json's verification.runUrl */
   jobUrl?: string
+  /** basename of the per-target full log this row's failures dumped into
+   *  VERIFY_DIAG_DIR — merge publishes it under catalog:verify-logs/ and
+   *  lands verification.logUrl so the issue's 完整日志 link opens THIS
+   *  package's log, not the whole shard job page */
+  diagFile?: string
   /** true when the shard THREW around the package check (sandbox setup, fs,
    *  spawn) rather than measuring the package — an infrastructure signal,
    *  not a verdict. merge drops these: writing them as 'failed' would burn
@@ -463,6 +468,8 @@ export async function verifyPackage(
     try {
       mkdirSync(diagDir, { recursive: true })
       writeFileSync(join(diagDir, diagFile), body.slice(-524_288))
+      // rides every {...base} return below — merge resolves it to logUrl
+      ;(base as { diagFile?: string }).diagFile = diagFile
       console.error(`diag: wrote ${diagFile} (${Math.min(body.length, 524_288)} bytes)`)
     } catch (e) { console.error(`diag: write failed for ${diagFile}: ${String(e).slice(0, 120)}`) }
   }
