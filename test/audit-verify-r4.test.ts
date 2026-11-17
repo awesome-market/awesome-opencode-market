@@ -157,12 +157,14 @@ describe('diagFile → per-package logUrl', () => {
       ])
       const v = m.plugins[0]!.verification
       expect(v.logUrl).toBe(`https://github.com/${repo}/blob/catalog/verify-logs/p-1.0.0.log`)
-    } finally { keep === undefined ? delete process.env.GITHUB_REPOSITORY : process.env.GITHUB_REPOSITORY = keep }
+    } finally { delete process.env.GITHUB_REPOSITORY }
     // no repo env → field absent, never a fabricated URL
+    // (GITHUB_REPOSITORY is always set under Actions — must stay deleted here)
     const m2 = mergeResults(idx([entry()]), [
       { name: 'p', version: '1.0.0', status: 'failed', diagFile: 'p-1.0.0.log', ...base },
     ])
     expect(m2.plugins[0]!.verification.logUrl).toBeUndefined()
+    if (keep !== undefined) process.env.GITHUB_REPOSITORY = keep
     // verified rows / rows without diagFile stay clean
     const m3 = mergeResults(idx([entry()]), [
       { name: 'p', version: '1.0.0', status: 'verified', ...base },
