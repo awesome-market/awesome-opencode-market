@@ -1,0 +1,18 @@
+spec: @bloodyeagle/megamemory@2.6.3
+apiNames: @bloodyeagle/megamemory, megamemory
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Foz9Rb/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38391
+server password [redacted]
+Error: Invalid port '0'. Port must be a number between 1 and 65535.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T19:09:25.893Z level=INFO run=0a5a096a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@bloodyeagle/megamemory@2.6.3\"]" role=cli
+timestamp=2026-11-17T19:09:34.740Z level=INFO run=88fba1a9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T19:09:35.114Z level=INFO run=88fba1a9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T19:09:35.280Z level=INFO run=88fba1a9 message="database schema bootstrap completed" migrations=59 durationMs=166 role=server

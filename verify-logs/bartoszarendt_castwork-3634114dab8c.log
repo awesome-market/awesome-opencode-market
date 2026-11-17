@@ -1,0 +1,32 @@
+spec: bartoszarendt/castwork#3634114dab8c00a20c76d83cffcd77676af226ec
+apiNames: bartoszarendt/castwork, castwork
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-iGkg5d/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37465
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T19:09:23.504Z level=INFO run=0ec559fc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"bartoszarendt/castwork#3634114dab8c00a20c76d83cffcd77676af226ec\"]" role=cli
+timestamp=2026-11-17T19:09:25.205Z level=INFO run=b6aee820 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T19:09:25.459Z level=INFO run=b6aee820 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T19:09:25.477Z level=INFO run=b6aee820 message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
+timestamp=2026-11-17T19:09:25.661Z level=INFO run=b6aee820 message="watcher subscribe" path=/tmp/verify-iGkg5d/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-17T19:09:25.664Z level=INFO run=b6aee820 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-17T19:09:25.665Z level=INFO run=b6aee820 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-17T19:09:25.665Z level=INFO run=b6aee820 message="watcher subscribe" path=/ type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-17T19:09:25.665Z level=INFO run=b6aee820 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-17T19:09:25.666Z level=INFO run=b6aee820 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-17T19:09:25.666Z level=INFO run=b6aee820 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-17T19:09:25.666Z level=INFO run=b6aee820 message="watcher subscribe" path=/tmp/verify-iGkg5d type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-17T19:09:25.666Z level=INFO run=b6aee820 message="watcher started" path=/tmp/verify-iGkg5d type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-17T19:09:25.666Z level=INFO run=b6aee820 message="watcher subscribe" path=/tmp/verify-iGkg5d/u type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-17T19:09:25.667Z level=INFO run=b6aee820 message="watcher started" path=/tmp/verify-iGkg5d/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-17T19:09:25.698Z level=INFO run=b6aee820 message="watcher started" path=/tmp/verify-iGkg5d/u/.config/opencode type=directory backend=inotify ignores=6 http.span=58 role=server
+timestamp=2026-11-17T19:09:25.713Z level=INFO run=b6aee820 message="location services booted" directory=/tmp/verify-iGkg5d/u workspaceID=undefined durationMs=73 http.span=73 role=server
+timestamp=2026-11-17T19:09:25.724Z level=INFO run=b6aee820 msg="loading plugin" id=bartoszarendt/castwork#3634114dab8c00a20c76d83cffcd77676af226ec entrypoint=file:///tmp/verify-iGkg5d/u/cache/opencode/npm/git-castwork-17e177f31a2a/1794942565035/node_modules/castwork/src/cli-main.js http.span=84 role=server
+timestamp=2026-11-17T19:09:25.760Z level=WARN run=b6aee820 message="failed to load plugin" target=bartoszarendt/castwork#3634114dab8c00a20c76d83cffcd77676af226ec ref=err_6e880de2 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=120 role=server
