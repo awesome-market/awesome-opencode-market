@@ -1060,7 +1060,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   }
   if (t.scanPreview?.length) {
     L.push(`- 扫描摘录（前几条，完整清单见${detailPage ? '详情页' : 'index.json'}）：`)
-    for (const s of t.scanPreview) L.push(`  - ${clean(s, 160)}`)
+    for (const s of t.scanPreview) {
+      // same rule:path — L<n> shape as flag rows → same pinned deep link;
+      // a phone reader taps the path instead of hunting the file tree
+      const m = SCAN_FLAG_RE.exec(s)
+      const href = m ? fileHref(m[2]!, +m[3]!) : null
+      L.push(`  - ${href ? clean(s, 160).replace(`${m![2]}`, `[${m![2]}](${href})`) : clean(s, 160)}`)
+    }
   }
   // 风险文件地图 — findings grouped by path answers "WHERE is the risk",
   // which 8 flat excerpt lines can't. Each file links into the judged
