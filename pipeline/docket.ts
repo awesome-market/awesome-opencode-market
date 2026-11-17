@@ -1079,6 +1079,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     }
   }
   if (t.scanPreview?.length) {
+    const preKeys = new Set(prereadKeys(t))
     L.push(`- 扫描摘录（前几条，完整清单见${detailPage ? '详情页' : 'index.json'}）：`)
     for (const s of t.scanPreview) {
       // same rule:path — L<n> shape as flag rows → same pinned deep link;
@@ -1086,6 +1087,15 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const m = SCAN_FLAG_RE.exec(s)
       const href = m ? fileHref(m[2]!, +m[3]!) : null
       L.push(`  - ${href ? clean(s, 160).replace(`${m![2]}`, `[${m![2]}](${href})`) : clean(s, 160)}`)
+      // every flagged excerpt carries the same three-state pre-read as the
+      // flag list — judged verdict, honest failure marker, or cap notice
+      if (m) {
+        const ekey = `${t.name.toLowerCase()}\0${t.version ?? ''}\0${s}`
+        const fc = opts.flagContexts?.get(ekey)
+        if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 200)}`)
+        else if (opts.deadCtx?.has(ekey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
+        else if (!preKeys.has(s) && opts.flagContexts) L.push(`    ↳ 超出 AI 预读上限——未判，请人工看原文`)
+      }
     }
   }
   // 风险文件地图 — findings grouped by path answers "WHERE is the risk",
