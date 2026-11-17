@@ -259,6 +259,19 @@ describe('flag-delta main', () => {
     })
     expect(compareCalls).toBe(0)
   })
+  it('last-chance judge throwing records judge-error, not a crash', async () => {
+    const failed = (i: number) => JSON.stringify(assess({
+      flag: 'sec:repo-moved-since-release:newsha999888777', newSha: 'newsha999888777',
+      ai: null, aiNote: 'compare-fetch-failed', at: `2026-11-16T0${i}:00:00Z` }))
+    const s = setup([ghEntry()], [humanPass], [1, 2, 3, 4].map(i => failed(i)))
+    await flagDeltaMain([...args(s), '--limit', '5'], {
+      compareFn: async () => null,
+      judge: async () => { throw new Error('judge exploded') },
+    })
+    const lines = readFileSync(s.spool, 'utf8').trim().split('\n').map(l => JSON.parse(l) as FlagAssessment)
+    expect(lines[0]!.ai).toBeNull()
+    expect(lines[0]!.aiNote).toContain('judge-error')
+  })
   it('excludes pending entries, non-github sources, and sha-matched pins', async () => {
     const s = setup([
       ghEntry({ name: 'o/pending', approval: 'pending' }),
