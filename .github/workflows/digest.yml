@@ -16,6 +16,12 @@ on:
   schedule:
     - { cron: '15 21 * * *' }
     - { cron: '50 * * * *' }
+  # pushes keep landing while the scheduler sleeps — a merged-PR trigger
+  # gives the watchdog a non-cron evaluation path during a TOTAL schedule
+  # outage (the 2026-11-17 drop took every cron repo-wide for ~5h). The
+  # digest job stays gated to the daily tick; only watchdog/alert jobs run.
+  push:
+    branches: [main]
   workflow_dispatch: {}
   workflow_call: {}   # reusable entry for full-run.yml
 permissions: {}
@@ -24,10 +30,12 @@ jobs:
     # scope guard: a fork's schedule would fail on the missing catalog branch
     # and then alert-spam the fork's tracker. Manual dispatch stays open.
     # Whitelist = the known data planes (org prod + terry2010 current prod).
-    # Schedule gate: render ONLY on the daily tick — the hourly cron is the
-    # watchdog's; an hourly render slides `day` forward and shrinks the
-    # announce→mature objection window it's the anchor for.
-    if: github.event_name != 'schedule' || (contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner) && github.event.schedule == '15 21 * * *')
+    # Render ONLY on the daily tick / manual / reusable-call — the hourly
+    # cron and every push are watchdog ticks. An hourly render would slide
+    # `day` forward and shrink the announce→mature objection window it's
+    # the anchor for; a push-per-merge render would churn the lock for
+    # nothing. Positive enumeration keeps new trigger kinds render-free.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' || (github.event_name == 'schedule' && contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner) && github.event.schedule == '15 21 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency: catalog-branch        # same writer lock as catalog/verify/ingest (I-4)
@@ -140,7 +148,10 @@ jobs:
   # targets plus a stale ai-verdicts.jsonl means the local job died silently
   # and submissions are rotting. Fires a pipeline-alert issue (deduped).
   watchdog:
-    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
+    # whitelist guards BOTH synthetic triggers (schedule AND push): a
+    # fork's cron tick or main-push would eval legs against a catalog
+    # branch it doesn't have and alert-spam the fork's tracker
+    if: (github.event_name != 'schedule' && github.event_name != 'push') || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # contents:read — this job checks out the repo AND fetches the catalog
