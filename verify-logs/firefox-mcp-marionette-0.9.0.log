@@ -3,55 +3,33 @@ apiNames: firefox-mcp-marionette
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-SGIrI5/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-ydOJUr/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:39365
+server listening on http://127.0.0.1:43297
 server password [redacted]
-2026-11-17T21:25:10.555Z firefox-mcp-marionette ready on 127.0.0.1:2828 file roots: /tmp autoLaunch: false profileRoot: /tmp/verify-SGIrI5/u/.mozilla/firefox
+2026-11-17T21:38:59.017Z firefox-mcp-marionette ready on 127.0.0.1:2828 file roots: /tmp autoLaunch: false profileRoot: /tmp/verify-ydOJUr/u/.mozilla/firefox
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-17T21:25:09.384Z level=INFO run=cb1386a0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"firefox-mcp-marionette@0.9.0\"]" role=cli
-timestamp=2026-11-17T21:25:10.064Z level=INFO run=7b409e56 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-17T21:25:10.277Z level=INFO run=7b409e56 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-17T21:25:10.286Z level=INFO run=7b409e56 message="database schema bootstrap completed" migrations=59 durationMs=9 role=server
-timestamp=2026-11-17T21:25:10.507Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u/.config/opencode type=directory ignores=6 http.span=31 role=server
-timestamp=2026-11-17T21:25:10.510Z level=INFO run=7b409e56 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=34 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher subscribe" path=/ type=entries ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.511Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5 type=entries ignores=0 http.span=35 role=server
-timestamp=2026-11-17T21:25:10.512Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5 type=entries backend=node ignores=0 http.span=36 role=server
-timestamp=2026-11-17T21:25:10.512Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u type=entries ignores=0 http.span=36 role=server
-timestamp=2026-11-17T21:25:10.512Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u type=entries backend=node ignores=0 http.span=36 role=server
-timestamp=2026-11-17T21:25:10.534Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u/.config/opencode type=directory backend=inotify ignores=6 http.span=58 role=server
-timestamp=2026-11-17T21:25:10.547Z level=INFO run=7b409e56 message="location services booted" directory=/tmp/verify-SGIrI5/u workspaceID=undefined durationMs=71 http.span=71 role=server
-timestamp=2026-11-17T21:25:10.549Z level=INFO run=7b409e56 msg="loading plugin" id=firefox-mcp-marionette@0.9.0 entrypoint=file:///tmp/verify-SGIrI5/u/cache/opencode/npm/firefox-mcp-marionette@0.9.0/1794950709760/node_modules/firefox-mcp-marionette/src/server.mjs http.span=73 role=server
-timestamp=2026-11-17T21:25:10.556Z level=WARN run=7b409e56 message="failed to load plugin" target=firefox-mcp-marionette@0.9.0 ref=err_db169218 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=80 role=server
-timestamp=2026-11-17T21:25:11.086Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-17T21:25:11.086Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-17T21:25:11.086Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-17T21:25:11.086Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-17T21:25:11.115Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-17T21:25:11.116Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-17T21:25:11.117Z level=INFO run=7b409e56 message="watcher subscribe" path=/tmp/verify-SGIrI5/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-17T21:25:11.118Z level=INFO run=7b409e56 message="watcher started" path=/tmp/verify-SGIrI5/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-17T21:25:11.154Z level=INFO run=7b409e56 message=event event.id=evt_1eb664770001L23HTR0hcpvy66 event.created=1794950711152 event.type=provider.updated event.location.directory=/tmp/verify-SGIrI5/u event.location.workspaceID=undefined event.data={} http.span=678 role=server
-timestamp=2026-11-17T21:25:11.170Z level=INFO run=7b409e56 message=event event.id=evt_1eb664782001zd8VaviDR3DVSx event.created=1794950711170 event.type=model.updated event.location.directory=/tmp/verify-SGIrI5/u event.location.workspaceID=undefined event.data={} http.span=694 role=server
-timestamp=2026-11-17T21:25:11.173Z level=INFO run=7b409e56 message=event event.id=evt_1eb664785001nl8GIdgRQq1Z19 event.created=1794950711173 event.type=agent.updated event.location.directory=/tmp/verify-SGIrI5/u event.location.workspaceID=undefined event.data={} http.span=697 role=server
-timestamp=2026-11-17T21:25:11.173Z level=INFO run=7b409e56 message=event event.id=evt_1eb664785002yUjcYdWdnZeSG5 event.created=1794950711173 event.type=command.updated event.location.directory=/tmp/verify-SGIrI5/u event.location.workspaceID=undefined event.data={} http.span=697 role=server
-timestamp=2026-11-17T21:25:11.448Z level=ERROR run=7b409e56 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=972 role=server
-timestamp=2026-11-17T21:25:11.665Z level=INFO run=7b409e56 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-17T21:25:11.665Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-17T21:25:11.665Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-17T21:25:11.671Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u/AGENTS.md type=file role=server
-timestamp=2026-11-17T21:25:11.672Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-17T21:25:11.692Z level=INFO run=7b409e56 message="watcher stopped" path=/etc type=entries http.span=1216 role=server
-timestamp=2026-11-17T21:25:11.692Z level=INFO run=7b409e56 message="watcher stopped" path=/ type=entries http.span=1216 role=server
-timestamp=2026-11-17T21:25:11.692Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp type=entries http.span=1216 role=server
-timestamp=2026-11-17T21:25:11.692Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5 type=entries http.span=1216 role=server
-timestamp=2026-11-17T21:25:11.692Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u type=entries http.span=1216 role=server
-timestamp=2026-11-17T21:25:11.694Z level=INFO run=7b409e56 message="watcher stopped" path=/tmp/verify-SGIrI5/u/.config/opencode type=directory http.span=1218 role=server
+timestamp=2026-11-17T21:38:57.595Z level=INFO run=0c17213b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"firefox-mcp-marionette@0.9.0\"]" role=cli
+timestamp=2026-11-17T21:38:58.123Z level=INFO run=382b5e80 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T21:38:58.681Z level=INFO run=382b5e80 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T21:38:58.706Z level=INFO run=382b5e80 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server
+timestamp=2026-11-17T21:38:58.963Z level=INFO run=382b5e80 message="watcher subscribe" path=/tmp/verify-ydOJUr/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-17T21:38:58.967Z level=INFO run=382b5e80 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-17T21:38:58.967Z level=INFO run=382b5e80 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-17T21:38:58.967Z level=INFO run=382b5e80 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-17T21:38:58.968Z level=INFO run=382b5e80 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-17T21:38:58.968Z level=INFO run=382b5e80 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-17T21:38:58.968Z level=INFO run=382b5e80 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-17T21:38:58.968Z level=INFO run=382b5e80 message="watcher subscribe" path=/tmp/verify-ydOJUr type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-17T21:38:58.968Z level=INFO run=382b5e80 message="watcher started" path=/tmp/verify-ydOJUr type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-17T21:38:58.969Z level=INFO run=382b5e80 message="watcher subscribe" path=/tmp/verify-ydOJUr/u type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-17T21:38:58.969Z level=INFO run=382b5e80 message="watcher started" path=/tmp/verify-ydOJUr/u type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-17T21:38:58.990Z level=INFO run=382b5e80 message="watcher started" path=/tmp/verify-ydOJUr/u/.config/opencode type=directory backend=inotify ignores=6 http.span=47 role=server
+timestamp=2026-11-17T21:38:58.999Z level=INFO run=382b5e80 message="location services booted" directory=/tmp/verify-ydOJUr/u workspaceID=undefined durationMs=55 http.span=56 role=server
+timestamp=2026-11-17T21:38:59.005Z level=INFO run=382b5e80 msg="loading plugin" id=firefox-mcp-marionette@0.9.0 entrypoint=file:///tmp/verify-ydOJUr/u/cache/opencode/npm/firefox-mcp-marionette@0.9.0/1794951537751/node_modules/firefox-mcp-marionette/src/server.mjs http.span=62 role=server
+timestamp=2026-11-17T21:38:59.017Z level=WARN run=382b5e80 message="failed to load plugin" target=firefox-mcp-marionette@0.9.0 ref=err_1d2dee73 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=74 role=server
