@@ -295,3 +295,45 @@ describe('flag-context main', () => {
     await flagCtxMain(['--index', s2.idx, '--verdicts', s2.vd, '--contexts', s2.cd], { fetchFn: async () => FILE, judge: okJudge })
   })
 })
+
+describe('finding-level pre-reads — the 风险文件 rows get judged too', () => {
+  const F1 = 'child-process:package/scripts/check.mjs — L86: const { execFileSync } = await import("node:child_process")'
+  const F2 = 'network-call:package/scripts/check.mjs — L40: fetch(u)'
+  const F3 = 'obfuscation:package/dist/bundle.js — L9: atob(x)'
+  const WITH_FINDINGS = () => entry({
+    capabilities: { scannedAt: 't', findings: [F1, F2, F3], redFlags: [] },
+  })
+
+  it('findings behind hotFile rows are fetched, judged, and keyed by the finding string', async () => {
+    const s = setup([WITH_FINDINGS()])
+    const urls: string[] = []
+    await flagCtxMain([...args(s), '--limit', '20'], {
+      fetchFn: async u => { urls.push(u); return FILE }, judge: okJudge,
+    })
+    const out = loadFlagContexts(s.spool)
+    expect(out).toHaveLength(3)
+    expect(out.map(a => a.flag).sort()).toEqual([F1, F2, F3].sort())
+    // same file fetched once via the shared cache
+    expect(new Set(urls).size).toBe(2)
+  })
+
+  it('findings already in redFlags are not re-judged — the flag pass owns them', async () => {
+    const s = setup([entry({ capabilities: { scannedAt: 't',
+      findings: [F1, F3], redFlags: [F1] } })])
+    const out: string[] = []
+    await flagCtxMain([...args(s), '--limit', '20'], {
+      fetchFn: async () => FILE,
+      judge: async m => { out.push(m.summary); return { verdict: 'pass', reasonZh: '', reasonEn: '' } },
+    })
+    const spool = loadFlagContexts(s.spool)
+    expect(spool.map(a => a.flag).sort()).toEqual([F1, F3].sort())  // F1 once, as the flag
+  })
+
+  it('top-10 hotFile bound: findings outside the rendered rows wait', async () => {
+    // 11 files × 1 finding each — only the first 10 files' findings queue
+    const findings = Array.from({ length: 11 }, (_, i) => `network-call:package/f${String(i).padStart(2, '0')}.js — L2: fetch(${i})`)
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings, redFlags: [] } })])
+    await flagCtxMain([...args(s), '--limit', '20'], { fetchFn: async () => FILE, judge: okJudge })
+    expect(loadFlagContexts(s.spool)).toHaveLength(10)
+  })
+})

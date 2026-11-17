@@ -36,6 +36,9 @@ export const VerifyResultFile = z.object({
   // /tmp/jobs.json so the published runUrl opens the failing shard's log
   // view, not the whole-run job list
   jobUrl: z.string().max(500).optional(),
+  // basename of the per-target full log the shard dumped (verify-logs/<file>
+  // on catalog) — basename only so a crafted row can't path-traverse
+  diagFile: z.string().max(300).regex(/^[^/\\]+$/).optional(),
   // shard threw around the package check — infrastructure signal, dropped below
   harness: z.boolean().optional(),
   // harness generation stamp — survives into index.json so plan can amnesty
@@ -71,6 +74,12 @@ function toVerification(r: VerifyResult, runUrl?: string, prev?: PluginEntry['ve
     ...(r.harnessGen ? { harnessGen: r.harnessGen } : {}),
     ...(r.integrity ? { integrity: r.integrity } : {}),
     ...(r.jobUrl ?? runUrl ? { runUrl: r.jobUrl ?? runUrl } : {}),
+    // per-package full log on the catalog branch — the docket's 完整日志
+    // link opens THIS target's evidence instead of the shard job page
+    // (one job verifies ~12 targets; the job page is a batch wall)
+    ...(r.diagFile && env.GITHUB_REPOSITORY
+      ? { logUrl: `${env.GITHUB_SERVER_URL ?? 'https://github.com'}/${env.GITHUB_REPOSITORY}/blob/catalog/verify-logs/${r.diagFile}` }
+      : {}),
     ...(excerpt ? { logExcerpt: excerpt } : {}),
     // consecutive-failure counter — plan lets a recent failure back into the
     // queue while retries < 3 (V-3). Cleared whenever the status isn't failed.

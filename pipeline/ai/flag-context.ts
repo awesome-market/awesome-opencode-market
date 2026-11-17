@@ -69,6 +69,28 @@ const CTX_LINES = 35          // lines of context each side of the hit
 const CTX_FILE_CAP = 256_000  // minified megabundles → judge can't read anyway
 const CTX_CHAR_CAP = 4_000    // window sent to the judge
 const FLAGS_PER_ENTRY = 12    // an issue renders ≤20 flags; top 12 pre-read
+const FINDINGS_PER_ENTRY = 15 // docket's 风险文件 TOP+ renders ≤10 files — the findings behind them get the same pre-read
+
+/** the findings behind the docket's 风险文件 TOP+ list — same aggregation:
+ *  group scan-format findings by path (excluding ones already red-flagged,
+ *  which the flag pass above covers), rank by hit count, keep top 10 files.
+ *  `rule:path — L<n>:` parsing is identical to flag lines. */
+const hotFileFindings = (e: Plugin): string[] => {
+  const flagSet = new Set(e.capabilities.redFlags)
+  const byFile = new Map<string, string[]>()
+  for (const f of e.capabilities.findings) {
+    if (flagSet.has(f)) continue
+    const m = SCAN_FLAG_RE.exec(f)
+    if (!m) continue
+    const arr = byFile.get(m[2]!) ?? []
+    arr.push(f)
+    byFile.set(m[2]!, arr)
+  }
+  return [...byFile.entries()]
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    .slice(0, 10)
+    .flatMap(([, findings]) => findings)
+}
 
 /** file-window fetch — unpkg for npm (prefix-stripped tree, same rule as
  *  the docket fileHref), raw.githubusercontent for github@pinned sha. */
@@ -116,7 +138,8 @@ type Plugin = CatalogIndex['plugins'][number]
 function flaggedEntries(idx: CatalogIndex, verdictsPath: string): Plugin[] {
   const human = latestHumanVerdicts(loadVerdicts(verdictsPath))
   return idx.plugins.filter(e => {
-    if (!e.capabilities.redFlags.some(f => SCAN_FLAG_RE.test(f))) return false
+    if (!e.capabilities.redFlags.some(f => SCAN_FLAG_RE.test(f)) &&
+        !e.capabilities.findings.some(f => SCAN_FLAG_RE.test(f))) return false
     const v = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
     return human.get(vkey(e.name, v))?.verdict !== 'pass'
   })
@@ -142,12 +165,18 @@ export async function main(
   const works: { e: Plugin; flag: string; rule: string; path: string; line: number; ver: string | null }[] = []
   for (const e of flaggedEntries(idx, verdictsPath!)) {
     const ver = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
-    for (const flag of e.capabilities.redFlags) {
+    // flags first (harder decisions), then the findings behind the rendered
+    // 风险文件 rows — same fetch-window + judge, one context per finding
+    const candidates = [
+      ...e.capabilities.redFlags.map(flag => ({ flag, cap: FLAGS_PER_ENTRY })),
+      ...hotFileFindings(e).map(flag => ({ flag, cap: FLAGS_PER_ENTRY + FINDINGS_PER_ENTRY })),
+    ]
+    for (const { flag, cap } of candidates) {
       const m = SCAN_FLAG_RE.exec(flag)
       if (!m) continue
+      if (works.filter(w => w.e === e).length >= cap) break
       if (judged.has(`${e.name.toLowerCase()}\0${ver ?? ''}\0${flag}`)) continue
       works.push({ e, flag, rule: m[1]!, path: m[2]!, line: +m[3]!, ver })
-      if (works.filter(w => w.e === e).length >= FLAGS_PER_ENTRY) break
     }
     if (works.length >= limit) break
   }

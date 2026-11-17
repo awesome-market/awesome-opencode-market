@@ -9,7 +9,7 @@
 //     a dir) — an ENOTDIR crash recorded harness:true, making the package
 //     permanently unverifiable instead of honestly failed
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -143,5 +143,51 @@ describe('audit#3 — findGuiBundle tolerates malformed install trees', () => {
     writeFileSync(join(nm, '@scope'), 'a file, not a scope directory')
     const found = findGuiBundle(home, 'p', spec)
     expect('error' in found).toBe(true)   // graceful "not found", not a thrown ENOTDIR
+  })
+})
+
+describe('diagFile → per-package logUrl', () => {
+  it('a failed row carrying diagFile publishes a catalog blob URL; env-less merge omits it', () => {
+    const repo = 'awesome-market/awesome-opencode-market'
+    const keep = process.env.GITHUB_REPOSITORY
+    process.env.GITHUB_REPOSITORY = repo
+    try {
+      const m = mergeResults(idx([entry()]), [
+        { name: 'p', version: '1.0.0', status: 'failed', diagFile: 'p-1.0.0.log', ...base },
+      ])
+      const v = m.plugins[0]!.verification
+      expect(v.logUrl).toBe(`https://github.com/${repo}/blob/catalog/verify-logs/p-1.0.0.log`)
+    } finally { delete process.env.GITHUB_REPOSITORY }
+    // no repo env → field absent, never a fabricated URL
+    // (GITHUB_REPOSITORY is always set under Actions — must stay deleted here)
+    const m2 = mergeResults(idx([entry()]), [
+      { name: 'p', version: '1.0.0', status: 'failed', diagFile: 'p-1.0.0.log', ...base },
+    ])
+    expect(m2.plugins[0]!.verification.logUrl).toBeUndefined()
+    if (keep !== undefined) process.env.GITHUB_REPOSITORY = keep
+    // verified rows / rows without diagFile stay clean
+    const m3 = mergeResults(idx([entry()]), [
+      { name: 'p', version: '1.0.0', status: 'verified', ...base },
+    ])
+    expect(m3.plugins[0]!.verification.logUrl).toBeUndefined()
+  })
+  it('path-traversal diagFile is rejected by the result schema', async () => {
+    // merge.ts loads results-*.json through a zod gate — a crafted row with
+    // a slashed diagFile must drop, not write a traversal into the index
+    const { execFileSync } = await import('node:child_process')
+    const d = mkdtempSync(join(tmpdir(), 'vm-'))
+    writeFileSync(join(d, 'i.json'), JSON.stringify(idx([entry()])))
+    mkdirSync(join(d, 'res'))
+    writeFileSync(join(d, 'res/results-0.json'), JSON.stringify([
+      { name: 'p', version: '1.0.0', status: 'failed', level: 'install',
+        opencodeVersion: '2.3.0', verifiedAt: '2026-01-02T00:00:00Z', diagFile: '../evil.log' },
+    ]))
+    process.env.GITHUB_REPOSITORY = 'o/r'
+    try {
+      execFileSync('npx', ['tsx', 'pipeline/verify/merge.ts', join(d, 'i.json'), join(d, 'res'), join(d, 'out.json')],
+        { cwd: join(import.meta.dirname, '..'), stdio: 'pipe' })
+      const out = JSON.parse(readFileSync(join(d, 'out.json'), 'utf8'))
+      expect(out.plugins[0].verification.logUrl).toBeUndefined()
+    } finally { delete process.env.GITHUB_REPOSITORY }
   })
 })

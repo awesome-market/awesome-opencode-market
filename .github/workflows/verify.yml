@@ -255,6 +255,11 @@ jobs:
         run: npm ci
       - uses: actions/download-artifact@v4
         with: { pattern: results-*, path: /tmp/results, merge-multiple: true }
+      # per-target full logs from failed verifications — published under
+      # catalog:verify-logs/ below so the review issue's 完整日志 link opens
+      # THIS package's evidence (the shard job page batches ~12 targets)
+      - uses: actions/download-artifact@v4
+        with: { pattern: vlogs-*, path: /tmp/vlogs, merge-multiple: true }
       # cancelled-merge recovery: when the catalog-branch concurrency lock
       # evicts a PENDING merge (another writer queued in), its verify shards'
       # results-* artifacts sit unmerged on that run. Sweep up to 3 previous
@@ -372,7 +377,15 @@ jobs:
               echo "::warning::release.ts failed — verify results committed without verdict fold (next catalog run re-derives)"
             fi
             cp /tmp/index.new.json /tmp/cat/index.json
+            # fold this run's per-target diag logs into the data plane — each
+            # <name>-<ver>.log overwrites its predecessor so the dir can't
+            # grow stale logs (a later success simply stops refreshing it)
+            mkdir -p /tmp/cat/verify-logs
+            if compgen -G '/tmp/vlogs/*.log' > /dev/null; then
+              cp /tmp/vlogs/*.log /tmp/cat/verify-logs/
+            fi
             git -C /tmp/cat add index.json
+            git -C /tmp/cat add -A verify-logs 2>/dev/null || true   # empty dir → pathspec misses — harmless, index.json still commits
             # staged-diff precheck (same C-2 fix as catalog-append): a real
             # commit failure must not pass as "no changes" — the push that
             # follows would no-op-succeed and the results would silently vanish

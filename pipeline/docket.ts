@@ -103,13 +103,19 @@ export interface DocketTarget {
   /** files carrying the most scan findings — the "where's the risk" map.
    *  Rendered with per-source links (github blob@judged-sha / npm unpkg)
    *  so the reviewer taps into the suspicious file, not index.json */
-  hotFiles?: { path: string; rules: string; n: number; doc: boolean; line?: number }[]
+  hotFiles?: { path: string; rules: string; n: number; doc: boolean; line?: number;
+    /** raw finding strings behind this row — flag-context lookup keys,
+     *  not rendered directly */
+    findings?: string[] }[]
   /** findings inside doc-like paths — separates signal (code hits) from
    *  the doc-example noise AI reasons keep citing */
   docFindings?: number
   /** verify failure evidence — '装不上' without the log is unauditable */
   verifyLog?: string
   verifyRunUrl?: string
+  /** per-package full log blob on catalog — preferred 完整日志 target over
+   *  the shard-job runUrl (a job page batches ~12 targets of output) */
+  verifyLogUrl?: string
   /** package source for out-of-issue links — npm → npmjs/unpkg, github →
    *  repo + blob@pin links */
   src?: { kind: 'npm' | 'github'; id: string; repo?: string; version?: string }
@@ -251,7 +257,7 @@ export function docketTargets(
     // reviewer's first question and 8 flat excerpt lines can't answer it.
     // Format is `rule:path — L<n>: <code>` (scan.ts fmtFinding); rule ends
     // at the first ':', path runs to the ' — L' evidence marker.
-    const byFile = new Map<string, { rules: Set<string>; n: number; line: number }>()
+    const byFile = new Map<string, { rules: Set<string>; n: number; line: number; findings: string[] }>()
     let docFindings = 0
     for (const f of slot.capabilities.findings) {
       if (flagSet.has(f)) continue
@@ -260,8 +266,8 @@ export function docketTargets(
       const rule = ci > 0 ? f.slice(0, ci) : f
       const path = findingPath(f)
       if (!path) continue
-      const rec = byFile.get(path) ?? { rules: new Set<string>(), n: 0, line: 0 }
-      rec.rules.add(rule); rec.n++
+      const rec = byFile.get(path) ?? { rules: new Set<string>(), n: 0, line: 0, findings: [] as string[] }
+      rec.rules.add(rule); rec.n++; rec.findings.push(f)
       // first finding line per file — renders as :L<n> and anchors github links
       if (!rec.line && li > ci) rec.line = parseInt(f.slice(li + 4), 10) || 0
       byFile.set(path, rec)
@@ -274,6 +280,7 @@ export function docketTargets(
         path, n: r.n, rules: [...r.rules].slice(0, 4).join(' '),
         doc: DOCISH.test(path) || DOCDIR.test(path),
         ...(r.line ? { line: r.line } : {}),
+        findings: r.findings,
       }))
     const meta: SlotMeta = {
       findings: slot.capabilities.findings.length,
@@ -298,6 +305,7 @@ export function docketTargets(
       // upstream, clean() bounds it again at render
       ...(slot.verification.logExcerpt ? { verifyLog: slot.verification.logExcerpt } : {}),
       ...(slot.verification.runUrl ? { verifyRunUrl: slot.verification.runUrl } : {}),
+      ...(slot.verification.logUrl ? { verifyLogUrl: slot.verification.logUrl } : {}),
       // source identity for package links — slot (pendingUpdate) doesn't
       // carry source, the ENTRY does
       ...(e.source?.kind ? { src: {
@@ -919,7 +927,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       .map(l => clean(unwrapLogLine(l.trim()).slice(0, 260), 260)).filter(Boolean)
     for (const l of vlogLines.slice(0, 8)) L.push(`  - ${l}`)
     if (vlogLines.length > 8) L.push(`  - …共 ${vlogLines.length} 行`)
-    if (t.verifyRunUrl) L.push(`  - [本次装测完整日志](${clean(t.verifyRunUrl, 300)})`)
+    if (t.verifyLogUrl ?? t.verifyRunUrl)
+      L.push(`  - [本次装测完整日志](${clean(t.verifyLogUrl ?? t.verifyRunUrl!, 300)})` +
+        `${t.verifyLogUrl && t.verifyRunUrl ? `（[装测 job](${clean(t.verifyRunUrl, 300)})）` : ''}`)
   }
   // package identity — "这是什么" before "安不安全". Pending entries have
   // no site page, so the npm/GitHub link IS the only way to see the package.
@@ -1059,6 +1069,15 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const href = fileHref(f.path, f.line)
       const name = `\`${clean(f.path, 120)}${f.line ? `:L${f.line}` : ''}\``
       L.push(`  - ${href ? `[${name}](${href})` : name} — ${clean(f.rules, 80)} ×${f.n}${f.doc ? ' 📄' : ''}`)
+      // per-finding AI pre-reads (flag-context): the same "confirm a one-line
+      // answer instead of opening a code wall on mobile" as the flag list.
+      // Any ⚠️ concern outranks passes — one line per file, worst first.
+      const ctxs = (f.findings ?? [])
+        .map(fx => opts.flagContexts?.get(`${t.name.toLowerCase()}\0${t.version ?? ''}\0${fx}`))
+        .filter((c): c is FlagContext => !!c?.ai)
+      const bad = ctxs.find(c => c.ai!.verdict === 'concern')
+      if (bad) L.push(`    ↳ AI 初筛：⚠️ 疑似异常——${clean(bad.ai!.reasonZh, 200)}`)
+      else if (ctxs.length) L.push(`    ↳ AI 初筛：${ctxs.length === f.n ? '全部' : `${ctxs.length} 处`}倾向良性——${clean(ctxs[0]!.ai!.reasonZh, 200)}`)
     }
   }
   if (t.verdictSha && t.integrity && t.verdictSha !== t.integrity) {
