@@ -87,8 +87,8 @@ export function latestAssessments(list: FlagAssessment[]): Map<string, FlagAsses
 
 const MOVED_FLAG_RE = /^sec:repo-moved-since-release:/
 
-interface JudgeResp { verdict: 'pass' | 'concern'; reasonZh: string; reasonEn: string }
-type JudgeFn = (material: { summary: string; commits: string; patches: string }, think: boolean) => Promise<JudgeResp>
+export interface JudgeResp { verdict: 'pass' | 'concern'; reasonZh: string; reasonEn: string }
+export type JudgeFn = (material: { summary: string; commits: string; patches: string }, think: boolean) => Promise<JudgeResp>
 
 /** drift-scoped prompt — the question is "did THESE changes introduce
  *  risk", not "is this package safe". Commit messages, file paths and
@@ -109,17 +109,18 @@ function parseJudgeResp(content: string): JudgeResp {
 }
 
 /** omlx judge for the delta — same endpoint/contract as diagnose's
- *  ornithReview. */
-const omlxJudge =
-  (base: string, model: string, key: string): JudgeFn =>
+ *  ornithReview. system/user are parameters so sibling reviewers
+ *  (flag-context) reuse the plumbing with their own scoped prompt. */
+export const omlxJudge =
+  (base: string, model: string, key: string, system: string = DELTA_SYSTEM, user: (m: { summary: string; commits: string; patches: string }) => string = deltaUser): JudgeFn =>
   async (material, think) => {
     const body = {
       model,
       ...(think ? {} : { chat_template_kwargs: { enable_thinking: false } }),
       max_tokens: 4096,
       messages: [
-        { role: 'system', content: DELTA_SYSTEM },
-        { role: 'user', content: deltaUser(material) },
+        { role: 'system', content: system },
+        { role: 'user', content: user(material) },
       ],
     }
     const res = await fetch(`${base}/chat/completions`, {
@@ -146,16 +147,17 @@ const execFileP = promisify(execFile)
 const DEVIN_REVIEW_DIR = join(tmpdir(), 'opencode-market-devin-review')
 
 /** AI_BACKEND=devin judge — one `devin -p` session per delta assessment,
- *  same drift prompt and verdict schema as the omlx path. `think` is an
- *  omlx-only knob (chat_template); the devin CLI has no such switch. */
-const devinJudge =
-  (model: string): JudgeFn =>
+ *  same verdict schema as the omlx path. `think` is an omlx-only knob
+ *  (chat_template); the devin CLI has no such switch. system/user are
+ *  parameters for sibling reviewers (flag-context). */
+export const devinJudge =
+  (model: string, system: string = DELTA_SYSTEM, user: (m: { summary: string; commits: string; patches: string }) => string = deltaUser): JudgeFn =>
   async (material) => {
     mkdirSync(DEVIN_REVIEW_DIR, { recursive: true })
     const cfg = join(DEVIN_REVIEW_DIR, 'devin-config.json')
     writeFileSync(cfg, DEVIN_REVIEW_CONFIG_JSON)
     const pf = join(DEVIN_REVIEW_DIR, `flagdelta-${process.pid}-${Date.now()}.txt`)
-    writeFileSync(pf, `${DELTA_SYSTEM}\n\n${deltaUser(material)}\n\nThis is a text-only review task — do not use any tools, do not read or modify any files. Reply with ONLY the JSON object.`)
+    writeFileSync(pf, `${system}\n\n${user(material)}\n\nThis is a text-only review task — do not use any tools, do not read or modify any files. Reply with ONLY the JSON object.`)
     const run = async (): Promise<string> => {
       try {
         const { stdout } = await execFileP('devin',

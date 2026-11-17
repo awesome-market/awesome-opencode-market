@@ -42,6 +42,7 @@ import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from
 import { explainFlag } from './scan/flagExplain.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
+import { loadFlagContexts, latestFlagContexts, type FlagContext } from './ai/flag-context.ts'
 
 export interface DocketTarget {
   name: string
@@ -573,6 +574,10 @@ export interface IssueBodyOpts {
    *  repo-moved flags. Advisory evidence for the human verdict, never a
    *  substitute: the freshness gate still requires source:human. */
   assessments?: Map<string, FlagAssessment> | null
+  /** flag-context per-flag AI pre-reads keyed "name\0version\0flag" — the
+   *  judge's "去向本地还是外发" answer for each scan flag. Advisory like
+   *  assessments: the flag still wants a human verdict. */
+  flagContexts?: Map<string, FlagContext> | null
   /** a decision label (verdict:pass/concern) is stuck on the issue but no
    *  human verdict landed in the jsonl — the write-back job failed; the
    *  label event won't re-fire, so say so on the body instead of letting
@@ -1001,6 +1006,11 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       // nothing — the explainer carries "为什么报警 + 去核实什么"
       const ex = explainFlag(f)
       if (ex) L.push(`    ↳ ${clean(ex.zh, 240)}`)
+      // flag-context AI pre-read — the judge's one-line answer to the
+      // explainer's question (去向本地还是外发), so the human spot-check
+      // confirms instead of reconstructs. Key mirrors latestFlagContexts.
+      const fc = opts.flagContexts?.get(`${t.name.toLowerCase()}\0${t.version ?? ''}\0${f}`)
+      if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 240)}`)
     }
     // two provenances share one list: sec:* identity signals (the trigger)
     // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
@@ -1147,6 +1157,10 @@ export async function main(
     if (raw === null) console.warn(`[docket] assessments ${assessPath} missing/unreadable — rendering without AI 初筛`)
     else if (raw.trim() && assessments!.size === 0) console.warn(`[docket] assessments ${assessPath} has content but zero parseable lines — rendering without AI 初筛`)
   }
+  // flag-context per-flag AI pre-reads — same advisory posture: absent/
+  // corrupt degrades to "no 初筛 line", never a sync failure
+  const ctxPath = arg('--contexts')
+  const flagContexts = ctxPath ? latestFlagContexts(loadFlagContexts(ctxPath)) : undefined
   // closeReason needs the raw maps too — claiming "verdict 已决议" without
   // checking the key is how a version-bumped/clock-reset issue used to close
   // with a pointer to a judgment that never existed
@@ -1369,7 +1383,7 @@ export async function main(
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
         ...(cl ? ['--label', cl] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
-        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null })]
+        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -1405,7 +1419,7 @@ export async function main(
       .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
       .sort()
     const stuck = stuckList.length ? stuckList.join('`, `') : null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()
