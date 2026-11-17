@@ -1,0 +1,26 @@
+spec: opencode-cn@1.2.27
+apiNames: opencode-cn
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-NesTFW/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39441
+server password [redacted]
+OpenCode Chinese Localization Tool
+==================================
+
+[31m错误: 未找到 OpenCode 安装目录[0m
+[33m
+请选择以下方式之一：[0m
+[33m  1. 设置环境变量: export OPENCODE_SOURCE_DIR=/path/to/opencode[0m
+[33m  2. 自动安装: opencode-cn-localize --install[0m
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T11:26:02.045Z level=INFO run=0053ecad message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-cn@1.2.27\"]" role=cli
+timestamp=2026-11-17T11:26:02.801Z level=INFO run=e8b722e2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T11:26:03.650Z level=INFO run=e8b722e2 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T11:26:03.944Z level=INFO run=e8b722e2 message="database schema bootstrap completed" migrations=59 durationMs=294 role=server
+timestamp=2026-11-17T11:26:04.533Z level=INFO run=9fbcc1d1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"--version\"]" role=cli

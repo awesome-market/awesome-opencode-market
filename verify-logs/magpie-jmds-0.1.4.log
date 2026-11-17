@@ -1,0 +1,32 @@
+spec: magpie-jmds@0.1.4
+apiNames: magpie-jmds
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vYmj8X/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45351
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T11:26:02.525Z level=INFO run=2d9f4d98 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-jmds@0.1.4\"]" role=cli
+timestamp=2026-11-17T11:26:03.078Z level=INFO run=50594f21 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T11:26:03.328Z level=INFO run=50594f21 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T11:26:03.344Z level=INFO run=50594f21 message="database schema bootstrap completed" migrations=59 durationMs=16 role=server
+timestamp=2026-11-17T11:26:03.672Z level=INFO run=50594f21 message="watcher subscribe" path=/tmp/verify-vYmj8X/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-17T11:26:03.677Z level=INFO run=50594f21 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-17T11:26:03.678Z level=INFO run=50594f21 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-17T11:26:03.679Z level=INFO run=50594f21 message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-17T11:26:03.679Z level=INFO run=50594f21 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-17T11:26:03.680Z level=INFO run=50594f21 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-17T11:26:03.680Z level=INFO run=50594f21 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-17T11:26:03.681Z level=INFO run=50594f21 message="watcher subscribe" path=/tmp/verify-vYmj8X type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-17T11:26:03.681Z level=INFO run=50594f21 message="watcher started" path=/tmp/verify-vYmj8X type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-17T11:26:03.681Z level=INFO run=50594f21 message="watcher subscribe" path=/tmp/verify-vYmj8X/u type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-17T11:26:03.682Z level=INFO run=50594f21 message="watcher started" path=/tmp/verify-vYmj8X/u type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-17T11:26:03.712Z level=INFO run=50594f21 message="watcher started" path=/tmp/verify-vYmj8X/u/.config/opencode type=directory backend=inotify ignores=6 http.span=80 role=server
+timestamp=2026-11-17T11:26:03.724Z level=INFO run=50594f21 message="location services booted" directory=/tmp/verify-vYmj8X/u workspaceID=undefined durationMs=92 http.span=92 role=server
+timestamp=2026-11-17T11:26:03.728Z level=INFO run=50594f21 msg="loading plugin" id=magpie-jmds@0.1.4 entrypoint=file:///tmp/verify-vYmj8X/u/cache/opencode/npm/magpie-jmds@0.1.4/1794914762700/node_modules/magpie-jmds/index.mjs http.span=96 role=server
+timestamp=2026-11-17T11:26:03.731Z level=WARN run=50594f21 message="failed to load plugin" target=magpie-jmds@0.1.4 ref=err_0f7ddfd5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=99 role=server

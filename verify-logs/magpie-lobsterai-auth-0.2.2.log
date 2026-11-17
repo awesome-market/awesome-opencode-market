@@ -1,0 +1,32 @@
+spec: magpie-lobsterai-auth@0.2.2
+apiNames: magpie-lobsterai-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Tjs3kw/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40771
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T11:26:14.384Z level=INFO run=a3856eff message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-lobsterai-auth@0.2.2\"]" role=cli
+timestamp=2026-11-17T11:26:15.257Z level=INFO run=c843d13e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T11:26:15.754Z level=INFO run=c843d13e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T11:26:15.788Z level=INFO run=c843d13e message="database schema bootstrap completed" migrations=59 durationMs=34 role=server
+timestamp=2026-11-17T11:26:16.226Z level=INFO run=c843d13e message="watcher subscribe" path=/tmp/verify-Tjs3kw/u/.config/opencode type=directory ignores=6 http.span=55 role=server
+timestamp=2026-11-17T11:26:16.231Z level=INFO run=c843d13e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-17T11:26:16.231Z level=INFO run=c843d13e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-17T11:26:16.232Z level=INFO run=c843d13e message="watcher subscribe" path=/ type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-17T11:26:16.232Z level=INFO run=c843d13e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-17T11:26:16.232Z level=INFO run=c843d13e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-17T11:26:16.233Z level=INFO run=c843d13e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-17T11:26:16.233Z level=INFO run=c843d13e message="watcher subscribe" path=/tmp/verify-Tjs3kw type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-17T11:26:16.233Z level=INFO run=c843d13e message="watcher started" path=/tmp/verify-Tjs3kw type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-17T11:26:16.234Z level=INFO run=c843d13e message="watcher subscribe" path=/tmp/verify-Tjs3kw/u type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-17T11:26:16.234Z level=INFO run=c843d13e message="watcher started" path=/tmp/verify-Tjs3kw/u type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-17T11:26:16.258Z level=INFO run=c843d13e message="watcher started" path=/tmp/verify-Tjs3kw/u/.config/opencode type=directory backend=inotify ignores=6 http.span=87 role=server
+timestamp=2026-11-17T11:26:16.291Z level=INFO run=c843d13e msg="loading plugin" id=magpie-lobsterai-auth@0.2.2 entrypoint=file:///tmp/verify-Tjs3kw/u/cache/opencode/npm/magpie-lobsterai-auth@0.2.2/1794914774676/node_modules/magpie-lobsterai-auth/index.mjs http.span=120 role=server
+timestamp=2026-11-17T11:26:16.299Z level=WARN run=c843d13e message="failed to load plugin" target=magpie-lobsterai-auth@0.2.2 ref=err_2079584b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=128 role=server
+timestamp=2026-11-17T11:26:16.320Z level=INFO run=c843d13e message="location services booted" directory=/tmp/verify-Tjs3kw/u workspaceID=undefined durationMs=148 http.span=149 role=server
