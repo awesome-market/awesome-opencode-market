@@ -1131,7 +1131,7 @@ describe('audit10 client hardening', () => {
   it('install: a second call inside the pin-recheck window → installRunning; cancelInstall reaches pending claims', async () => {
     const name = 'a10-race-pkg'
     const IDX = { version: '1', generatedAt: 't', categories: {}, removed: [],
-      plugins: [{ name, slug: name, type: 'plugin', contains: ['plugin'], approval: 'approved', latestVersion: '1.0.0', source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc1234' } }] }
+      plugins: [{ name, slug: name, type: 'skill', contains: ['skill'], approval: 'approved', latestVersion: '1.0.0', source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc1234' } }] }
     const env = envOf()
     const prevIdx = env.OPENCODE_MARKET_INDEX; env.OPENCODE_MARKET_INDEX = 'https://a10.example/index.json'
     const prevPath = env.PATH; env.PATH = '/nonexistent-a10'   // if it ever spawns, it must fail
