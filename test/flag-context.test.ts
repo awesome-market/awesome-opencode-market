@@ -300,8 +300,8 @@ describe('finding-level pre-reads — the 风险文件 rows get judged too', () 
   const F1 = 'child-process:package/scripts/check.mjs — L86: const { execFileSync } = await import("node:child_process")'
   const F2 = 'network-call:package/scripts/check.mjs — L40: fetch(u)'
   const F3 = 'obfuscation:package/dist/bundle.js — L9: atob(x)'
-  const WITH_FINDINGS = (over: object = {}) => entry({
-    capabilities: { scannedAt: 't', findings: [F1, F2, F3], redFlags: [], ...over as never },
+  const WITH_FINDINGS = () => entry({
+    capabilities: { scannedAt: 't', findings: [F1, F2, F3], redFlags: [] },
   })
 
   it('findings behind hotFile rows are fetched, judged, and keyed by the finding string', async () => {

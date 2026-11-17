@@ -494,19 +494,19 @@ describe('issueBody', () => {
     expect(bare).toContain('credential-read')
   })
   it('风险文件 rows aggregate per-finding pre-reads — any concern wins', () => {
+    const F_NET = 'network-call:src/index.js — L10: fetch("https://evil.example")'
+    const F_CP = 'child-process:src/index.js — L20: execSync(cmd)'
+    const F_DOC = 'network-call:README.md — L30: curl example'
     const t = docketTargets(idx([e({ capabilities: { scannedAt: 't',
-      findings: [
-        'network-call:src/index.js — L10: fetch("https://evil.example")',
-        'child-process:src/index.js — L20: execSync(cmd)',
-        'network-call:README.md — L30: curl example',
-        'network-call:src/net.js — L5: http.get(u)',
-      ], redFlags: [] } })]), [v({ verdict: 'concern' })])[0]!
+      findings: [F_NET, F_CP, F_DOC, 'network-call:src/net.js — L5: http.get(u)'],
+      redFlags: [] } })]), [v({ verdict: 'concern' })])[0]!
     const k = (flag: string) => `${t.name.toLowerCase()}\0${t.version ?? ''}\0${flag}`
-    const ctx = (flag: string, ai?: object) => ({ name: t.name, version: t.version, flag, rule: 'x', path: 'p', line: 1, at: 't', ai })
+    const ctx = (flag: string, ai: { verdict: 'pass' | 'concern'; reasonZh: string; reasonEn: string }) =>
+      ({ name: t.name, version: t.version, flag, rule: 'x', path: 'p', line: 1, at: 't', ai })
     const flagContexts = new Map([
-      [k('network-call:src/index.js — L10: fetch("https://evil.example")'), ctx('x', { verdict: 'concern', reasonZh: '外发可疑', reasonEn: '' })],
-      [k('child-process:src/index.js — L20: execSync(cmd)'), ctx('x', { verdict: 'pass', reasonZh: '调本机工具', reasonEn: '' })],
-      [k('network-call:README.md — L30: curl example'), ctx('x', { verdict: 'pass', reasonZh: '文档示例', reasonEn: '' })],
+      [k(F_NET), ctx(F_NET, { verdict: 'concern', reasonZh: '外发可疑', reasonEn: '' })],
+      [k(F_CP), ctx(F_CP, { verdict: 'pass', reasonZh: '调本机工具', reasonEn: '' })],
+      [k(F_DOC), ctx(F_DOC, { verdict: 'pass', reasonZh: '文档示例', reasonEn: '' })],
       // docs-example finding has no pre-read yet — partial coverage path
     ])
     const body = issueBody(t, { flagContexts })
