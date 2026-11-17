@@ -475,6 +475,24 @@ describe('issueBody', () => {
     expect(body).toContain('unknown-rule:[x.js](https://app.unpkg.com/pkg@1.0.0/files/x.js)')
     expect((body.match(/↳/g) ?? []).length).toBe(2)
   })
+  it('红旗清单 renders the flag-context AI pre-read when a context line exists', () => {
+    const flag = 'credential-read:lib/x.js — L3: read("id_rsa")'
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [], redFlags: [flag] },
+    })]), [v({ verdict: 'concern' })])
+    const key = `${t[0]!.name.toLowerCase()}\0${t[0]!.version ?? ''}\0${flag}`
+    const flagContexts = new Map([[key, {
+      name: t[0]!.name, version: t[0]!.version, flag, rule: 'credential-read',
+      path: 'lib/x.js', line: 3, at: '2026-01-01T00:00:00Z',
+      ai: { verdict: 'pass' as const, reasonZh: 'SSH 工具读本机 key', reasonEn: 'local use' },
+    }]])
+    const body = issueBody(t[0]!, { flagContexts })
+    expect(body).toContain('↳ AI 初筛：倾向良性——SSH 工具读本机 key')
+    // miss → explainer still renders, pre-read line absent
+    const bare = issueBody(t[0]!, { flagContexts: new Map() })
+    expect(bare).not.toContain('AI 初筛：倾向良性')
+    expect(bare).toContain('credential-read')
+  })
   it('flag verdict headline carries the flag explainer', () => {
     const t = docketTargets(idx([e()]), [])
     const body = issueBody({ ...t[0]!, verdict: 'flag', reason: 'sec:repo-recreated' })
