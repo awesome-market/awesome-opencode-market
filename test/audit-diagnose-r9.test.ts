@@ -115,6 +115,33 @@ describe('stale verify-fail concerns re-queue on newer measurement', () => {
   })
 })
 
+describe('stale L0.5 mechanical concerns re-queue (finding/flag-block evidence evaporated)', () => {
+  const l05 = (block: string) => v({ verdict: 'concern', source: 'ai',
+    reason: `L0.5 命中注入信号（score 0.9 ≥ 0.662，块 ${block}）；LLM 判 pass：x`,
+    at: '2026-01-02T00:00:00Z' })
+  it('hit on a finding block — matched-line scoring is gone → re-queue', () => {
+    expect(unreviewedTargets(idx([entry()]), [l05('finding:5:network-call:scripts/install.sh — L5: # bash <(curl')])).toHaveLength(1)
+  })
+  it('hit on a flag block — same scoreText treatment → re-queue', () => {
+    expect(unreviewedTargets(idx([entry()]), [l05('flag:0:lifecycle-script:package.json — L9: "postinstall"')])).toHaveLength(1)
+  })
+  it('retag-prefixed stale L0.5 still re-queues — emit() prepends the annotation', () => {
+    const v0 = l05('finding:0:child-process:src/x.ts — L4: re.exec(v)')
+    v0.reason = `同版本换包（该键曾有人工裁决，re-tag 自动重审）——${v0.reason}`
+    expect(unreviewedTargets(idx([entry()]), [v0])).toHaveLength(1)
+  })
+  it('hit on a content block — real package text, still terminal', () => {
+    expect(unreviewedTargets(idx([entry()]), [l05('content:SKILL.md')])).toEqual([])
+  })
+  it('hit on the manifest — still scored, still terminal', () => {
+    expect(unreviewedTargets(idx([entry()]), [l05('manifest')])).toEqual([])
+  })
+  it('human L0.5-shaped verdict is untouched — source:ai only', () => {
+    const h = l05('finding:0:x — L1: y'); h.source = 'human'
+    expect(unreviewedTargets(idx([entry()]), [h])).toEqual([])
+  })
+})
+
 describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
   const gh = entry({
     name: 'Owner/Repo', slug: 'owner/repo',

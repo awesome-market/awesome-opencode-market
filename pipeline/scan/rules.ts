@@ -6,7 +6,7 @@
  *  leaves previously-admitted entries reuse-skipping the new gate forever
  *  (the foreign-host demotion shipped under r9 proved this — r9-stamped
  *  rescan entries kept their slots without ever facing the gate). */
-export const RULESET_VERSION = 'r12'
+export const RULESET_VERSION = 'r13'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -318,7 +318,13 @@ export const RULES: Rule[] = [
       // docs SHOW spawn/exec examples — only exec surface can spawn;
       // test/e2e dirs spawn by design (noise, same as network-call)
       if (c == null || !EXEC_EXT.test(p) || testPath(p)) return null
-      const m = c.match(/child_process|execSync|spawnSync|\bspawn\(|\bexec\(/)
+      // `.exec(` excluded: on a regex literal or any object it's
+      // RegExp.prototype.exec — by far the top FP in this rule (every
+      // `X_RE.exec(v)`/`/…/.exec(s)` in shipped code). Bare `exec(` keeps
+      // the destructured-import shape; `cp.exec`-style aliases only matter
+      // in files that also reference child_process — the first alternative
+      // already catches those, so dropping .exec( loses no real coverage.
+      const m = c.match(/child_process|execSync|spawnSync|\bspawn\(|(?<![\w$.])exec\s*\(/)
       return m ? { detail: 'spawns child processes', ...srcLine(c, m) } : null
     },
   },
