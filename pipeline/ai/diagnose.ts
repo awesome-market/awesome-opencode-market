@@ -260,6 +260,10 @@ const CONTENT_TOTAL_CAP = 384 * 1024  // total content chars kept per candidate,
  *  bounded by the per-file/total caps below regardless of tarball size. */
 const CONTENT_TRANSPORT_CAP = 32 * 1024 * 1024
 const CONTENT_BASENAME = /^(package\.json|opencode[^/]*\.json|[^/]*\.plugin\.json|[^/]*skill[^/]*\.md|readme[^/]*\.(md|txt)|agents\.md|claude\.md|instructions?[^/]*\.(md|txt)|prompt[^/]*\.(md|txt)|[^/]*\.(md|txt))$/i
+// entry-shaped code — main/exports/bin conventions. The audit gap: real
+// code never reached the reviewer, so a package whose docs were benign
+// but whose entry JS read ~/.ssh and POSTed it got judged on prose alone
+const CODE_ENTRY = /(^|\/)(index|main|entry|plugin|cli|app|server|extension)\.(mjs|cjs|js|ts)$|(^|\/)bin\/[^/]+\.(mjs|cjs|js|ts)$/i
 // the trailing all-md alternative keeps coverage broad — skill poison hides
 // in ANY markdown the agent will read, not just SKILL.md
 /** tar member path minus its single-segment wrapper root: npm packs under
@@ -271,7 +275,7 @@ const tarRel = (p: string) => p.slice(p.indexOf('/') + 1)
 const isContentFile = (p: string) => {
   const rel = tarRel(p)
   return rel !== '' && !/(^|\/)\._/.test(rel) &&
-    CONTENT_BASENAME.test(rel.split('/').pop() ?? '')
+    (CONTENT_BASENAME.test(rel.split('/').pop() ?? '') || CODE_ENTRY.test(rel))
 }
 
 /** Selection priority for the review budget — the prompt-injection surface
@@ -289,8 +293,9 @@ const contentRank = (p: string): number => {
   const b = (p.split('/').pop() ?? '').toLowerCase()
   if (/^[^/]*skill[^/]*\.md$|^agents\.md$|^claude\.md$|^instructions?[^/]*\.(md|txt)$|^prompt[^/]*\.(md|txt)$/.test(b)) return 0
   if (/^package\.json$|^opencode[^/]*\.json$|^[^/]*\.plugin\.json$/.test(b)) return 1
-  if (/^readme[^/]*\.(md|txt)$/.test(b)) return 2
-  return 3
+  if (/^readme[^/]*\.(md|txt)$/.test(b)) return 3
+  if (CODE_ENTRY.test(p)) return 2   // entry code outranks prose — it IS the payload
+  return 4
 }
 
 const CONTENT_STUB_CAP = 256 * 1024  // head-only slices for files past the full budget
@@ -1162,14 +1167,14 @@ export async function main(
   // legacy admission flag). backlog0 is what this process may take; uncovered
   // is what the catalog still owes — the number an operator actually watches.
   const uncovered = new Set<string>()
-  const shaSeen = new Set(allVerdicts.filter(v => v.sha).map(v => `${v.name.toLowerCase()} ${v.sha}`))
+  const shaSeen = new Set(allVerdicts.filter(v => v.sha).map(v => `${v.name.toLowerCase()}\u0000${v.sha}`))
   for (const e of idx.plugins) {
     const gh = e.source?.kind === 'github'
     const ver = reviewVer(e, true)
     if (!ver && !reviewPin(e, true)) continue
     const k = vkey(e.name, ver)
     const covered = gh
-      ? seen.has(k) && shaSeen.has(`${e.name.toLowerCase()} ${(e.source!.version ?? '').toLowerCase()}`)
+      ? seen.has(k) && shaSeen.has(`${e.name.toLowerCase()}\u0000${(e.source!.version ?? '').toLowerCase()}`)
       : seen.has(k)
     if (!covered) uncovered.add(k)
   }

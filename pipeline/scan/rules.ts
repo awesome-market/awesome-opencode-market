@@ -313,6 +313,21 @@ export const RULES: Rule[] = [
     },
   },
   {
+    id: 'concat-cloak', sev: 'high',
+    test: (p, c) => {
+      // a sensitive token split across '+'-joined string literals evades
+      // every literal rule ('~/.s' + 'sh/id_rsa' never contains '.ssh') —
+      // reassemble adjacent literal pairs and re-check the join
+      if (c == null || !EXEC_EXT.test(p)) return null
+      for (const m of c.matchAll(/(['"`])([^'"`]{1,40})\1\s*\+\s*(['"`])([^'"`]{1,40})\3/g)) {
+        const joined = (m[2] ?? '') + (m[4] ?? '')
+        if (/\.ssh(?![\w-])|id_rsa|\.aws|keychain|\.npmrc|\.netrc|https?:\/\/|child_process|eval\(|fetch\(/.test(joined))
+          return { detail: `sensitive token assembled by concat: …${m[2]!.slice(-12)} + ${m[4]!.slice(0, 12)}…`, ...srcLine(c, m) }
+      }
+      return null
+    },
+  },
+  {
     id: 'child-process', sev: 'medium',
     test: (p, c) => {
       // docs SHOW spawn/exec examples — only exec surface can spawn;
