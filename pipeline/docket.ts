@@ -1565,12 +1565,15 @@ export async function main(
         // tick has to redo (run 43673747835: one 20s retry wasn't enough
         // during mass-close churn → pipeline-alert #3936)
         let last: unknown = err
-        if (/too quickly|rate.?limit|secondary/i.test(String(err))) {
+        // 'non-200 OK status code: 499' is gh's surface for the same
+        // secondary-throttle bursts during mass write batches
+        const transient = (x: unknown) => /too quickly|rate.?limit|secondary|status code: 4\d\d/i.test(String(x))
+        if (transient(err)) {
           for (const wait of [20_000, 40_000, 60_000]) {
             await sleep(wait)
             try { await op.run(); last = null; break } catch (e2) {
               last = e2
-              if (!/too quickly|rate.?limit|secondary/i.test(String(e2))) break
+              if (!transient(e2)) break
             }
           }
         }

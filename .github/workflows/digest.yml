@@ -359,6 +359,13 @@ jobs:
             fi
           else
             echo "watchdog: healthy"
+            # self-heal: legs all cleared — retire the open pipeline-stale
+            # alert instead of leaving it open forever (alerts were write-only)
+            STALE=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "pipeline stale in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            if [ -n "$STALE" ]; then
+              gh issue comment "$STALE" -R "$GH_REPO" --body "watchdog：全部 legs 恢复——告警自动关闭。"
+              gh issue close "$STALE" -R "$GH_REPO" && echo "watchdog: resolved #$STALE"
+            fi
           fi
 
   alert:
@@ -392,4 +399,28 @@ jobs:
               --title "digest workflow failed (run ${GITHUB_RUN_ID})" \
               --body "Automated alert: the digest workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               --label "pipeline-alert"
+          fi
+
+  # self-heal: a green run retires the open alert — transient failures must
+  # not leave pipeline-alert issues open forever (alerts were write-only)
+  alert-resolve:
+    needs: [digest, watchdog]
+    if: '!failure() && !cancelled()'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: { issues: write }
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
+      - name: resolve failure alert
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          N=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "digest workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$N" ]; then
+            gh issue comment "$N" -R "$GH_REPO" --body "自愈：run ${GITHUB_RUN_ID} 成功——告警条件已消失，自动关闭。"
+            gh issue close "$N" -R "$GH_REPO" && echo "alert-resolve: closed #$N"
           fi
