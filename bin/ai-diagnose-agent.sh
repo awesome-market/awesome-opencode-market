@@ -141,6 +141,25 @@ while :; do
   if [ "$rc" -eq 0 ]; then S=$TICK; else S=$RETRY; fi
   log "sweep finished (rc=$rc) — next in ${S}s"
 
+  # GitHub drops this repo's scheduled runs for days at a time (catalog
+  # 30-min, docket/verify hourly crons all went silent). The daemon is the
+  # only always-on piece left — self-heal: when a workflow's last run is
+  # older than its cadence + slack, dispatch it ourselves. A fresh run in
+  # flight counts, so this never double-dispatches.
+  if command -v gh >/dev/null 2>&1; then
+    now=$(date +%s)
+    for wf in catalog.yml docket.yml verify.yml; do
+      last=$(gh run list -R awesome-market/awesome-opencode-market --workflow "$wf" --limit 1 \
+        --json createdAt -q '.[0].createdAt // empty' 2>/dev/null)
+      age=0
+      [ -n "$last" ] && age=$(( now - $(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null || echo "$now") ))
+      if [ "$age" -gt 8100 ]; then   # 2.25h — hourly cron + slack
+        gh workflow run "$wf" -R awesome-market/awesome-opencode-market >/dev/null 2>&1 \
+          && log "stall-watchdog: ${wf} silent ${age}s — dispatched"
+      fi
+    done
+  fi
+
   sleep "$S" & CHILD=$!   # 后台 sleep + wait —— 信号可中断，不用等满整段
   wait "$CHILD"; CHILD=
 done
