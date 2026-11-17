@@ -493,6 +493,23 @@ describe('issueBody', () => {
     expect(bare).not.toContain('AI 初筛：倾向良性')
     expect(bare).toContain('credential-read')
   })
+  it('dead pre-read key renders an explicit 不可用 marker — never silently bare', () => {
+    const flag = 'credential-read:lib/ssh.js — L3: readKey("~/.ssh/id_rsa")'
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [], redFlags: [flag] },
+    })]), [v({ verdict: 'concern' })])
+    const key = `${t[0]!.name.toLowerCase()}\0${t[0]!.version ?? ''}\0${flag}`
+    const flagContexts = new Map([[key, {
+      name: t[0]!.name, version: t[0]!.version, flag, rule: 'credential-read',
+      path: 'lib/ssh.js', line: 3, at: '2026-01-01T00:00:00Z',
+      ai: null, aiNote: 'context-fetch-failed',
+    }]])
+    const body = issueBody(t[0]!, { flagContexts, deadCtx: new Set([key]) })
+    expect(body).toContain('↳ AI 初筛不可用——多次判定失败')
+    // alive-but-uncovered keys keep the bare row (gate defers creation anyway)
+    const pending = issueBody(t[0]!, { flagContexts, deadCtx: new Set() })
+    expect(pending).not.toContain('AI 初筛不可用')
+  })
   it('风险文件 rows aggregate per-finding pre-reads — any concern wins', () => {
     const F_NET = 'network-call:src/index.js — L10: fetch("https://evil.example")'
     const F_CP = 'child-process:src/index.js — L20: execSync(cmd)'

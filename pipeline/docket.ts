@@ -586,6 +586,9 @@ export interface IssueBodyOpts {
    *  judge's "去向本地还是外发" answer for each scan flag. Advisory like
    *  assessments: the flag still wants a human verdict. */
   flagContexts?: Map<string, FlagContext> | null
+  // keys that exhausted every retry (deadContextKeys) — render an explicit
+  // "unjudged" marker so a bare row never masquerades as "not yet pre-read"
+  deadCtx?: Set<string> | null
   /** a decision label (verdict:pass/concern) is stuck on the issue but no
    *  human verdict landed in the jsonl — the write-back job failed; the
    *  label event won't re-fire, so say so on the body instead of letting
@@ -1019,8 +1022,10 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       // flag-context AI pre-read — the judge's one-line answer to the
       // explainer's question (去向本地还是外发), so the human spot-check
       // confirms instead of reconstructs. Key mirrors latestFlagContexts.
-      const fc = opts.flagContexts?.get(`${t.name.toLowerCase()}\0${t.version ?? ''}\0${f}`)
+      const fkey = `${t.name.toLowerCase()}\0${t.version ?? ''}\0${f}`
+      const fc = opts.flagContexts?.get(fkey)
       if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 240)}`)
+      else if (opts.deadCtx?.has(fkey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
     }
     // two provenances share one list: sec:* identity signals (the trigger)
     // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
@@ -1078,6 +1083,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const bad = ctxs.find(c => c.ai!.verdict === 'concern')
       if (bad) L.push(`    ↳ AI 初筛：⚠️ 疑似异常——${clean(bad.ai!.reasonZh, 200)}`)
       else if (ctxs.length) L.push(`    ↳ AI 初筛：${ctxs.length === f.n ? '全部' : `${ctxs.length} 处`}倾向良性——${clean(ctxs[0]!.ai!.reasonZh, 200)}`)
+      else if ((f.findings ?? []).length &&
+               (f.findings ?? []).every(fx => opts.deadCtx?.has(`${t.name.toLowerCase()}\0${t.version ?? ''}\0${fx}`)))
+        L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
     }
   }
   if (t.verdictSha && t.integrity && t.verdictSha !== t.integrity) {
@@ -1432,7 +1440,7 @@ export async function main(
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
         ...(cl ? ['--label', cl] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
-        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null })]
+        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -1468,7 +1476,7 @@ export async function main(
       .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
       .sort()
     const stuck = stuckList.length ? stuckList.join('`, `') : null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()
