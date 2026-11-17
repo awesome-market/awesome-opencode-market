@@ -51,6 +51,26 @@ export function loadFlagContexts(path?: string): FlagContext[] {
   return out
 }
 
+/** context keys that are permanently unjudgeable — transient failures
+ *  (context-fetch-failed, judge-error:*) past RETRY_BUDGET. Shared with the
+ *  docket's pre-read completeness gate: a dead key counts as "covered" for
+ *  issue-opening purposes (its retry budget is spent, waiting won't help). */
+export function deadContextKeys(list: FlagContext[]): Set<string> {
+  const prior = latestFlagContexts(list)
+  const attempts = new Map<string, number>()
+  for (const a of list) {
+    if (a.ai !== null) continue
+    const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
+    attempts.set(k, (attempts.get(k) ?? 0) + 1)
+  }
+  return new Set(
+    [...prior.entries()]
+      .filter(([k, a]) => a.ai === null && a.aiNote !== 'judge-unavailable'
+        && (a.aiNote === 'context-fetch-failed' || a.aiNote?.startsWith('judge-error'))
+        && (attempts.get(k) ?? 0) >= RETRY_BUDGET)
+      .map(([k]) => k))
+}
+
 /** latest per name\0version\0flag — append-only log, newest `at` wins */
 export function latestFlagContexts(list: FlagContext[]): Map<string, FlagContext> {
   const m = new Map<string, FlagContext>()
@@ -64,13 +84,13 @@ export function latestFlagContexts(list: FlagContext[]): Map<string, FlagContext
 
 /** `rule:path — L<n>: <matched text>` — sec:* identity flags carry no
  *  line to context-fetch (their evidence is the compare, flag-delta's job) */
-const SCAN_FLAG_RE = /^([a-z][a-z0-9-]*):((?:package\/)?\S+?\.\w+) — L(\d+)[: ]/
+export const SCAN_FLAG_RE = /^([a-z][a-z0-9-]*):((?:package\/)?\S+?\.\w+) — L(\d+)[: ]/
 
 const CTX_LINES = 35          // lines of context each side of the hit
 const CTX_FILE_CAP = 256_000  // minified megabundles → judge can't read anyway
 const CTX_CHAR_CAP = 4_000    // window sent to the judge
-const FLAGS_PER_ENTRY = 12    // an issue renders ≤20 flags; top 12 pre-read
-const FINDINGS_PER_ENTRY = 15 // docket's 风险文件 TOP+ renders ≤10 files — the findings behind them get the same pre-read
+export const FLAGS_PER_ENTRY = 12    // an issue renders ≤20 flags; top 12 pre-read
+export const FINDINGS_PER_ENTRY = 15 // docket's 风险文件 TOP+ renders ≤10 files — the findings behind them get the same pre-read
 const RETRY_BUDGET = 5        // transient-failure retries before a key is dead
 
 /** the findings behind the docket's 风险文件 TOP+ list — same aggregation:
@@ -161,18 +181,7 @@ export async function main(
   // forever, and alphabetically-early dead keys ate every cycle's whole
   // limit so the queue behind them never moved. judge-unavailable stays
   // unbounded: a down judge is the environment's fault, not the entry's.
-  const attempts = new Map<string, number>()
-  for (const a of all) {
-    if (a.ai !== null) continue
-    const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
-    attempts.set(k, (attempts.get(k) ?? 0) + 1)
-  }
-  const dead = new Set(
-    [...prior.entries()]
-      .filter(([k, a]) => a.ai === null && a.aiNote !== 'judge-unavailable'
-        && (a.aiNote === 'context-fetch-failed' || a.aiNote?.startsWith('judge-error'))
-        && (attempts.get(k) ?? 0) >= RETRY_BUDGET)
-      .map(([k]) => k))
+  const dead = deadContextKeys(all)
   const judge: JudgeFn | null = deps.judge ?? (
     env.AI_BACKEND === 'devin'
       ? devinJudge(env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)

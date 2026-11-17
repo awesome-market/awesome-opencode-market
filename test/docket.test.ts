@@ -2034,3 +2034,61 @@ describe('concern-class labels', () => {
     expect(calls.some(c => c.includes('close') && c.includes('9'))).toBe(false)
   })
 })
+
+describe('pre-read completeness gate — no half-baked review issues', () => {
+  const FLAG = 'network-call:lib/x.js — L3: fetch(u)'
+  const ctx = (at: string, ai: object | null = { verdict: 'pass', reasonZh: 'r', reasonEn: 'r' }, aiNote?: string) =>
+    JSON.stringify({ name: 'pkg', version: '1.0.0', flag: FLAG, rule: 'network-call', path: 'lib/x.js', line: 3, at, ai, ...(aiNote ? { aiNote } : {}) })
+  const OTHER = (at: string) =>
+    JSON.stringify({ name: 'other', version: '1', flag: 'x:p — L1: y', rule: 'x', path: 'p', line: 1, at, ai: { verdict: 'pass', reasonZh: '', reasonEn: '' } })
+
+  const mkRun = () => {
+    const calls: string[][] = []
+    return {
+      calls,
+      ghFn: (a: string[]) => { calls.push(a); return a.includes('list') ? '[]' : '' },
+    }
+  }
+  const boot = async () => {
+    const { mkdtempSync, writeFileSync, appendFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dkg-'))
+    const idxPath = join(dir, 'i.json'), vPath = join(dir, 'v.jsonl'), ctxPath = join(dir, 'c.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG] } })])))
+    writeFileSync(vPath, JSON.stringify(v({ verdict: 'concern' })) + '\n')
+    const run = (ghFn: (a: string[]) => string) =>
+      main(['x', 'y', '--index', idxPath, '--verdicts', vPath, '--contexts', ctxPath], ghFn)
+    return { ctxPath, run, writeFileSync, appendFileSync }
+  }
+
+  it('defers create until flag keys are covered; judged → creates', async () => {
+    const f = await boot()
+    f.writeFileSync(f.ctxPath, OTHER(new Date().toISOString()) + '\n')   // alive pipeline, our flag uncovered
+    const keep = process.env.GH_REPO; process.env.GH_REPO = 'o/r'
+    try {
+      const r1 = mkRun(); await f.run(r1.ghFn)
+      expect(r1.calls.some(c => c.includes('create'))).toBe(false)
+      f.appendFileSync(f.ctxPath, ctx(new Date().toISOString()) + '\n')
+      const r2 = mkRun(); await f.run(r2.ghFn)
+      expect(r2.calls.some(c => c.includes('create'))).toBe(true)
+    } finally { keep === undefined ? delete process.env.GH_REPO : process.env.GH_REPO = keep }
+  })
+
+  it('dead keys count as covered; stale contexts file opens anyway (fail-visible)', async () => {
+    const f = await boot()
+    // 5× fetch-failed = retries exhausted — waiting can't help, open now
+    f.writeFileSync(f.ctxPath, Array.from({ length: 5 }, () =>
+      ctx(new Date().toISOString(), null, 'context-fetch-failed')).join('\n') + '\n')
+    const keep = process.env.GH_REPO; process.env.GH_REPO = 'o/r'
+    try {
+      const r1 = mkRun(); await f.run(r1.ghFn)
+      expect(r1.calls.some(c => c.includes('create'))).toBe(true)
+      // stale file: daemon dead >3h — a live review must not be hidden by a dead pre-reader
+      f.writeFileSync(f.ctxPath, OTHER('2020-01-01T00:00:00Z') + '\n')
+      const r2 = mkRun(); await f.run(r2.ghFn)
+      expect(r2.calls.some(c => c.includes('create'))).toBe(true)
+    } finally { keep === undefined ? delete process.env.GH_REPO : process.env.GH_REPO = keep }
+  })
+})

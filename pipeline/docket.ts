@@ -42,7 +42,7 @@ import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from
 import { explainFlag } from './scan/flagExplain.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
-import { loadFlagContexts, latestFlagContexts, type FlagContext } from './ai/flag-context.ts'
+import { loadFlagContexts, latestFlagContexts, deadContextKeys, SCAN_FLAG_RE, FLAGS_PER_ENTRY, FINDINGS_PER_ENTRY, type FlagContext } from './ai/flag-context.ts'
 
 export interface DocketTarget {
   name: string
@@ -1179,7 +1179,29 @@ export async function main(
   // flag-context per-flag AI pre-reads — same advisory posture: absent/
   // corrupt degrades to "no 初筛 line", never a sync failure
   const ctxPath = arg('--contexts')
-  const flagContexts = ctxPath ? latestFlagContexts(loadFlagContexts(ctxPath)) : undefined
+  const ctxList = ctxPath ? loadFlagContexts(ctxPath) : []
+  const flagContexts = ctxPath ? latestFlagContexts(ctxList) : undefined
+  const deadCtx = deadContextKeys(ctxList)
+  // the pre-read pipeline is considered ALIVE while any context line is
+  // <3h old — a drained queue can't produce uncovered keys, so a stale file
+  // only ever coincides with a dead daemon (fail-visible: open anyway).
+  const ctxFreshAt = ctxList.reduce((m, a) => (a.at > m ? a.at : m), '')
+  const prereadAlive = !!ctxPath && !!ctxFreshAt && Date.now() - Date.parse(ctxFreshAt) < 3 * 3_600_000
+  /** scan-format flag+finding keys this target's issue would look up —
+   *  mirrors flag-context's per-entry candidate caps so the gate never
+   *  waits on keys that will never be judged. */
+  const prereadKeys = (t: DocketTarget): string[] => {
+    const scan = (t.redFlagList ?? []).filter(f => SCAN_FLAG_RE.test(f)).slice(0, FLAGS_PER_ENTRY)
+    const hot = (t.hotFiles ?? []).flatMap(h => h.findings ?? [])
+    return [...scan, ...hot].slice(0, FLAGS_PER_ENTRY + FINDINGS_PER_ENTRY)
+  }
+  /** keys without a verdict yet that aren't permanently dead — the reason
+   *  to hold an issue back until its pre-reads land (or give up waiting) */
+  const prereadUncovered = (t: DocketTarget): number => {
+    if (!prereadAlive) return 0
+    const pfx = `${t.name.toLowerCase()}\0${t.version ?? ''}\0`
+    return prereadKeys(t).filter(f => !flagContexts!.get(pfx + f)?.ai && !deadCtx.has(pfx + f)).length
+  }
   // closeReason needs the raw maps too — claiming "verdict 已决议" without
   // checking the key is how a version-bumped/clock-reset issue used to close
   // with a pointer to a judgment that never existed
@@ -1396,6 +1418,14 @@ export async function main(
       }
     }
     if (!ex) {
+      // pre-read completeness gate: a flag/finding-bearing review issue is
+      // "half-baked" until its AI 初筛 lines exist — hold the CREATE until
+      // the daemon's contexts cover this target's keys (or the keys are
+      // dead: retries exhausted = permanently unjudgeable). Escapes: no
+      // --contexts (degraded run), contexts file >3h stale (daemon dead —
+      // hiding the review would be worse than shipping without pre-reads).
+      const unready = prereadUncovered(t)
+      if (unready) { console.log(`[docket] defer ${title} — AI 初筛 pending ×${unready}`); continue }
       console.log(`[docket] create ${title}`)
       const cl = concernLabel(t)
       const args = ['issue', 'create', '-R', repo, '--title', title,
