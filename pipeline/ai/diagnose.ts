@@ -65,6 +65,21 @@ import { isMain } from '../main-guard.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
+/** Agent-surface files keep the calibrated bar. Prose no agent ever reads
+ *  (README, docs/, assets/, examples/) can't inject the PRODUCT — its only
+ *  threat is hijacking the JUDGE, and a real hijack payload ("ignore
+ *  previous instructions…") scores ~0.95+. Generic imperative prose
+ *  ("Install…", "Configure…") sits at 0.67-0.85 on this classifier and
+ *  FP'd the l05 queue (~20/27 residuals were doc-only mechanical holds). */
+const L05_DOC_THRESHOLD = 0.9
+const AGENT_SURFACE_DIR = /(?:^|\/)(?:\.opencode|commands?|agents?|skills?|rules|prompts?)\//i
+const AGENT_SURFACE_BASE = /^(?:package\.json|opencode[^/]*\.json|[^/]*\.plugin\.json|[^/]*skill[^/]*\.md|agents\.md|claude\.md|instructions?[^/]*\.(?:md|txt)|prompt[^/]*\.(?:md|txt))$/i
+/** path → agent-facing? (exported for the stale-verdict requeue below) */
+export const isAgentSurface = (rel: string): boolean =>
+  AGENT_SURFACE_DIR.test(rel) || AGENT_SURFACE_BASE.test(rel.split('/').pop() ?? '')
+const l05ThresholdFor = (block: string): number =>
+  block.startsWith('content:') && !isAgentSurface(block.slice('content:'.length))
+    ? L05_DOC_THRESHOLD : L05_THRESHOLD
 /** Canary self-check blocks — two known-label strings ride every L0.5 batch
  *  (zero extra spawns). A classifier that scores the hostile canary below
  *  threshold — or the benign one above — is producing untrusted output this
@@ -808,6 +823,16 @@ export const staleVerifyFail = (
 const L05_STALE_BLOCK_RE = /L0\.5 命中注入信号（score [\d.]+ ≥ [\d.]+，块 (?:(?:finding|flag):\d+:|prev-findings)/
 export const isStaleL05Concern = (v: AiVerdict | undefined): boolean =>
   v?.verdict === 'concern' && v.source === 'ai' && L05_STALE_BLOCK_RE.test(v.reason ?? '')
+/** Same requeue for the doc-threshold change: a pre-split concern whose cited
+ *  block is a NON-agent-surface content file scoring under the new 0.9 bar
+ *  would not flag today — the cited evidence is exactly what the threshold
+ *  change retired, so the verdict goes back through the queue. */
+const L05_STALE_DOC_RE = /L0\.5 命中注入信号（score ([\d.]+) ≥ [\d.]+，块 content:([^）\s]+)/
+export const isStaleL05DocScore = (v: AiVerdict | undefined): boolean => {
+  if (v?.verdict !== 'concern' || v.source !== 'ai') return false
+  const m = L05_STALE_DOC_RE.exec(v.reason ?? '')
+  return !!m && +m[1]! < L05_DOC_THRESHOLD && !isAgentSurface(m[2]!)
+}
 
 /** Blind-evidence concerns — the reason asserts ABSENCE of material (never
  *  scanned / tarball unextractable / oversized) rather than a judgment of
@@ -898,7 +923,7 @@ export function unreviewedTargets(
       gov?.verdict === 'pass' && gov.source === 'ai' && !gov.flagsReviewed
       && slotCaps.redFlags.length > 0
       && !humanPassCovers(human, e.name, ver, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov) && !staleBlindConcern(gov, slotCaps)) return false
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov) && !isStaleL05DocScore(gov) && !staleBlindConcern(gov, slotCaps)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
@@ -1305,6 +1330,7 @@ export async function main(
   const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest', 'content-error', 'prev-findings'])
   const reviewWorks = works.filter(w => !w.twin && !mechTerminal(w))
   const l05Top = new Map<Work, { score: number; block: string }>()
+  const l05FlagTop = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'
   if (reviewWorks.length) {
     try {
@@ -1322,15 +1348,19 @@ export async function main(
         let unscored = 0
         for (const w of reviewWorks) {
           let top: { score: number; block: string } | null = null
+          let flagTop: { score: number; block: string } | null = null
           for (const m of w.material) {
             if (L05_SKIP_IDS.has(m.id)) continue
             const s = scores.get(`${w.e.name}\0${m.id}`)
-            if (s !== undefined && (top === null || s > top.score)) top = { score: s, block: m.id }
+            if (s === undefined) continue
+            if (top === null || s > top.score) top = { score: s, block: m.id }
+            if (s >= l05ThresholdFor(m.id) && (flagTop === null || s > flagTop.score)) flagTop = { score: s, block: m.id }
           }
           if (top) {
             l05Top.set(w, top)
             console.log(`[diagnose] ${w.e.name}@${w.ver} L0.5 max=${top.score.toFixed(3)} (${top.block})`)
           }
+          if (flagTop) l05FlagTop.set(w, flagTop)
           // a non-empty block with NO score isn't benign — the global window
           // budget can exhaust before reaching tail material (a backlog of
           // content-rich candidates is exactly the shape that starves it).
@@ -1348,11 +1378,11 @@ export async function main(
     } catch (x) { l05State = 'failed'; console.error(`[diagnose] L0.5 batch failed — LLM review still runs: ${x}`) }
   }
   const l05flagOf = (w: Work) => {
-    const top = l05Top.get(w)
-    return top && top.score >= L05_THRESHOLD ? {
+    const top = l05FlagTop.get(w)
+    return top ? {
       score: top.score,
-      zh: `L0.5 命中注入信号（score ${top.score.toFixed(3)} ≥ ${L05_THRESHOLD}，块 ${top.block}）`,
-      en: `L0.5 injection score ${top.score.toFixed(3)} ≥ ${L05_THRESHOLD} on ${top.block}`,
+      zh: `L0.5 命中注入信号（score ${top.score.toFixed(3)} ≥ ${l05ThresholdFor(top.block)}，块 ${top.block}）`,
+      en: `L0.5 injection score ${top.score.toFixed(3)} ≥ ${l05ThresholdFor(top.block)} on ${top.block}`,
     } : null
   }
 
