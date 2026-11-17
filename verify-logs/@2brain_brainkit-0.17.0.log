@@ -1,0 +1,32 @@
+spec: @2brain/brainkit@0.17.0
+apiNames: @2brain/brainkit, brainkit
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-bazX4r/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34467
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:24.450Z level=INFO run=3aeebc23 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@2brain/brainkit@0.17.0\"]" role=cli
+timestamp=2026-11-16T12:05:26.986Z level=INFO run=cd539b6b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:27.760Z level=INFO run=cd539b6b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:28.058Z level=INFO run=cd539b6b message="database schema bootstrap completed" migrations=59 durationMs=298 role=server
+timestamp=2026-11-16T12:05:28.397Z level=INFO run=cd539b6b message="watcher subscribe" path=/tmp/verify-bazX4r/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T12:05:28.399Z level=INFO run=cd539b6b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.400Z level=INFO run=cd539b6b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:05:28.400Z level=INFO run=cd539b6b message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:05:28.400Z level=INFO run=cd539b6b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:05:28.400Z level=INFO run=cd539b6b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:05:28.400Z level=INFO run=cd539b6b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:05:28.401Z level=INFO run=cd539b6b message="watcher subscribe" path=/tmp/verify-bazX4r type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:05:28.401Z level=INFO run=cd539b6b message="watcher started" path=/tmp/verify-bazX4r type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:05:28.401Z level=INFO run=cd539b6b message="watcher subscribe" path=/tmp/verify-bazX4r/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:05:28.401Z level=INFO run=cd539b6b message="watcher started" path=/tmp/verify-bazX4r/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:05:28.421Z level=INFO run=cd539b6b message="watcher started" path=/tmp/verify-bazX4r/u/.config/opencode type=directory backend=inotify ignores=6 http.span=43 role=server
+timestamp=2026-11-16T12:05:28.439Z level=INFO run=cd539b6b message="location services booted" directory=/tmp/verify-bazX4r/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-16T12:05:28.441Z level=INFO run=cd539b6b msg="loading plugin" id=@2brain/brainkit@0.17.0 entrypoint=file:///tmp/verify-bazX4r/u/cache/opencode/npm/@2brain/brainkit@0.17.0/1794830726707/node_modules/@2brain/brainkit/opencode/server.ts http.span=63 role=server
+timestamp=2026-11-16T12:05:28.452Z level=WARN run=cd539b6b message="failed to load plugin" target=@2brain/brainkit@0.17.0 ref=err_73e5c06e cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=74 role=server

@@ -1,0 +1,32 @@
+spec: scnet-magpie@1.0.3
+apiNames: scnet-magpie
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-y6M7x4/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46821
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:22.883Z level=INFO run=5f302828 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"scnet-magpie@1.0.3\"]" role=cli
+timestamp=2026-11-16T12:54:23.363Z level=INFO run=52aca45b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:23.791Z level=INFO run=52aca45b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:23.851Z level=INFO run=52aca45b message="database schema bootstrap completed" migrations=59 durationMs=59 role=server
+timestamp=2026-11-16T12:54:24.109Z level=INFO run=52aca45b message="watcher subscribe" path=/tmp/verify-y6M7x4/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T12:54:24.116Z level=INFO run=52aca45b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T12:54:24.117Z level=INFO run=52aca45b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:54:24.117Z level=INFO run=52aca45b message="watcher subscribe" path=/ type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:54:24.117Z level=INFO run=52aca45b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:54:24.117Z level=INFO run=52aca45b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:54:24.117Z level=INFO run=52aca45b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:54:24.118Z level=INFO run=52aca45b message="watcher subscribe" path=/tmp/verify-y6M7x4 type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:54:24.118Z level=INFO run=52aca45b message="watcher started" path=/tmp/verify-y6M7x4 type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:54:24.118Z level=INFO run=52aca45b message="watcher subscribe" path=/tmp/verify-y6M7x4/u type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:54:24.118Z level=INFO run=52aca45b message="watcher started" path=/tmp/verify-y6M7x4/u type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:54:24.154Z level=INFO run=52aca45b message="watcher started" path=/tmp/verify-y6M7x4/u/.config/opencode type=directory backend=inotify ignores=6 http.span=85 role=server
+timestamp=2026-11-16T12:54:24.166Z level=INFO run=52aca45b message="location services booted" directory=/tmp/verify-y6M7x4/u workspaceID=undefined durationMs=96 http.span=97 role=server
+timestamp=2026-11-16T12:54:24.174Z level=INFO run=52aca45b msg="loading plugin" id=scnet-magpie@1.0.3 entrypoint=file:///tmp/verify-y6M7x4/u/cache/opencode/npm/scnet-magpie@1.0.3/1794833663059/node_modules/scnet-magpie/index.mjs http.span=105 role=server
+timestamp=2026-11-16T12:54:24.182Z level=WARN run=52aca45b message="failed to load plugin" target=scnet-magpie@1.0.3 ref=err_a6aef26f cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=113 role=server

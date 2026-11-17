@@ -1,0 +1,56 @@
+spec: opencode-gemini-oauth@1.1.4
+apiNames: opencode-gemini-oauth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-fPnmZZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39163
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:11.581Z level=INFO run=feb742c4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-gemini-oauth@1.1.4\"]" role=cli
+timestamp=2026-11-16T10:13:17.512Z level=INFO run=71f451b2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:17.761Z level=INFO run=71f451b2 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:17.784Z level=INFO run=71f451b2 message="database schema bootstrap completed" migrations=59 durationMs=23 role=server
+timestamp=2026-11-16T10:13:18.232Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u/.config/opencode type=directory ignores=6 http.span=53 role=server
+timestamp=2026-11-16T10:13:18.237Z level=INFO run=71f451b2 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T10:13:18.238Z level=INFO run=71f451b2 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:18.238Z level=INFO run=71f451b2 message="watcher subscribe" path=/ type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:18.239Z level=INFO run=71f451b2 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T10:13:18.239Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-16T10:13:18.240Z level=INFO run=71f451b2 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T10:13:18.240Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T10:13:18.241Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T10:13:18.242Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T10:13:18.242Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T10:13:18.292Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=113 role=server
+timestamp=2026-11-16T10:13:18.310Z level=INFO run=71f451b2 message="location services booted" directory=/tmp/verify-fPnmZZ/u workspaceID=undefined durationMs=129 http.span=131 role=server
+timestamp=2026-11-16T10:13:18.351Z level=INFO run=71f451b2 msg="loading plugin" id=opencode-gemini-oauth@1.1.4 entrypoint=file:///tmp/verify-fPnmZZ/u/cache/opencode/npm/opencode-gemini-oauth@1.1.4/1794823997154/node_modules/opencode-gemini-oauth/dist/index.js http.span=172 role=server
+timestamp=2026-11-16T10:13:18.354Z level=WARN run=71f451b2 message="failed to load plugin" target=opencode-gemini-oauth@1.1.4 ref=err_b297b29e cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=175 role=server
+timestamp=2026-11-16T10:13:19.677Z level=ERROR run=71f451b2 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1498 role=server
+timestamp=2026-11-16T10:13:19.794Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:19.795Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:19.795Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:19.795Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:19.850Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:19.850Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:19.851Z level=INFO run=71f451b2 message="watcher subscribe" path=/tmp/verify-fPnmZZ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:19.852Z level=INFO run=71f451b2 message="watcher started" path=/tmp/verify-fPnmZZ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:19.884Z level=INFO run=71f451b2 message=event event.id=evt_1e3d8d18c001siFnXqel0Yh8l9 event.created=1794823999884 event.type=provider.updated event.location.directory=/tmp/verify-fPnmZZ/u event.location.workspaceID=undefined event.data={} http.span=1705 role=server
+timestamp=2026-11-16T10:13:19.942Z level=INFO run=71f451b2 message=event event.id=evt_1e3d8d1c5001VUDrl2qC7ZX172 event.created=1794823999942 event.type=model.updated event.location.directory=/tmp/verify-fPnmZZ/u event.location.workspaceID=undefined event.data={} http.span=1763 role=server
+timestamp=2026-11-16T10:13:19.947Z level=INFO run=71f451b2 message=event event.id=evt_1e3d8d1cb001rmXAeLhc0lE3uZ event.created=1794823999947 event.type=agent.updated event.location.directory=/tmp/verify-fPnmZZ/u event.location.workspaceID=undefined event.data={} http.span=1768 role=server
+timestamp=2026-11-16T10:13:19.947Z level=INFO run=71f451b2 message=event event.id=evt_1e3d8d1cb0020e94jWk8mrXer6 event.created=1794823999947 event.type=command.updated event.location.directory=/tmp/verify-fPnmZZ/u event.location.workspaceID=undefined event.data={} http.span=1768 role=server
+timestamp=2026-11-16T10:13:20.324Z level=INFO run=71f451b2 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:20.325Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:13:20.325Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:13:20.338Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:20.338Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:20.363Z level=INFO run=71f451b2 message="watcher stopped" path=/etc type=entries http.span=2184 role=server
+timestamp=2026-11-16T10:13:20.363Z level=INFO run=71f451b2 message="watcher stopped" path=/ type=entries http.span=2184 role=server
+timestamp=2026-11-16T10:13:20.363Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp type=entries http.span=2184 role=server
+timestamp=2026-11-16T10:13:20.363Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ type=entries http.span=2184 role=server
+timestamp=2026-11-16T10:13:20.363Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u type=entries http.span=2184 role=server
+timestamp=2026-11-16T10:13:20.368Z level=INFO run=71f451b2 message="watcher stopped" path=/tmp/verify-fPnmZZ/u/.config/opencode type=directory http.span=2189 role=server

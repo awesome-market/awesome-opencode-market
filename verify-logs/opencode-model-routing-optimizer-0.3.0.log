@@ -1,0 +1,55 @@
+spec: opencode-model-routing-optimizer@0.3.0
+apiNames: opencode-model-routing-optimizer
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ccdvrm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39637
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:06:47.953Z level=INFO run=e7efbf2c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-model-routing-optimizer@0.3.0\"]" role=cli
+timestamp=2026-11-16T12:06:52.093Z level=INFO run=1f948de1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:06:52.188Z level=INFO run=1f948de1 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:06:52.242Z level=INFO run=1f948de1 message="database schema bootstrap completed" migrations=59 durationMs=54 role=server
+timestamp=2026-11-16T12:06:52.589Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T12:06:52.591Z level=INFO run=1f948de1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:06:52.592Z level=INFO run=1f948de1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:06:52.592Z level=INFO run=1f948de1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:06:52.592Z level=INFO run=1f948de1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:06:52.592Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T12:06:52.593Z level=INFO run=1f948de1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:06:52.593Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:06:52.593Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:06:52.593Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:06:52.593Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T12:06:52.607Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=37 role=server
+timestamp=2026-11-16T12:06:52.615Z level=INFO run=1f948de1 message="location services booted" directory=/tmp/verify-ccdvrm/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T12:06:52.628Z level=INFO run=1f948de1 msg="loading plugin" id=opencode-model-routing-optimizer@0.3.0 entrypoint=file:///tmp/verify-ccdvrm/u/cache/opencode/npm/opencode-model-routing-optimizer@0.3.0/1794830811950/node_modules/opencode-model-routing-optimizer/dist/index.js http.span=58 role=server
+timestamp=2026-11-16T12:06:52.631Z level=WARN run=1f948de1 message="failed to load plugin" target=opencode-model-routing-optimizer@0.3.0 ref=err_84a6badb cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=61 role=server
+timestamp=2026-11-16T12:06:53.006Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:06:53.007Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:53.007Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:06:53.007Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:53.021Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:06:53.022Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:53.022Z level=INFO run=1f948de1 message="watcher subscribe" path=/tmp/verify-ccdvrm/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:06:53.022Z level=INFO run=1f948de1 message="watcher started" path=/tmp/verify-ccdvrm/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:53.037Z level=INFO run=1f948de1 message=event event.id=evt_1e440c76d001Ul1pPEwJ4PHMVZ event.created=1794830813037 event.type=provider.updated event.location.directory=/tmp/verify-ccdvrm/u event.location.workspaceID=undefined event.data={} http.span=467 role=server
+timestamp=2026-11-16T12:06:53.044Z level=INFO run=1f948de1 message=event event.id=evt_1e440c774001XUbeMVH7Lbi5Gn event.created=1794830813044 event.type=model.updated event.location.directory=/tmp/verify-ccdvrm/u event.location.workspaceID=undefined event.data={} http.span=474 role=server
+timestamp=2026-11-16T12:06:53.046Z level=INFO run=1f948de1 message=event event.id=evt_1e440c776001SVyVu5f5AdwPBp event.created=1794830813046 event.type=agent.updated event.location.directory=/tmp/verify-ccdvrm/u event.location.workspaceID=undefined event.data={} http.span=476 role=server
+timestamp=2026-11-16T12:06:53.046Z level=INFO run=1f948de1 message=event event.id=evt_1e440c7760027fjSoc7SedGS2U event.created=1794830813046 event.type=command.updated event.location.directory=/tmp/verify-ccdvrm/u event.location.workspaceID=undefined event.data={} http.span=476 role=server
+timestamp=2026-11-16T12:06:53.161Z level=INFO run=1f948de1 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:06:53.161Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:06:53.161Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:06:53.163Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:06:53.163Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:06:53.173Z level=INFO run=1f948de1 message="watcher stopped" path=/etc type=entries http.span=603 role=server
+timestamp=2026-11-16T12:06:53.173Z level=INFO run=1f948de1 message="watcher stopped" path=/ type=entries http.span=603 role=server
+timestamp=2026-11-16T12:06:53.173Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp type=entries http.span=603 role=server
+timestamp=2026-11-16T12:06:53.173Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm type=entries http.span=603 role=server
+timestamp=2026-11-16T12:06:53.173Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u type=entries http.span=603 role=server
+timestamp=2026-11-16T12:06:53.175Z level=INFO run=1f948de1 message="watcher stopped" path=/tmp/verify-ccdvrm/u/.config/opencode type=directory http.span=605 role=server

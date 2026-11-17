@@ -1,0 +1,32 @@
+spec: @prismer/opencode-plugin@1.9.0
+apiNames: @prismer/opencode-plugin, opencode-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-YKYHuo/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39051
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:55.273Z level=INFO run=1377468f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@prismer/opencode-plugin@1.9.0\"]" role=cli
+timestamp=2026-11-16T02:54:55.853Z level=INFO run=18ff4e98 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:56.356Z level=INFO run=18ff4e98 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:56.407Z level=INFO run=18ff4e98 message="database schema bootstrap completed" migrations=59 durationMs=51 role=server
+timestamp=2026-11-16T02:54:56.919Z level=INFO run=18ff4e98 message="watcher subscribe" path=/tmp/verify-YKYHuo/u/.config/opencode type=directory ignores=6 http.span=64 role=server
+timestamp=2026-11-16T02:54:56.923Z level=INFO run=18ff4e98 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-16T02:54:56.925Z level=INFO run=18ff4e98 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=70 role=server
+timestamp=2026-11-16T02:54:56.925Z level=INFO run=18ff4e98 message="watcher subscribe" path=/ type=entries ignores=0 http.span=70 role=server
+timestamp=2026-11-16T02:54:56.925Z level=INFO run=18ff4e98 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=70 role=server
+timestamp=2026-11-16T02:54:56.926Z level=INFO run=18ff4e98 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=71 role=server
+timestamp=2026-11-16T02:54:56.926Z level=INFO run=18ff4e98 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=71 role=server
+timestamp=2026-11-16T02:54:56.926Z level=INFO run=18ff4e98 message="watcher subscribe" path=/tmp/verify-YKYHuo type=entries ignores=0 http.span=71 role=server
+timestamp=2026-11-16T02:54:56.926Z level=ERROR run=18ff4e98 message="failed to watch directory" path=/tmp/verify-YKYHuo error="Error: EACCES: permission denied, watch '/tmp/verify-YKYHuo'" http.span=71 role=server
+timestamp=2026-11-16T02:54:56.929Z level=INFO run=18ff4e98 message="watcher subscribe" path=/tmp/verify-YKYHuo/u type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T02:54:56.930Z level=INFO run=18ff4e98 message="watcher started" path=/tmp/verify-YKYHuo/u type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-16T02:54:56.952Z level=INFO run=18ff4e98 message="watcher started" path=/tmp/verify-YKYHuo/u/.config/opencode type=directory backend=inotify ignores=6 http.span=97 role=server
+timestamp=2026-11-16T02:54:56.963Z level=INFO run=18ff4e98 message="location services booted" directory=/tmp/verify-YKYHuo/u workspaceID=undefined durationMs=106 http.span=108 role=server
+timestamp=2026-11-16T02:54:56.972Z level=INFO run=18ff4e98 msg="loading plugin" id=@prismer/opencode-plugin@1.9.0 entrypoint=file:///tmp/verify-YKYHuo/u/cache/opencode/npm/@prismer/opencode-plugin@1.9.0/1794797695518/node_modules/@prismer/opencode-plugin/dist/index.js http.span=117 role=server
+timestamp=2026-11-16T02:54:56.975Z level=WARN run=18ff4e98 message="failed to load plugin" target=@prismer/opencode-plugin@1.9.0 ref=err_194d91a7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=120 role=server

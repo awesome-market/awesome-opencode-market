@@ -1,0 +1,59 @@
+spec: magpie-agent-console@1.3.8
+apiNames: magpie-agent-console
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ldFkwc/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44613
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:05.348Z level=INFO run=41575d08 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-agent-console@1.3.8\"]" role=cli
+timestamp=2026-11-16T02:54:07.560Z level=INFO run=6c3a69de message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:08.076Z level=INFO run=6c3a69de message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:08.116Z level=INFO run=6c3a69de message="database schema bootstrap completed" migrations=59 durationMs=40 role=server
+timestamp=2026-11-16T02:54:08.492Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u/.config/opencode type=directory ignores=6 http.span=81 role=server
+timestamp=2026-11-16T02:54:08.495Z level=INFO run=6c3a69de message="watcher subscribe" path=/etc type=entries ignores=0 http.span=84 role=server
+timestamp=2026-11-16T02:54:08.496Z level=INFO run=6c3a69de message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=85 role=server
+timestamp=2026-11-16T02:54:08.496Z level=INFO run=6c3a69de message="watcher subscribe" path=/ type=entries ignores=0 http.span=85 role=server
+timestamp=2026-11-16T02:54:08.497Z level=INFO run=6c3a69de message="watcher started" path=/ type=entries backend=node ignores=0 http.span=86 role=server
+timestamp=2026-11-16T02:54:08.497Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=86 role=server
+timestamp=2026-11-16T02:54:08.498Z level=INFO run=6c3a69de message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T02:54:08.498Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T02:54:08.498Z level=ERROR run=6c3a69de message="failed to watch directory" path=/tmp/verify-ldFkwc error="Error: EACCES: permission denied, watch '/tmp/verify-ldFkwc'" http.span=87 role=server
+timestamp=2026-11-16T02:54:08.499Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T02:54:08.499Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u type=entries backend=node ignores=0 http.span=88 role=server
+timestamp=2026-11-16T02:54:08.534Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u/.config/opencode type=directory backend=inotify ignores=6 http.span=123 role=server
+timestamp=2026-11-16T02:54:08.549Z level=INFO run=6c3a69de msg="loading plugin" id=magpie-agent-console@1.3.8 entrypoint=file:///tmp/verify-ldFkwc/u/cache/opencode/npm/magpie-agent-console@1.3.8/1794797647059/node_modules/magpie-agent-console/index.mjs http.span=138 role=server
+timestamp=2026-11-16T02:54:08.554Z level=WARN run=6c3a69de message="failed to load plugin" target=magpie-agent-console@1.3.8 ref=err_83293476 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=143 role=server
+timestamp=2026-11-16T02:54:08.582Z level=INFO run=6c3a69de message="location services booted" directory=/tmp/verify-ldFkwc/u workspaceID=undefined durationMs=170 http.span=171 role=server
+timestamp=2026-11-16T02:54:09.424Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:09.424Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:09.424Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:09.424Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:09.441Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc type=entries ignores=0 http.span=1030 role=server
+timestamp=2026-11-16T02:54:09.442Z level=ERROR run=6c3a69de message="failed to watch directory" path=/tmp/verify-ldFkwc error="Error: EACCES: permission denied, watch '/tmp/verify-ldFkwc'" http.span=1031 role=server
+timestamp=2026-11-16T02:54:09.458Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:54:09.459Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:09.460Z level=INFO run=6c3a69de message="watcher subscribe" path=/tmp/verify-ldFkwc/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:54:09.460Z level=INFO run=6c3a69de message="watcher started" path=/tmp/verify-ldFkwc/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:09.483Z level=INFO run=6c3a69de message=event event.id=evt_1e246be4b001I092g5nkszTqQz event.created=1794797649483 event.type=provider.updated event.location.directory=/tmp/verify-ldFkwc/u event.location.workspaceID=undefined event.data={} http.span=1072 role=server
+timestamp=2026-11-16T02:54:09.493Z level=INFO run=6c3a69de message=event event.id=evt_1e246be550010Qr9jUsUf58xos event.created=1794797649493 event.type=model.updated event.location.directory=/tmp/verify-ldFkwc/u event.location.workspaceID=undefined event.data={} http.span=1082 role=server
+timestamp=2026-11-16T02:54:09.498Z level=INFO run=6c3a69de message=event event.id=evt_1e246be5a001RA1s0pVLyU8hcP event.created=1794797649498 event.type=agent.updated event.location.directory=/tmp/verify-ldFkwc/u event.location.workspaceID=undefined event.data={} http.span=1087 role=server
+timestamp=2026-11-16T02:54:09.499Z level=INFO run=6c3a69de message=event event.id=evt_1e246be5b001OOe5Y1ibBBXqmC event.created=1794797649499 event.type=command.updated event.location.directory=/tmp/verify-ldFkwc/u event.location.workspaceID=undefined event.data={} http.span=1088 role=server
+timestamp=2026-11-16T02:54:09.751Z level=ERROR run=6c3a69de message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1340 role=server
+timestamp=2026-11-16T02:54:09.905Z level=INFO run=6c3a69de message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:54:09.906Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:54:09.906Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:54:09.908Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:09.909Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:09.926Z level=INFO run=6c3a69de message="watcher stopped" path=/etc type=entries http.span=1515 role=server
+timestamp=2026-11-16T02:54:09.926Z level=INFO run=6c3a69de message="watcher stopped" path=/ type=entries http.span=1515 role=server
+timestamp=2026-11-16T02:54:09.926Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp type=entries http.span=1515 role=server
+timestamp=2026-11-16T02:54:09.927Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u type=entries http.span=1516 role=server
+timestamp=2026-11-16T02:54:09.931Z level=INFO run=6c3a69de message="watcher stopped" path=/tmp/verify-ldFkwc/u/.config/opencode type=directory http.span=1520 role=server

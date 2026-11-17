@@ -1,0 +1,56 @@
+spec: opencode-notify-macos@0.0.2
+apiNames: opencode-notify-macos
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-saMQ52/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43861
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:28.710Z level=INFO run=b87082cc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-notify-macos@0.0.2\"]" role=cli
+timestamp=2026-11-16T11:33:33.202Z level=INFO run=0571e51b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:33.730Z level=INFO run=0571e51b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:33.931Z level=INFO run=0571e51b message="database schema bootstrap completed" migrations=59 durationMs=201 role=server
+timestamp=2026-11-16T11:33:34.247Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u/.config/opencode type=directory ignores=6 http.span=32 role=server
+timestamp=2026-11-16T11:33:34.251Z level=INFO run=0571e51b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T11:33:34.252Z level=INFO run=0571e51b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T11:33:34.252Z level=INFO run=0571e51b message="watcher subscribe" path=/ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T11:33:34.252Z level=INFO run=0571e51b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T11:33:34.252Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T11:33:34.253Z level=INFO run=0571e51b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:34.253Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52 type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:34.253Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52 type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:34.253Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:34.253Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:34.281Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u/.config/opencode type=directory backend=inotify ignores=6 http.span=66 role=server
+timestamp=2026-11-16T11:33:34.297Z level=INFO run=0571e51b message="location services booted" directory=/tmp/verify-saMQ52/u workspaceID=undefined durationMs=81 http.span=82 role=server
+timestamp=2026-11-16T11:33:34.325Z level=INFO run=0571e51b msg="loading plugin" id=opencode-notify-macos@0.0.2 entrypoint=file:///tmp/verify-saMQ52/u/cache/opencode/npm/opencode-notify-macos@0.0.2/1794828813006/node_modules/opencode-notify-macos/dist/index.js http.span=110 role=server
+timestamp=2026-11-16T11:33:34.333Z level=WARN run=0571e51b message="failed to load plugin" target=opencode-notify-macos@0.0.2 ref=err_a59ed7ae cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=118 role=server
+timestamp=2026-11-16T11:33:35.127Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:35.128Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:35.128Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:35.128Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:35.154Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:33:35.154Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:35.155Z level=INFO run=0571e51b message="watcher subscribe" path=/tmp/verify-saMQ52/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:33:35.155Z level=INFO run=0571e51b message="watcher started" path=/tmp/verify-saMQ52/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:35.175Z level=INFO run=0571e51b message=event event.id=evt_1e4224b47001kgs1MCG2qIkA9G event.created=1794828815175 event.type=provider.updated event.location.directory=/tmp/verify-saMQ52/u event.location.workspaceID=undefined event.data={} http.span=960 role=server
+timestamp=2026-11-16T11:33:35.185Z level=INFO run=0571e51b message=event event.id=evt_1e4224b51001RFecuNv2rl4d2r event.created=1794828815185 event.type=model.updated event.location.directory=/tmp/verify-saMQ52/u event.location.workspaceID=undefined event.data={} http.span=970 role=server
+timestamp=2026-11-16T11:33:35.187Z level=INFO run=0571e51b message=event event.id=evt_1e4224b53001BlRhheSUPxwhYW event.created=1794828815187 event.type=agent.updated event.location.directory=/tmp/verify-saMQ52/u event.location.workspaceID=undefined event.data={} http.span=972 role=server
+timestamp=2026-11-16T11:33:35.188Z level=INFO run=0571e51b message=event event.id=evt_1e4224b540011j2D0hJUvSjrcb event.created=1794828815188 event.type=command.updated event.location.directory=/tmp/verify-saMQ52/u event.location.workspaceID=undefined event.data={} http.span=973 role=server
+timestamp=2026-11-16T11:33:35.364Z level=ERROR run=0571e51b message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1149 role=server
+timestamp=2026-11-16T11:33:35.612Z level=INFO run=0571e51b message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:33:35.612Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:33:35.612Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:33:35.617Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:35.618Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:35.635Z level=INFO run=0571e51b message="watcher stopped" path=/etc type=entries http.span=1420 role=server
+timestamp=2026-11-16T11:33:35.635Z level=INFO run=0571e51b message="watcher stopped" path=/ type=entries http.span=1420 role=server
+timestamp=2026-11-16T11:33:35.635Z level=INFO run=0571e51b message="watcher stopped" path=/tmp type=entries http.span=1420 role=server
+timestamp=2026-11-16T11:33:35.636Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52 type=entries http.span=1421 role=server
+timestamp=2026-11-16T11:33:35.636Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u type=entries http.span=1421 role=server
+timestamp=2026-11-16T11:33:35.637Z level=INFO run=0571e51b message="watcher stopped" path=/tmp/verify-saMQ52/u/.config/opencode type=directory http.span=1422 role=server

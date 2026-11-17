@@ -1,0 +1,44 @@
+spec: @weiyentan/opencode-plugin-gitlab@0.0.6
+apiNames: @weiyentan/opencode-plugin-gitlab, opencode-plugin-gitlab
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vVJsAZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46643
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:14.399Z level=INFO run=ceec8829 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@weiyentan/opencode-plugin-gitlab@0.0.6\"]" role=cli
+timestamp=2026-11-16T08:06:19.744Z level=INFO run=b35554e2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:20.258Z level=INFO run=b35554e2 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:20.330Z level=INFO run=b35554e2 message="database schema bootstrap completed" migrations=59 durationMs=72 role=server
+timestamp=2026-11-16T08:06:20.679Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u/.config/opencode type=directory ignores=6 http.span=43 role=server
+timestamp=2026-11-16T08:06:20.682Z level=INFO run=b35554e2 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T08:06:20.683Z level=INFO run=b35554e2 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:06:20.683Z level=INFO run=b35554e2 message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:06:20.683Z level=INFO run=b35554e2 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:06:20.683Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:06:20.683Z level=INFO run=b35554e2 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:06:20.684Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:06:20.684Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:06:20.684Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:06:20.684Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:06:20.711Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=75 role=server
+timestamp=2026-11-16T08:06:20.723Z level=INFO run=b35554e2 message="location services booted" directory=/tmp/verify-vVJsAZ/u workspaceID=undefined durationMs=85 http.span=87 role=server
+timestamp=2026-11-16T08:06:20.742Z level=INFO run=b35554e2 msg="loading plugin" id=@weiyentan/opencode-plugin-gitlab@0.0.6 entrypoint=file:///tmp/verify-vVJsAZ/u/cache/opencode/npm/@weiyentan/opencode-plugin-gitlab@0.0.6/1794816379317/node_modules/@weiyentan/opencode-plugin-gitlab/dist/index.js http.span=106 role=server
+timestamp=2026-11-16T08:06:20.791Z level=WARN run=b35554e2 message="failed to load plugin" target=@weiyentan/opencode-plugin-gitlab@0.0.6 ref=err_cf5b6f6a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=155 role=server
+timestamp=2026-11-16T08:06:21.669Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:21.669Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:21.669Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:21.670Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:21.690Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:21.690Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:21.691Z level=INFO run=b35554e2 message="watcher subscribe" path=/tmp/verify-vVJsAZ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:21.691Z level=INFO run=b35554e2 message="watcher started" path=/tmp/verify-vVJsAZ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:21.709Z level=INFO run=b35554e2 message=event event.id=evt_1e364930d001l8OQW6ZWGe5uDd event.created=1794816381709 event.type=provider.updated event.location.directory=/tmp/verify-vVJsAZ/u event.location.workspaceID=undefined event.data={} http.span=1073 role=server
+timestamp=2026-11-16T08:06:21.719Z level=INFO run=b35554e2 message=event event.id=evt_1e36493170015A10ihaOmkcWOg event.created=1794816381719 event.type=model.updated event.location.directory=/tmp/verify-vVJsAZ/u event.location.workspaceID=undefined event.data={} http.span=1083 role=server
+timestamp=2026-11-16T08:06:21.721Z level=INFO run=b35554e2 message=event event.id=evt_1e364931900123izfen9WKd3Xl event.created=1794816381721 event.type=agent.updated event.location.directory=/tmp/verify-vVJsAZ/u event.location.workspaceID=undefined event.data={} http.span=1085 role=server
+timestamp=2026-11-16T08:06:21.721Z level=INFO run=b35554e2 message=event event.id=evt_1e3649319002hRhQfsISJnIgbV event.created=1794816381721 event.type=command.updated event.location.directory=/tmp/verify-vVJsAZ/u event.location.workspaceID=undefined event.data={} http.span=1085 role=server

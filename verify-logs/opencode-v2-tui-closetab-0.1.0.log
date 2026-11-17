@@ -1,0 +1,55 @@
+spec: opencode-v2-tui-closetab@0.1.0
+apiNames: opencode-v2-tui-closetab
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-rd4wOR/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38347
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:52:47.575Z level=INFO run=6f101747 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-v2-tui-closetab@0.1.0\"]" role=cli
+timestamp=2026-11-16T08:53:01.761Z level=INFO run=e2dd9444 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:53:01.889Z level=INFO run=e2dd9444 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:53:01.900Z level=INFO run=e2dd9444 message="database schema bootstrap completed" migrations=59 durationMs=11 role=server
+timestamp=2026-11-16T08:53:01.997Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T08:53:01.999Z level=INFO run=e2dd9444 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T08:53:01.999Z level=INFO run=e2dd9444 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.000Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:53:02.001Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:53:02.015Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u/.config/opencode type=directory backend=inotify ignores=6 http.span=34 role=server
+timestamp=2026-11-16T08:53:02.022Z level=INFO run=e2dd9444 message="location services booted" directory=/tmp/verify-rd4wOR/u workspaceID=undefined durationMs=40 http.span=41 role=server
+timestamp=2026-11-16T08:53:02.027Z level=INFO run=e2dd9444 msg="loading plugin" id=opencode-v2-tui-closetab@0.1.0 entrypoint=file:///tmp/verify-rd4wOR/u/cache/opencode/npm/opencode-v2-tui-closetab@0.1.0/1794819181607/node_modules/opencode-v2-tui-closetab/src/index.ts http.span=46 role=server
+timestamp=2026-11-16T08:53:02.038Z level=WARN run=e2dd9444 message="failed to load plugin" target=opencode-v2-tui-closetab@0.1.0 ref=err_a7993078 cause="Cause([Die(TypeError: Schema.isStartsWith is not a function. (In 'Schema.isStartsWith(\"wrk\")', 'Schema.isStartsWith' is undefined))])" http.span=57 role=server
+timestamp=2026-11-16T08:53:02.464Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:53:02.464Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:02.464Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:53:02.464Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:02.475Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:53:02.475Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:02.475Z level=INFO run=e2dd9444 message="watcher subscribe" path=/tmp/verify-rd4wOR/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:53:02.475Z level=INFO run=e2dd9444 message="watcher started" path=/tmp/verify-rd4wOR/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:02.489Z level=INFO run=e2dd9444 message=event event.id=evt_1e38f4f99001YHavhnAPjy3VQ2 event.created=1794819182489 event.type=provider.updated event.location.directory=/tmp/verify-rd4wOR/u event.location.workspaceID=undefined event.data={} http.span=508 role=server
+timestamp=2026-11-16T08:53:02.496Z level=INFO run=e2dd9444 message=event event.id=evt_1e38f4fa00011HRiJMyR46Yg86 event.created=1794819182496 event.type=model.updated event.location.directory=/tmp/verify-rd4wOR/u event.location.workspaceID=undefined event.data={} http.span=515 role=server
+timestamp=2026-11-16T08:53:02.498Z level=INFO run=e2dd9444 message=event event.id=evt_1e38f4fa2001nPVX7VZqwWQ1MS event.created=1794819182498 event.type=agent.updated event.location.directory=/tmp/verify-rd4wOR/u event.location.workspaceID=undefined event.data={} http.span=517 role=server
+timestamp=2026-11-16T08:53:02.498Z level=INFO run=e2dd9444 message=event event.id=evt_1e38f4fa2002rqSFu5wcNQPYu4 event.created=1794819182498 event.type=command.updated event.location.directory=/tmp/verify-rd4wOR/u event.location.workspaceID=undefined event.data={} http.span=517 role=server
+timestamp=2026-11-16T08:53:02.577Z level=INFO run=e2dd9444 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:53:02.577Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:53:02.577Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:53:02.580Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:53:02.580Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:53:02.592Z level=INFO run=e2dd9444 message="watcher stopped" path=/etc type=entries http.span=611 role=server
+timestamp=2026-11-16T08:53:02.592Z level=INFO run=e2dd9444 message="watcher stopped" path=/ type=entries http.span=611 role=server
+timestamp=2026-11-16T08:53:02.592Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp type=entries http.span=611 role=server
+timestamp=2026-11-16T08:53:02.592Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR type=entries http.span=611 role=server
+timestamp=2026-11-16T08:53:02.592Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u type=entries http.span=611 role=server
+timestamp=2026-11-16T08:53:02.593Z level=INFO run=e2dd9444 message="watcher stopped" path=/tmp/verify-rd4wOR/u/.config/opencode type=directory http.span=612 role=server

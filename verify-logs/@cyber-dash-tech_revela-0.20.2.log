@@ -1,0 +1,56 @@
+spec: @cyber-dash-tech/revela@0.20.2
+apiNames: @cyber-dash-tech/revela, revela
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-J8JOEg/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43455
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:52:04.126Z level=INFO run=01f4950c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@cyber-dash-tech/revela@0.20.2\"]" role=cli
+timestamp=2026-11-16T08:52:22.056Z level=INFO run=72b9bb03 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:52:22.497Z level=INFO run=72b9bb03 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:52:22.546Z level=INFO run=72b9bb03 message="database schema bootstrap completed" migrations=59 durationMs=49 role=server
+timestamp=2026-11-16T08:52:22.878Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u/.config/opencode type=directory ignores=6 http.span=47 role=server
+timestamp=2026-11-16T08:52:22.884Z level=INFO run=72b9bb03 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:52:22.885Z level=INFO run=72b9bb03 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:52:22.885Z level=INFO run=72b9bb03 message="watcher subscribe" path=/ type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:52:22.886Z level=INFO run=72b9bb03 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:52:22.888Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:52:22.888Z level=INFO run=72b9bb03 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:52:22.889Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:22.889Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:22.889Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:22.889Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:22.916Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u/.config/opencode type=directory backend=inotify ignores=6 http.span=85 role=server
+timestamp=2026-11-16T08:52:22.937Z level=INFO run=72b9bb03 message="location services booted" directory=/tmp/verify-J8JOEg/u workspaceID=undefined durationMs=106 http.span=106 role=server
+timestamp=2026-11-16T08:52:22.953Z level=INFO run=72b9bb03 msg="loading plugin" id=@cyber-dash-tech/revela@0.20.2 entrypoint=file:///tmp/verify-J8JOEg/u/cache/opencode/npm/@cyber-dash-tech/revela@0.20.2/1794819141719/node_modules/@cyber-dash-tech/revela/index.ts http.span=122 role=server
+timestamp=2026-11-16T08:52:24.105Z level=WARN run=72b9bb03 message="failed to load plugin" target=@cyber-dash-tech/revela@0.20.2 ref=err_c5a12be0 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=1274 role=server
+timestamp=2026-11-16T08:52:25.196Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:25.197Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:25.197Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:25.197Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:25.237Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:52:25.238Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:25.238Z level=INFO run=72b9bb03 message="watcher subscribe" path=/tmp/verify-J8JOEg/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:52:25.240Z level=INFO run=72b9bb03 message="watcher started" path=/tmp/verify-J8JOEg/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:25.276Z level=INFO run=72b9bb03 message=event event.id=evt_1e38ebe3c0018pAhDYpt3usjWa event.created=1794819145276 event.type=provider.updated event.location.directory=/tmp/verify-J8JOEg/u event.location.workspaceID=undefined event.data={} http.span=2445 role=server
+timestamp=2026-11-16T08:52:25.287Z level=INFO run=72b9bb03 message=event event.id=evt_1e38ebe47001CGfDkdedn2mimT event.created=1794819145287 event.type=model.updated event.location.directory=/tmp/verify-J8JOEg/u event.location.workspaceID=undefined event.data={} http.span=2456 role=server
+timestamp=2026-11-16T08:52:25.290Z level=INFO run=72b9bb03 message=event event.id=evt_1e38ebe4a0014QeY7vPdSXdtFN event.created=1794819145290 event.type=agent.updated event.location.directory=/tmp/verify-J8JOEg/u event.location.workspaceID=undefined event.data={} http.span=2459 role=server
+timestamp=2026-11-16T08:52:25.290Z level=INFO run=72b9bb03 message=event event.id=evt_1e38ebe4a002mNZMeC41Z0JFI6 event.created=1794819145290 event.type=command.updated event.location.directory=/tmp/verify-J8JOEg/u event.location.workspaceID=undefined event.data={} http.span=2459 role=server
+timestamp=2026-11-16T08:52:25.368Z level=ERROR run=72b9bb03 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2537 role=server
+timestamp=2026-11-16T08:52:25.778Z level=INFO run=72b9bb03 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:52:25.778Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:52:25.778Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:52:25.783Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:25.786Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:25.808Z level=INFO run=72b9bb03 message="watcher stopped" path=/etc type=entries http.span=2977 role=server
+timestamp=2026-11-16T08:52:25.808Z level=INFO run=72b9bb03 message="watcher stopped" path=/ type=entries http.span=2977 role=server
+timestamp=2026-11-16T08:52:25.808Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp type=entries http.span=2977 role=server
+timestamp=2026-11-16T08:52:25.808Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg type=entries http.span=2977 role=server
+timestamp=2026-11-16T08:52:25.808Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u type=entries http.span=2977 role=server
+timestamp=2026-11-16T08:52:25.817Z level=INFO run=72b9bb03 message="watcher stopped" path=/tmp/verify-J8JOEg/u/.config/opencode type=directory http.span=2986 role=server

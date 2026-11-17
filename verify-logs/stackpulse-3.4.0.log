@@ -1,0 +1,18 @@
+spec: stackpulse@3.4.0
+apiNames: stackpulse
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-24Y4Zo/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43577
+server password [redacted]
+error: unknown option '--port'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:26.148Z level=INFO run=a3102b4b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"stackpulse@3.4.0\"]" role=cli
+timestamp=2026-11-16T07:35:30.936Z level=INFO run=13d3dfab message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:31.440Z level=INFO run=13d3dfab message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:31.832Z level=INFO run=13d3dfab message="database schema bootstrap completed" migrations=59 durationMs=392 role=server

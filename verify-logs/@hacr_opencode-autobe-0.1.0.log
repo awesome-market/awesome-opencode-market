@@ -1,0 +1,32 @@
+spec: @hacr/opencode-autobe@0.1.0
+apiNames: @hacr/opencode-autobe, opencode-autobe
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-NyQ9GS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45735
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:40.604Z level=INFO run=86ec5aba message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@hacr/opencode-autobe@0.1.0\"]" role=cli
+timestamp=2026-11-16T07:35:45.190Z level=INFO run=c9432e99 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:45.566Z level=INFO run=c9432e99 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:45.620Z level=INFO run=c9432e99 message="database schema bootstrap completed" migrations=59 durationMs=54 role=server
+timestamp=2026-11-16T07:35:45.914Z level=INFO run=c9432e99 message="watcher subscribe" path=/tmp/verify-NyQ9GS/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T07:35:45.916Z level=INFO run=c9432e99 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.917Z level=INFO run=c9432e99 message="watcher subscribe" path=/tmp/verify-NyQ9GS type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:45.918Z level=INFO run=c9432e99 message="watcher started" path=/tmp/verify-NyQ9GS type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:45.918Z level=INFO run=c9432e99 message="watcher subscribe" path=/tmp/verify-NyQ9GS/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:45.918Z level=INFO run=c9432e99 message="watcher started" path=/tmp/verify-NyQ9GS/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:45.934Z level=INFO run=c9432e99 message="watcher started" path=/tmp/verify-NyQ9GS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=39 role=server
+timestamp=2026-11-16T07:35:45.942Z level=INFO run=c9432e99 message="location services booted" directory=/tmp/verify-NyQ9GS/u workspaceID=undefined durationMs=46 http.span=47 role=server
+timestamp=2026-11-16T07:35:45.946Z level=INFO run=c9432e99 msg="loading plugin" id=@hacr/opencode-autobe@0.1.0 entrypoint=file:///tmp/verify-NyQ9GS/u/cache/opencode/npm/@hacr/opencode-autobe@0.1.0/1794814545042/node_modules/@hacr/opencode-autobe/index.ts http.span=51 role=server
+timestamp=2026-11-16T07:35:45.989Z level=WARN run=c9432e99 message="failed to load plugin" target=@hacr/opencode-autobe@0.1.0 ref=err_37a33eb9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=94 role=server

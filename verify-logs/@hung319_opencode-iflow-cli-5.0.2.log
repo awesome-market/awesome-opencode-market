@@ -1,0 +1,32 @@
+spec: @hung319/opencode-iflow-cli@5.0.2
+apiNames: @hung319/opencode-iflow-cli, opencode-iflow-cli
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-9XGV03/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33955
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:38:30.256Z level=INFO run=73881d0d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@hung319/opencode-iflow-cli@5.0.2\"]" role=cli
+timestamp=2026-11-16T09:38:32.456Z level=INFO run=1fb89322 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:38:32.578Z level=INFO run=1fb89322 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:38:32.609Z level=INFO run=1fb89322 message="database schema bootstrap completed" migrations=59 durationMs=31 role=server
+timestamp=2026-11-16T09:38:32.971Z level=INFO run=1fb89322 message="watcher subscribe" path=/tmp/verify-9XGV03/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-16T09:38:32.975Z level=INFO run=1fb89322 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T09:38:32.976Z level=INFO run=1fb89322 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T09:38:32.976Z level=INFO run=1fb89322 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T09:38:32.976Z level=INFO run=1fb89322 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T09:38:32.976Z level=INFO run=1fb89322 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T09:38:32.976Z level=INFO run=1fb89322 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T09:38:32.977Z level=INFO run=1fb89322 message="watcher subscribe" path=/tmp/verify-9XGV03 type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T09:38:32.977Z level=INFO run=1fb89322 message="watcher started" path=/tmp/verify-9XGV03 type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T09:38:32.977Z level=INFO run=1fb89322 message="watcher subscribe" path=/tmp/verify-9XGV03/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T09:38:32.977Z level=INFO run=1fb89322 message="watcher started" path=/tmp/verify-9XGV03/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T09:38:32.999Z level=INFO run=1fb89322 message="watcher started" path=/tmp/verify-9XGV03/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-16T09:38:33.009Z level=INFO run=1fb89322 message="location services booted" directory=/tmp/verify-9XGV03/u workspaceID=undefined durationMs=59 http.span=59 role=server
+timestamp=2026-11-16T09:38:33.013Z level=INFO run=1fb89322 msg="loading plugin" id=@hung319/opencode-iflow-cli@5.0.2 entrypoint=file:///tmp/verify-9XGV03/u/cache/opencode/npm/@hung319/opencode-iflow-cli@5.0.2/1794821912289/node_modules/@hung319/opencode-iflow-cli/dist/index.js http.span=63 role=server
+timestamp=2026-11-16T09:38:33.034Z level=WARN run=1fb89322 message="failed to load plugin" target=@hung319/opencode-iflow-cli@5.0.2 ref=err_6e64d4a0 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=84 role=server

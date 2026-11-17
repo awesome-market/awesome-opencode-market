@@ -1,0 +1,31 @@
+spec: subway-context@1.3.3
+apiNames: subway-context
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-oFFzNq/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42963
+server password [redacted]
+Subway Context v1.3.3
+
+  subway-context                     Run as an MCP server over stdio
+  subway-context hud [port] [--open] Start the Live HUD on 127.0.0.1
+  subway-context workers             List workers, with approval codes for pending ones
+  subway-context approve <worker_id> Launch a pending worker
+  subway-context reject <worker_id> [reason]
+  subway-context stop <worker_id>    Stop a running worker
+  subway-context permissions         List worker permission requests
+  subway-context watch [--stream]    Wait for, or stream, permission requests and finished workers
+  subway-context mode [ask|auto_safe|auto_approve]  Show or set how workers get permissions
+  subway-context allow|always|deny <request_id>
+  subway-context tail <worker_id>    Show a worker's status and log
+  subway-context locks | track [name] | quota [source]
+  subway-context notify test           Send a test desktop notification
+  subway-context install | status | uninstall
+  subway-context <tool> '<json args>' Call any MCP tool directly
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:26.462Z level=INFO run=6d3a5a38 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"subway-context@1.3.3\"]" role=cli

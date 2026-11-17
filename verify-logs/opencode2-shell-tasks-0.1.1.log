@@ -1,0 +1,32 @@
+spec: opencode2-shell-tasks@0.1.1
+apiNames: opencode2-shell-tasks
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-GRMVqS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43435
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:27.191Z level=INFO run=8c2cecde message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode2-shell-tasks@0.1.1\"]" role=cli
+timestamp=2026-11-16T10:14:01.952Z level=INFO run=defc26ba message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:14:02.578Z level=INFO run=defc26ba message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:14:02.902Z level=INFO run=defc26ba message="database schema bootstrap completed" migrations=59 durationMs=324 role=server
+timestamp=2026-11-16T10:14:03.174Z level=INFO run=defc26ba message="watcher subscribe" path=/tmp/verify-GRMVqS/u/.config/opencode type=directory ignores=6 http.span=24 role=server
+timestamp=2026-11-16T10:14:03.178Z level=INFO run=defc26ba message="watcher subscribe" path=/etc type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:14:03.178Z level=INFO run=defc26ba message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:14:03.179Z level=INFO run=defc26ba message="watcher subscribe" path=/ type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:14:03.179Z level=INFO run=defc26ba message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:14:03.179Z level=INFO run=defc26ba message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:14:03.179Z level=INFO run=defc26ba message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:14:03.179Z level=INFO run=defc26ba message="watcher subscribe" path=/tmp/verify-GRMVqS type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:14:03.180Z level=INFO run=defc26ba message="watcher started" path=/tmp/verify-GRMVqS type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:14:03.180Z level=INFO run=defc26ba message="watcher subscribe" path=/tmp/verify-GRMVqS/u type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:14:03.181Z level=INFO run=defc26ba message="watcher started" path=/tmp/verify-GRMVqS/u type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T10:14:03.209Z level=INFO run=defc26ba message="watcher started" path=/tmp/verify-GRMVqS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=59 role=server
+timestamp=2026-11-16T10:14:03.246Z level=INFO run=defc26ba message="location services booted" directory=/tmp/verify-GRMVqS/u workspaceID=undefined durationMs=94 http.span=96 role=server
+timestamp=2026-11-16T10:14:03.254Z level=INFO run=defc26ba msg="loading plugin" id=opencode2-shell-tasks@0.1.1 entrypoint=file:///tmp/verify-GRMVqS/u/cache/opencode/npm/opencode2-shell-tasks@0.1.1/1794824041702/node_modules/opencode2-shell-tasks/dist/server.js http.span=104 role=server
+timestamp=2026-11-16T10:14:03.277Z level=WARN run=defc26ba message="failed to load plugin" target=opencode2-shell-tasks@0.1.1 ref=err_85109097 cause="Cause([Die(TypeError: Schema.isStartsWith is not a function. (In 'Schema.isStartsWith(\"wrk\")', 'Schema.isStartsWith' is undefined))])" http.span=127 role=server

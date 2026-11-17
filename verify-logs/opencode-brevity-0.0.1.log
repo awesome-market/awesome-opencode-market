@@ -1,0 +1,32 @@
+spec: opencode-brevity@0.0.1
+apiNames: opencode-brevity
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-rheVFo/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36317
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:05.218Z level=INFO run=720d0b70 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-brevity@0.0.1\"]" role=cli
+timestamp=2026-11-16T12:54:09.950Z level=INFO run=4f65ab17 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:10.144Z level=INFO run=4f65ab17 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:10.156Z level=INFO run=4f65ab17 message="database schema bootstrap completed" migrations=59 durationMs=12 role=server
+timestamp=2026-11-16T12:54:10.453Z level=INFO run=4f65ab17 message="watcher subscribe" path=/tmp/verify-rheVFo/u/.config/opencode type=directory ignores=6 http.span=31 role=server
+timestamp=2026-11-16T12:54:10.458Z level=INFO run=4f65ab17 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:54:10.459Z level=INFO run=4f65ab17 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:54:10.459Z level=INFO run=4f65ab17 message="watcher subscribe" path=/ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:54:10.459Z level=INFO run=4f65ab17 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:54:10.460Z level=INFO run=4f65ab17 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T12:54:10.460Z level=INFO run=4f65ab17 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T12:54:10.460Z level=INFO run=4f65ab17 message="watcher subscribe" path=/tmp/verify-rheVFo type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T12:54:10.461Z level=INFO run=4f65ab17 message="watcher started" path=/tmp/verify-rheVFo type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T12:54:10.461Z level=INFO run=4f65ab17 message="watcher subscribe" path=/tmp/verify-rheVFo/u type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T12:54:10.461Z level=INFO run=4f65ab17 message="watcher started" path=/tmp/verify-rheVFo/u type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T12:54:10.481Z level=INFO run=4f65ab17 message="watcher started" path=/tmp/verify-rheVFo/u/.config/opencode type=directory backend=inotify ignores=6 http.span=59 role=server
+timestamp=2026-11-16T12:54:10.491Z level=INFO run=4f65ab17 message="location services booted" directory=/tmp/verify-rheVFo/u workspaceID=undefined durationMs=68 http.span=69 role=server
+timestamp=2026-11-16T12:54:10.506Z level=INFO run=4f65ab17 msg="loading plugin" id=opencode-brevity@0.0.1 entrypoint=file:///tmp/verify-rheVFo/u/cache/opencode/npm/opencode-brevity@0.0.1/1794833649709/node_modules/opencode-brevity/dist/index.js http.span=84 role=server
+timestamp=2026-11-16T12:54:10.508Z level=WARN run=4f65ab17 message="failed to load plugin" target=opencode-brevity@0.0.1 ref=err_69846e9d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=86 role=server

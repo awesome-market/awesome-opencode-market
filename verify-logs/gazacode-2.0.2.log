@@ -1,0 +1,65 @@
+spec: gazacode@2.0.2
+apiNames: gazacode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-lH4KSF/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42383
+server password [redacted]
+ ██████╗  █████╗ ███████╗ █████╗  ██████╗ ██████╗ ██████╗ ███████╗
+██╔════╝ ██╔══██╗╚══███╔╝██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
+██║  ███╗███████║  ███╔╝ ███████║██║     ██║   ██║██║  ██║█████╗  
+██║   ██║██╔══██║ ███╔╝  ██╔══██║██║     ██║   ██║██║  ██║██╔══╝  
+╚██████╔╝██║  ██║███████╗██║  ██║╚██████╗╚██████╔╝██████╔╝███████╗
+ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
+                                                                  
+A multi-provider AI chat CLI for your terminal — by GAZA
+────────────────────────────────────────────────────────────
+
+╭───────────────────────────────── ◉ Connect ──────────────────────────────────╮
+│                                                                              │
+│   Welcome to GAZACODE                                                        │
+│                                                                              │
+│   Connect an AI provider to start chatting in your terminal.                 │
+│   Your API key is stored locally in                                          │
+│   /tmp/verify-lH4KSF/u/.opengaza/config.json                                 │
+│                                                                              │
+│   Don't have a key? Each provider offers free access:                        │
+│   • OpenRouter has 20+ free models (no credit card)                          │
+│   • Gemini has a generous free tier                                          │
+│   • OpenAI / Claude require a paid account                                   │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+? Pick a provider to connect: (Use arrow keys)
+❯ ○ OpenAI             · gpt-5.5
+  ○ Google Gemini      · gemini-2.5-pro
+  ○ Anthropic Claude   · claude-sonnet-4-6
+  ○ OpenRouter         · nvidia/nemotron-3-super-120b-a12b:free
+  ○ OpenCode Zen       · opencode/big-pickle[?25l[45Greceived SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T19:24:02.981Z level=INFO run=8838a2a7 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"gazacode@2.0.2\"]" role=cli
+timestamp=2026-11-16T19:24:09.809Z level=INFO run=40f2961e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T19:24:10.051Z level=INFO run=40f2961e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T19:24:10.077Z level=INFO run=40f2961e message="database schema bootstrap completed" migrations=59 durationMs=26 role=server
+timestamp=2026-11-16T19:24:10.277Z level=INFO run=40f2961e message="watcher subscribe" path=/tmp/verify-lH4KSF/u/.config/opencode type=directory ignores=6 http.span=30 role=server
+timestamp=2026-11-16T19:24:10.282Z level=INFO run=40f2961e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T19:24:10.282Z level=INFO run=40f2961e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T19:24:10.283Z level=INFO run=40f2961e message="watcher subscribe" path=/ type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T19:24:10.283Z level=INFO run=40f2961e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T19:24:10.284Z level=INFO run=40f2961e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T19:24:10.284Z level=INFO run=40f2961e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T19:24:10.284Z level=INFO run=40f2961e message="watcher subscribe" path=/tmp/verify-lH4KSF type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T19:24:10.284Z level=INFO run=40f2961e message="watcher started" path=/tmp/verify-lH4KSF type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T19:24:10.285Z level=INFO run=40f2961e message="watcher subscribe" path=/tmp/verify-lH4KSF/u type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T19:24:10.285Z level=INFO run=40f2961e message="watcher started" path=/tmp/verify-lH4KSF/u type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T19:24:10.314Z level=INFO run=40f2961e message="watcher started" path=/tmp/verify-lH4KSF/u/.config/opencode type=directory backend=inotify ignores=6 http.span=67 role=server
+timestamp=2026-11-16T19:24:10.337Z level=INFO run=40f2961e message="location services booted" directory=/tmp/verify-lH4KSF/u workspaceID=undefined durationMs=89 http.span=90 role=server
+timestamp=2026-11-16T19:24:10.352Z level=INFO run=40f2961e msg="loading plugin" id=gazacode@2.0.2 entrypoint=file:///tmp/verify-lH4KSF/u/cache/opencode/npm/gazacode@2.0.2/1794857049516/node_modules/gazacode/dist/index.js http.span=105 role=server
+timestamp=2026-11-16T19:24:11.503Z level=WARN run=40f2961e message="failed to load plugin" target=gazacode@2.0.2 ref=err_b341e668 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=1256 role=server

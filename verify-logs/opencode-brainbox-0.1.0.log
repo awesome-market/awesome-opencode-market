@@ -1,0 +1,58 @@
+spec: opencode-brainbox@0.1.0
+apiNames: opencode-brainbox
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-cmiEDt/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40615
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:31.722Z level=INFO run=04a8bc66 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-brainbox@0.1.0\"]" role=cli
+timestamp=2026-11-16T08:47:36.582Z level=INFO run=f75139bf message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:37.035Z level=INFO run=f75139bf message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:37.067Z level=INFO run=f75139bf message="database schema bootstrap completed" migrations=59 durationMs=32 role=server
+timestamp=2026-11-16T08:47:37.509Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u/.config/opencode type=directory ignores=6 http.span=48 role=server
+timestamp=2026-11-16T08:47:37.513Z level=INFO run=f75139bf message="watcher subscribe" path=/etc type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T08:47:37.513Z level=INFO run=f75139bf message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-16T08:47:37.514Z level=INFO run=f75139bf message="watcher subscribe" path=/ type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:37.514Z level=INFO run=f75139bf message="watcher started" path=/ type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:37.514Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:37.515Z level=INFO run=f75139bf message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:47:37.515Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:47:37.515Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:47:37.516Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:47:37.516Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:47:37.544Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u/.config/opencode type=directory backend=inotify ignores=6 http.span=83 role=server
+timestamp=2026-11-16T08:47:37.562Z level=INFO run=f75139bf message="location services booted" directory=/tmp/verify-cmiEDt/u workspaceID=undefined durationMs=100 http.span=101 role=server
+timestamp=2026-11-16T08:47:37.566Z level=INFO run=f75139bf msg="loading plugin" id=opencode-brainbox@0.1.0 entrypoint=file:///tmp/verify-cmiEDt/u/cache/opencode/npm/opencode-brainbox@0.1.0/1794818856177/node_modules/opencode-brainbox/index.js http.span=105 role=server
+timestamp=2026-11-16T08:47:37.596Z level=WARN run=f75139bf message="failed to load plugin" target=opencode-brainbox@0.1.0 ref=err_9d9c9e3d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=135 role=server
+timestamp=2026-11-16T08:47:38.252Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:38.253Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:38.253Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:38.253Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:38.266Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:47:38.267Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:38.267Z level=INFO run=f75139bf message="watcher subscribe" path=/tmp/verify-cmiEDt/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:47:38.267Z level=INFO run=f75139bf message="watcher started" path=/tmp/verify-cmiEDt/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:38.282Z level=INFO run=f75139bf message=event event.id=evt_1e38a5d2a001R8vwj5xsokgutg event.created=1794818858282 event.type=provider.updated event.location.directory=/tmp/verify-cmiEDt/u event.location.workspaceID=undefined event.data={} http.span=821 role=server
+timestamp=2026-11-16T08:47:38.289Z level=INFO run=f75139bf message=event event.id=evt_1e38a5d31001FPgOM3RK7zxVc5 event.created=1794818858289 event.type=model.updated event.location.directory=/tmp/verify-cmiEDt/u event.location.workspaceID=undefined event.data={} http.span=828 role=server
+timestamp=2026-11-16T08:47:38.291Z level=INFO run=f75139bf message=event event.id=evt_1e38a5d33001ySpCWAqHj3ieQE event.created=1794818858291 event.type=agent.updated event.location.directory=/tmp/verify-cmiEDt/u event.location.workspaceID=undefined event.data={} http.span=830 role=server
+timestamp=2026-11-16T08:47:38.292Z level=INFO run=f75139bf message=event event.id=evt_1e38a5d34001FeT4tukQLKCtwh event.created=1794818858292 event.type=command.updated event.location.directory=/tmp/verify-cmiEDt/u event.location.workspaceID=undefined event.data={} http.span=831 role=server
+timestamp=2026-11-16T08:47:38.599Z level=ERROR run=f75139bf message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1138 role=server
+timestamp=2026-11-16T08:47:38.793Z level=INFO run=f75139bf message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:47:38.793Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:47:38.793Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:47:38.796Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:38.796Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:38.808Z level=INFO run=f75139bf message="watcher stopped" path=/etc type=entries http.span=1347 role=server
+timestamp=2026-11-16T08:47:38.808Z level=INFO run=f75139bf message="watcher stopped" path=/ type=entries http.span=1347 role=server
+timestamp=2026-11-16T08:47:38.808Z level=INFO run=f75139bf message="watcher stopped" path=/tmp type=entries http.span=1347 role=server
+timestamp=2026-11-16T08:47:38.808Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt type=entries http.span=1347 role=server
+timestamp=2026-11-16T08:47:38.808Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u type=entries http.span=1347 role=server
+timestamp=2026-11-16T08:47:38.809Z level=INFO run=f75139bf message="watcher stopped" path=/tmp/verify-cmiEDt/u/.config/opencode type=directory http.span=1348 role=server

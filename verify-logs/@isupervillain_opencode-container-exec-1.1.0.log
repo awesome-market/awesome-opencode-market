@@ -1,0 +1,32 @@
+spec: @isupervillain/opencode-container-exec@1.1.0
+apiNames: @isupervillain/opencode-container-exec, opencode-container-exec
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Lxsaga/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41619
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:38:37.052Z level=INFO run=1fc0a59e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@isupervillain/opencode-container-exec@1.1.0\"]" role=cli
+timestamp=2026-11-16T09:38:39.326Z level=INFO run=faa206fd message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:38:39.553Z level=INFO run=faa206fd message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:38:39.694Z level=INFO run=faa206fd message="database schema bootstrap completed" migrations=59 durationMs=141 role=server
+timestamp=2026-11-16T09:38:39.855Z level=INFO run=faa206fd message="watcher subscribe" path=/tmp/verify-Lxsaga/u/.config/opencode type=directory ignores=6 http.span=34 role=server
+timestamp=2026-11-16T09:38:39.858Z level=INFO run=faa206fd message="watcher subscribe" path=/etc type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T09:38:39.859Z level=INFO run=faa206fd message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:38:39.859Z level=INFO run=faa206fd message="watcher subscribe" path=/ type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:38:39.860Z level=INFO run=faa206fd message="watcher started" path=/ type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher subscribe" path=/tmp/verify-Lxsaga type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher started" path=/tmp/verify-Lxsaga type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher subscribe" path=/tmp/verify-Lxsaga/u type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.861Z level=INFO run=faa206fd message="watcher started" path=/tmp/verify-Lxsaga/u type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:38:39.880Z level=INFO run=faa206fd message="watcher started" path=/tmp/verify-Lxsaga/u/.config/opencode type=directory backend=inotify ignores=6 http.span=59 role=server
+timestamp=2026-11-16T09:38:39.894Z level=INFO run=faa206fd message="location services booted" directory=/tmp/verify-Lxsaga/u workspaceID=undefined durationMs=72 http.span=73 role=server
+timestamp=2026-11-16T09:38:39.901Z level=INFO run=faa206fd msg="loading plugin" id=@isupervillain/opencode-container-exec@1.1.0 entrypoint=file:///tmp/verify-Lxsaga/u/cache/opencode/npm/@isupervillain/opencode-container-exec@1.1.0/1794821919085/node_modules/@isupervillain/opencode-container-exec/plugin/index.js http.span=80 role=server
+timestamp=2026-11-16T09:38:39.939Z level=WARN run=faa206fd message="failed to load plugin" target=@isupervillain/opencode-container-exec@1.1.0 ref=err_c2804b10 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=118 role=server

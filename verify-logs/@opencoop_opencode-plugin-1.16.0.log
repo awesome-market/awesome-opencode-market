@@ -1,0 +1,45 @@
+spec: @opencoop/opencode-plugin@1.16.0
+apiNames: @opencoop/opencode-plugin, opencode-plugin
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-KaRo9x/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37209
+server password [redacted]
+[OpenCOOP] V2 plugin setup starting...
+{"level":30,"time":1794816392373,"pid":4442,"hostname":"ip-10-0-128-241","msg":"Database initialized at /tmp/verify-KaRo9x/u/.opencoop/opencoop.db"}
+[OpenCOOP] All managers initialized
+{"level":30,"time":1794816392457,"pid":4442,"hostname":"ip-10-0-128-241","msg":"All managers initialized"}
+[OpenCOOP] Security: local connections trusted; remote requires a token
+[OpenCOOP] Admin token: 0098712621959fac99e0cff7f4e4255b104c2776132cd0be54bbed0efd97787d
+{"level":30,"time":1794816392465,"pid":4442,"hostname":"ip-10-0-128-241","msg":"Tunnel edge proxy listening on 127.0.0.1:31314"}
+{"level":30,"time":1794816392466,"pid":4442,"hostname":"ip-10-0-128-241","msg":"OpenCOOP server listening on 127.0.0.1:31313"}
+[OpenCOOP] SSH tunnel exited with code 255
+received SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+  0.1s  layer plugin-supervisor releasing
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:17.737Z level=INFO run=43127008 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@opencoop/opencode-plugin@1.16.0\"]" role=cli
+timestamp=2026-11-16T08:06:29.581Z level=INFO run=8db2ac0d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:29.951Z level=INFO run=8db2ac0d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:29.974Z level=INFO run=8db2ac0d message="database schema bootstrap completed" migrations=59 durationMs=23 role=server
+timestamp=2026-11-16T08:06:30.273Z level=INFO run=8db2ac0d message="watcher subscribe" path=/tmp/verify-KaRo9x/u/.config/opencode type=directory ignores=6 http.span=92 role=server
+timestamp=2026-11-16T08:06:30.278Z level=INFO run=8db2ac0d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=97 role=server
+timestamp=2026-11-16T08:06:30.278Z level=INFO run=8db2ac0d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=97 role=server
+timestamp=2026-11-16T08:06:30.279Z level=INFO run=8db2ac0d message="watcher subscribe" path=/ type=entries ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:30.279Z level=INFO run=8db2ac0d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:30.280Z level=INFO run=8db2ac0d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:30.280Z level=INFO run=8db2ac0d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:30.280Z level=INFO run=8db2ac0d message="watcher subscribe" path=/tmp/verify-KaRo9x type=entries ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:30.281Z level=INFO run=8db2ac0d message="watcher started" path=/tmp/verify-KaRo9x type=entries backend=node ignores=0 http.span=100 role=server
+timestamp=2026-11-16T08:06:30.281Z level=INFO run=8db2ac0d message="watcher subscribe" path=/tmp/verify-KaRo9x/u type=entries ignores=0 http.span=100 role=server
+timestamp=2026-11-16T08:06:30.282Z level=INFO run=8db2ac0d message="watcher started" path=/tmp/verify-KaRo9x/u type=entries backend=node ignores=0 http.span=101 role=server
+timestamp=2026-11-16T08:06:30.328Z level=INFO run=8db2ac0d message="watcher started" path=/tmp/verify-KaRo9x/u/.config/opencode type=directory backend=inotify ignores=6 http.span=147 role=server
+timestamp=2026-11-16T08:06:30.346Z level=INFO run=8db2ac0d message="location services booted" directory=/tmp/verify-KaRo9x/u workspaceID=undefined durationMs=163 http.span=165 role=server
+timestamp=2026-11-16T08:06:30.362Z level=INFO run=8db2ac0d msg="loading plugin" id=@opencoop/opencode-plugin@1.16.0 entrypoint=file:///tmp/verify-KaRo9x/u/cache/opencode/npm/@opencoop/opencode-plugin@1.16.0/1794816389200/node_modules/@opencoop/opencode-plugin/dist/index.js http.span=181 role=server
+timestamp=2026-11-16T08:06:40.338Z level=ERROR run=8db2ac0d message="Failed to fetch models.dev" cause="Cause([Fail(TimeoutError: Operation timed out after '10s')])" http.span=10157 role=server

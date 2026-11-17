@@ -1,0 +1,31 @@
+spec: @bojackduy/opencode-voice@0.11.5
+apiNames: @bojackduy/opencode-voice, opencode-voice
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-QG8A1b/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33619
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:35.810Z level=INFO run=22641091 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@bojackduy/opencode-voice@0.11.5\"]" role=cli
+timestamp=2026-11-16T08:47:36.652Z level=INFO run=4b310594 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:37.205Z level=INFO run=4b310594 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:37.257Z level=INFO run=4b310594 message="database schema bootstrap completed" migrations=59 durationMs=52 role=server
+timestamp=2026-11-16T08:47:37.563Z level=INFO run=4b310594 message="watcher subscribe" path=/tmp/verify-QG8A1b/u/.config/opencode type=directory ignores=6 http.span=28 role=server
+timestamp=2026-11-16T08:47:37.566Z level=INFO run=4b310594 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:37.567Z level=INFO run=4b310594 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:47:37.567Z level=INFO run=4b310594 message="watcher subscribe" path=/ type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:47:37.568Z level=INFO run=4b310594 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-16T08:47:37.569Z level=INFO run=4b310594 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T08:47:37.569Z level=INFO run=4b310594 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T08:47:37.569Z level=INFO run=4b310594 message="watcher subscribe" path=/tmp/verify-QG8A1b type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T08:47:37.569Z level=INFO run=4b310594 message="watcher started" path=/tmp/verify-QG8A1b type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T08:47:37.570Z level=INFO run=4b310594 message="watcher subscribe" path=/tmp/verify-QG8A1b/u type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T08:47:37.570Z level=INFO run=4b310594 message="watcher started" path=/tmp/verify-QG8A1b/u type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T08:47:37.596Z level=INFO run=4b310594 message="watcher started" path=/tmp/verify-QG8A1b/u/.config/opencode type=directory backend=inotify ignores=6 http.span=61 role=server
+timestamp=2026-11-16T08:47:37.603Z level=INFO run=4b310594 message="location services booted" directory=/tmp/verify-QG8A1b/u workspaceID=undefined durationMs=67 http.span=68 role=server
+timestamp=2026-11-16T08:47:37.613Z level=INFO run=4b310594 msg="loading plugin" id=@bojackduy/opencode-voice@0.11.5 entrypoint=file:///tmp/verify-QG8A1b/u/cache/opencode/npm/@bojackduy/opencode-voice@0.11.5/1794818856292/node_modules/@bojackduy/opencode-voice/index.js http.span=78 role=server

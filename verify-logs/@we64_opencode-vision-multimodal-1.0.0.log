@@ -1,0 +1,35 @@
+spec: @we64/opencode-vision-multimodal@1.0.0
+apiNames: @we64/opencode-vision-multimodal, opencode-vision-multimodal
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-n2PIC8/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38595
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:07:17.700Z level=INFO run=aca3053c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@we64/opencode-vision-multimodal@1.0.0\"]" role=cli
+timestamp=2026-11-16T08:07:22.099Z level=INFO run=3718655f message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:07:22.323Z level=INFO run=3718655f message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:07:22.335Z level=INFO run=3718655f message="database schema bootstrap completed" migrations=59 durationMs=12 role=server
+timestamp=2026-11-16T08:07:22.593Z level=INFO run=3718655f message="watcher subscribe" path=/tmp/verify-n2PIC8/u/.config/opencode type=directory ignores=6 http.span=44 role=server
+timestamp=2026-11-16T08:07:22.595Z level=INFO run=3718655f message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T08:07:22.596Z level=INFO run=3718655f message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:07:22.596Z level=INFO run=3718655f message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:07:22.596Z level=INFO run=3718655f message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:07:22.597Z level=INFO run=3718655f message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:07:22.597Z level=INFO run=3718655f message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:07:22.597Z level=INFO run=3718655f message="watcher subscribe" path=/tmp/verify-n2PIC8 type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:07:22.597Z level=INFO run=3718655f message="watcher started" path=/tmp/verify-n2PIC8 type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:07:22.598Z level=INFO run=3718655f message="watcher subscribe" path=/tmp/verify-n2PIC8/u type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:07:22.598Z level=INFO run=3718655f message="watcher started" path=/tmp/verify-n2PIC8/u type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:07:22.620Z level=INFO run=3718655f message="watcher started" path=/tmp/verify-n2PIC8/u/.config/opencode type=directory backend=inotify ignores=6 http.span=71 role=server
+timestamp=2026-11-16T08:07:22.634Z level=INFO run=3718655f message="location services booted" directory=/tmp/verify-n2PIC8/u workspaceID=undefined durationMs=85 http.span=85 role=server
+timestamp=2026-11-16T08:07:22.640Z level=INFO run=3718655f msg="loading plugin" id=@we64/opencode-vision-multimodal@1.0.0 entrypoint=file:///tmp/verify-n2PIC8/u/cache/opencode/npm/@we64/opencode-vision-multimodal@1.0.0/1794816441930/node_modules/@we64/opencode-vision-multimodal/plugin/vision.ts http.span=91 role=server
+timestamp=2026-11-16T08:07:22.686Z level=WARN run=3718655f message="failed to load plugin" target=@we64/opencode-vision-multimodal@1.0.0 ref=err_ea383a6c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=137 role=server

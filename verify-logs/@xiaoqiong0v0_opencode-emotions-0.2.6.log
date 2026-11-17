@@ -1,0 +1,56 @@
+spec: @xiaoqiong0v0/opencode-emotions@0.2.6
+apiNames: @xiaoqiong0v0/opencode-emotions, opencode-emotions
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-dXUMW8/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44263
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:57.094Z level=INFO run=e5cbbbcb message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@xiaoqiong0v0/opencode-emotions@0.2.6\"]" role=cli
+timestamp=2026-11-16T02:55:01.577Z level=INFO run=8cb28978 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:55:01.746Z level=INFO run=8cb28978 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:55:01.801Z level=INFO run=8cb28978 message="database schema bootstrap completed" migrations=59 durationMs=55 role=server
+timestamp=2026-11-16T02:55:02.056Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T02:55:02.058Z level=INFO run=8cb28978 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:55:02.058Z level=INFO run=8cb28978 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:55:02.059Z level=INFO run=8cb28978 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:55:02.059Z level=INFO run=8cb28978 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:55:02.059Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:55:02.059Z level=INFO run=8cb28978 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:55:02.059Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8 type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:55:02.059Z level=ERROR run=8cb28978 message="failed to watch directory" path=/tmp/verify-dXUMW8 error="Error: EACCES: permission denied, watch '/tmp/verify-dXUMW8'" http.span=19 role=server
+timestamp=2026-11-16T02:55:02.060Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T02:55:02.060Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T02:55:02.074Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u/.config/opencode type=directory backend=inotify ignores=6 http.span=34 role=server
+timestamp=2026-11-16T02:55:02.081Z level=INFO run=8cb28978 message="location services booted" directory=/tmp/verify-dXUMW8/u workspaceID=undefined durationMs=40 http.span=41 role=server
+timestamp=2026-11-16T02:55:02.088Z level=INFO run=8cb28978 msg="loading plugin" id=@xiaoqiong0v0/opencode-emotions@0.2.6 entrypoint=file:///tmp/verify-dXUMW8/u/cache/opencode/npm/@xiaoqiong0v0/opencode-emotions@0.2.6/1794797701425/node_modules/@xiaoqiong0v0/opencode-emotions/dist/emotions.js http.span=48 role=server
+timestamp=2026-11-16T02:55:02.127Z level=WARN run=8cb28978 message="failed to load plugin" target=@xiaoqiong0v0/opencode-emotions@0.2.6 ref=err_22b31baf cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=87 role=server
+timestamp=2026-11-16T02:55:02.496Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8 type=entries ignores=0 http.span=456 role=server
+timestamp=2026-11-16T02:55:02.496Z level=ERROR run=8cb28978 message="failed to watch directory" path=/tmp/verify-dXUMW8 error="Error: EACCES: permission denied, watch '/tmp/verify-dXUMW8'" http.span=456 role=server
+timestamp=2026-11-16T02:55:02.496Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:02.497Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:02.497Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:02.497Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:02.505Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:55:02.505Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:02.505Z level=INFO run=8cb28978 message="watcher subscribe" path=/tmp/verify-dXUMW8/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:55:02.505Z level=INFO run=8cb28978 message="watcher started" path=/tmp/verify-dXUMW8/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:02.517Z level=INFO run=8cb28978 message=event event.id=evt_1e2478d75001hMQAXx0EpheDA7 event.created=1794797702517 event.type=provider.updated event.location.directory=/tmp/verify-dXUMW8/u event.location.workspaceID=undefined event.data={} http.span=477 role=server
+timestamp=2026-11-16T02:55:02.523Z level=INFO run=8cb28978 message=event event.id=evt_1e2478d7b001t6ZZxyRp4FxCvT event.created=1794797702523 event.type=model.updated event.location.directory=/tmp/verify-dXUMW8/u event.location.workspaceID=undefined event.data={} http.span=483 role=server
+timestamp=2026-11-16T02:55:02.525Z level=INFO run=8cb28978 message=event event.id=evt_1e2478d7d0011pZhpYqiSzwoOO event.created=1794797702525 event.type=agent.updated event.location.directory=/tmp/verify-dXUMW8/u event.location.workspaceID=undefined event.data={} http.span=485 role=server
+timestamp=2026-11-16T02:55:02.525Z level=INFO run=8cb28978 message=event event.id=evt_1e2478d7d002uwHG5tQ8RaJREG event.created=1794797702525 event.type=command.updated event.location.directory=/tmp/verify-dXUMW8/u event.location.workspaceID=undefined event.data={} http.span=485 role=server
+timestamp=2026-11-16T02:55:02.619Z level=INFO run=8cb28978 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:55:02.619Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:55:02.619Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:55:02.621Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:02.621Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:02.630Z level=INFO run=8cb28978 message="watcher stopped" path=/etc type=entries http.span=590 role=server
+timestamp=2026-11-16T02:55:02.631Z level=INFO run=8cb28978 message="watcher stopped" path=/ type=entries http.span=591 role=server
+timestamp=2026-11-16T02:55:02.631Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp type=entries http.span=591 role=server
+timestamp=2026-11-16T02:55:02.631Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u type=entries http.span=591 role=server
+timestamp=2026-11-16T02:55:02.633Z level=INFO run=8cb28978 message="watcher stopped" path=/tmp/verify-dXUMW8/u/.config/opencode type=directory http.span=593 role=server

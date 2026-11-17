@@ -1,0 +1,45 @@
+spec: @markarranz/opencode-focus-notify@1.0.1
+apiNames: @markarranz/opencode-focus-notify, opencode-focus-notify
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Tpy6OZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36979
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:04.563Z level=INFO run=b90a6946 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@markarranz/opencode-focus-notify@1.0.1\"]" role=cli
+timestamp=2026-11-16T10:13:05.161Z level=INFO run=ec8649f6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:05.394Z level=INFO run=ec8649f6 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:05.426Z level=INFO run=ec8649f6 message="database schema bootstrap completed" migrations=59 durationMs=32 role=server
+timestamp=2026-11-16T10:13:05.815Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u/.config/opencode type=directory ignores=6 http.span=34 role=server
+timestamp=2026-11-16T10:13:05.818Z level=INFO run=ec8649f6 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:13:05.819Z level=INFO run=ec8649f6 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T10:13:05.819Z level=INFO run=ec8649f6 message="watcher subscribe" path=/ type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T10:13:05.819Z level=INFO run=ec8649f6 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T10:13:05.819Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T10:13:05.820Z level=INFO run=ec8649f6 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T10:13:05.820Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T10:13:05.820Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T10:13:05.820Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T10:13:05.820Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T10:13:05.837Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=56 role=server
+timestamp=2026-11-16T10:13:05.842Z level=INFO run=ec8649f6 message="location services booted" directory=/tmp/verify-Tpy6OZ/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-16T10:13:05.855Z level=INFO run=ec8649f6 msg="loading plugin" id=@markarranz/opencode-focus-notify@1.0.1 entrypoint=file:///tmp/verify-Tpy6OZ/u/cache/opencode/npm/@markarranz/opencode-focus-notify@1.0.1/1794823984832/node_modules/@markarranz/opencode-focus-notify/plugin.js http.span=74 role=server
+timestamp=2026-11-16T10:13:05.856Z level=WARN run=ec8649f6 message="failed to load plugin" target=@markarranz/opencode-focus-notify@1.0.1 ref=err_efe8abc8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=75 role=server
+timestamp=2026-11-16T10:13:06.562Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:06.563Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:06.563Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:06.563Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:06.578Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:06.578Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:06.578Z level=INFO run=ec8649f6 message="watcher subscribe" path=/tmp/verify-Tpy6OZ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:06.578Z level=INFO run=ec8649f6 message="watcher started" path=/tmp/verify-Tpy6OZ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:06.600Z level=INFO run=ec8649f6 message=event event.id=evt_1e3d89da80012vj7q40XgypnPX event.created=1794823986600 event.type=provider.updated event.location.directory=/tmp/verify-Tpy6OZ/u event.location.workspaceID=undefined event.data={} http.span=819 role=server
+timestamp=2026-11-16T10:13:06.610Z level=INFO run=ec8649f6 message=event event.id=evt_1e3d89db2001UKTr4inFddBCFB event.created=1794823986610 event.type=model.updated event.location.directory=/tmp/verify-Tpy6OZ/u event.location.workspaceID=undefined event.data={} http.span=829 role=server
+timestamp=2026-11-16T10:13:06.627Z level=INFO run=ec8649f6 message=event event.id=evt_1e3d89dc3001aakiMFYlFzc6zG event.created=1794823986627 event.type=agent.updated event.location.directory=/tmp/verify-Tpy6OZ/u event.location.workspaceID=undefined event.data={} http.span=846 role=server
+timestamp=2026-11-16T10:13:06.628Z level=INFO run=ec8649f6 message=event event.id=evt_1e3d89dc4001L5RVBcNzYAzo6K event.created=1794823986628 event.type=command.updated event.location.directory=/tmp/verify-Tpy6OZ/u event.location.workspaceID=undefined event.data={} http.span=847 role=server
+timestamp=2026-11-16T10:13:06.913Z level=ERROR run=ec8649f6 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1132 role=server

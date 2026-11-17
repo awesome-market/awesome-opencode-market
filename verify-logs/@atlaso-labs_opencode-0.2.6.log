@@ -1,0 +1,32 @@
+spec: @atlaso-labs/opencode@0.2.6
+apiNames: @atlaso-labs/opencode, opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-HWjyKM/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42503
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:24.090Z level=INFO run=0c48e31a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@atlaso-labs/opencode@0.2.6\"]" role=cli
+timestamp=2026-11-16T08:47:24.865Z level=INFO run=5273c061 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:25.095Z level=INFO run=5273c061 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:25.114Z level=INFO run=5273c061 message="database schema bootstrap completed" migrations=59 durationMs=19 role=server
+timestamp=2026-11-16T08:47:25.369Z level=INFO run=5273c061 message="watcher subscribe" path=/tmp/verify-HWjyKM/u/.config/opencode type=directory ignores=6 http.span=45 role=server
+timestamp=2026-11-16T08:47:25.373Z level=INFO run=5273c061 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:47:25.373Z level=INFO run=5273c061 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:47:25.373Z level=INFO run=5273c061 message="watcher subscribe" path=/ type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:47:25.374Z level=INFO run=5273c061 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T08:47:25.374Z level=INFO run=5273c061 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T08:47:25.374Z level=INFO run=5273c061 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T08:47:25.374Z level=INFO run=5273c061 message="watcher subscribe" path=/tmp/verify-HWjyKM type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T08:47:25.375Z level=INFO run=5273c061 message="watcher started" path=/tmp/verify-HWjyKM type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T08:47:25.375Z level=INFO run=5273c061 message="watcher subscribe" path=/tmp/verify-HWjyKM/u type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T08:47:25.375Z level=INFO run=5273c061 message="watcher started" path=/tmp/verify-HWjyKM/u type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T08:47:25.409Z level=INFO run=5273c061 message="watcher started" path=/tmp/verify-HWjyKM/u/.config/opencode type=directory backend=inotify ignores=6 http.span=85 role=server
+timestamp=2026-11-16T08:47:25.420Z level=INFO run=5273c061 message="location services booted" directory=/tmp/verify-HWjyKM/u workspaceID=undefined durationMs=95 http.span=96 role=server
+timestamp=2026-11-16T08:47:25.429Z level=INFO run=5273c061 msg="loading plugin" id=@atlaso-labs/opencode@0.2.6 entrypoint=file:///tmp/verify-HWjyKM/u/cache/opencode/npm/@atlaso-labs/opencode@0.2.6/1794818844595/node_modules/@atlaso-labs/opencode/src/index.ts http.span=105 role=server
+timestamp=2026-11-16T08:47:25.450Z level=WARN run=5273c061 message="failed to load plugin" target=@atlaso-labs/opencode@0.2.6 ref=err_d9886d30 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=126 role=server

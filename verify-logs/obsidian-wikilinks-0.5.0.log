@@ -1,0 +1,55 @@
+spec: obsidian-wikilinks@0.5.0
+apiNames: obsidian-wikilinks
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-CZmQIU/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46477
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:50.441Z level=INFO run=31a9cfc0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"obsidian-wikilinks@0.5.0\"]" role=cli
+timestamp=2026-11-16T08:51:51.087Z level=INFO run=bfcc1338 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:51:51.258Z level=INFO run=bfcc1338 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:51:51.268Z level=INFO run=bfcc1338 message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T08:51:51.392Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u/.config/opencode type=directory ignores=6 http.span=18 role=server
+timestamp=2026-11-16T08:51:51.395Z level=INFO run=bfcc1338 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.395Z level=INFO run=bfcc1338 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.396Z level=INFO run=bfcc1338 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:51:51.396Z level=INFO run=bfcc1338 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:51:51.396Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:51:51.397Z level=INFO run=bfcc1338 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:51.397Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:51.397Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:51.397Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:51.397Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:51.415Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-16T08:51:51.422Z level=INFO run=bfcc1338 message="location services booted" directory=/tmp/verify-CZmQIU/u workspaceID=undefined durationMs=47 http.span=48 role=server
+timestamp=2026-11-16T08:51:51.426Z level=INFO run=bfcc1338 msg="loading plugin" id=obsidian-wikilinks@0.5.0 entrypoint=file:///tmp/verify-CZmQIU/u/cache/opencode/npm/obsidian-wikilinks@0.5.0/1794819110669/node_modules/obsidian-wikilinks/plugin/obsidian-wikilinks.js http.span=52 role=server
+timestamp=2026-11-16T08:51:51.428Z level=WARN run=bfcc1338 message="failed to load plugin" target=obsidian-wikilinks@0.5.0 ref=err_0f4524bc cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=54 role=server
+timestamp=2026-11-16T08:51:51.881Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:51.881Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:51.881Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:51.881Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:51.890Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:51:51.890Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:51.891Z level=INFO run=bfcc1338 message="watcher subscribe" path=/tmp/verify-CZmQIU/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:51:51.891Z level=INFO run=bfcc1338 message="watcher started" path=/tmp/verify-CZmQIU/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:51.902Z level=INFO run=bfcc1338 message=event event.id=evt_1e38e3bde001J5sM01NNhSmoyL event.created=1794819111902 event.type=provider.updated event.location.directory=/tmp/verify-CZmQIU/u event.location.workspaceID=undefined event.data={} http.span=528 role=server
+timestamp=2026-11-16T08:51:51.907Z level=INFO run=bfcc1338 message=event event.id=evt_1e38e3be3001HVRInSV2b7MXwc event.created=1794819111907 event.type=model.updated event.location.directory=/tmp/verify-CZmQIU/u event.location.workspaceID=undefined event.data={} http.span=533 role=server
+timestamp=2026-11-16T08:51:51.909Z level=INFO run=bfcc1338 message=event event.id=evt_1e38e3be5001HLY38vyopQYlTh event.created=1794819111909 event.type=agent.updated event.location.directory=/tmp/verify-CZmQIU/u event.location.workspaceID=undefined event.data={} http.span=535 role=server
+timestamp=2026-11-16T08:51:51.909Z level=INFO run=bfcc1338 message=event event.id=evt_1e38e3be5002kMO5yBaoKcD0A9 event.created=1794819111909 event.type=command.updated event.location.directory=/tmp/verify-CZmQIU/u event.location.workspaceID=undefined event.data={} http.span=535 role=server
+timestamp=2026-11-16T08:51:51.963Z level=INFO run=bfcc1338 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:51:51.963Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:51:51.964Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:51:51.968Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:51:51.968Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:51:51.980Z level=INFO run=bfcc1338 message="watcher stopped" path=/etc type=entries http.span=606 role=server
+timestamp=2026-11-16T08:51:51.980Z level=INFO run=bfcc1338 message="watcher stopped" path=/ type=entries http.span=606 role=server
+timestamp=2026-11-16T08:51:51.981Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp type=entries http.span=607 role=server
+timestamp=2026-11-16T08:51:51.981Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU type=entries http.span=607 role=server
+timestamp=2026-11-16T08:51:51.981Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u type=entries http.span=607 role=server
+timestamp=2026-11-16T08:51:51.986Z level=INFO run=bfcc1338 message="watcher stopped" path=/tmp/verify-CZmQIU/u/.config/opencode type=directory http.span=612 role=server

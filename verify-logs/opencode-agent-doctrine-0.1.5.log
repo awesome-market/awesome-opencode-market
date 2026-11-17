@@ -1,0 +1,30 @@
+spec: opencode-agent-doctrine@0.1.5
+apiNames: opencode-agent-doctrine
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-0iUGBU/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33775
+server password [redacted]
+error: unknown argument: --port
+OpenCode Agent Doctrine installer
+
+Usage:
+  opencode-agent-doctrine install [--dry-run] [--config-dir <path>]
+  opencode-agent-doctrine uninstall [--dry-run] [--config-dir <path>]
+  opencode-agent-doctrine list
+  opencode-agent-doctrine help
+
+Defaults:
+  config dir: /tmp/verify-0iUGBU/u/.config/opencode
+
+The installer copies the eight agent files into <config-dir>/agents, backs up
+existing files with the same names, and never edits opencode.jsonc.
+If AGENTS.md already exists it writes AGENTS.opencode-doctrine.md instead.
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:25.489Z level=INFO run=c7756bb8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-agent-doctrine@0.1.5\"]" role=cli

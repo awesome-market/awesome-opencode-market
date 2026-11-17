@@ -1,0 +1,47 @@
+spec: @agentnetwork/opencode-anet@0.3.0
+apiNames: @agentnetwork/opencode-anet, opencode-anet
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-nCPklZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34733
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:52:30.229Z level=INFO run=7f8b3de8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@agentnetwork/opencode-anet@0.3.0\"]" role=cli
+timestamp=2026-11-16T02:52:30.865Z level=INFO run=df68542a message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:52:31.493Z level=INFO run=df68542a message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:52:31.626Z level=INFO run=df68542a message="database schema bootstrap completed" migrations=59 durationMs=133 role=server
+timestamp=2026-11-16T02:52:31.877Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u/.config/opencode type=directory ignores=6 http.span=33 role=server
+timestamp=2026-11-16T02:52:31.880Z level=INFO run=df68542a message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher subscribe" path=/ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher started" path=/ type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:52:31.881Z level=ERROR run=df68542a message="failed to watch directory" path=/tmp/verify-nCPklZ error="Error: EACCES: permission denied, watch '/tmp/verify-nCPklZ'" http.span=37 role=server
+timestamp=2026-11-16T02:52:31.882Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T02:52:31.882Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T02:52:31.899Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=55 role=server
+timestamp=2026-11-16T02:52:31.913Z level=INFO run=df68542a message="location services booted" directory=/tmp/verify-nCPklZ/u workspaceID=undefined durationMs=68 http.span=69 role=server
+timestamp=2026-11-16T02:52:31.915Z level=INFO run=df68542a msg="loading plugin" id=@agentnetwork/opencode-anet@0.3.0 entrypoint=file:///tmp/verify-nCPklZ/u/cache/opencode/npm/@agentnetwork/opencode-anet@0.3.0/1794797550619/node_modules/@agentnetwork/opencode-anet/server.js http.span=71 role=server
+timestamp=2026-11-16T02:52:31.918Z level=WARN run=df68542a message="failed to load plugin" target=@agentnetwork/opencode-anet@0.3.0 ref=err_1fb34ce9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=74 role=server
+timestamp=2026-11-16T02:52:32.493Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ type=entries ignores=0 http.span=649 role=server
+timestamp=2026-11-16T02:52:32.493Z level=ERROR run=df68542a message="failed to watch directory" path=/tmp/verify-nCPklZ error="Error: EACCES: permission denied, watch '/tmp/verify-nCPklZ'" http.span=649 role=server
+timestamp=2026-11-16T02:52:32.494Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:32.495Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:32.495Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:32.495Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:32.517Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:52:32.517Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:32.518Z level=INFO run=df68542a message="watcher subscribe" path=/tmp/verify-nCPklZ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:52:32.518Z level=INFO run=df68542a message="watcher started" path=/tmp/verify-nCPklZ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:32.532Z level=INFO run=df68542a message=event event.id=evt_1e2454394001EJI0J4n7FqL5ik event.created=1794797552532 event.type=provider.updated event.location.directory=/tmp/verify-nCPklZ/u event.location.workspaceID=undefined event.data={} http.span=688 role=server
+timestamp=2026-11-16T02:52:32.539Z level=INFO run=df68542a message=event event.id=evt_1e245439b001LJAL7ew74L9qV4 event.created=1794797552539 event.type=model.updated event.location.directory=/tmp/verify-nCPklZ/u event.location.workspaceID=undefined event.data={} http.span=695 role=server
+timestamp=2026-11-16T02:52:32.540Z level=INFO run=df68542a message=event event.id=evt_1e245439c001bvsGTF4MsQohk0 event.created=1794797552540 event.type=agent.updated event.location.directory=/tmp/verify-nCPklZ/u event.location.workspaceID=undefined event.data={} http.span=696 role=server
+timestamp=2026-11-16T02:52:32.540Z level=INFO run=df68542a message=event event.id=evt_1e245439c0029KjZYC90lo9rpX event.created=1794797552540 event.type=command.updated event.location.directory=/tmp/verify-nCPklZ/u event.location.workspaceID=undefined event.data={} http.span=696 role=server
+timestamp=2026-11-16T02:52:32.848Z level=ERROR run=df68542a message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1004 role=server

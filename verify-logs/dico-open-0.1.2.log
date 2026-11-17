@@ -1,0 +1,58 @@
+spec: dico-open@0.1.2
+apiNames: dico-open
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-l0TW16/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45651
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:39.020Z level=INFO run=97e3ee88 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"dico-open@0.1.2\"]" role=cli
+timestamp=2026-11-16T09:37:44.805Z level=INFO run=69fe1ad6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:45.379Z level=INFO run=69fe1ad6 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:45.417Z level=INFO run=69fe1ad6 message="database schema bootstrap completed" migrations=59 durationMs=38 role=server
+timestamp=2026-11-16T09:37:45.782Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u/.config/opencode type=directory ignores=6 http.span=44 role=server
+timestamp=2026-11-16T09:37:45.786Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T09:37:45.787Z level=INFO run=69fe1ad6 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T09:37:45.788Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/ type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T09:37:45.788Z level=INFO run=69fe1ad6 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T09:37:45.789Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T09:37:45.789Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T09:37:45.789Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16 type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T09:37:45.790Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16 type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-16T09:37:45.790Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T09:37:45.791Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T09:37:45.817Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u/.config/opencode type=directory backend=inotify ignores=6 http.span=79 role=server
+timestamp=2026-11-16T09:37:45.837Z level=INFO run=69fe1ad6 message="location services booted" directory=/tmp/verify-l0TW16/u workspaceID=undefined durationMs=98 http.span=99 role=server
+timestamp=2026-11-16T09:37:45.844Z level=INFO run=69fe1ad6 msg="loading plugin" id=dico-open@0.1.2 entrypoint=file:///tmp/verify-l0TW16/u/cache/opencode/npm/dico-open@0.1.2/1794821864474/node_modules/dico-open/dist/src/index.js http.span=106 role=server
+timestamp=2026-11-16T09:37:46.197Z level=WARN run=69fe1ad6 message="failed to load plugin" target=dico-open@0.1.2 ref=err_47d0f3f4 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=459 role=server
+timestamp=2026-11-16T09:37:47.109Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:47.110Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:47.110Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:47.111Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:47.132Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T09:37:47.133Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:47.133Z level=INFO run=69fe1ad6 message="watcher subscribe" path=/tmp/verify-l0TW16/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T09:37:47.134Z level=INFO run=69fe1ad6 message="watcher started" path=/tmp/verify-l0TW16/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:47.154Z level=INFO run=69fe1ad6 message=event event.id=evt_1e3b84692001b157QHT93wG5D5 event.created=1794821867154 event.type=provider.updated event.location.directory=/tmp/verify-l0TW16/u event.location.workspaceID=undefined event.data={} http.span=1416 role=server
+timestamp=2026-11-16T09:37:47.164Z level=INFO run=69fe1ad6 message=event event.id=evt_1e3b8469c001ifjPaEd1IQfFmO event.created=1794821867164 event.type=model.updated event.location.directory=/tmp/verify-l0TW16/u event.location.workspaceID=undefined event.data={} http.span=1426 role=server
+timestamp=2026-11-16T09:37:47.166Z level=INFO run=69fe1ad6 message=event event.id=evt_1e3b8469e001VLOLJZgvT3HTTg event.created=1794821867166 event.type=agent.updated event.location.directory=/tmp/verify-l0TW16/u event.location.workspaceID=undefined event.data={} http.span=1428 role=server
+timestamp=2026-11-16T09:37:47.166Z level=INFO run=69fe1ad6 message=event event.id=evt_1e3b8469e002GqZCbkyrRw5gI5 event.created=1794821867166 event.type=command.updated event.location.directory=/tmp/verify-l0TW16/u event.location.workspaceID=undefined event.data={} http.span=1428 role=server
+timestamp=2026-11-16T09:37:47.227Z level=ERROR run=69fe1ad6 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1489 role=server
+timestamp=2026-11-16T09:37:47.679Z level=INFO run=69fe1ad6 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T09:37:47.679Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T09:37:47.681Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T09:37:47.689Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:37:47.689Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:37:47.717Z level=INFO run=69fe1ad6 message="watcher stopped" path=/etc type=entries http.span=1979 role=server
+timestamp=2026-11-16T09:37:47.718Z level=INFO run=69fe1ad6 message="watcher stopped" path=/ type=entries http.span=1980 role=server
+timestamp=2026-11-16T09:37:47.718Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp type=entries http.span=1980 role=server
+timestamp=2026-11-16T09:37:47.718Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16 type=entries http.span=1980 role=server
+timestamp=2026-11-16T09:37:47.718Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u type=entries http.span=1980 role=server
+timestamp=2026-11-16T09:37:47.721Z level=INFO run=69fe1ad6 message="watcher stopped" path=/tmp/verify-l0TW16/u/.config/opencode type=directory http.span=1983 role=server

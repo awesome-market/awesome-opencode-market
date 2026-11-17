@@ -1,0 +1,32 @@
+spec: @zachary0528/opencode-pixel-pet@1.2.1
+apiNames: @zachary0528/opencode-pixel-pet, opencode-pixel-pet
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-3IfQ3W/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38965
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:07:03.568Z level=INFO run=2ffa3735 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@zachary0528/opencode-pixel-pet@1.2.1\"]" role=cli
+timestamp=2026-11-16T08:07:08.575Z level=INFO run=efb086e1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:07:08.930Z level=INFO run=efb086e1 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:07:08.952Z level=INFO run=efb086e1 message="database schema bootstrap completed" migrations=59 durationMs=22 role=server
+timestamp=2026-11-16T08:07:09.288Z level=INFO run=efb086e1 message="watcher subscribe" path=/tmp/verify-3IfQ3W/u/.config/opencode type=directory ignores=6 http.span=32 role=server
+timestamp=2026-11-16T08:07:09.292Z level=INFO run=efb086e1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T08:07:09.293Z level=INFO run=efb086e1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:07:09.293Z level=INFO run=efb086e1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:07:09.294Z level=INFO run=efb086e1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:07:09.294Z level=INFO run=efb086e1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:07:09.294Z level=INFO run=efb086e1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:07:09.294Z level=INFO run=efb086e1 message="watcher subscribe" path=/tmp/verify-3IfQ3W type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:07:09.295Z level=INFO run=efb086e1 message="watcher started" path=/tmp/verify-3IfQ3W type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:07:09.296Z level=INFO run=efb086e1 message="watcher subscribe" path=/tmp/verify-3IfQ3W/u type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T08:07:09.297Z level=INFO run=efb086e1 message="watcher started" path=/tmp/verify-3IfQ3W/u type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T08:07:09.332Z level=INFO run=efb086e1 message="watcher started" path=/tmp/verify-3IfQ3W/u/.config/opencode type=directory backend=inotify ignores=6 http.span=76 role=server
+timestamp=2026-11-16T08:07:09.345Z level=INFO run=efb086e1 message="location services booted" directory=/tmp/verify-3IfQ3W/u workspaceID=undefined durationMs=88 http.span=89 role=server
+timestamp=2026-11-16T08:07:09.351Z level=INFO run=efb086e1 msg="loading plugin" id=@zachary0528/opencode-pixel-pet@1.2.1 entrypoint=file:///tmp/verify-3IfQ3W/u/cache/opencode/npm/@zachary0528/opencode-pixel-pet@1.2.1/1794816428307/node_modules/@zachary0528/opencode-pixel-pet/pixel-pet.ts http.span=95 role=server
+timestamp=2026-11-16T08:07:09.401Z level=WARN run=efb086e1 message="failed to load plugin" target=@zachary0528/opencode-pixel-pet@1.2.1 ref=err_4fa6fd54 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=145 role=server

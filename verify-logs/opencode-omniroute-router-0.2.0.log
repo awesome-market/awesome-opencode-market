@@ -1,0 +1,32 @@
+spec: opencode-omniroute-router@0.2.0
+apiNames: opencode-omniroute-router
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-tDUKJ9/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40975
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:23.904Z level=INFO run=04b55d74 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-omniroute-router@0.2.0\"]" role=cli
+timestamp=2026-11-16T08:47:24.528Z level=INFO run=2399d791 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:24.834Z level=INFO run=2399d791 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:24.864Z level=INFO run=2399d791 message="database schema bootstrap completed" migrations=59 durationMs=30 role=server
+timestamp=2026-11-16T08:47:25.202Z level=INFO run=2399d791 message="watcher subscribe" path=/tmp/verify-tDUKJ9/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T08:47:25.205Z level=INFO run=2399d791 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:47:25.206Z level=INFO run=2399d791 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:47:25.206Z level=INFO run=2399d791 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher subscribe" path=/tmp/verify-tDUKJ9 type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher started" path=/tmp/verify-tDUKJ9 type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher subscribe" path=/tmp/verify-tDUKJ9/u type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.207Z level=INFO run=2399d791 message="watcher started" path=/tmp/verify-tDUKJ9/u type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:47:25.228Z level=INFO run=2399d791 message="watcher started" path=/tmp/verify-tDUKJ9/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T08:47:25.238Z level=INFO run=2399d791 message="location services booted" directory=/tmp/verify-tDUKJ9/u workspaceID=undefined durationMs=61 http.span=62 role=server
+timestamp=2026-11-16T08:47:25.251Z level=INFO run=2399d791 msg="loading plugin" id=opencode-omniroute-router@0.2.0 entrypoint=file:///tmp/verify-tDUKJ9/u/cache/opencode/npm/opencode-omniroute-router@0.2.0/1794818844122/node_modules/opencode-omniroute-router/src/plugin.mjs http.span=75 role=server
+timestamp=2026-11-16T08:47:25.257Z level=WARN run=2399d791 message="failed to load plugin" target=opencode-omniroute-router@0.2.0 ref=err_46315209 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=81 role=server

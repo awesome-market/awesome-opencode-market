@@ -1,0 +1,31 @@
+spec: @joe-broadhead/opencode-history@0.0.6
+apiNames: @joe-broadhead/opencode-history, opencode-history
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-CrYudO/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35181
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:38.815Z level=INFO run=166c3436 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@joe-broadhead/opencode-history@0.0.6\"]" role=cli
+timestamp=2026-11-16T02:54:39.602Z level=INFO run=5c736b59 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:40.159Z level=INFO run=5c736b59 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:40.262Z level=INFO run=5c736b59 message="database schema bootstrap completed" migrations=59 durationMs=103 role=server
+timestamp=2026-11-16T02:54:40.409Z level=INFO run=5c736b59 message="watcher subscribe" path=/tmp/verify-CrYudO/u/.config/opencode type=directory ignores=6 http.span=38 role=server
+timestamp=2026-11-16T02:54:40.412Z level=INFO run=5c736b59 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T02:54:40.412Z level=INFO run=5c736b59 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T02:54:40.412Z level=INFO run=5c736b59 message="watcher subscribe" path=/ type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T02:54:40.412Z level=INFO run=5c736b59 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T02:54:40.413Z level=INFO run=5c736b59 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T02:54:40.413Z level=INFO run=5c736b59 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T02:54:40.413Z level=INFO run=5c736b59 message="watcher subscribe" path=/tmp/verify-CrYudO type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T02:54:40.413Z level=ERROR run=5c736b59 message="failed to watch directory" path=/tmp/verify-CrYudO error="Error: EACCES: permission denied, watch '/tmp/verify-CrYudO'" http.span=42 role=server
+timestamp=2026-11-16T02:54:40.414Z level=INFO run=5c736b59 message="watcher subscribe" path=/tmp/verify-CrYudO/u type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T02:54:40.414Z level=INFO run=5c736b59 message="watcher started" path=/tmp/verify-CrYudO/u type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T02:54:40.430Z level=INFO run=5c736b59 message="watcher started" path=/tmp/verify-CrYudO/u/.config/opencode type=directory backend=inotify ignores=6 http.span=59 role=server
+timestamp=2026-11-16T02:54:40.441Z level=INFO run=5c736b59 message="location services booted" directory=/tmp/verify-CrYudO/u workspaceID=undefined durationMs=69 http.span=70 role=server
+timestamp=2026-11-16T02:54:40.444Z level=INFO run=5c736b59 msg="loading plugin" id=@joe-broadhead/opencode-history@0.0.6 entrypoint=file:///tmp/verify-CrYudO/u/cache/opencode/npm/@joe-broadhead/opencode-history@0.0.6/1794797679079/node_modules/@joe-broadhead/opencode-history/dist/index.js http.span=73 role=server

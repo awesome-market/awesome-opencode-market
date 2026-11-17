@@ -1,0 +1,32 @@
+spec: opencode-sa-assistant@0.2.10
+apiNames: opencode-sa-assistant
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-P8Tfjt/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42959
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:26.273Z level=INFO run=b64b3cfa message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-sa-assistant@0.2.10\"]" role=cli
+timestamp=2026-11-16T11:33:31.915Z level=INFO run=95f9b274 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:32.183Z level=INFO run=95f9b274 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:32.256Z level=INFO run=95f9b274 message="database schema bootstrap completed" migrations=59 durationMs=73 role=server
+timestamp=2026-11-16T11:33:32.673Z level=INFO run=95f9b274 message="watcher subscribe" path=/tmp/verify-P8Tfjt/u/.config/opencode type=directory ignores=6 http.span=73 role=server
+timestamp=2026-11-16T11:33:32.683Z level=INFO run=95f9b274 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T11:33:32.686Z level=INFO run=95f9b274 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=86 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher subscribe" path=/ type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher subscribe" path=/tmp/verify-P8Tfjt type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.687Z level=INFO run=95f9b274 message="watcher started" path=/tmp/verify-P8Tfjt type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T11:33:32.688Z level=INFO run=95f9b274 message="watcher subscribe" path=/tmp/verify-P8Tfjt/u type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T11:33:32.688Z level=INFO run=95f9b274 message="watcher started" path=/tmp/verify-P8Tfjt/u type=entries backend=node ignores=0 http.span=88 role=server
+timestamp=2026-11-16T11:33:32.757Z level=INFO run=95f9b274 message="watcher started" path=/tmp/verify-P8Tfjt/u/.config/opencode type=directory backend=inotify ignores=6 http.span=157 role=server
+timestamp=2026-11-16T11:33:32.804Z level=INFO run=95f9b274 message="location services booted" directory=/tmp/verify-P8Tfjt/u workspaceID=undefined durationMs=203 http.span=204 role=server
+timestamp=2026-11-16T11:33:32.828Z level=INFO run=95f9b274 msg="loading plugin" id=opencode-sa-assistant@0.2.10 entrypoint=file:///tmp/verify-P8Tfjt/u/cache/opencode/npm/opencode-sa-assistant@0.2.10/1794828811561/node_modules/opencode-sa-assistant/src/index.ts http.span=228 role=server
+timestamp=2026-11-16T11:33:32.869Z level=WARN run=95f9b274 message="failed to load plugin" target=opencode-sa-assistant@0.2.10 ref=err_ae02ff6c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=269 role=server

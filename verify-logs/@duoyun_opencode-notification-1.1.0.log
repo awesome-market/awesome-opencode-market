@@ -1,0 +1,46 @@
+spec: @duoyun/opencode-notification@1.1.0
+apiNames: @duoyun/opencode-notification, opencode-notification
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-mGXy85/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39593
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:33.444Z level=INFO run=d321bab4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@duoyun/opencode-notification@1.1.0\"]" role=cli
+timestamp=2026-11-16T07:35:37.833Z level=INFO run=d5e1ea0d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:38.434Z level=INFO run=d5e1ea0d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:38.752Z level=INFO run=d5e1ea0d message="database schema bootstrap completed" migrations=59 durationMs=318 role=server
+timestamp=2026-11-16T07:35:38.997Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u/.config/opencode type=directory ignores=6 http.span=48 role=server
+timestamp=2026-11-16T07:35:39.002Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T07:35:39.003Z level=INFO run=d5e1ea0d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T07:35:39.003Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/ type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T07:35:39.003Z level=INFO run=d5e1ea0d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T07:35:39.003Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T07:35:39.004Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T07:35:39.004Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85 type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T07:35:39.004Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85 type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T07:35:39.004Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T07:35:39.004Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T07:35:39.027Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u/.config/opencode type=directory backend=inotify ignores=6 http.span=78 role=server
+timestamp=2026-11-16T07:35:39.045Z level=INFO run=d5e1ea0d message="location services booted" directory=/tmp/verify-mGXy85/u workspaceID=undefined durationMs=94 http.span=96 role=server
+timestamp=2026-11-16T07:35:39.051Z level=INFO run=d5e1ea0d msg="loading plugin" id=@duoyun/opencode-notification@1.1.0 entrypoint=file:///tmp/verify-mGXy85/u/cache/opencode/npm/@duoyun/opencode-notification@1.1.0/1794814537523/node_modules/@duoyun/opencode-notification/main.ts http.span=102 role=server
+timestamp=2026-11-16T07:35:39.055Z level=WARN run=d5e1ea0d message="failed to load plugin" target=@duoyun/opencode-notification@1.1.0 ref=err_f2216baf cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=106 role=server
+timestamp=2026-11-16T07:35:39.774Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:39.775Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:39.775Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:39.775Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:39.796Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:39.797Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:39.797Z level=INFO run=d5e1ea0d message="watcher subscribe" path=/tmp/verify-mGXy85/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:39.798Z level=INFO run=d5e1ea0d message="watcher started" path=/tmp/verify-mGXy85/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:39.862Z level=INFO run=d5e1ea0d message=event event.id=evt_1e3487856001xQ429ElXZpuomV event.created=1794814539862 event.type=provider.updated event.location.directory=/tmp/verify-mGXy85/u event.location.workspaceID=undefined event.data={} http.span=913 role=server
+timestamp=2026-11-16T07:35:39.871Z level=INFO run=d5e1ea0d message=event event.id=evt_1e348785f001TuFJ2chHDZaJwc event.created=1794814539871 event.type=model.updated event.location.directory=/tmp/verify-mGXy85/u event.location.workspaceID=undefined event.data={} http.span=922 role=server
+timestamp=2026-11-16T07:35:39.873Z level=INFO run=d5e1ea0d message=event event.id=evt_1e3487861001Na2tojgtLLIuy5 event.created=1794814539873 event.type=agent.updated event.location.directory=/tmp/verify-mGXy85/u event.location.workspaceID=undefined event.data={} http.span=924 role=server
+timestamp=2026-11-16T07:35:39.874Z level=INFO run=d5e1ea0d message=event event.id=evt_1e3487862001VA9P6DsdYHo2pn event.created=1794814539874 event.type=command.updated event.location.directory=/tmp/verify-mGXy85/u event.location.workspaceID=undefined event.data={} http.span=925 role=server

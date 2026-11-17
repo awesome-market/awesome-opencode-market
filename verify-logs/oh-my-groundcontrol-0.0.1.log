@@ -1,0 +1,45 @@
+spec: oh-my-groundcontrol@0.0.1
+apiNames: oh-my-groundcontrol
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-7M9ncv/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37121
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:24.277Z level=INFO run=dfba948a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"oh-my-groundcontrol@0.0.1\"]" role=cli
+timestamp=2026-11-16T11:33:31.352Z level=INFO run=3b8b396c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:31.968Z level=INFO run=3b8b396c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:32.171Z level=INFO run=3b8b396c message="database schema bootstrap completed" migrations=59 durationMs=203 role=server
+timestamp=2026-11-16T11:33:32.331Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u/.config/opencode type=directory ignores=6 http.span=23 role=server
+timestamp=2026-11-16T11:33:32.342Z level=INFO run=3b8b396c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:32.342Z level=INFO run=3b8b396c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:32.343Z level=INFO run=3b8b396c message="watcher subscribe" path=/ type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:32.343Z level=INFO run=3b8b396c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:32.343Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:32.343Z level=INFO run=3b8b396c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:32.343Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:32.344Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T11:33:32.344Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T11:33:32.344Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T11:33:32.365Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u/.config/opencode type=directory backend=inotify ignores=6 http.span=57 role=server
+timestamp=2026-11-16T11:33:32.383Z level=INFO run=3b8b396c message="location services booted" directory=/tmp/verify-7M9ncv/u workspaceID=undefined durationMs=74 http.span=75 role=server
+timestamp=2026-11-16T11:33:32.385Z level=INFO run=3b8b396c msg="loading plugin" id=oh-my-groundcontrol@0.0.1 entrypoint=file:///tmp/verify-7M9ncv/u/cache/opencode/npm/oh-my-groundcontrol@0.0.1/1794828811032/node_modules/oh-my-groundcontrol/dist/index.js http.span=77 role=server
+timestamp=2026-11-16T11:33:32.424Z level=WARN run=3b8b396c message="failed to load plugin" target=oh-my-groundcontrol@0.0.1 ref=err_624f1326 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=116 role=server
+timestamp=2026-11-16T11:33:33.062Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:33.062Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:33.062Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:33.062Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:33.080Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:33:33.081Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:33.081Z level=INFO run=3b8b396c message="watcher subscribe" path=/tmp/verify-7M9ncv/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:33:33.082Z level=INFO run=3b8b396c message="watcher started" path=/tmp/verify-7M9ncv/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:33.099Z level=INFO run=3b8b396c message=event event.id=evt_1e422432b001BOi5cA7NWK4ZuY event.created=1794828813099 event.type=provider.updated event.location.directory=/tmp/verify-7M9ncv/u event.location.workspaceID=undefined event.data={} http.span=791 role=server
+timestamp=2026-11-16T11:33:33.108Z level=INFO run=3b8b396c message=event event.id=evt_1e4224333001WJ90JtpwhtPUgN event.created=1794828813107 event.type=model.updated event.location.directory=/tmp/verify-7M9ncv/u event.location.workspaceID=undefined event.data={} http.span=800 role=server
+timestamp=2026-11-16T11:33:33.110Z level=INFO run=3b8b396c message=event event.id=evt_1e4224336001LPDi6CGmDXdcoB event.created=1794828813110 event.type=agent.updated event.location.directory=/tmp/verify-7M9ncv/u event.location.workspaceID=undefined event.data={} http.span=802 role=server
+timestamp=2026-11-16T11:33:33.110Z level=INFO run=3b8b396c message=event event.id=evt_1e42243360021ESEyz2d1J8wuf event.created=1794828813110 event.type=command.updated event.location.directory=/tmp/verify-7M9ncv/u event.location.workspaceID=undefined event.data={} http.span=802 role=server
+timestamp=2026-11-16T11:33:33.278Z level=ERROR run=3b8b396c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=970 role=server

@@ -1,0 +1,55 @@
+spec: @oguzkaganozt/opencode-studio@1.0.19
+apiNames: @oguzkaganozt/opencode-studio, opencode-studio
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-HbCv5n/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37109
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:28.461Z level=INFO run=f69df42d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@oguzkaganozt/opencode-studio@1.0.19\"]" role=cli
+timestamp=2026-11-16T11:34:03.860Z level=INFO run=086ac704 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:34:04.240Z level=INFO run=086ac704 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:34:04.283Z level=INFO run=086ac704 message="database schema bootstrap completed" migrations=59 durationMs=43 role=server
+timestamp=2026-11-16T11:34:04.590Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u/.config/opencode type=directory ignores=6 http.span=13 role=server
+timestamp=2026-11-16T11:34:04.593Z level=INFO run=086ac704 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T11:34:04.593Z level=INFO run=086ac704 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T11:34:04.593Z level=INFO run=086ac704 message="watcher subscribe" path=/ type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.594Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T11:34:04.606Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u/.config/opencode type=directory backend=inotify ignores=6 http.span=29 role=server
+timestamp=2026-11-16T11:34:04.616Z level=INFO run=086ac704 message="location services booted" directory=/tmp/verify-HbCv5n/u workspaceID=undefined durationMs=39 http.span=39 role=server
+timestamp=2026-11-16T11:34:04.619Z level=INFO run=086ac704 msg="loading plugin" id=@oguzkaganozt/opencode-studio@1.0.19 entrypoint=file:///tmp/verify-HbCv5n/u/cache/opencode/npm/@oguzkaganozt/opencode-studio@1.0.19/1794828843703/node_modules/@oguzkaganozt/opencode-studio/dist/plugin.js http.span=42 role=server
+timestamp=2026-11-16T11:34:04.752Z level=WARN run=086ac704 message="failed to load plugin" target=@oguzkaganozt/opencode-studio@1.0.19 ref=err_a4f70849 cause="Cause([Die(SyntaxError: Export named 'source_component_misconfigured_error' not found in module '/tmp/verify-HbCv5n/u/cache/opencode/npm/@oguzkaganozt/opencode-studio@1.0.19/1794828843703/node_modules/circuit-json/dist/index.mjs'.)])" http.span=175 role=server
+timestamp=2026-11-16T11:34:05.104Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:05.104Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:05.104Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:05.104Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:05.113Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:34:05.113Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:05.114Z level=INFO run=086ac704 message="watcher subscribe" path=/tmp/verify-HbCv5n/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:34:05.114Z level=INFO run=086ac704 message="watcher started" path=/tmp/verify-HbCv5n/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:05.128Z level=INFO run=086ac704 message=event event.id=evt_1e422c047001UUzglzRNqLQdbh event.created=1794828845127 event.type=provider.updated event.location.directory=/tmp/verify-HbCv5n/u event.location.workspaceID=undefined event.data={} http.span=551 role=server
+timestamp=2026-11-16T11:34:05.134Z level=INFO run=086ac704 message=event event.id=evt_1e422c04e001xB2MxYEo48Is8V event.created=1794828845134 event.type=model.updated event.location.directory=/tmp/verify-HbCv5n/u event.location.workspaceID=undefined event.data={} http.span=557 role=server
+timestamp=2026-11-16T11:34:05.136Z level=INFO run=086ac704 message=event event.id=evt_1e422c050001pJ2OxEB3o94YPd event.created=1794828845136 event.type=agent.updated event.location.directory=/tmp/verify-HbCv5n/u event.location.workspaceID=undefined event.data={} http.span=559 role=server
+timestamp=2026-11-16T11:34:05.136Z level=INFO run=086ac704 message=event event.id=evt_1e422c050002f8nCkW5p9iw6ra event.created=1794828845136 event.type=command.updated event.location.directory=/tmp/verify-HbCv5n/u event.location.workspaceID=undefined event.data={} http.span=559 role=server
+timestamp=2026-11-16T11:34:05.208Z level=INFO run=086ac704 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:34:05.208Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:34:05.208Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:34:05.210Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:05.210Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:05.221Z level=INFO run=086ac704 message="watcher stopped" path=/etc type=entries http.span=644 role=server
+timestamp=2026-11-16T11:34:05.221Z level=INFO run=086ac704 message="watcher stopped" path=/ type=entries http.span=644 role=server
+timestamp=2026-11-16T11:34:05.221Z level=INFO run=086ac704 message="watcher stopped" path=/tmp type=entries http.span=644 role=server
+timestamp=2026-11-16T11:34:05.221Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n type=entries http.span=644 role=server
+timestamp=2026-11-16T11:34:05.221Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u type=entries http.span=644 role=server
+timestamp=2026-11-16T11:34:05.223Z level=INFO run=086ac704 message="watcher stopped" path=/tmp/verify-HbCv5n/u/.config/opencode type=directory http.span=646 role=server

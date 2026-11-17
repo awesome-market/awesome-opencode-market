@@ -1,0 +1,34 @@
+spec: opencode-auto-loop@0.1.8
+apiNames: opencode-auto-loop
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-JUgrSF/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46189
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:05.306Z level=INFO run=4941d2bc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-auto-loop@0.1.8\"]" role=cli
+timestamp=2026-11-16T12:54:11.246Z level=INFO run=6062d811 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:11.595Z level=INFO run=6062d811 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:11.638Z level=INFO run=6062d811 message="database schema bootstrap completed" migrations=59 durationMs=43 role=server
+timestamp=2026-11-16T12:54:11.979Z level=INFO run=6062d811 message="watcher subscribe" path=/tmp/verify-JUgrSF/u/.config/opencode type=directory ignores=6 http.span=90 role=server
+timestamp=2026-11-16T12:54:11.986Z level=INFO run=6062d811 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=97 role=server
+timestamp=2026-11-16T12:54:11.990Z level=INFO run=6062d811 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=101 role=server
+timestamp=2026-11-16T12:54:11.990Z level=INFO run=6062d811 message="watcher subscribe" path=/ type=entries ignores=0 http.span=101 role=server
+timestamp=2026-11-16T12:54:11.991Z level=INFO run=6062d811 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=102 role=server
+timestamp=2026-11-16T12:54:11.991Z level=INFO run=6062d811 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=102 role=server
+timestamp=2026-11-16T12:54:11.991Z level=INFO run=6062d811 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=102 role=server
+timestamp=2026-11-16T12:54:11.991Z level=INFO run=6062d811 message="watcher subscribe" path=/tmp/verify-JUgrSF type=entries ignores=0 http.span=102 role=server
+timestamp=2026-11-16T12:54:11.992Z level=INFO run=6062d811 message="watcher started" path=/tmp/verify-JUgrSF type=entries backend=node ignores=0 http.span=103 role=server
+timestamp=2026-11-16T12:54:11.993Z level=INFO run=6062d811 message="watcher subscribe" path=/tmp/verify-JUgrSF/u type=entries ignores=0 http.span=104 role=server
+timestamp=2026-11-16T12:54:11.993Z level=INFO run=6062d811 message="watcher started" path=/tmp/verify-JUgrSF/u type=entries backend=node ignores=0 http.span=104 role=server
+timestamp=2026-11-16T12:54:12.021Z level=INFO run=6062d811 message="watcher started" path=/tmp/verify-JUgrSF/u/.config/opencode type=directory backend=inotify ignores=6 http.span=132 role=server
+timestamp=2026-11-16T12:54:12.067Z level=INFO run=6062d811 message="location services booted" directory=/tmp/verify-JUgrSF/u workspaceID=undefined durationMs=177 http.span=178 role=server
+timestamp=2026-11-16T12:54:12.102Z level=INFO run=6062d811 msg="loading plugin" id=opencode-auto-loop@0.1.8 entrypoint=file:///tmp/verify-JUgrSF/u/cache/opencode/npm/opencode-auto-loop@0.1.8/1794833650817/node_modules/opencode-auto-loop/src/index.ts http.span=213 role=server
+timestamp=2026-11-16T12:54:12.309Z level=WARN run=6062d811 message="failed to load plugin" target=opencode-auto-loop@0.1.8 ref=err_250c66b4 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=420 role=server

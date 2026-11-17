@@ -1,0 +1,88 @@
+spec: @cobusgreyling/loop@0.2.0
+apiNames: @cobusgreyling/loop, loop
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-G1gKtk/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35991
+server password [redacted]
+Unknown command: serve
+
+loop — Loop Engineering unified CLI v0.2.0
+
+Usage:
+  loop                          Week-one help (or wizard if TTY + --interactive)
+  loop init [args…]             → loop-init (scaffold)
+  loop audit [args…]            → loop-audit (Loop Ready score)
+  loop cost [args…]             → loop-cost
+  loop sync [args…]             → loop-sync
+  loop doctor [path] [--json]   Audit + sync + files → top 3 actions
+  loop status [path] [--json]   Day-2 dashboard from STATE / run-log
+  loop badge [path]             README badge (→ loop-audit --badge)
+  loop wizard [--yes]           Guided scaffold + doctor
+  loop context|worktree|gate|mcp|sandbox [args…]
+
+Week-one (recommended):
+  npx @cobusgreyling/loop init . --pattern daily-triage --tool claude
+  npx @cobusgreyling/loop doctor .
+
+Doctor exit codes:
+  0  healthy
+  1  warnings (score/sync/budget gaps)
+  2  blocked (score < 40, critical drift, or unscaffolded)
+
+Compatibility (old doors stay open):
+  npx @cobusgreyling/loop-init .
+  npx @cobusgreyling/loop-audit . --suggest
+
+Docs: https://github.com/cobusgreyling/loop-engineering/blob/main/docs/QUICKSTART.md
+Showcase: https://cobusgreyling.github.io/loop-engineering/
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:36:34.250Z level=INFO run=2794c69a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@cobusgreyling/loop@0.2.0\"]" role=cli
+timestamp=2026-11-16T07:36:34.914Z level=INFO run=d12ece1d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:36:35.186Z level=INFO run=d12ece1d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:36:35.243Z level=INFO run=d12ece1d message="database schema bootstrap completed" migrations=59 durationMs=57 role=server
+timestamp=2026-11-16T07:36:35.577Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T07:36:35.584Z level=INFO run=d12ece1d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:36:35.585Z level=INFO run=d12ece1d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T07:36:35.585Z level=INFO run=d12ece1d message="watcher subscribe" path=/ type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T07:36:35.585Z level=INFO run=d12ece1d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T07:36:35.586Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T07:36:35.586Z level=INFO run=d12ece1d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T07:36:35.586Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T07:36:35.586Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T07:36:35.587Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T07:36:35.587Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T07:36:35.620Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u/.config/opencode type=directory backend=inotify ignores=6 http.span=83 role=server
+timestamp=2026-11-16T07:36:35.672Z level=INFO run=d12ece1d msg="loading plugin" id=@cobusgreyling/loop@0.2.0 entrypoint=file:///tmp/verify-G1gKtk/u/cache/opencode/npm/@cobusgreyling/loop@0.2.0/1794814594586/node_modules/@cobusgreyling/loop/dist/cli.js http.span=135 role=server
+timestamp=2026-11-16T07:36:35.676Z level=WARN run=d12ece1d message="failed to load plugin" target=@cobusgreyling/loop@0.2.0 ref=err_e622d8b9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=139 role=server
+timestamp=2026-11-16T07:36:35.702Z level=INFO run=d12ece1d message="location services booted" directory=/tmp/verify-G1gKtk/u workspaceID=undefined durationMs=164 http.span=165 role=server
+timestamp=2026-11-16T07:36:36.834Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:36.834Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:36.835Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:36.835Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:36.869Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:36:36.871Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:36.873Z level=INFO run=d12ece1d message="watcher subscribe" path=/tmp/verify-G1gKtk/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:36:36.875Z level=INFO run=d12ece1d message="watcher started" path=/tmp/verify-G1gKtk/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:36.949Z level=INFO run=d12ece1d message=event event.id=evt_1e3495755001rip0sPdzvO6waY event.created=1794814596949 event.type=provider.updated event.location.directory=/tmp/verify-G1gKtk/u event.location.workspaceID=undefined event.data={} http.span=1412 role=server
+timestamp=2026-11-16T07:36:37.004Z level=INFO run=d12ece1d message=event event.id=evt_1e349578c001deRuFi7bD6Ft2C event.created=1794814597004 event.type=model.updated event.location.directory=/tmp/verify-G1gKtk/u event.location.workspaceID=undefined event.data={} http.span=1467 role=server
+timestamp=2026-11-16T07:36:37.009Z level=INFO run=d12ece1d message=event event.id=evt_1e3495791001uiky10eGj4UxtC event.created=1794814597009 event.type=agent.updated event.location.directory=/tmp/verify-G1gKtk/u event.location.workspaceID=undefined event.data={} http.span=1472 role=server
+timestamp=2026-11-16T07:36:37.009Z level=INFO run=d12ece1d message=event event.id=evt_1e3495791002fLifmpd6N1mbyH event.created=1794814597009 event.type=command.updated event.location.directory=/tmp/verify-G1gKtk/u event.location.workspaceID=undefined event.data={} http.span=1472 role=server
+timestamp=2026-11-16T07:36:37.130Z level=ERROR run=d12ece1d message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1593 role=server
+timestamp=2026-11-16T07:36:37.226Z level=INFO run=d12ece1d message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:36:37.226Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:36:37.226Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:36:37.235Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:37.235Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:37.268Z level=INFO run=d12ece1d message="watcher stopped" path=/etc type=entries http.span=1731 role=server
+timestamp=2026-11-16T07:36:37.269Z level=INFO run=d12ece1d message="watcher stopped" path=/ type=entries http.span=1732 role=server
+timestamp=2026-11-16T07:36:37.269Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp type=entries http.span=1732 role=server
+timestamp=2026-11-16T07:36:37.269Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk type=entries http.span=1732 role=server
+timestamp=2026-11-16T07:36:37.269Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u type=entries http.span=1732 role=server
+timestamp=2026-11-16T07:36:37.269Z level=INFO run=d12ece1d message="watcher stopped" path=/tmp/verify-G1gKtk/u/.config/opencode type=directory http.span=1732 role=server

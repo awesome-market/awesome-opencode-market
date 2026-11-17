@@ -1,0 +1,32 @@
+spec: @pipellm/magpie-websearch@0.1.0
+apiNames: @pipellm/magpie-websearch, magpie-websearch
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Sj7Pvl/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44913
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T13:20:42.666Z level=INFO run=b02a225a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@pipellm/magpie-websearch@0.1.0\"]" role=cli
+timestamp=2026-11-16T13:20:43.025Z level=INFO run=fd44b827 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T13:20:43.237Z level=INFO run=fd44b827 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T13:20:43.256Z level=INFO run=fd44b827 message="database schema bootstrap completed" migrations=59 durationMs=19 role=server
+timestamp=2026-11-16T13:20:43.510Z level=INFO run=fd44b827 message="watcher subscribe" path=/tmp/verify-Sj7Pvl/u/.config/opencode type=directory ignores=6 http.span=22 role=server
+timestamp=2026-11-16T13:20:43.513Z level=INFO run=fd44b827 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T13:20:43.514Z level=INFO run=fd44b827 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T13:20:43.514Z level=INFO run=fd44b827 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T13:20:43.514Z level=INFO run=fd44b827 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T13:20:43.514Z level=INFO run=fd44b827 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T13:20:43.515Z level=INFO run=fd44b827 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T13:20:43.515Z level=INFO run=fd44b827 message="watcher subscribe" path=/tmp/verify-Sj7Pvl type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T13:20:43.515Z level=INFO run=fd44b827 message="watcher started" path=/tmp/verify-Sj7Pvl type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T13:20:43.515Z level=INFO run=fd44b827 message="watcher subscribe" path=/tmp/verify-Sj7Pvl/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T13:20:43.515Z level=INFO run=fd44b827 message="watcher started" path=/tmp/verify-Sj7Pvl/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T13:20:43.532Z level=INFO run=fd44b827 message="watcher started" path=/tmp/verify-Sj7Pvl/u/.config/opencode type=directory backend=inotify ignores=6 http.span=44 role=server
+timestamp=2026-11-16T13:20:43.548Z level=INFO run=fd44b827 message="location services booted" directory=/tmp/verify-Sj7Pvl/u workspaceID=undefined durationMs=59 http.span=60 role=server
+timestamp=2026-11-16T13:20:43.550Z level=INFO run=fd44b827 msg="loading plugin" id=@pipellm/magpie-websearch@0.1.0 entrypoint=file:///tmp/verify-Sj7Pvl/u/cache/opencode/npm/@pipellm/magpie-websearch@0.1.0/1794835242868/node_modules/@pipellm/magpie-websearch/index.mjs http.span=62 role=server
+timestamp=2026-11-16T13:20:43.553Z level=WARN run=fd44b827 message="failed to load plugin" target=@pipellm/magpie-websearch@0.1.0 ref=err_0fdb1d11 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=65 role=server

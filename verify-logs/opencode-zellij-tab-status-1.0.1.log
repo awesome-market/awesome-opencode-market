@@ -1,0 +1,56 @@
+spec: opencode-zellij-tab-status@1.0.1
+apiNames: opencode-zellij-tab-status
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vmTaCS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42731
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:57.877Z level=INFO run=7419aff0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-zellij-tab-status@1.0.1\"]" role=cli
+timestamp=2026-11-16T11:33:58.630Z level=INFO run=fab49dc4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:59.136Z level=INFO run=fab49dc4 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:59.162Z level=INFO run=fab49dc4 message="database schema bootstrap completed" migrations=59 durationMs=26 role=server
+timestamp=2026-11-16T11:33:59.585Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u/.config/opencode type=directory ignores=6 http.span=51 role=server
+timestamp=2026-11-16T11:33:59.594Z level=INFO run=fab49dc4 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-16T11:33:59.596Z level=INFO run=fab49dc4 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T11:33:59.597Z level=INFO run=fab49dc4 message="watcher subscribe" path=/ type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T11:33:59.597Z level=INFO run=fab49dc4 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T11:33:59.597Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T11:33:59.598Z level=INFO run=fab49dc4 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T11:33:59.598Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS type=entries ignores=0 http.span=64 role=server
+timestamp=2026-11-16T11:33:59.598Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T11:33:59.598Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u type=entries ignores=0 http.span=64 role=server
+timestamp=2026-11-16T11:33:59.598Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T11:33:59.635Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=101 role=server
+timestamp=2026-11-16T11:33:59.654Z level=INFO run=fab49dc4 message="location services booted" directory=/tmp/verify-vmTaCS/u workspaceID=undefined durationMs=100 http.span=120 role=server
+timestamp=2026-11-16T11:33:59.665Z level=INFO run=fab49dc4 msg="loading plugin" id=opencode-zellij-tab-status@1.0.1 entrypoint=file:///tmp/verify-vmTaCS/u/cache/opencode/npm/opencode-zellij-tab-status@1.0.1/1794828838094/node_modules/opencode-zellij-tab-status/dist/index.js http.span=131 role=server
+timestamp=2026-11-16T11:33:59.667Z level=WARN run=fab49dc4 message="failed to load plugin" target=opencode-zellij-tab-status@1.0.1 ref=err_06ea7333 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=133 role=server
+timestamp=2026-11-16T11:34:00.907Z level=ERROR run=fab49dc4 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1373 role=server
+timestamp=2026-11-16T11:34:00.983Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:00.985Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:00.986Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:00.986Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:01.021Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:34:01.021Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:01.023Z level=INFO run=fab49dc4 message="watcher subscribe" path=/tmp/verify-vmTaCS/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:34:01.023Z level=INFO run=fab49dc4 message="watcher started" path=/tmp/verify-vmTaCS/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:01.057Z level=INFO run=fab49dc4 message=event event.id=evt_1e422b061001WbgIXrd2YpeKsN event.created=1794828841057 event.type=provider.updated event.location.directory=/tmp/verify-vmTaCS/u event.location.workspaceID=undefined event.data={} http.span=1523 role=server
+timestamp=2026-11-16T11:34:01.073Z level=INFO run=fab49dc4 message=event event.id=evt_1e422b071001uIW164ivWEQaJM event.created=1794828841073 event.type=model.updated event.location.directory=/tmp/verify-vmTaCS/u event.location.workspaceID=undefined event.data={} http.span=1539 role=server
+timestamp=2026-11-16T11:34:01.077Z level=INFO run=fab49dc4 message=event event.id=evt_1e422b07500142kwyPXz5rTJJo event.created=1794828841077 event.type=agent.updated event.location.directory=/tmp/verify-vmTaCS/u event.location.workspaceID=undefined event.data={} http.span=1543 role=server
+timestamp=2026-11-16T11:34:01.078Z level=INFO run=fab49dc4 message=event event.id=evt_1e422b076001wXyE7TK405IN79 event.created=1794828841078 event.type=command.updated event.location.directory=/tmp/verify-vmTaCS/u event.location.workspaceID=undefined event.data={} http.span=1544 role=server
+timestamp=2026-11-16T11:34:01.614Z level=INFO run=fab49dc4 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:34:01.614Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:34:01.615Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:34:01.620Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:01.621Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:01.649Z level=INFO run=fab49dc4 message="watcher stopped" path=/etc type=entries http.span=2115 role=server
+timestamp=2026-11-16T11:34:01.649Z level=INFO run=fab49dc4 message="watcher stopped" path=/ type=entries http.span=2115 role=server
+timestamp=2026-11-16T11:34:01.649Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp type=entries http.span=2115 role=server
+timestamp=2026-11-16T11:34:01.649Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS type=entries http.span=2115 role=server
+timestamp=2026-11-16T11:34:01.649Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u type=entries http.span=2115 role=server
+timestamp=2026-11-16T11:34:01.651Z level=INFO run=fab49dc4 message="watcher stopped" path=/tmp/verify-vmTaCS/u/.config/opencode type=directory http.span=2117 role=server

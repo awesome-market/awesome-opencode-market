@@ -1,0 +1,32 @@
+spec: magpie-aws-bedrock-sso@0.4.0
+apiNames: magpie-aws-bedrock-sso
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-5VecZA/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42635
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:35.821Z level=INFO run=ff3081fe message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-aws-bedrock-sso@0.4.0\"]" role=cli
+timestamp=2026-11-16T09:37:36.311Z level=INFO run=d74a6c70 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:36.532Z level=INFO run=d74a6c70 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:36.545Z level=INFO run=d74a6c70 message="database schema bootstrap completed" migrations=59 durationMs=13 role=server
+timestamp=2026-11-16T09:37:36.761Z level=INFO run=d74a6c70 message="watcher subscribe" path=/tmp/verify-5VecZA/u/.config/opencode type=directory ignores=6 http.span=55 role=server
+timestamp=2026-11-16T09:37:36.764Z level=INFO run=d74a6c70 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T09:37:36.767Z level=INFO run=d74a6c70 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T09:37:36.768Z level=INFO run=d74a6c70 message="watcher subscribe" path=/ type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-16T09:37:36.768Z level=INFO run=d74a6c70 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T09:37:36.769Z level=INFO run=d74a6c70 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T09:37:36.769Z level=INFO run=d74a6c70 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T09:37:36.769Z level=INFO run=d74a6c70 message="watcher subscribe" path=/tmp/verify-5VecZA type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T09:37:36.770Z level=INFO run=d74a6c70 message="watcher started" path=/tmp/verify-5VecZA type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T09:37:36.771Z level=INFO run=d74a6c70 message="watcher subscribe" path=/tmp/verify-5VecZA/u type=entries ignores=0 http.span=65 role=server
+timestamp=2026-11-16T09:37:36.771Z level=INFO run=d74a6c70 message="watcher started" path=/tmp/verify-5VecZA/u type=entries backend=node ignores=0 http.span=65 role=server
+timestamp=2026-11-16T09:37:36.808Z level=INFO run=d74a6c70 message="watcher started" path=/tmp/verify-5VecZA/u/.config/opencode type=directory backend=inotify ignores=6 http.span=102 role=server
+timestamp=2026-11-16T09:37:36.822Z level=INFO run=d74a6c70 msg="loading plugin" id=magpie-aws-bedrock-sso@0.4.0 entrypoint=file:///tmp/verify-5VecZA/u/cache/opencode/npm/magpie-aws-bedrock-sso@0.4.0/1794821856019/node_modules/magpie-aws-bedrock-sso/index.mjs http.span=116 role=server
+timestamp=2026-11-16T09:37:36.829Z level=WARN run=d74a6c70 message="failed to load plugin" target=magpie-aws-bedrock-sso@0.4.0 ref=err_d7443d0a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=123 role=server
+timestamp=2026-11-16T09:37:36.839Z level=INFO run=d74a6c70 message="location services booted" directory=/tmp/verify-5VecZA/u workspaceID=undefined durationMs=131 http.span=133 role=server

@@ -1,0 +1,32 @@
+spec: @heretek-ai/godot-opencode@1.0.1
+apiNames: @heretek-ai/godot-opencode, godot-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-LEvMSd/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44611
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:40.802Z level=INFO run=55de718e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@heretek-ai/godot-opencode@1.0.1\"]" role=cli
+timestamp=2026-11-16T09:37:41.482Z level=INFO run=43c543c1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:41.757Z level=INFO run=43c543c1 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:41.782Z level=INFO run=43c543c1 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server
+timestamp=2026-11-16T09:37:42.182Z level=INFO run=43c543c1 message="watcher subscribe" path=/tmp/verify-LEvMSd/u/.config/opencode type=directory ignores=6 http.span=58 role=server
+timestamp=2026-11-16T09:37:42.189Z level=INFO run=43c543c1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=65 role=server
+timestamp=2026-11-16T09:37:42.191Z level=INFO run=43c543c1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-16T09:37:42.193Z level=INFO run=43c543c1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=69 role=server
+timestamp=2026-11-16T09:37:42.195Z level=INFO run=43c543c1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=71 role=server
+timestamp=2026-11-16T09:37:42.196Z level=INFO run=43c543c1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=72 role=server
+timestamp=2026-11-16T09:37:42.198Z level=INFO run=43c543c1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-16T09:37:42.198Z level=INFO run=43c543c1 message="watcher subscribe" path=/tmp/verify-LEvMSd type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T09:37:42.198Z level=INFO run=43c543c1 message="watcher started" path=/tmp/verify-LEvMSd type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-16T09:37:42.199Z level=INFO run=43c543c1 message="watcher subscribe" path=/tmp/verify-LEvMSd/u type=entries ignores=0 http.span=75 role=server
+timestamp=2026-11-16T09:37:42.200Z level=INFO run=43c543c1 message="watcher started" path=/tmp/verify-LEvMSd/u type=entries backend=node ignores=0 http.span=76 role=server
+timestamp=2026-11-16T09:37:42.242Z level=INFO run=43c543c1 message="watcher started" path=/tmp/verify-LEvMSd/u/.config/opencode type=directory backend=inotify ignores=6 http.span=118 role=server
+timestamp=2026-11-16T09:37:42.262Z level=INFO run=43c543c1 message="location services booted" directory=/tmp/verify-LEvMSd/u workspaceID=undefined durationMs=137 http.span=138 role=server
+timestamp=2026-11-16T09:37:42.268Z level=INFO run=43c543c1 msg="loading plugin" id=@heretek-ai/godot-opencode@1.0.1 entrypoint=file:///tmp/verify-LEvMSd/u/cache/opencode/npm/@heretek-ai/godot-opencode@1.0.1/1794821861121/node_modules/@heretek-ai/godot-opencode/src/index.ts http.span=144 role=server
+timestamp=2026-11-16T09:37:42.269Z level=WARN run=43c543c1 message="failed to load plugin" target=@heretek-ai/godot-opencode@1.0.1 ref=err_a818f2fd cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=145 role=server

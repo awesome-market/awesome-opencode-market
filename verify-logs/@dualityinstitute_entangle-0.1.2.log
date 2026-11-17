@@ -1,0 +1,55 @@
+spec: @dualityinstitute/entangle@0.1.2
+apiNames: @dualityinstitute/entangle, entangle
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Kdcoum/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33129
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:53:07.151Z level=INFO run=eb93e28b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@dualityinstitute/entangle@0.1.2\"]" role=cli
+timestamp=2026-11-16T08:53:16.413Z level=INFO run=c01696fb message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:53:16.744Z level=INFO run=c01696fb message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:53:16.803Z level=INFO run=c01696fb message="database schema bootstrap completed" migrations=59 durationMs=59 role=server
+timestamp=2026-11-16T08:53:17.219Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u/.config/opencode type=directory ignores=6 http.span=76 role=server
+timestamp=2026-11-16T08:53:17.231Z level=INFO run=c01696fb message="watcher subscribe" path=/etc type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T08:53:17.232Z level=INFO run=c01696fb message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T08:53:17.232Z level=INFO run=c01696fb message="watcher subscribe" path=/ type=entries ignores=0 http.span=89 role=server
+timestamp=2026-11-16T08:53:17.232Z level=INFO run=c01696fb message="watcher started" path=/ type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T08:53:17.233Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:53:17.236Z level=INFO run=c01696fb message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:53:17.236Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum type=entries ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:53:17.237Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum type=entries backend=node ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:53:17.237Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:53:17.237Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u type=entries backend=node ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:53:17.298Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u/.config/opencode type=directory backend=inotify ignores=6 http.span=155 role=server
+timestamp=2026-11-16T08:53:17.323Z level=INFO run=c01696fb message="location services booted" directory=/tmp/verify-Kdcoum/u workspaceID=undefined durationMs=179 http.span=180 role=server
+timestamp=2026-11-16T08:53:17.342Z level=INFO run=c01696fb msg="loading plugin" id=@dualityinstitute/entangle@0.1.2 entrypoint=file:///tmp/verify-Kdcoum/u/cache/opencode/npm/@dualityinstitute/entangle@0.1.2/1794819196123/node_modules/@dualityinstitute/entangle/dist/plugin.js http.span=199 role=server
+timestamp=2026-11-16T08:53:17.460Z level=WARN run=c01696fb message="failed to load plugin" target=@dualityinstitute/entangle@0.1.2 ref=err_0e637142 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=317 role=server
+timestamp=2026-11-16T08:53:18.634Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:53:18.635Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:18.635Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:53:18.635Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:18.674Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:53:18.674Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:18.676Z level=INFO run=c01696fb message="watcher subscribe" path=/tmp/verify-Kdcoum/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:53:18.677Z level=INFO run=c01696fb message="watcher started" path=/tmp/verify-Kdcoum/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:53:18.708Z level=INFO run=c01696fb message=event event.id=evt_1e38f8ef4001ye2sIvlvEwqP6h event.created=1794819198708 event.type=provider.updated event.location.directory=/tmp/verify-Kdcoum/u event.location.workspaceID=undefined event.data={} http.span=1565 role=server
+timestamp=2026-11-16T08:53:18.722Z level=INFO run=c01696fb message=event event.id=evt_1e38f8f02001weLj46umWiDPDV event.created=1794819198722 event.type=model.updated event.location.directory=/tmp/verify-Kdcoum/u event.location.workspaceID=undefined event.data={} http.span=1579 role=server
+timestamp=2026-11-16T08:53:18.724Z level=INFO run=c01696fb message=event event.id=evt_1e38f8f04001OMUbrmNByzxyCT event.created=1794819198724 event.type=agent.updated event.location.directory=/tmp/verify-Kdcoum/u event.location.workspaceID=undefined event.data={} http.span=1581 role=server
+timestamp=2026-11-16T08:53:18.724Z level=INFO run=c01696fb message=event event.id=evt_1e38f8f04002UiYWd9wkgBnipT event.created=1794819198724 event.type=command.updated event.location.directory=/tmp/verify-Kdcoum/u event.location.workspaceID=undefined event.data={} http.span=1581 role=server
+timestamp=2026-11-16T08:53:18.872Z level=INFO run=c01696fb message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:53:18.873Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:53:18.873Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:53:18.884Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:53:18.885Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:53:18.909Z level=INFO run=c01696fb message="watcher stopped" path=/etc type=entries http.span=1766 role=server
+timestamp=2026-11-16T08:53:18.909Z level=INFO run=c01696fb message="watcher stopped" path=/ type=entries http.span=1766 role=server
+timestamp=2026-11-16T08:53:18.909Z level=INFO run=c01696fb message="watcher stopped" path=/tmp type=entries http.span=1766 role=server
+timestamp=2026-11-16T08:53:18.912Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum type=entries http.span=1769 role=server
+timestamp=2026-11-16T08:53:18.912Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u type=entries http.span=1769 role=server
+timestamp=2026-11-16T08:53:18.912Z level=INFO run=c01696fb message="watcher stopped" path=/tmp/verify-Kdcoum/u/.config/opencode type=directory http.span=1769 role=server

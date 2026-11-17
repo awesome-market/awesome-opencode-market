@@ -1,0 +1,56 @@
+spec: @asframe/opencode-iflow-auth@1.0.6
+apiNames: @asframe/opencode-iflow-auth, opencode-iflow-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-GesbTP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33937
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:32.387Z level=INFO run=3d41ee0d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@asframe/opencode-iflow-auth@1.0.6\"]" role=cli
+timestamp=2026-11-16T08:47:39.608Z level=INFO run=7b992633 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:40.089Z level=INFO run=7b992633 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:40.115Z level=INFO run=7b992633 message="database schema bootstrap completed" migrations=59 durationMs=26 role=server
+timestamp=2026-11-16T08:47:40.556Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u/.config/opencode type=directory ignores=6 http.span=34 role=server
+timestamp=2026-11-16T08:47:40.569Z level=INFO run=7b992633 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:47:40.570Z level=INFO run=7b992633 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:47:40.571Z level=INFO run=7b992633 message="watcher subscribe" path=/ type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:47:40.574Z level=INFO run=7b992633 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-16T08:47:40.574Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T08:47:40.575Z level=INFO run=7b992633 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:40.575Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:40.575Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:40.575Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:47:40.576Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:47:40.611Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=89 role=server
+timestamp=2026-11-16T08:47:40.644Z level=INFO run=7b992633 message="location services booted" directory=/tmp/verify-GesbTP/u workspaceID=undefined durationMs=122 http.span=122 role=server
+timestamp=2026-11-16T08:47:40.649Z level=INFO run=7b992633 msg="loading plugin" id=@asframe/opencode-iflow-auth@1.0.6 entrypoint=file:///tmp/verify-GesbTP/u/cache/opencode/npm/@asframe/opencode-iflow-auth@1.0.6/1794818859235/node_modules/@asframe/opencode-iflow-auth/dist/index.js http.span=127 role=server
+timestamp=2026-11-16T08:47:40.709Z level=WARN run=7b992633 message="failed to load plugin" target=@asframe/opencode-iflow-auth@1.0.6 ref=err_8cc1fbd7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=187 role=server
+timestamp=2026-11-16T08:47:42.382Z level=ERROR run=7b992633 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1860 role=server
+timestamp=2026-11-16T08:47:42.474Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:42.474Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:42.474Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:42.475Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:42.535Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:47:42.536Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:42.538Z level=INFO run=7b992633 message="watcher subscribe" path=/tmp/verify-GesbTP/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:47:42.540Z level=INFO run=7b992633 message="watcher started" path=/tmp/verify-GesbTP/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:42.571Z level=INFO run=7b992633 message=event event.id=evt_1e38a6dea001rUfhMlkzz5i2GL event.created=1794818862570 event.type=provider.updated event.location.directory=/tmp/verify-GesbTP/u event.location.workspaceID=undefined event.data={} http.span=2049 role=server
+timestamp=2026-11-16T08:47:42.586Z level=INFO run=7b992633 message=event event.id=evt_1e38a6dfa0010cMGROW9msd6hm event.created=1794818862586 event.type=model.updated event.location.directory=/tmp/verify-GesbTP/u event.location.workspaceID=undefined event.data={} http.span=2064 role=server
+timestamp=2026-11-16T08:47:42.590Z level=INFO run=7b992633 message=event event.id=evt_1e38a6dfe001nETSMXSl22UHux event.created=1794818862590 event.type=agent.updated event.location.directory=/tmp/verify-GesbTP/u event.location.workspaceID=undefined event.data={} http.span=2068 role=server
+timestamp=2026-11-16T08:47:42.591Z level=INFO run=7b992633 message=event event.id=evt_1e38a6dfe002FZIeZPbNDpYpPe event.created=1794818862590 event.type=command.updated event.location.directory=/tmp/verify-GesbTP/u event.location.workspaceID=undefined event.data={} http.span=2069 role=server
+timestamp=2026-11-16T08:47:43.119Z level=INFO run=7b992633 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:47:43.123Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:47:43.123Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:47:43.136Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:43.137Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:43.178Z level=INFO run=7b992633 message="watcher stopped" path=/etc type=entries http.span=2656 role=server
+timestamp=2026-11-16T08:47:43.178Z level=INFO run=7b992633 message="watcher stopped" path=/ type=entries http.span=2656 role=server
+timestamp=2026-11-16T08:47:43.178Z level=INFO run=7b992633 message="watcher stopped" path=/tmp type=entries http.span=2656 role=server
+timestamp=2026-11-16T08:47:43.178Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP type=entries http.span=2656 role=server
+timestamp=2026-11-16T08:47:43.179Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u type=entries http.span=2657 role=server
+timestamp=2026-11-16T08:47:43.185Z level=INFO run=7b992633 message="watcher stopped" path=/tmp/verify-GesbTP/u/.config/opencode type=directory http.span=2663 role=server

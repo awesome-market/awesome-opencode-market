@@ -1,0 +1,32 @@
+spec: ca-x/magpie-intern-ai#f0fed840b77056f9a6799e8936b33745e3b8bed1
+apiNames: ca-x/magpie-intern-ai, magpie-intern-ai
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-dlf6dT/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37053
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:39.192Z level=INFO run=a38ddfc0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"ca-x/magpie-intern-ai#f0fed840b77056f9a6799e8936b33745e3b8bed1\"]" role=cli
+timestamp=2026-11-16T08:47:40.047Z level=INFO run=449ea9dd message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:40.383Z level=INFO run=449ea9dd message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:40.414Z level=INFO run=449ea9dd message="database schema bootstrap completed" migrations=59 durationMs=31 role=server
+timestamp=2026-11-16T08:47:40.815Z level=INFO run=449ea9dd message="watcher subscribe" path=/tmp/verify-dlf6dT/u/.config/opencode type=directory ignores=6 http.span=72 role=server
+timestamp=2026-11-16T08:47:40.829Z level=INFO run=449ea9dd message="watcher subscribe" path=/etc type=entries ignores=0 http.span=86 role=server
+timestamp=2026-11-16T08:47:40.830Z level=INFO run=449ea9dd message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T08:47:40.832Z level=INFO run=449ea9dd message="watcher subscribe" path=/ type=entries ignores=0 http.span=89 role=server
+timestamp=2026-11-16T08:47:40.832Z level=INFO run=449ea9dd message="watcher started" path=/ type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T08:47:40.833Z level=INFO run=449ea9dd message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:47:40.833Z level=INFO run=449ea9dd message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:47:40.833Z level=INFO run=449ea9dd message="watcher subscribe" path=/tmp/verify-dlf6dT type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:47:40.834Z level=INFO run=449ea9dd message="watcher started" path=/tmp/verify-dlf6dT type=entries backend=node ignores=0 http.span=91 role=server
+timestamp=2026-11-16T08:47:40.835Z level=INFO run=449ea9dd message="watcher subscribe" path=/tmp/verify-dlf6dT/u type=entries ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:47:40.835Z level=INFO run=449ea9dd message="watcher started" path=/tmp/verify-dlf6dT/u type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:47:40.883Z level=INFO run=449ea9dd message="watcher started" path=/tmp/verify-dlf6dT/u/.config/opencode type=directory backend=inotify ignores=6 http.span=140 role=server
+timestamp=2026-11-16T08:47:40.903Z level=INFO run=449ea9dd message="location services booted" directory=/tmp/verify-dlf6dT/u workspaceID=undefined durationMs=160 http.span=160 role=server
+timestamp=2026-11-16T08:47:40.937Z level=INFO run=449ea9dd msg="loading plugin" id=ca-x/magpie-intern-ai#f0fed840b77056f9a6799e8936b33745e3b8bed1 entrypoint=file:///tmp/verify-dlf6dT/u/cache/opencode/npm/git-magpie-intern-ai-e2d03fc1d2cc/1794818859749/node_modules/magpie-intern-ai/index.mjs http.span=194 role=server
+timestamp=2026-11-16T08:47:40.945Z level=WARN run=449ea9dd message="failed to load plugin" target=ca-x/magpie-intern-ai#f0fed840b77056f9a6799e8936b33745e3b8bed1 ref=err_a7991717 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=202 role=server

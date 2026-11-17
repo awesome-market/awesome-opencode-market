@@ -1,0 +1,56 @@
+spec: @skythelight/opencode-plugin-dashboard@0.1.1
+apiNames: @skythelight/opencode-plugin-dashboard, opencode-plugin-dashboard
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-K7aB32/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44359
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:55:21.612Z level=INFO run=8e6b30ad message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@skythelight/opencode-plugin-dashboard@0.1.1\"]" role=cli
+timestamp=2026-11-16T02:55:22.484Z level=INFO run=41d7e10f message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:55:22.796Z level=INFO run=41d7e10f message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:55:22.823Z level=INFO run=41d7e10f message="database schema bootstrap completed" migrations=59 durationMs=27 role=server
+timestamp=2026-11-16T02:55:23.102Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T02:55:23.110Z level=INFO run=41d7e10f message="watcher subscribe" path=/etc type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T02:55:23.111Z level=INFO run=41d7e10f message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T02:55:23.111Z level=INFO run=41d7e10f message="watcher subscribe" path=/ type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T02:55:23.111Z level=INFO run=41d7e10f message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T02:55:23.112Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T02:55:23.112Z level=INFO run=41d7e10f message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T02:55:23.112Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32 type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T02:55:23.113Z level=ERROR run=41d7e10f message="failed to watch directory" path=/tmp/verify-K7aB32 error="Error: EACCES: permission denied, watch '/tmp/verify-K7aB32'" http.span=47 role=server
+timestamp=2026-11-16T02:55:23.114Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T02:55:23.114Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T02:55:23.160Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u/.config/opencode type=directory backend=inotify ignores=6 http.span=94 role=server
+timestamp=2026-11-16T02:55:23.186Z level=INFO run=41d7e10f msg="loading plugin" id=@skythelight/opencode-plugin-dashboard@0.1.1 entrypoint=file:///tmp/verify-K7aB32/u/cache/opencode/npm/@skythelight/opencode-plugin-dashboard@0.1.1/1794797722060/node_modules/@skythelight/opencode-plugin-dashboard/src/server.js http.span=120 role=server
+timestamp=2026-11-16T02:55:23.193Z level=WARN run=41d7e10f message="failed to load plugin" target=@skythelight/opencode-plugin-dashboard@0.1.1 ref=err_d80f55d8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=127 role=server
+timestamp=2026-11-16T02:55:23.210Z level=INFO run=41d7e10f message="location services booted" directory=/tmp/verify-K7aB32/u workspaceID=undefined durationMs=143 http.span=144 role=server
+timestamp=2026-11-16T02:55:24.161Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32 type=entries ignores=0 http.span=1095 role=server
+timestamp=2026-11-16T02:55:24.162Z level=ERROR run=41d7e10f message="failed to watch directory" path=/tmp/verify-K7aB32 error="Error: EACCES: permission denied, watch '/tmp/verify-K7aB32'" http.span=1096 role=server
+timestamp=2026-11-16T02:55:24.168Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:24.169Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:24.169Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:24.169Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:24.203Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:55:24.205Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:24.211Z level=INFO run=41d7e10f message="watcher subscribe" path=/tmp/verify-K7aB32/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:55:24.212Z level=INFO run=41d7e10f message="watcher started" path=/tmp/verify-K7aB32/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:24.259Z level=INFO run=41d7e10f message=event event.id=evt_1e247e2630012TEooFCjAvVYi2 event.created=1794797724259 event.type=provider.updated event.location.directory=/tmp/verify-K7aB32/u event.location.workspaceID=undefined event.data={} http.span=1193 role=server
+timestamp=2026-11-16T02:55:24.282Z level=INFO run=41d7e10f message=event event.id=evt_1e247e27a001a4tKyGf0ke1Nhr event.created=1794797724282 event.type=model.updated event.location.directory=/tmp/verify-K7aB32/u event.location.workspaceID=undefined event.data={} http.span=1216 role=server
+timestamp=2026-11-16T02:55:24.312Z level=INFO run=41d7e10f message=event event.id=evt_1e247e298001NVnWQUwiCAotRL event.created=1794797724312 event.type=agent.updated event.location.directory=/tmp/verify-K7aB32/u event.location.workspaceID=undefined event.data={} http.span=1246 role=server
+timestamp=2026-11-16T02:55:24.313Z level=INFO run=41d7e10f message=event event.id=evt_1e247e2990014QI92GDC5dvnPC event.created=1794797724313 event.type=command.updated event.location.directory=/tmp/verify-K7aB32/u event.location.workspaceID=undefined event.data={} http.span=1247 role=server
+timestamp=2026-11-16T02:55:24.484Z level=INFO run=41d7e10f message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:55:24.484Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:55:24.484Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:55:24.496Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:24.497Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:24.532Z level=INFO run=41d7e10f message="watcher stopped" path=/etc type=entries http.span=1466 role=server
+timestamp=2026-11-16T02:55:24.532Z level=INFO run=41d7e10f message="watcher stopped" path=/ type=entries http.span=1466 role=server
+timestamp=2026-11-16T02:55:24.532Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp type=entries http.span=1466 role=server
+timestamp=2026-11-16T02:55:24.532Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u type=entries http.span=1466 role=server
+timestamp=2026-11-16T02:55:24.537Z level=INFO run=41d7e10f message="watcher stopped" path=/tmp/verify-K7aB32/u/.config/opencode type=directory http.span=1471 role=server

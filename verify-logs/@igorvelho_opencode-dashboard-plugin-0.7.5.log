@@ -1,0 +1,32 @@
+spec: @igorvelho/opencode-dashboard-plugin@0.7.5
+apiNames: @igorvelho/opencode-dashboard-plugin, opencode-dashboard-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-eUPIGL/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34311
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:27.567Z level=INFO run=f54b130f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@igorvelho/opencode-dashboard-plugin@0.7.5\"]" role=cli
+timestamp=2026-11-16T07:35:37.205Z level=INFO run=dc312903 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:37.416Z level=INFO run=dc312903 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:37.478Z level=INFO run=dc312903 message="database schema bootstrap completed" migrations=59 durationMs=62 role=server
+timestamp=2026-11-16T07:35:37.981Z level=INFO run=dc312903 message="watcher subscribe" path=/tmp/verify-eUPIGL/u/.config/opencode type=directory ignores=6 http.span=78 role=server
+timestamp=2026-11-16T07:35:37.992Z level=INFO run=dc312903 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=89 role=server
+timestamp=2026-11-16T07:35:37.995Z level=INFO run=dc312903 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-16T07:35:37.997Z level=INFO run=dc312903 message="watcher subscribe" path=/ type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T07:35:37.998Z level=INFO run=dc312903 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=95 role=server
+timestamp=2026-11-16T07:35:37.999Z level=INFO run=dc312903 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=96 role=server
+timestamp=2026-11-16T07:35:37.999Z level=INFO run=dc312903 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=96 role=server
+timestamp=2026-11-16T07:35:37.999Z level=INFO run=dc312903 message="watcher subscribe" path=/tmp/verify-eUPIGL type=entries ignores=0 http.span=96 role=server
+timestamp=2026-11-16T07:35:38.000Z level=INFO run=dc312903 message="watcher started" path=/tmp/verify-eUPIGL type=entries backend=node ignores=0 http.span=97 role=server
+timestamp=2026-11-16T07:35:38.001Z level=INFO run=dc312903 message="watcher subscribe" path=/tmp/verify-eUPIGL/u type=entries ignores=0 http.span=98 role=server
+timestamp=2026-11-16T07:35:38.002Z level=INFO run=dc312903 message="watcher started" path=/tmp/verify-eUPIGL/u type=entries backend=node ignores=0 http.span=99 role=server
+timestamp=2026-11-16T07:35:38.055Z level=INFO run=dc312903 message="watcher started" path=/tmp/verify-eUPIGL/u/.config/opencode type=directory backend=inotify ignores=6 http.span=152 role=server
+timestamp=2026-11-16T07:35:38.072Z level=INFO run=dc312903 message="location services booted" directory=/tmp/verify-eUPIGL/u workspaceID=undefined durationMs=168 http.span=169 role=server
+timestamp=2026-11-16T07:35:38.154Z level=INFO run=dc312903 msg="loading plugin" id=@igorvelho/opencode-dashboard-plugin@0.7.5 entrypoint=file:///tmp/verify-eUPIGL/u/cache/opencode/npm/@igorvelho/opencode-dashboard-plugin@0.7.5/1794814536950/node_modules/@igorvelho/opencode-dashboard-plugin/index.js http.span=251 role=server
+timestamp=2026-11-16T07:35:38.163Z level=WARN run=dc312903 message="failed to load plugin" target=@igorvelho/opencode-dashboard-plugin@0.7.5 ref=err_a09032e1 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=260 role=server

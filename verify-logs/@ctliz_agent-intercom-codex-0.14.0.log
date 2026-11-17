@@ -1,0 +1,33 @@
+spec: @ctliz/agent-intercom-codex@0.14.0
+apiNames: @ctliz/agent-intercom-codex, agent-intercom-codex
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-kSz1SP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39123
+server password [redacted]
+[agent-intercom-build] package=@ctliz/agent-intercom-codex version=0.14.0 target=codex-server sourceSha256=0169c5ca06e3ec0889c9e3b3b932219db1cf562357a639271b993a71f09fa268
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:42.767Z level=INFO run=d603f36f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ctliz/agent-intercom-codex@0.14.0\"]" role=cli
+timestamp=2026-11-16T08:47:44.035Z level=INFO run=6ccbbdbd message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:44.430Z level=INFO run=6ccbbdbd message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:44.527Z level=INFO run=6ccbbdbd message="database schema bootstrap completed" migrations=59 durationMs=97 role=server
+timestamp=2026-11-16T08:47:44.746Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/tmp/verify-kSz1SP/u/.config/opencode type=directory ignores=6 http.span=18 role=server
+timestamp=2026-11-16T08:47:44.748Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/etc type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:47:44.749Z level=INFO run=6ccbbdbd message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:44.749Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/ type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:44.749Z level=INFO run=6ccbbdbd message="watcher started" path=/ type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:44.749Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:44.749Z level=INFO run=6ccbbdbd message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:44.750Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/tmp/verify-kSz1SP type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:44.750Z level=INFO run=6ccbbdbd message="watcher started" path=/tmp/verify-kSz1SP type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:44.750Z level=INFO run=6ccbbdbd message="watcher subscribe" path=/tmp/verify-kSz1SP/u type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:44.750Z level=INFO run=6ccbbdbd message="watcher started" path=/tmp/verify-kSz1SP/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:44.765Z level=INFO run=6ccbbdbd message="watcher started" path=/tmp/verify-kSz1SP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=37 role=server
+timestamp=2026-11-16T08:47:44.773Z level=INFO run=6ccbbdbd message="location services booted" directory=/tmp/verify-kSz1SP/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T08:47:44.779Z level=INFO run=6ccbbdbd msg="loading plugin" id=@ctliz/agent-intercom-codex@0.14.0 entrypoint=file:///tmp/verify-kSz1SP/u/cache/opencode/npm/@ctliz/agent-intercom-codex@0.14.0/1794818863879/node_modules/@ctliz/agent-intercom-codex/dist/codex-server.mjs http.span=51 role=server
+timestamp=2026-11-16T08:47:44.821Z level=WARN run=6ccbbdbd message="failed to load plugin" target=@ctliz/agent-intercom-codex@0.14.0 ref=err_574f022d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=93 role=server

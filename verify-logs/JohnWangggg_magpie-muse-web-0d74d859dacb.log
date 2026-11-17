@@ -1,0 +1,56 @@
+spec: JohnWangggg/magpie-muse-web#0d74d859dacbe0c56a753c94f3de3ac4fbe97891
+apiNames: JohnWangggg/magpie-muse-web, magpie-muse-web, johnwangggg/magpie-muse-web
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-6Iqgd4/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42961
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T13:20:40.382Z level=INFO run=7b660b5a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"JohnWangggg/magpie-muse-web#0d74d859dacbe0c56a753c94f3de3ac4fbe97891\"]" role=cli
+timestamp=2026-11-16T13:20:41.878Z level=INFO run=e4f53557 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T13:20:42.328Z level=INFO run=e4f53557 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T13:20:42.384Z level=INFO run=e4f53557 message="database schema bootstrap completed" migrations=59 durationMs=56 role=server
+timestamp=2026-11-16T13:20:42.883Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u/.config/opencode type=directory ignores=6 http.span=39 role=server
+timestamp=2026-11-16T13:20:42.888Z level=INFO run=e4f53557 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T13:20:42.889Z level=INFO run=e4f53557 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T13:20:42.889Z level=INFO run=e4f53557 message="watcher subscribe" path=/ type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T13:20:42.889Z level=INFO run=e4f53557 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T13:20:42.890Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T13:20:42.890Z level=INFO run=e4f53557 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T13:20:42.890Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4 type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T13:20:42.890Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4 type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T13:20:42.891Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T13:20:42.891Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T13:20:42.926Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u/.config/opencode type=directory backend=inotify ignores=6 http.span=82 role=server
+timestamp=2026-11-16T13:20:42.939Z level=INFO run=e4f53557 message="location services booted" directory=/tmp/verify-6Iqgd4/u workspaceID=undefined durationMs=93 http.span=95 role=server
+timestamp=2026-11-16T13:20:42.963Z level=INFO run=e4f53557 msg="loading plugin" id=JohnWangggg/magpie-muse-web#0d74d859dacbe0c56a753c94f3de3ac4fbe97891 entrypoint=file:///tmp/verify-6Iqgd4/u/cache/opencode/npm/git-magpie-muse-web-dc62662c6c94/1794835241507/node_modules/magpie-muse-web/index.mjs http.span=119 role=server
+timestamp=2026-11-16T13:20:42.967Z level=WARN run=e4f53557 message="failed to load plugin" target=JohnWangggg/magpie-muse-web#0d74d859dacbe0c56a753c94f3de3ac4fbe97891 ref=err_a14bf7b9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=123 role=server
+timestamp=2026-11-16T13:20:44.363Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T13:20:44.364Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:20:44.364Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T13:20:44.364Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:20:44.404Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T13:20:44.405Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:20:44.412Z level=INFO run=e4f53557 message="watcher subscribe" path=/tmp/verify-6Iqgd4/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T13:20:44.412Z level=INFO run=e4f53557 message="watcher started" path=/tmp/verify-6Iqgd4/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:20:44.480Z level=INFO run=e4f53557 message=event event.id=evt_1e48465c00011IOhvGJrcetV44 event.created=1794835244480 event.type=provider.updated event.location.directory=/tmp/verify-6Iqgd4/u event.location.workspaceID=undefined event.data={} http.span=1636 role=server
+timestamp=2026-11-16T13:20:44.501Z level=INFO run=e4f53557 message=event event.id=evt_1e48465d400141KVp7d9AzYGdm event.created=1794835244501 event.type=model.updated event.location.directory=/tmp/verify-6Iqgd4/u event.location.workspaceID=undefined event.data={} http.span=1657 role=server
+timestamp=2026-11-16T13:20:44.504Z level=INFO run=e4f53557 message=event event.id=evt_1e48465d8001QUDmW1Mp5Qc2WV event.created=1794835244504 event.type=agent.updated event.location.directory=/tmp/verify-6Iqgd4/u event.location.workspaceID=undefined event.data={} http.span=1660 role=server
+timestamp=2026-11-16T13:20:44.504Z level=INFO run=e4f53557 message=event event.id=evt_1e48465d8002n4e0NxL5w800v5 event.created=1794835244504 event.type=command.updated event.location.directory=/tmp/verify-6Iqgd4/u event.location.workspaceID=undefined event.data={} http.span=1660 role=server
+timestamp=2026-11-16T13:20:44.662Z level=ERROR run=e4f53557 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1818 role=server
+timestamp=2026-11-16T13:20:45.013Z level=INFO run=e4f53557 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T13:20:45.013Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T13:20:45.014Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T13:20:45.022Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T13:20:45.022Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T13:20:45.075Z level=INFO run=e4f53557 message="watcher stopped" path=/etc type=entries http.span=2231 role=server
+timestamp=2026-11-16T13:20:45.076Z level=INFO run=e4f53557 message="watcher stopped" path=/ type=entries http.span=2232 role=server
+timestamp=2026-11-16T13:20:45.076Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp type=entries http.span=2232 role=server
+timestamp=2026-11-16T13:20:45.076Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4 type=entries http.span=2232 role=server
+timestamp=2026-11-16T13:20:45.076Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u type=entries http.span=2232 role=server
+timestamp=2026-11-16T13:20:45.077Z level=INFO run=e4f53557 message="watcher stopped" path=/tmp/verify-6Iqgd4/u/.config/opencode type=directory http.span=2233 role=server

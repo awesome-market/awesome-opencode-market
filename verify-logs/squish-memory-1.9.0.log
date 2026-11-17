@@ -1,0 +1,57 @@
+spec: squish-memory@1.9.0
+apiNames: squish-memory
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-wEXKX1/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42899
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:27.233Z level=INFO run=7f4052d9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"squish-memory@1.9.0\"]" role=cli
+timestamp=2026-11-16T07:35:56.410Z level=INFO run=45f763a8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:56.800Z level=INFO run=45f763a8 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:56.913Z level=INFO run=45f763a8 message="database schema bootstrap completed" migrations=59 durationMs=113 role=server
+timestamp=2026-11-16T07:35:57.130Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u/.config/opencode type=directory ignores=6 http.span=17 role=server
+timestamp=2026-11-16T07:35:57.133Z level=INFO run=45f763a8 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T07:35:57.133Z level=INFO run=45f763a8 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher subscribe" path=/ type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1 type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.134Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1 type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T07:35:57.135Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:57.135Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:57.152Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u/.config/opencode type=directory backend=inotify ignores=6 http.span=39 role=server
+timestamp=2026-11-16T07:35:57.157Z level=INFO run=45f763a8 message="location services booted" directory=/tmp/verify-wEXKX1/u workspaceID=undefined durationMs=44 http.span=44 role=server
+timestamp=2026-11-16T07:35:57.166Z level=INFO run=45f763a8 msg="loading plugin" id=squish-memory@1.9.0 entrypoint=file:///tmp/verify-wEXKX1/u/cache/opencode/npm/squish-memory@1.9.0/1794814556113/node_modules/squish-memory/config.ts http.span=53 role=server
+timestamp=2026-11-16T07:35:57.168Z level=WARN run=45f763a8 message="failed to load plugin" target=squish-memory@1.9.0 ref=err_4f89f691 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=55 role=server
+timestamp=2026-11-16T07:35:57.613Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:57.613Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:57.613Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:57.613Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:57.628Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:57.628Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:57.629Z level=INFO run=45f763a8 message="watcher subscribe" path=/tmp/verify-wEXKX1/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:57.629Z level=INFO run=45f763a8 message="watcher started" path=/tmp/verify-wEXKX1/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:57.644Z level=INFO run=45f763a8 message=event event.id=evt_1e348bdcb001QMvE0WRiL0AC2y event.created=1794814557644 event.type=provider.updated event.location.directory=/tmp/verify-wEXKX1/u event.location.workspaceID=undefined event.data={} http.span=531 role=server
+timestamp=2026-11-16T07:35:57.651Z level=INFO run=45f763a8 message=event event.id=evt_1e348bdd3001DVM3dpEjsSfE5z event.created=1794814557651 event.type=model.updated event.location.directory=/tmp/verify-wEXKX1/u event.location.workspaceID=undefined event.data={} http.span=538 role=server
+timestamp=2026-11-16T07:35:57.654Z level=INFO run=45f763a8 message=event event.id=evt_1e348bdd6001HCBiGGk65kF093 event.created=1794814557654 event.type=agent.updated event.location.directory=/tmp/verify-wEXKX1/u event.location.workspaceID=undefined event.data={} http.span=541 role=server
+timestamp=2026-11-16T07:35:57.655Z level=INFO run=45f763a8 message=event event.id=evt_1e348bdd7001zg7lh7ysUOYle4 event.created=1794814557655 event.type=command.updated event.location.directory=/tmp/verify-wEXKX1/u event.location.workspaceID=undefined event.data={} http.span=542 role=server
+timestamp=2026-11-16T07:35:57.728Z level=INFO run=45f763a8 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:35:57.729Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:35:57.729Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:35:57.731Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:57.732Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:57.743Z level=INFO run=45f763a8 message="watcher stopped" path=/etc type=entries http.span=630 role=server
+timestamp=2026-11-16T07:35:57.743Z level=INFO run=45f763a8 message="watcher stopped" path=/ type=entries http.span=630 role=server
+timestamp=2026-11-16T07:35:57.743Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp type=entries http.span=630 role=server
+timestamp=2026-11-16T07:35:57.743Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1 type=entries http.span=630 role=server
+timestamp=2026-11-16T07:35:57.743Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u type=entries http.span=630 role=server
+timestamp=2026-11-16T07:35:57.747Z level=INFO run=45f763a8 message="watcher stopped" path=/tmp/verify-wEXKX1/u/.config/opencode type=directory http.span=634 role=server

@@ -1,0 +1,47 @@
+spec: opencode-novel-tools@0.1.0
+apiNames: opencode-novel-tools
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-LIQL8C/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40757
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:25.261Z level=INFO run=284706a2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-novel-tools@0.1.0\"]" role=cli
+timestamp=2026-11-16T12:05:31.563Z level=INFO run=c07864b1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:31.919Z level=INFO run=c07864b1 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:31.985Z level=INFO run=c07864b1 message="database schema bootstrap completed" migrations=59 durationMs=66 role=server
+timestamp=2026-11-16T12:05:32.320Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u/.config/opencode type=directory ignores=6 http.span=65 role=server
+timestamp=2026-11-16T12:05:32.326Z level=INFO run=c07864b1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=71 role=server
+timestamp=2026-11-16T12:05:32.328Z level=INFO run=c07864b1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=73 role=server
+timestamp=2026-11-16T12:05:32.328Z level=INFO run=c07864b1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=73 role=server
+timestamp=2026-11-16T12:05:32.329Z level=INFO run=c07864b1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-16T12:05:32.329Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T12:05:32.329Z level=INFO run=c07864b1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-16T12:05:32.329Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T12:05:32.330Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-16T12:05:32.330Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u type=entries ignores=0 http.span=75 role=server
+timestamp=2026-11-16T12:05:32.331Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u type=entries backend=node ignores=0 http.span=76 role=server
+timestamp=2026-11-16T12:05:32.361Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u/.config/opencode type=directory backend=inotify ignores=6 http.span=106 role=server
+timestamp=2026-11-16T12:05:32.415Z level=INFO run=c07864b1 message="location services booted" directory=/tmp/verify-LIQL8C/u workspaceID=undefined durationMs=159 http.span=160 role=server
+timestamp=2026-11-16T12:05:32.457Z level=INFO run=c07864b1 msg="loading plugin" id=opencode-novel-tools@0.1.0 entrypoint=file:///tmp/verify-LIQL8C/u/cache/opencode/npm/opencode-novel-tools@0.1.0/1794830731156/node_modules/opencode-novel-tools/dist/index.js http.span=202 role=server
+timestamp=2026-11-16T12:05:32.833Z level=WARN run=c07864b1 message="failed to load plugin" target=opencode-novel-tools@0.1.0 ref=err_d94e509a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=578 role=server
+timestamp=2026-11-16T12:05:34.312Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:34.312Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:34.312Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:34.312Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:34.355Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:34.356Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:34.357Z level=INFO run=c07864b1 message="watcher subscribe" path=/tmp/verify-LIQL8C/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:34.358Z level=INFO run=c07864b1 message="watcher started" path=/tmp/verify-LIQL8C/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:34.391Z level=INFO run=c07864b1 message=event event.id=evt_1e43f9437001NGiR1fJfinn92q event.created=1794830734391 event.type=provider.updated event.location.directory=/tmp/verify-LIQL8C/u event.location.workspaceID=undefined event.data={} http.span=2136 role=server
+timestamp=2026-11-16T12:05:34.412Z level=INFO run=c07864b1 message=event event.id=evt_1e43f944b001VCw4czeD9YhCc7 event.created=1794830734412 event.type=model.updated event.location.directory=/tmp/verify-LIQL8C/u event.location.workspaceID=undefined event.data={} http.span=2157 role=server
+timestamp=2026-11-16T12:05:34.418Z level=INFO run=c07864b1 message=event event.id=evt_1e43f94520010NQ55e3ugvj814 event.created=1794830734418 event.type=agent.updated event.location.directory=/tmp/verify-LIQL8C/u event.location.workspaceID=undefined event.data={} http.span=2163 role=server
+timestamp=2026-11-16T12:05:34.419Z level=INFO run=c07864b1 message=event event.id=evt_1e43f9453001V10l7pd6ZMEPvT event.created=1794830734419 event.type=command.updated event.location.directory=/tmp/verify-LIQL8C/u event.location.workspaceID=undefined event.data={} http.span=2164 role=server
+timestamp=2026-11-16T12:05:34.505Z level=ERROR run=c07864b1 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2250 role=server

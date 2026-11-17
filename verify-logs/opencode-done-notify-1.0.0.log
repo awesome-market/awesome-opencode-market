@@ -1,0 +1,32 @@
+spec: opencode-done-notify@1.0.0
+apiNames: opencode-done-notify
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-io5IUN/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46439
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:11.153Z level=INFO run=a1ada284 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-done-notify@1.0.0\"]" role=cli
+timestamp=2026-11-16T10:13:11.811Z level=INFO run=5e90ecc2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:12.329Z level=INFO run=5e90ecc2 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:12.612Z level=INFO run=5e90ecc2 message="database schema bootstrap completed" migrations=59 durationMs=283 role=server
+timestamp=2026-11-16T10:13:12.939Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/tmp/verify-io5IUN/u/.config/opencode type=directory ignores=6 http.span=53 role=server
+timestamp=2026-11-16T10:13:12.943Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T10:13:12.943Z level=INFO run=5e90ecc2 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T10:13:12.944Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/ type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T10:13:12.944Z level=INFO run=5e90ecc2 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T10:13:12.944Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T10:13:12.944Z level=INFO run=5e90ecc2 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T10:13:12.945Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/tmp/verify-io5IUN type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:12.945Z level=INFO run=5e90ecc2 message="watcher started" path=/tmp/verify-io5IUN type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:12.945Z level=INFO run=5e90ecc2 message="watcher subscribe" path=/tmp/verify-io5IUN/u type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:12.945Z level=INFO run=5e90ecc2 message="watcher started" path=/tmp/verify-io5IUN/u type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T10:13:12.985Z level=INFO run=5e90ecc2 message="watcher started" path=/tmp/verify-io5IUN/u/.config/opencode type=directory backend=inotify ignores=6 http.span=99 role=server
+timestamp=2026-11-16T10:13:13.024Z level=INFO run=5e90ecc2 message="location services booted" directory=/tmp/verify-io5IUN/u workspaceID=undefined durationMs=137 http.span=138 role=server
+timestamp=2026-11-16T10:13:13.031Z level=INFO run=5e90ecc2 msg="loading plugin" id=opencode-done-notify@1.0.0 entrypoint=file:///tmp/verify-io5IUN/u/cache/opencode/npm/opencode-done-notify@1.0.0/1794823991347/node_modules/opencode-done-notify/src/index.ts http.span=145 role=server
+timestamp=2026-11-16T10:13:13.040Z level=WARN run=5e90ecc2 message="failed to load plugin" target=opencode-done-notify@1.0.0 ref=err_632a3622 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=154 role=server

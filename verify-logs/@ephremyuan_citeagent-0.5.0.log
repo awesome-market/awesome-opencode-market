@@ -1,0 +1,34 @@
+spec: @ephremyuan/citeagent@0.5.0
+apiNames: @ephremyuan/citeagent, citeagent
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-IwVd2O/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44583
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:31.062Z level=INFO run=b05e6e57 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ephremyuan/citeagent@0.5.0\"]" role=cli
+timestamp=2026-11-16T08:47:37.667Z level=INFO run=f58374f3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:37.936Z level=INFO run=f58374f3 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:37.960Z level=INFO run=f58374f3 message="database schema bootstrap completed" migrations=59 durationMs=24 role=server
+timestamp=2026-11-16T08:47:38.366Z level=INFO run=f58374f3 message="watcher subscribe" path=/tmp/verify-IwVd2O/u/.config/opencode type=directory ignores=6 http.span=34 role=server
+timestamp=2026-11-16T08:47:38.370Z level=INFO run=f58374f3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:47:38.370Z level=INFO run=f58374f3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T08:47:38.371Z level=INFO run=f58374f3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:47:38.371Z level=INFO run=f58374f3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:47:38.371Z level=INFO run=f58374f3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:47:38.371Z level=INFO run=f58374f3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:47:38.371Z level=INFO run=f58374f3 message="watcher subscribe" path=/tmp/verify-IwVd2O type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T08:47:38.372Z level=INFO run=f58374f3 message="watcher started" path=/tmp/verify-IwVd2O type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T08:47:38.372Z level=INFO run=f58374f3 message="watcher subscribe" path=/tmp/verify-IwVd2O/u type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T08:47:38.372Z level=INFO run=f58374f3 message="watcher started" path=/tmp/verify-IwVd2O/u type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T08:47:38.395Z level=INFO run=f58374f3 message="watcher started" path=/tmp/verify-IwVd2O/u/.config/opencode type=directory backend=inotify ignores=6 http.span=63 role=server
+timestamp=2026-11-16T08:47:38.415Z level=INFO run=f58374f3 message="location services booted" directory=/tmp/verify-IwVd2O/u workspaceID=undefined durationMs=83 http.span=83 role=server
+timestamp=2026-11-16T08:47:38.419Z level=INFO run=f58374f3 msg="loading plugin" id=@ephremyuan/citeagent@0.5.0 entrypoint=file:///tmp/verify-IwVd2O/u/cache/opencode/npm/@ephremyuan/citeagent@0.5.0/1794818857352/node_modules/@ephremyuan/citeagent/dist/index.js http.span=87 role=server
+timestamp=2026-11-16T08:47:38.488Z level=WARN run=f58374f3 message="failed to load plugin" target=@ephremyuan/citeagent@0.5.0 ref=err_a5657538 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=156 role=server

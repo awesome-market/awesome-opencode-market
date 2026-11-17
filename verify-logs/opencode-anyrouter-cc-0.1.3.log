@@ -1,0 +1,32 @@
+spec: opencode-anyrouter-cc@0.1.3
+apiNames: opencode-anyrouter-cc
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-4nMEEM/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39507
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:30.224Z level=INFO run=efe9b600 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-anyrouter-cc@0.1.3\"]" role=cli
+timestamp=2026-11-16T11:33:31.128Z level=INFO run=5ddb9807 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:31.422Z level=INFO run=5ddb9807 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:31.533Z level=INFO run=5ddb9807 message="database schema bootstrap completed" migrations=59 durationMs=111 role=server
+timestamp=2026-11-16T11:33:31.814Z level=INFO run=5ddb9807 message="watcher subscribe" path=/tmp/verify-4nMEEM/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T11:33:31.817Z level=INFO run=5ddb9807 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T11:33:31.818Z level=INFO run=5ddb9807 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T11:33:31.818Z level=INFO run=5ddb9807 message="watcher subscribe" path=/ type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher subscribe" path=/tmp/verify-4nMEEM type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher started" path=/tmp/verify-4nMEEM type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.819Z level=INFO run=5ddb9807 message="watcher subscribe" path=/tmp/verify-4nMEEM/u type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T11:33:31.820Z level=INFO run=5ddb9807 message="watcher started" path=/tmp/verify-4nMEEM/u type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T11:33:31.840Z level=INFO run=5ddb9807 message="watcher started" path=/tmp/verify-4nMEEM/u/.config/opencode type=directory backend=inotify ignores=6 http.span=66 role=server
+timestamp=2026-11-16T11:33:31.852Z level=INFO run=5ddb9807 message="location services booted" directory=/tmp/verify-4nMEEM/u workspaceID=undefined durationMs=77 http.span=78 role=server
+timestamp=2026-11-16T11:33:31.855Z level=INFO run=5ddb9807 msg="loading plugin" id=opencode-anyrouter-cc@0.1.3 entrypoint=file:///tmp/verify-4nMEEM/u/cache/opencode/npm/opencode-anyrouter-cc@0.1.3/1794828810586/node_modules/opencode-anyrouter-cc/dist/index.js http.span=81 role=server
+timestamp=2026-11-16T11:33:31.856Z level=WARN run=5ddb9807 message="failed to load plugin" target=opencode-anyrouter-cc@0.1.3 ref=err_f61bf2ca cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=82 role=server

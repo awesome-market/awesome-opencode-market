@@ -1,0 +1,18 @@
+spec: @corti/cli@1.6.3
+apiNames: @corti/cli, cli
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-s0oINE/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44373
+server password [redacted]
+error: unknown command 'serve'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T19:23:58.955Z level=INFO run=cfaf3599 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@corti/cli@1.6.3\"]" role=cli
+timestamp=2026-11-16T19:24:03.372Z level=INFO run=814529cf message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T19:24:04.123Z level=INFO run=814529cf message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T19:24:04.181Z level=INFO run=814529cf message="database schema bootstrap completed" migrations=59 durationMs=58 role=server

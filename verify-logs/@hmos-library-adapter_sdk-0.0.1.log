@@ -1,0 +1,46 @@
+spec: @hmos-library-adapter/sdk@0.0.1
+apiNames: @hmos-library-adapter/sdk, sdk
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-6dwh1e/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42083
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:39.592Z level=INFO run=a92805e1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@hmos-library-adapter/sdk@0.0.1\"]" role=cli
+timestamp=2026-11-16T07:35:45.770Z level=INFO run=0bf7fa10 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:45.919Z level=INFO run=0bf7fa10 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:45.930Z level=INFO run=0bf7fa10 message="database schema bootstrap completed" migrations=59 durationMs=11 role=server
+timestamp=2026-11-16T07:35:46.255Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u/.config/opencode type=directory ignores=6 http.span=25 role=server
+timestamp=2026-11-16T07:35:46.257Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.258Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T07:35:46.259Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T07:35:46.269Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u/.config/opencode type=directory backend=inotify ignores=6 http.span=39 role=server
+timestamp=2026-11-16T07:35:46.275Z level=INFO run=0bf7fa10 message="location services booted" directory=/tmp/verify-6dwh1e/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T07:35:46.284Z level=INFO run=0bf7fa10 msg="loading plugin" id=@hmos-library-adapter/sdk@0.0.1 entrypoint=file:///tmp/verify-6dwh1e/u/cache/opencode/npm/@hmos-library-adapter/sdk@0.0.1/1794814545589/node_modules/@hmos-library-adapter/sdk/dist/plugin.js http.span=54 role=server
+timestamp=2026-11-16T07:35:46.302Z level=WARN run=0bf7fa10 message="failed to load plugin" target=@hmos-library-adapter/sdk@0.0.1 ref=err_4ed81b69 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=72 role=server
+timestamp=2026-11-16T07:35:46.727Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:46.727Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:46.727Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:46.727Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:46.737Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:46.738Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:46.738Z level=INFO run=0bf7fa10 message="watcher subscribe" path=/tmp/verify-6dwh1e/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:46.738Z level=INFO run=0bf7fa10 message="watcher started" path=/tmp/verify-6dwh1e/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:46.751Z level=INFO run=0bf7fa10 message=event event.id=evt_1e348933f001ZldI149MsefCo5 event.created=1794814546751 event.type=provider.updated event.location.directory=/tmp/verify-6dwh1e/u event.location.workspaceID=undefined event.data={} http.span=521 role=server
+timestamp=2026-11-16T07:35:46.758Z level=INFO run=0bf7fa10 message=event event.id=evt_1e3489346001hIA2R6QhWqViPy event.created=1794814546758 event.type=model.updated event.location.directory=/tmp/verify-6dwh1e/u event.location.workspaceID=undefined event.data={} http.span=528 role=server
+timestamp=2026-11-16T07:35:46.760Z level=INFO run=0bf7fa10 message=event event.id=evt_1e3489348001pqm0DXH6kLS13Z event.created=1794814546760 event.type=agent.updated event.location.directory=/tmp/verify-6dwh1e/u event.location.workspaceID=undefined event.data={} http.span=530 role=server
+timestamp=2026-11-16T07:35:46.760Z level=INFO run=0bf7fa10 message=event event.id=evt_1e3489348002dUdo3f3t0WFz7d event.created=1794814546760 event.type=command.updated event.location.directory=/tmp/verify-6dwh1e/u event.location.workspaceID=undefined event.data={} http.span=530 role=server

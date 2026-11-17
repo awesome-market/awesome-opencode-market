@@ -1,0 +1,57 @@
+spec: opencode-speech-to-text@0.1.1
+apiNames: opencode-speech-to-text
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-CYkOZP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43141
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:52:45.904Z level=INFO run=be1555bd message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-speech-to-text@0.1.1\"]" role=cli
+timestamp=2026-11-16T02:52:52.171Z level=INFO run=b47b3b90 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:52:52.522Z level=INFO run=b47b3b90 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:52:52.553Z level=INFO run=b47b3b90 message="database schema bootstrap completed" migrations=59 durationMs=31 role=server
+timestamp=2026-11-16T02:52:52.747Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u/.config/opencode type=directory ignores=6 http.span=25 role=server
+timestamp=2026-11-16T02:52:52.751Z level=INFO run=b47b3b90 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T02:52:52.751Z level=INFO run=b47b3b90 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T02:52:52.752Z level=INFO run=b47b3b90 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:52:52.752Z level=INFO run=b47b3b90 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:52:52.752Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:52:52.752Z level=INFO run=b47b3b90 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:52:52.752Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:52:52.753Z level=ERROR run=b47b3b90 message="failed to watch directory" path=/tmp/verify-CYkOZP error="Error: EACCES: permission denied, watch '/tmp/verify-CYkOZP'" http.span=31 role=server
+timestamp=2026-11-16T02:52:52.754Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-16T02:52:52.754Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-16T02:52:52.776Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=54 role=server
+timestamp=2026-11-16T02:52:52.797Z level=INFO run=b47b3b90 message="location services booted" directory=/tmp/verify-CYkOZP/u workspaceID=undefined durationMs=75 http.span=75 role=server
+timestamp=2026-11-16T02:52:52.804Z level=INFO run=b47b3b90 msg="loading plugin" id=opencode-speech-to-text@0.1.1 entrypoint=file:///tmp/verify-CYkOZP/u/cache/opencode/npm/opencode-speech-to-text@0.1.1/1794797571730/node_modules/opencode-speech-to-text/dist/index.js http.span=82 role=server
+timestamp=2026-11-16T02:52:52.806Z level=WARN run=b47b3b90 message="failed to load plugin" target=opencode-speech-to-text@0.1.1 ref=err_785dcbad cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=84 role=server
+timestamp=2026-11-16T02:52:53.508Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP type=entries ignores=0 http.span=786 role=server
+timestamp=2026-11-16T02:52:53.509Z level=ERROR run=b47b3b90 message="failed to watch directory" path=/tmp/verify-CYkOZP error="Error: EACCES: permission denied, watch '/tmp/verify-CYkOZP'" http.span=787 role=server
+timestamp=2026-11-16T02:52:53.538Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:53.538Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:53.538Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:53.538Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:53.572Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:52:53.573Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:53.574Z level=INFO run=b47b3b90 message="watcher subscribe" path=/tmp/verify-CYkOZP/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:52:53.574Z level=INFO run=b47b3b90 message="watcher started" path=/tmp/verify-CYkOZP/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:53.598Z level=INFO run=b47b3b90 message=event event.id=evt_1e24595dd0010iosr3cQ9dR5ub event.created=1794797573597 event.type=provider.updated event.location.directory=/tmp/verify-CYkOZP/u event.location.workspaceID=undefined event.data={} http.span=876 role=server
+timestamp=2026-11-16T02:52:53.606Z level=INFO run=b47b3b90 message=event event.id=evt_1e24595e6001Rgd5sDMTvORioF event.created=1794797573606 event.type=model.updated event.location.directory=/tmp/verify-CYkOZP/u event.location.workspaceID=undefined event.data={} http.span=884 role=server
+timestamp=2026-11-16T02:52:53.608Z level=INFO run=b47b3b90 message=event event.id=evt_1e24595e8001aHauP965IJ0rup event.created=1794797573608 event.type=agent.updated event.location.directory=/tmp/verify-CYkOZP/u event.location.workspaceID=undefined event.data={} http.span=886 role=server
+timestamp=2026-11-16T02:52:53.608Z level=INFO run=b47b3b90 message=event event.id=evt_1e24595e8002oFGudhaeAI7ZH3 event.created=1794797573608 event.type=command.updated event.location.directory=/tmp/verify-CYkOZP/u event.location.workspaceID=undefined event.data={} http.span=886 role=server
+timestamp=2026-11-16T02:52:53.681Z level=ERROR run=b47b3b90 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=959 role=server
+timestamp=2026-11-16T02:52:53.945Z level=INFO run=b47b3b90 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:52:53.945Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:52:53.945Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:52:53.948Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:53.948Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:53.961Z level=INFO run=b47b3b90 message="watcher stopped" path=/etc type=entries http.span=1239 role=server
+timestamp=2026-11-16T02:52:53.961Z level=INFO run=b47b3b90 message="watcher stopped" path=/ type=entries http.span=1239 role=server
+timestamp=2026-11-16T02:52:53.961Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp type=entries http.span=1239 role=server
+timestamp=2026-11-16T02:52:53.961Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u type=entries http.span=1239 role=server
+timestamp=2026-11-16T02:52:53.961Z level=INFO run=b47b3b90 message="watcher stopped" path=/tmp/verify-CYkOZP/u/.config/opencode type=directory http.span=1239 role=server

@@ -1,0 +1,34 @@
+spec: opencode-claude-tailguard@0.1.0
+apiNames: opencode-claude-tailguard
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-IoXrXK/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40829
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:19.334Z level=INFO run=caf1d4ee message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-claude-tailguard@0.1.0\"]" role=cli
+timestamp=2026-11-16T12:05:25.035Z level=INFO run=db5d1140 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:25.302Z level=INFO run=db5d1140 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:25.327Z level=INFO run=db5d1140 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server
+timestamp=2026-11-16T12:05:25.494Z level=INFO run=db5d1140 message="watcher subscribe" path=/tmp/verify-IoXrXK/u/.config/opencode type=directory ignores=6 http.span=31 role=server
+timestamp=2026-11-16T12:05:25.497Z level=INFO run=db5d1140 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T12:05:25.498Z level=INFO run=db5d1140 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T12:05:25.498Z level=INFO run=db5d1140 message="watcher subscribe" path=/ type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T12:05:25.499Z level=INFO run=db5d1140 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:25.499Z level=INFO run=db5d1140 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:25.499Z level=INFO run=db5d1140 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:25.500Z level=INFO run=db5d1140 message="watcher subscribe" path=/tmp/verify-IoXrXK type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:05:25.500Z level=INFO run=db5d1140 message="watcher started" path=/tmp/verify-IoXrXK type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:05:25.500Z level=INFO run=db5d1140 message="watcher subscribe" path=/tmp/verify-IoXrXK/u type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:05:25.500Z level=INFO run=db5d1140 message="watcher started" path=/tmp/verify-IoXrXK/u type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:05:25.524Z level=INFO run=db5d1140 message="watcher started" path=/tmp/verify-IoXrXK/u/.config/opencode type=directory backend=inotify ignores=6 http.span=61 role=server
+timestamp=2026-11-16T12:05:25.542Z level=INFO run=db5d1140 message="location services booted" directory=/tmp/verify-IoXrXK/u workspaceID=undefined durationMs=78 http.span=79 role=server
+timestamp=2026-11-16T12:05:25.547Z level=INFO run=db5d1140 msg="loading plugin" id=opencode-claude-tailguard@0.1.0 entrypoint=file:///tmp/verify-IoXrXK/u/cache/opencode/npm/opencode-claude-tailguard@0.1.0/1794830724794/node_modules/opencode-claude-tailguard/dist/index.js http.span=84 role=server
+timestamp=2026-11-16T12:05:25.551Z level=WARN run=db5d1140 message="failed to load plugin" target=opencode-claude-tailguard@0.1.0 ref=err_30888d19 cause="Cause([Die(Error: ENOENT: no such file or directory, lstat '/tmp/verify-IoXrXK/u/.local/share/opencode')])" http.span=88 role=server

@@ -1,0 +1,42 @@
+spec: @hung319/opencode-hive@2.2.2
+apiNames: @hung319/opencode-hive, opencode-hive
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xVTfyJ/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36007
+server password [redacted]
+[hive:shell-path] Added PATH to: /tmp/verify-xVTfyJ/u/.bashrc
+[lsp-autoinstall] Installing TypeScript: npm install --prefix /tmp/verify-xVTfyJ/u/.config/opencode/hive/lsp typescript-language-server typescript@^5
+
+added 2 packages in 1s
+[lsp-autoinstall] Installing Python: uv pip install --user pyright
+/bin/sh: 1: uv: Permission denied
+[lsp-autoinstall] Primary install failed for Python: Command failed: uv pip install --user pyright
+[lsp-autoinstall] Installing Python: pip install --user pyright
+WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectTimeoutError(<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7eb3fae72e40>, 'Connection to pypi.org timed out. (connect timeout=15)')': /simple/pyright/
+[lsp-autoinstall] Fallback install failed for Python: Command failed: pip install --user pyright
+[lsp-autoinstall] Installing Go: go install golang.org/x/tools/gopls@latest
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:25:59.392Z level=INFO run=c4ee72ea message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@hung319/opencode-hive@2.2.2\"]" role=cli
+timestamp=2026-11-16T02:26:15.509Z level=INFO run=270cc734 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:26:15.666Z level=INFO run=270cc734 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:26:15.705Z level=INFO run=270cc734 message="database schema bootstrap completed" migrations=59 durationMs=39 role=server
+timestamp=2026-11-16T02:26:16.037Z level=INFO run=270cc734 message="watcher subscribe" path=/tmp/verify-xVTfyJ/u/.config/opencode type=directory ignores=6 http.span=33 role=server
+timestamp=2026-11-16T02:26:16.040Z level=INFO run=270cc734 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T02:26:16.041Z level=INFO run=270cc734 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:26:16.041Z level=INFO run=270cc734 message="watcher subscribe" path=/ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:26:16.041Z level=INFO run=270cc734 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:26:16.041Z level=INFO run=270cc734 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T02:26:16.042Z level=INFO run=270cc734 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T02:26:16.042Z level=INFO run=270cc734 message="watcher subscribe" path=/tmp/verify-xVTfyJ type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T02:26:16.042Z level=ERROR run=270cc734 message="failed to watch directory" path=/tmp/verify-xVTfyJ error="Error: EACCES: permission denied, watch '/tmp/verify-xVTfyJ'" http.span=38 role=server
+timestamp=2026-11-16T02:26:16.043Z level=INFO run=270cc734 message="watcher subscribe" path=/tmp/verify-xVTfyJ/u type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T02:26:16.043Z level=INFO run=270cc734 message="watcher started" path=/tmp/verify-xVTfyJ/u type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T02:26:16.065Z level=INFO run=270cc734 message="watcher started" path=/tmp/verify-xVTfyJ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=61 role=server
+timestamp=2026-11-16T02:26:16.084Z level=INFO run=270cc734 message="location services booted" directory=/tmp/verify-xVTfyJ/u workspaceID=undefined durationMs=79 http.span=80 role=server
+timestamp=2026-11-16T02:26:16.094Z level=INFO run=270cc734 msg="loading plugin" id=@hung319/opencode-hive@2.2.2 entrypoint=file:///tmp/verify-xVTfyJ/u/cache/opencode/npm/@hung319/opencode-hive@2.2.2/1794795975312/node_modules/@hung319/opencode-hive/dist/index.js http.span=90 role=server

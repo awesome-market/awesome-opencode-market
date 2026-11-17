@@ -1,0 +1,44 @@
+spec: @voidrot/openai-featherless-compatible@0.3.1
+apiNames: @voidrot/openai-featherless-compatible, openai-featherless-compatible
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-WC3vxe/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35545
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:10.406Z level=INFO run=34230e57 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@voidrot/openai-featherless-compatible@0.3.1\"]" role=cli
+timestamp=2026-11-16T12:54:12.104Z level=INFO run=953c22ba message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:12.616Z level=INFO run=953c22ba message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:12.867Z level=INFO run=953c22ba message="database schema bootstrap completed" migrations=59 durationMs=251 role=server
+timestamp=2026-11-16T12:54:13.101Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u/.config/opencode type=directory ignores=6 http.span=44 role=server
+timestamp=2026-11-16T12:54:13.106Z level=INFO run=953c22ba message="watcher subscribe" path=/etc type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:54:13.107Z level=INFO run=953c22ba message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:54:13.107Z level=INFO run=953c22ba message="watcher subscribe" path=/ type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:54:13.107Z level=INFO run=953c22ba message="watcher started" path=/ type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:54:13.107Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:54:13.108Z level=INFO run=953c22ba message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T12:54:13.108Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T12:54:13.109Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-16T12:54:13.109Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T12:54:13.111Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T12:54:13.136Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u/.config/opencode type=directory backend=inotify ignores=6 http.span=79 role=server
+timestamp=2026-11-16T12:54:13.154Z level=INFO run=953c22ba message="location services booted" directory=/tmp/verify-WC3vxe/u workspaceID=undefined durationMs=95 http.span=97 role=server
+timestamp=2026-11-16T12:54:13.157Z level=INFO run=953c22ba msg="loading plugin" id=@voidrot/openai-featherless-compatible@0.3.1 entrypoint=file:///tmp/verify-WC3vxe/u/cache/opencode/npm/@voidrot/openai-featherless-compatible@0.3.1/1794833651841/node_modules/@voidrot/openai-featherless-compatible/dist/index.js http.span=100 role=server
+timestamp=2026-11-16T12:54:13.242Z level=WARN run=953c22ba message="failed to load plugin" target=@voidrot/openai-featherless-compatible@0.3.1 ref=err_d6048c59 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=185 role=server
+timestamp=2026-11-16T12:54:14.127Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:14.127Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:14.127Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:14.128Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:14.143Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:54:14.143Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:14.144Z level=INFO run=953c22ba message="watcher subscribe" path=/tmp/verify-WC3vxe/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:54:14.144Z level=INFO run=953c22ba message="watcher started" path=/tmp/verify-WC3vxe/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:14.175Z level=INFO run=953c22ba message=event event.id=evt_1e46c219e001W4WlgvyyrnhWpi event.created=1794833654174 event.type=provider.updated event.location.directory=/tmp/verify-WC3vxe/u event.location.workspaceID=undefined event.data={} http.span=1118 role=server
+timestamp=2026-11-16T12:54:14.189Z level=INFO run=953c22ba message=event event.id=evt_1e46c21ad001CgFIjBd501rXGR event.created=1794833654189 event.type=model.updated event.location.directory=/tmp/verify-WC3vxe/u event.location.workspaceID=undefined event.data={} http.span=1132 role=server
+timestamp=2026-11-16T12:54:14.192Z level=INFO run=953c22ba message=event event.id=evt_1e46c21b0001agqpdaM0fD3W6w event.created=1794833654192 event.type=agent.updated event.location.directory=/tmp/verify-WC3vxe/u event.location.workspaceID=undefined event.data={} http.span=1135 role=server
+timestamp=2026-11-16T12:54:14.192Z level=INFO run=953c22ba message=event event.id=evt_1e46c21b0002kwoTizlsR83y2C event.created=1794833654192 event.type=command.updated event.location.directory=/tmp/verify-WC3vxe/u event.location.workspaceID=undefined event.data={} http.span=1135 role=server

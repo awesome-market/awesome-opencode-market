@@ -1,0 +1,33 @@
+spec: opencode-config-cli@1.2.0
+apiNames: opencode-config-cli
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-XR2Iwp/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44673
+server password [redacted]
+error: unknown command 'serve'
+
+Usage: ocfg [options] [command]
+
+Create and update an OpenCode configuration
+
+Options:
+  -V, --version         output the version number
+  -h, --help            display help for command
+
+Commands:
+  init                  Create an OpenCode configuration in the current
+                        directory
+  model [model]         Select an OpenCode model
+  effort [effort]       Select the active model reasoning effort
+  use <model> <effort>  Set the OpenCode model and reasoning effort
+  show                  Show the active OpenCode configuration
+  reset [options]       Restore the default OpenCode configuration
+  help [command]        display help for command
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:28.116Z level=INFO run=744a9bfb message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-config-cli@1.2.0\"]" role=cli

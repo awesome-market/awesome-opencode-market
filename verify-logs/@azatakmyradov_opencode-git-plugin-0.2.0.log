@@ -1,0 +1,56 @@
+spec: @azatakmyradov/opencode-git-plugin@0.2.0
+apiNames: @azatakmyradov/opencode-git-plugin, opencode-git-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Q8iNit/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40725
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:36:36.527Z level=INFO run=c692ee17 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@azatakmyradov/opencode-git-plugin@0.2.0\"]" role=cli
+timestamp=2026-11-16T07:36:49.799Z level=INFO run=ab71a352 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:36:50.063Z level=INFO run=ab71a352 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:36:50.166Z level=INFO run=ab71a352 message="database schema bootstrap completed" migrations=59 durationMs=103 role=server
+timestamp=2026-11-16T07:36:50.279Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-16T07:36:50.282Z level=INFO run=ab71a352 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:36:50.283Z level=INFO run=ab71a352 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:36:50.283Z level=INFO run=ab71a352 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:36:50.283Z level=INFO run=ab71a352 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:36:50.283Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:36:50.284Z level=INFO run=ab71a352 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:36:50.284Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:36:50.284Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:36:50.284Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:36:50.284Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:36:50.301Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u/.config/opencode type=directory backend=inotify ignores=6 http.span=42 role=server
+timestamp=2026-11-16T07:36:50.309Z level=INFO run=ab71a352 message="location services booted" directory=/tmp/verify-Q8iNit/u workspaceID=undefined durationMs=49 http.span=50 role=server
+timestamp=2026-11-16T07:36:50.315Z level=INFO run=ab71a352 msg="loading plugin" id=@azatakmyradov/opencode-git-plugin@0.2.0 entrypoint=file:///tmp/verify-Q8iNit/u/cache/opencode/npm/@azatakmyradov/opencode-git-plugin@0.2.0/1794814609622/node_modules/@azatakmyradov/opencode-git-plugin/dist/index.js http.span=56 role=server
+timestamp=2026-11-16T07:36:50.349Z level=WARN run=ab71a352 message="failed to load plugin" target=@azatakmyradov/opencode-git-plugin@0.2.0 ref=err_7255811d cause="Cause([Die(TypeError: Schema.isStartsWith is not a function. (In 'Schema.isStartsWith(\"wrk\")', 'Schema.isStartsWith' is undefined))])" http.span=90 role=server
+timestamp=2026-11-16T07:36:50.836Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:50.836Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:50.836Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:50.836Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:50.849Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:36:50.849Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:50.850Z level=INFO run=ab71a352 message="watcher subscribe" path=/tmp/verify-Q8iNit/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:36:50.850Z level=INFO run=ab71a352 message="watcher started" path=/tmp/verify-Q8iNit/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:50.865Z level=INFO run=ab71a352 message=event event.id=evt_1e3498db1001oyXk5OmWQWqrbm event.created=1794814610865 event.type=provider.updated event.location.directory=/tmp/verify-Q8iNit/u event.location.workspaceID=undefined event.data={} http.span=606 role=server
+timestamp=2026-11-16T07:36:50.873Z level=INFO run=ab71a352 message=event event.id=evt_1e3498db9001scfn9mC1MRe5lp event.created=1794814610873 event.type=model.updated event.location.directory=/tmp/verify-Q8iNit/u event.location.workspaceID=undefined event.data={} http.span=614 role=server
+timestamp=2026-11-16T07:36:50.875Z level=INFO run=ab71a352 message=event event.id=evt_1e3498dbb001l9UxjNbI5HvquA event.created=1794814610875 event.type=agent.updated event.location.directory=/tmp/verify-Q8iNit/u event.location.workspaceID=undefined event.data={} http.span=616 role=server
+timestamp=2026-11-16T07:36:50.876Z level=INFO run=ab71a352 message=event event.id=evt_1e3498dbc001C26gr5G4815ZoA event.created=1794814610876 event.type=command.updated event.location.directory=/tmp/verify-Q8iNit/u event.location.workspaceID=undefined event.data={} http.span=617 role=server
+timestamp=2026-11-16T07:36:51.165Z level=ERROR run=ab71a352 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=906 role=server
+timestamp=2026-11-16T07:36:51.386Z level=INFO run=ab71a352 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:36:51.386Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:36:51.386Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:36:51.389Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:51.389Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/etc type=entries http.span=1142 role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/ type=entries http.span=1142 role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp type=entries http.span=1142 role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit type=entries http.span=1142 role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u type=entries http.span=1142 role=server
+timestamp=2026-11-16T07:36:51.401Z level=INFO run=ab71a352 message="watcher stopped" path=/tmp/verify-Q8iNit/u/.config/opencode type=directory http.span=1142 role=server

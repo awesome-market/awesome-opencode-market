@@ -1,0 +1,56 @@
+spec: opencode-plugin-gstack@0.1.1
+apiNames: opencode-plugin-gstack
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-WIWRJ4/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34831
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:44.742Z level=INFO run=358cfcd1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-plugin-gstack@0.1.1\"]" role=cli
+timestamp=2026-11-16T11:33:52.557Z level=INFO run=4c8a73d4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:52.946Z level=INFO run=4c8a73d4 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:52.971Z level=INFO run=4c8a73d4 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server
+timestamp=2026-11-16T11:33:53.476Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u/.config/opencode type=directory ignores=6 http.span=95 role=server
+timestamp=2026-11-16T11:33:53.483Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=102 role=server
+timestamp=2026-11-16T11:33:53.490Z level=INFO run=4c8a73d4 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=109 role=server
+timestamp=2026-11-16T11:33:53.491Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/ type=entries ignores=0 http.span=110 role=server
+timestamp=2026-11-16T11:33:53.491Z level=INFO run=4c8a73d4 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=110 role=server
+timestamp=2026-11-16T11:33:53.492Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=111 role=server
+timestamp=2026-11-16T11:33:53.492Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=111 role=server
+timestamp=2026-11-16T11:33:53.492Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4 type=entries ignores=0 http.span=111 role=server
+timestamp=2026-11-16T11:33:53.493Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4 type=entries backend=node ignores=0 http.span=112 role=server
+timestamp=2026-11-16T11:33:53.497Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u type=entries ignores=0 http.span=116 role=server
+timestamp=2026-11-16T11:33:53.497Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u type=entries backend=node ignores=0 http.span=116 role=server
+timestamp=2026-11-16T11:33:53.547Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u/.config/opencode type=directory backend=inotify ignores=6 http.span=166 role=server
+timestamp=2026-11-16T11:33:53.580Z level=INFO run=4c8a73d4 message="location services booted" directory=/tmp/verify-WIWRJ4/u workspaceID=undefined durationMs=198 http.span=199 role=server
+timestamp=2026-11-16T11:33:53.585Z level=INFO run=4c8a73d4 msg="loading plugin" id=opencode-plugin-gstack@0.1.1 entrypoint=file:///tmp/verify-WIWRJ4/u/cache/opencode/npm/opencode-plugin-gstack@0.1.1/1794828832143/node_modules/opencode-plugin-gstack/index.ts http.span=204 role=server
+timestamp=2026-11-16T11:33:53.588Z level=WARN run=4c8a73d4 message="failed to load plugin" target=opencode-plugin-gstack@0.1.1 ref=err_11b8c9c7 cause="Cause([Die(ResolveMessage: Cannot find package 'sjz-opencode-plugin' imported from /tmp/verify-WIWRJ4/u/cache/opencode/npm/opencode-plugin-gstack@0.1.1/1794828832143/node_modules/opencode-plugin-gstack/index.ts)])" http.span=207 role=server
+timestamp=2026-11-16T11:33:54.933Z level=ERROR run=4c8a73d4 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1552 role=server
+timestamp=2026-11-16T11:33:55.032Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:55.032Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:55.035Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:55.035Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:55.080Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:33:55.080Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:55.081Z level=INFO run=4c8a73d4 message="watcher subscribe" path=/tmp/verify-WIWRJ4/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:33:55.082Z level=INFO run=4c8a73d4 message="watcher started" path=/tmp/verify-WIWRJ4/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:55.131Z level=INFO run=4c8a73d4 message=event event.id=evt_1e422993b001GvRLlDixv4ijSo event.created=1794828835131 event.type=provider.updated event.location.directory=/tmp/verify-WIWRJ4/u event.location.workspaceID=undefined event.data={} http.span=1750 role=server
+timestamp=2026-11-16T11:33:55.166Z level=INFO run=4c8a73d4 message=event event.id=evt_1e422995e001tbm6qW063dlB5E event.created=1794828835166 event.type=model.updated event.location.directory=/tmp/verify-WIWRJ4/u event.location.workspaceID=undefined event.data={} http.span=1785 role=server
+timestamp=2026-11-16T11:33:55.171Z level=INFO run=4c8a73d4 message=event event.id=evt_1e42299620015OKSR7tE67G9zV event.created=1794828835170 event.type=agent.updated event.location.directory=/tmp/verify-WIWRJ4/u event.location.workspaceID=undefined event.data={} http.span=1790 role=server
+timestamp=2026-11-16T11:33:55.171Z level=INFO run=4c8a73d4 message=event event.id=evt_1e4229963001k2TiEAZmEcf0YW event.created=1794828835171 event.type=command.updated event.location.directory=/tmp/verify-WIWRJ4/u event.location.workspaceID=undefined event.data={} http.span=1790 role=server
+timestamp=2026-11-16T11:33:55.519Z level=INFO run=4c8a73d4 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:33:55.520Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:33:55.522Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:33:55.530Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:55.530Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:55.566Z level=INFO run=4c8a73d4 message="watcher stopped" path=/etc type=entries http.span=2185 role=server
+timestamp=2026-11-16T11:33:55.566Z level=INFO run=4c8a73d4 message="watcher stopped" path=/ type=entries http.span=2185 role=server
+timestamp=2026-11-16T11:33:55.566Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp type=entries http.span=2185 role=server
+timestamp=2026-11-16T11:33:55.566Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4 type=entries http.span=2185 role=server
+timestamp=2026-11-16T11:33:55.567Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u type=entries http.span=2186 role=server
+timestamp=2026-11-16T11:33:55.572Z level=INFO run=4c8a73d4 message="watcher stopped" path=/tmp/verify-WIWRJ4/u/.config/opencode type=directory http.span=2191 role=server

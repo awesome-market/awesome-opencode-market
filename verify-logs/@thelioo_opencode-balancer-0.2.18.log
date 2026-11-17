@@ -1,0 +1,46 @@
+spec: @thelioo/opencode-balancer@0.2.18
+apiNames: @thelioo/opencode-balancer, opencode-balancer
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-PEuPFB/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33057
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:02.980Z level=INFO run=dae05296 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@thelioo/opencode-balancer@0.2.18\"]" role=cli
+timestamp=2026-11-16T12:54:14.116Z level=INFO run=218b5a16 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:14.776Z level=INFO run=218b5a16 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:15.028Z level=INFO run=218b5a16 message="database schema bootstrap completed" migrations=59 durationMs=252 role=server
+timestamp=2026-11-16T12:54:15.256Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T12:54:15.259Z level=INFO run=218b5a16 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:54:15.260Z level=INFO run=218b5a16 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T12:54:15.260Z level=INFO run=218b5a16 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T12:54:15.260Z level=INFO run=218b5a16 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T12:54:15.260Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T12:54:15.261Z level=INFO run=218b5a16 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T12:54:15.261Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T12:54:15.261Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T12:54:15.261Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T12:54:15.261Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T12:54:15.283Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u/.config/opencode type=directory backend=inotify ignores=6 http.span=53 role=server
+timestamp=2026-11-16T12:54:15.297Z level=INFO run=218b5a16 message="location services booted" directory=/tmp/verify-PEuPFB/u workspaceID=undefined durationMs=66 http.span=67 role=server
+timestamp=2026-11-16T12:54:15.306Z level=INFO run=218b5a16 msg="loading plugin" id=@thelioo/opencode-balancer@0.2.18 entrypoint=file:///tmp/verify-PEuPFB/u/cache/opencode/npm/@thelioo/opencode-balancer@0.2.18/1794833653744/node_modules/@thelioo/opencode-balancer/dist/index.js http.span=76 role=server
+timestamp=2026-11-16T12:54:15.352Z level=WARN run=218b5a16 message="failed to load plugin" target=@thelioo/opencode-balancer@0.2.18 ref=err_831450c6 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=122 role=server
+timestamp=2026-11-16T12:54:15.985Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:15.986Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:15.986Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:15.986Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:15.998Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:54:15.999Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:16.000Z level=INFO run=218b5a16 message="watcher subscribe" path=/tmp/verify-PEuPFB/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:54:16.000Z level=INFO run=218b5a16 message="watcher started" path=/tmp/verify-PEuPFB/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:16.018Z level=INFO run=218b5a16 message=event event.id=evt_1e46c28d2001z5E5G4ziGpix2E event.created=1794833656018 event.type=provider.updated event.location.directory=/tmp/verify-PEuPFB/u event.location.workspaceID=undefined event.data={} http.span=788 role=server
+timestamp=2026-11-16T12:54:16.027Z level=INFO run=218b5a16 message=event event.id=evt_1e46c28db0012n8iniyqmS87SE event.created=1794833656027 event.type=model.updated event.location.directory=/tmp/verify-PEuPFB/u event.location.workspaceID=undefined event.data={} http.span=797 role=server
+timestamp=2026-11-16T12:54:16.030Z level=INFO run=218b5a16 message=event event.id=evt_1e46c28de001qGWRaSX4Aes53A event.created=1794833656030 event.type=agent.updated event.location.directory=/tmp/verify-PEuPFB/u event.location.workspaceID=undefined event.data={} http.span=800 role=server
+timestamp=2026-11-16T12:54:16.030Z level=INFO run=218b5a16 message=event event.id=evt_1e46c28de002CSTP5cGozJTNkX event.created=1794833656030 event.type=command.updated event.location.directory=/tmp/verify-PEuPFB/u event.location.workspaceID=undefined event.data={} http.span=800 role=server

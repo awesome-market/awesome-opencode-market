@@ -1,0 +1,56 @@
+spec: magpie-google-ai-studio@0.1.2
+apiNames: magpie-google-ai-studio
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-QTHej7/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35457
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:25.971Z level=INFO run=1d741253 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-google-ai-studio@0.1.2\"]" role=cli
+timestamp=2026-11-16T12:54:26.760Z level=INFO run=fff9724e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:27.149Z level=INFO run=fff9724e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:27.179Z level=INFO run=fff9724e message="database schema bootstrap completed" migrations=59 durationMs=30 role=server
+timestamp=2026-11-16T12:54:27.933Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u/.config/opencode type=directory ignores=6 http.span=140 role=server
+timestamp=2026-11-16T12:54:27.940Z level=INFO run=fff9724e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=147 role=server
+timestamp=2026-11-16T12:54:27.941Z level=INFO run=fff9724e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=148 role=server
+timestamp=2026-11-16T12:54:27.942Z level=INFO run=fff9724e message="watcher subscribe" path=/ type=entries ignores=0 http.span=149 role=server
+timestamp=2026-11-16T12:54:27.942Z level=INFO run=fff9724e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=149 role=server
+timestamp=2026-11-16T12:54:27.943Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=150 role=server
+timestamp=2026-11-16T12:54:27.943Z level=INFO run=fff9724e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=150 role=server
+timestamp=2026-11-16T12:54:27.944Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7 type=entries ignores=0 http.span=151 role=server
+timestamp=2026-11-16T12:54:27.944Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7 type=entries backend=node ignores=0 http.span=151 role=server
+timestamp=2026-11-16T12:54:27.944Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u type=entries ignores=0 http.span=151 role=server
+timestamp=2026-11-16T12:54:27.944Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u type=entries backend=node ignores=0 http.span=151 role=server
+timestamp=2026-11-16T12:54:27.983Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u/.config/opencode type=directory backend=inotify ignores=6 http.span=190 role=server
+timestamp=2026-11-16T12:54:28.004Z level=INFO run=fff9724e message="location services booted" directory=/tmp/verify-QTHej7/u workspaceID=undefined durationMs=211 http.span=211 role=server
+timestamp=2026-11-16T12:54:28.060Z level=INFO run=fff9724e msg="loading plugin" id=magpie-google-ai-studio@0.1.2 entrypoint=file:///tmp/verify-QTHej7/u/cache/opencode/npm/magpie-google-ai-studio@0.1.2/1794833666312/node_modules/magpie-google-ai-studio/index.ts http.span=267 role=server
+timestamp=2026-11-16T12:54:28.087Z level=WARN run=fff9724e message="failed to load plugin" target=magpie-google-ai-studio@0.1.2 ref=err_81cd27a8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=294 role=server
+timestamp=2026-11-16T12:54:29.479Z level=ERROR run=fff9724e message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1686 role=server
+timestamp=2026-11-16T12:54:29.485Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:29.486Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:29.486Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:29.487Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:29.555Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:54:29.556Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:29.562Z level=INFO run=fff9724e message="watcher subscribe" path=/tmp/verify-QTHej7/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:54:29.563Z level=INFO run=fff9724e message="watcher started" path=/tmp/verify-QTHej7/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:29.611Z level=INFO run=fff9724e message=event event.id=evt_1e46c5deb001C5OF2QO3LPNAD2 event.created=1794833669611 event.type=provider.updated event.location.directory=/tmp/verify-QTHej7/u event.location.workspaceID=undefined event.data={} http.span=1818 role=server
+timestamp=2026-11-16T12:54:29.661Z level=INFO run=fff9724e message=event event.id=evt_1e46c5e1d001lv9IBtXzQf3Xkc event.created=1794833669661 event.type=model.updated event.location.directory=/tmp/verify-QTHej7/u event.location.workspaceID=undefined event.data={} http.span=1868 role=server
+timestamp=2026-11-16T12:54:29.672Z level=INFO run=fff9724e message=event event.id=evt_1e46c5e280011MQJVJAE0aFWht event.created=1794833669672 event.type=agent.updated event.location.directory=/tmp/verify-QTHej7/u event.location.workspaceID=undefined event.data={} http.span=1879 role=server
+timestamp=2026-11-16T12:54:29.674Z level=INFO run=fff9724e message=event event.id=evt_1e46c5e2a001dcvTj68HD8RFU0 event.created=1794833669674 event.type=command.updated event.location.directory=/tmp/verify-QTHej7/u event.location.workspaceID=undefined event.data={} http.span=1881 role=server
+timestamp=2026-11-16T12:54:30.115Z level=INFO run=fff9724e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:54:30.115Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:54:30.115Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:54:30.131Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:54:30.136Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:54:30.184Z level=INFO run=fff9724e message="watcher stopped" path=/etc type=entries http.span=2391 role=server
+timestamp=2026-11-16T12:54:30.184Z level=INFO run=fff9724e message="watcher stopped" path=/ type=entries http.span=2391 role=server
+timestamp=2026-11-16T12:54:30.184Z level=INFO run=fff9724e message="watcher stopped" path=/tmp type=entries http.span=2391 role=server
+timestamp=2026-11-16T12:54:30.184Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7 type=entries http.span=2391 role=server
+timestamp=2026-11-16T12:54:30.184Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u type=entries http.span=2391 role=server
+timestamp=2026-11-16T12:54:30.187Z level=INFO run=fff9724e message="watcher stopped" path=/tmp/verify-QTHej7/u/.config/opencode type=directory http.span=2394 role=server

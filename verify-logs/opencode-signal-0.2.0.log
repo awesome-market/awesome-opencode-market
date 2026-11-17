@@ -1,0 +1,56 @@
+spec: opencode-signal@0.2.0
+apiNames: opencode-signal
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Q7t830/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43571
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:55:19.419Z level=INFO run=452709c9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-signal@0.2.0\"]" role=cli
+timestamp=2026-11-16T02:55:22.929Z level=INFO run=c9ea10db message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:55:23.078Z level=INFO run=c9ea10db message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:55:23.087Z level=INFO run=c9ea10db message="database schema bootstrap completed" migrations=59 durationMs=9 role=server
+timestamp=2026-11-16T02:55:23.404Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-16T02:55:23.406Z level=INFO run=c9ea10db message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T02:55:23.407Z level=INFO run=c9ea10db message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:55:23.407Z level=INFO run=c9ea10db message="watcher subscribe" path=/ type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:55:23.408Z level=INFO run=c9ea10db message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T02:55:23.408Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T02:55:23.408Z level=INFO run=c9ea10db message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T02:55:23.408Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830 type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T02:55:23.408Z level=ERROR run=c9ea10db message="failed to watch directory" path=/tmp/verify-Q7t830 error="Error: EACCES: permission denied, watch '/tmp/verify-Q7t830'" http.span=24 role=server
+timestamp=2026-11-16T02:55:23.409Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T02:55:23.409Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T02:55:23.425Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-16T02:55:23.435Z level=INFO run=c9ea10db message="location services booted" directory=/tmp/verify-Q7t830/u workspaceID=undefined durationMs=50 http.span=51 role=server
+timestamp=2026-11-16T02:55:23.441Z level=INFO run=c9ea10db msg="loading plugin" id=opencode-signal@0.2.0 entrypoint=file:///tmp/verify-Q7t830/u/cache/opencode/npm/opencode-signal@0.2.0/1794797722782/node_modules/opencode-signal/signal-bridge.ts http.span=57 role=server
+timestamp=2026-11-16T02:55:23.445Z level=WARN run=c9ea10db message="failed to load plugin" target=opencode-signal@0.2.0 ref=err_88666194 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=61 role=server
+timestamp=2026-11-16T02:55:23.922Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830 type=entries ignores=0 http.span=538 role=server
+timestamp=2026-11-16T02:55:23.922Z level=ERROR run=c9ea10db message="failed to watch directory" path=/tmp/verify-Q7t830 error="Error: EACCES: permission denied, watch '/tmp/verify-Q7t830'" http.span=538 role=server
+timestamp=2026-11-16T02:55:23.923Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:23.923Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:23.923Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:55:23.923Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:23.943Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:55:23.943Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:23.944Z level=INFO run=c9ea10db message="watcher subscribe" path=/tmp/verify-Q7t830/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:55:23.944Z level=INFO run=c9ea10db message="watcher started" path=/tmp/verify-Q7t830/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:55:23.958Z level=INFO run=c9ea10db message=event event.id=evt_1e247e136001OA2pEx4upPoKQq event.created=1794797723958 event.type=provider.updated event.location.directory=/tmp/verify-Q7t830/u event.location.workspaceID=undefined event.data={} http.span=574 role=server
+timestamp=2026-11-16T02:55:23.966Z level=INFO run=c9ea10db message=event event.id=evt_1e247e13e001a6yW4UcCMPIFqT event.created=1794797723966 event.type=model.updated event.location.directory=/tmp/verify-Q7t830/u event.location.workspaceID=undefined event.data={} http.span=582 role=server
+timestamp=2026-11-16T02:55:23.967Z level=INFO run=c9ea10db message=event event.id=evt_1e247e13f001w5egvAioO9G5It event.created=1794797723967 event.type=agent.updated event.location.directory=/tmp/verify-Q7t830/u event.location.workspaceID=undefined event.data={} http.span=583 role=server
+timestamp=2026-11-16T02:55:23.968Z level=INFO run=c9ea10db message=event event.id=evt_1e247e140001biYjJUNybMU0SO event.created=1794797723968 event.type=command.updated event.location.directory=/tmp/verify-Q7t830/u event.location.workspaceID=undefined event.data={} http.span=584 role=server
+timestamp=2026-11-16T02:55:24.034Z level=INFO run=c9ea10db message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:55:24.034Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:55:24.034Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:55:24.037Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:24.037Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:55:24.048Z level=INFO run=c9ea10db message="watcher stopped" path=/etc type=entries http.span=664 role=server
+timestamp=2026-11-16T02:55:24.048Z level=INFO run=c9ea10db message="watcher stopped" path=/ type=entries http.span=664 role=server
+timestamp=2026-11-16T02:55:24.048Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp type=entries http.span=664 role=server
+timestamp=2026-11-16T02:55:24.048Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u type=entries http.span=664 role=server
+timestamp=2026-11-16T02:55:24.053Z level=INFO run=c9ea10db message="watcher stopped" path=/tmp/verify-Q7t830/u/.config/opencode type=directory http.span=669 role=server

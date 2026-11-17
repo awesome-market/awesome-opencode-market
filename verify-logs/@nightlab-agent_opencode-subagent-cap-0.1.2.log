@@ -1,0 +1,32 @@
+spec: @nightlab-agent/opencode-subagent-cap@0.1.2
+apiNames: @nightlab-agent/opencode-subagent-cap, opencode-subagent-cap
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-MffTTK/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46705
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:44.463Z level=INFO run=21f45095 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@nightlab-agent/opencode-subagent-cap@0.1.2\"]" role=cli
+timestamp=2026-11-16T02:53:45.258Z level=INFO run=8946ad8e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:45.458Z level=INFO run=8946ad8e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:45.472Z level=INFO run=8946ad8e message="database schema bootstrap completed" migrations=59 durationMs=15 role=server
+timestamp=2026-11-16T02:53:45.609Z level=INFO run=8946ad8e message="watcher subscribe" path=/tmp/verify-MffTTK/u/.config/opencode type=directory ignores=6 http.span=18 role=server
+timestamp=2026-11-16T02:53:45.612Z level=INFO run=8946ad8e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T02:53:45.613Z level=INFO run=8946ad8e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T02:53:45.613Z level=INFO run=8946ad8e message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T02:53:45.614Z level=INFO run=8946ad8e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:53:45.614Z level=INFO run=8946ad8e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:53:45.614Z level=INFO run=8946ad8e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:53:45.614Z level=INFO run=8946ad8e message="watcher subscribe" path=/tmp/verify-MffTTK type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T02:53:45.614Z level=ERROR run=8946ad8e message="failed to watch directory" path=/tmp/verify-MffTTK error="Error: EACCES: permission denied, watch '/tmp/verify-MffTTK'" http.span=23 role=server
+timestamp=2026-11-16T02:53:45.615Z level=INFO run=8946ad8e message="watcher subscribe" path=/tmp/verify-MffTTK/u type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T02:53:45.616Z level=INFO run=8946ad8e message="watcher started" path=/tmp/verify-MffTTK/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T02:53:45.642Z level=INFO run=8946ad8e message="watcher started" path=/tmp/verify-MffTTK/u/.config/opencode type=directory backend=inotify ignores=6 http.span=51 role=server
+timestamp=2026-11-16T02:53:45.664Z level=INFO run=8946ad8e message="location services booted" directory=/tmp/verify-MffTTK/u workspaceID=undefined durationMs=73 http.span=73 role=server
+timestamp=2026-11-16T02:53:45.670Z level=INFO run=8946ad8e msg="loading plugin" id=@nightlab-agent/opencode-subagent-cap@0.1.2 entrypoint=file:///tmp/verify-MffTTK/u/cache/opencode/npm/@nightlab-agent/opencode-subagent-cap@0.1.2/1794797624815/node_modules/@nightlab-agent/opencode-subagent-cap/index.js http.span=79 role=server
+timestamp=2026-11-16T02:53:45.673Z level=WARN run=8946ad8e message="failed to load plugin" target=@nightlab-agent/opencode-subagent-cap@0.1.2 ref=err_e30a897e cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=82 role=server

@@ -1,0 +1,18 @@
+spec: omo-telegram-bot@0.23.1-omo.2
+apiNames: omo-telegram-bot
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-QE0V2g/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38205
+server password [redacted]
+Failed to start bot: Missing required environment variable: TELEGRAM_BOT_TOKEN (expected in /tmp/verify-QE0V2g/u/.env)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:29.176Z level=INFO run=4e38d6fb message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"omo-telegram-bot@0.23.1-omo.2\"]" role=cli
+timestamp=2026-11-16T10:13:34.116Z level=INFO run=cb165286 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:34.625Z level=INFO run=cb165286 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:34.695Z level=INFO run=cb165286 message="database schema bootstrap completed" migrations=59 durationMs=70 role=server

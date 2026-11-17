@@ -1,0 +1,15 @@
+spec: harnessport@0.4.3
+apiNames: harnessport
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-h0kYe4/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34313
+server password [redacted]
+error: unknown command 'serve'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:13.945Z level=INFO run=45a67bb6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"harnessport@0.4.3\"]" role=cli

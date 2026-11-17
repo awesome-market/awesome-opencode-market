@@ -1,0 +1,32 @@
+spec: @parallel-web/opencode-plugin@1.2.0
+apiNames: @parallel-web/opencode-plugin, opencode-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-cWBJ7v/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37699
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:21.872Z level=INFO run=3297fa9e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@parallel-web/opencode-plugin@1.2.0\"]" role=cli
+timestamp=2026-11-16T12:05:26.632Z level=INFO run=ed11e31a message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:26.825Z level=INFO run=ed11e31a message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:26.838Z level=INFO run=ed11e31a message="database schema bootstrap completed" migrations=59 durationMs=13 role=server
+timestamp=2026-11-16T12:05:27.126Z level=INFO run=ed11e31a message="watcher subscribe" path=/tmp/verify-cWBJ7v/u/.config/opencode type=directory ignores=6 http.span=31 role=server
+timestamp=2026-11-16T12:05:27.130Z level=INFO run=ed11e31a message="watcher subscribe" path=/etc type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T12:05:27.130Z level=INFO run=ed11e31a message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T12:05:27.130Z level=INFO run=ed11e31a message="watcher subscribe" path=/ type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher subscribe" path=/tmp/verify-cWBJ7v type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher started" path=/tmp/verify-cWBJ7v type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.131Z level=INFO run=ed11e31a message="watcher subscribe" path=/tmp/verify-cWBJ7v/u type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T12:05:27.132Z level=INFO run=ed11e31a message="watcher started" path=/tmp/verify-cWBJ7v/u type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T12:05:27.147Z level=INFO run=ed11e31a message="watcher started" path=/tmp/verify-cWBJ7v/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T12:05:27.156Z level=INFO run=ed11e31a msg="loading plugin" id=@parallel-web/opencode-plugin@1.2.0 entrypoint=file:///tmp/verify-cWBJ7v/u/cache/opencode/npm/@parallel-web/opencode-plugin@1.2.0/1794830726378/node_modules/@parallel-web/opencode-plugin/dist/index.js http.span=61 role=server
+timestamp=2026-11-16T12:05:27.199Z level=WARN run=ed11e31a message="failed to load plugin" target=@parallel-web/opencode-plugin@1.2.0 ref=err_5a4cad48 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=104 role=server
+timestamp=2026-11-16T12:05:27.209Z level=INFO run=ed11e31a message="location services booted" directory=/tmp/verify-cWBJ7v/u workspaceID=undefined durationMs=113 http.span=114 role=server

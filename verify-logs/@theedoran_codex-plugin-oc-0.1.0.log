@@ -1,0 +1,57 @@
+spec: @theedoran/codex-plugin-oc@0.1.0
+apiNames: @theedoran/codex-plugin-oc, codex-plugin-oc
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xGvqRT/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42643
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:11.058Z level=INFO run=f796fc0e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@theedoran/codex-plugin-oc@0.1.0\"]" role=cli
+timestamp=2026-11-16T12:54:17.383Z level=INFO run=17403025 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:17.660Z level=INFO run=17403025 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:17.710Z level=INFO run=17403025 message="database schema bootstrap completed" migrations=59 durationMs=50 role=server
+timestamp=2026-11-16T12:54:18.109Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u/.config/opencode type=directory ignores=6 http.span=94 role=server
+timestamp=2026-11-16T12:54:18.117Z level=INFO run=17403025 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=102 role=server
+timestamp=2026-11-16T12:54:18.118Z level=INFO run=17403025 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=103 role=server
+timestamp=2026-11-16T12:54:18.118Z level=INFO run=17403025 message="watcher subscribe" path=/ type=entries ignores=0 http.span=103 role=server
+timestamp=2026-11-16T12:54:18.119Z level=INFO run=17403025 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=104 role=server
+timestamp=2026-11-16T12:54:18.119Z level=INFO run=17403025 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=104 role=server
+timestamp=2026-11-16T12:54:18.119Z level=INFO run=17403025 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=104 role=server
+timestamp=2026-11-16T12:54:18.122Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT type=entries ignores=0 http.span=107 role=server
+timestamp=2026-11-16T12:54:18.122Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT type=entries backend=node ignores=0 http.span=107 role=server
+timestamp=2026-11-16T12:54:18.122Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u type=entries ignores=0 http.span=107 role=server
+timestamp=2026-11-16T12:54:18.122Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u type=entries backend=node ignores=0 http.span=107 role=server
+timestamp=2026-11-16T12:54:18.176Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u/.config/opencode type=directory backend=inotify ignores=6 http.span=161 role=server
+timestamp=2026-11-16T12:54:18.227Z level=INFO run=17403025 message="location services booted" directory=/tmp/verify-xGvqRT/u workspaceID=undefined durationMs=207 http.span=212 role=server
+timestamp=2026-11-16T12:54:18.265Z level=INFO run=17403025 msg="loading plugin" id=@theedoran/codex-plugin-oc@0.1.0 entrypoint=file:///tmp/verify-xGvqRT/u/cache/opencode/npm/@theedoran/codex-plugin-oc@0.1.0/1794833656983/node_modules/@theedoran/codex-plugin-oc/index.mjs http.span=250 role=server
+timestamp=2026-11-16T12:54:18.421Z level=WARN run=17403025 message="failed to load plugin" target=@theedoran/codex-plugin-oc@0.1.0 ref=err_95ffe135 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=406 role=server
+timestamp=2026-11-16T12:54:19.831Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:19.831Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:19.832Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:54:19.832Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:19.848Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:54:19.849Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:19.849Z level=INFO run=17403025 message="watcher subscribe" path=/tmp/verify-xGvqRT/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:54:19.850Z level=INFO run=17403025 message="watcher started" path=/tmp/verify-xGvqRT/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:54:19.876Z level=INFO run=17403025 message=event event.id=evt_1e46c37e4001jSx2TWYYL567tW event.created=1794833659876 event.type=provider.updated event.location.directory=/tmp/verify-xGvqRT/u event.location.workspaceID=undefined event.data={} http.span=1861 role=server
+timestamp=2026-11-16T12:54:19.892Z level=INFO run=17403025 message=event event.id=evt_1e46c37f3001PSJuUwOUSVt9hc event.created=1794833659891 event.type=model.updated event.location.directory=/tmp/verify-xGvqRT/u event.location.workspaceID=undefined event.data={} http.span=1877 role=server
+timestamp=2026-11-16T12:54:19.894Z level=INFO run=17403025 message=event event.id=evt_1e46c37f6001yZS2Rf6ujkbhU7 event.created=1794833659894 event.type=agent.updated event.location.directory=/tmp/verify-xGvqRT/u event.location.workspaceID=undefined event.data={} http.span=1879 role=server
+timestamp=2026-11-16T12:54:19.894Z level=INFO run=17403025 message=event event.id=evt_1e46c37f60020hGZLqGPukGKmR event.created=1794833659894 event.type=command.updated event.location.directory=/tmp/verify-xGvqRT/u event.location.workspaceID=undefined event.data={} http.span=1879 role=server
+timestamp=2026-11-16T12:54:20.132Z level=INFO run=17403025 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:54:20.132Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:54:20.132Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:54:20.139Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:54:20.140Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:54:20.158Z level=INFO run=17403025 message="watcher stopped" path=/etc type=entries http.span=2143 role=server
+timestamp=2026-11-16T12:54:20.158Z level=INFO run=17403025 message="watcher stopped" path=/ type=entries http.span=2143 role=server
+timestamp=2026-11-16T12:54:20.158Z level=INFO run=17403025 message="watcher stopped" path=/tmp type=entries http.span=2143 role=server
+timestamp=2026-11-16T12:54:20.158Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT type=entries http.span=2143 role=server
+timestamp=2026-11-16T12:54:20.158Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u type=entries http.span=2143 role=server
+timestamp=2026-11-16T12:54:20.161Z level=INFO run=17403025 message="watcher stopped" path=/tmp/verify-xGvqRT/u/.config/opencode type=directory http.span=2146 role=server

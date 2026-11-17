@@ -1,0 +1,56 @@
+spec: pulsecloud-mcp@1.0.30
+apiNames: pulsecloud-mcp
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-kdecw7/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42925
+server password [redacted]
+[pulsecloud-mcp] Streamable HTTP server running on port 3002
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T14:21:16.938Z level=INFO run=e878ebdb message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"pulsecloud-mcp@1.0.30\"]" role=cli
+timestamp=2026-11-16T14:21:19.710Z level=INFO run=4619eb75 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T14:21:19.948Z level=INFO run=4619eb75 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T14:21:19.974Z level=INFO run=4619eb75 message="database schema bootstrap completed" migrations=59 durationMs=26 role=server
+timestamp=2026-11-16T14:21:20.315Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u/.config/opencode type=directory ignores=6 http.span=73 role=server
+timestamp=2026-11-16T14:21:20.318Z level=INFO run=4619eb75 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-16T14:21:20.319Z level=INFO run=4619eb75 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=77 role=server
+timestamp=2026-11-16T14:21:20.320Z level=INFO run=4619eb75 message="watcher subscribe" path=/ type=entries ignores=0 http.span=78 role=server
+timestamp=2026-11-16T14:21:20.320Z level=INFO run=4619eb75 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=78 role=server
+timestamp=2026-11-16T14:21:20.321Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=79 role=server
+timestamp=2026-11-16T14:21:20.321Z level=INFO run=4619eb75 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=79 role=server
+timestamp=2026-11-16T14:21:20.321Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7 type=entries ignores=0 http.span=79 role=server
+timestamp=2026-11-16T14:21:20.322Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7 type=entries backend=node ignores=0 http.span=80 role=server
+timestamp=2026-11-16T14:21:20.322Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u type=entries ignores=0 http.span=80 role=server
+timestamp=2026-11-16T14:21:20.323Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u type=entries backend=node ignores=0 http.span=81 role=server
+timestamp=2026-11-16T14:21:20.354Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u/.config/opencode type=directory backend=inotify ignores=6 http.span=112 role=server
+timestamp=2026-11-16T14:21:20.364Z level=INFO run=4619eb75 msg="loading plugin" id=pulsecloud-mcp@1.0.30 entrypoint=file:///tmp/verify-kdecw7/u/cache/opencode/npm/pulsecloud-mcp@1.0.30/1794838879474/node_modules/pulsecloud-mcp/dist/index.js http.span=122 role=server
+timestamp=2026-11-16T14:21:20.613Z level=WARN run=4619eb75 message="failed to load plugin" target=pulsecloud-mcp@1.0.30 ref=err_fb4e4225 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=371 role=server
+timestamp=2026-11-16T14:21:20.638Z level=INFO run=4619eb75 message="location services booted" directory=/tmp/verify-kdecw7/u workspaceID=undefined durationMs=391 http.span=396 role=server
+timestamp=2026-11-16T14:21:21.296Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T14:21:21.296Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T14:21:21.296Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T14:21:21.296Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T14:21:21.323Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T14:21:21.323Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T14:21:21.324Z level=INFO run=4619eb75 message="watcher subscribe" path=/tmp/verify-kdecw7/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T14:21:21.325Z level=INFO run=4619eb75 message="watcher started" path=/tmp/verify-kdecw7/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T14:21:21.344Z level=INFO run=4619eb75 message=event event.id=evt_1e4bbe440001SRTSFx4zoimGAG event.created=1794838881344 event.type=provider.updated event.location.directory=/tmp/verify-kdecw7/u event.location.workspaceID=undefined event.data={} http.span=1102 role=server
+timestamp=2026-11-16T14:21:21.351Z level=INFO run=4619eb75 message=event event.id=evt_1e4bbe447001LnRR9xB7NeRcGl event.created=1794838881351 event.type=model.updated event.location.directory=/tmp/verify-kdecw7/u event.location.workspaceID=undefined event.data={} http.span=1109 role=server
+timestamp=2026-11-16T14:21:21.353Z level=INFO run=4619eb75 message=event event.id=evt_1e4bbe449001D0q7Jo5oflzNKJ event.created=1794838881353 event.type=agent.updated event.location.directory=/tmp/verify-kdecw7/u event.location.workspaceID=undefined event.data={} http.span=1111 role=server
+timestamp=2026-11-16T14:21:21.354Z level=INFO run=4619eb75 message=event event.id=evt_1e4bbe44a001OaSbilTIMQnW4Q event.created=1794838881354 event.type=command.updated event.location.directory=/tmp/verify-kdecw7/u event.location.workspaceID=undefined event.data={} http.span=1112 role=server
+timestamp=2026-11-16T14:21:21.791Z level=INFO run=4619eb75 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T14:21:21.791Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T14:21:21.791Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T14:21:21.798Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T14:21:21.799Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T14:21:21.817Z level=INFO run=4619eb75 message="watcher stopped" path=/etc type=entries http.span=1575 role=server
+timestamp=2026-11-16T14:21:21.817Z level=INFO run=4619eb75 message="watcher stopped" path=/ type=entries http.span=1575 role=server
+timestamp=2026-11-16T14:21:21.817Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp type=entries http.span=1575 role=server
+timestamp=2026-11-16T14:21:21.817Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7 type=entries http.span=1575 role=server
+timestamp=2026-11-16T14:21:21.817Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u type=entries http.span=1575 role=server
+timestamp=2026-11-16T14:21:21.820Z level=INFO run=4619eb75 message="watcher stopped" path=/tmp/verify-kdecw7/u/.config/opencode type=directory http.span=1578 role=server

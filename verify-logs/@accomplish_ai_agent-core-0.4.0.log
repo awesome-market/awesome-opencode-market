@@ -1,0 +1,34 @@
+spec: @accomplish_ai/agent-core@0.4.0
+apiNames: @accomplish_ai/agent-core, agent-core
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ZXTXVf/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43377
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:22.244Z level=INFO run=761b3c7f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@accomplish_ai/agent-core@0.4.0\"]" role=cli
+timestamp=2026-11-16T08:06:32.850Z level=INFO run=bdf78ab2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:33.197Z level=INFO run=bdf78ab2 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:33.371Z level=INFO run=bdf78ab2 message="database schema bootstrap completed" migrations=59 durationMs=174 role=server
+timestamp=2026-11-16T08:06:33.930Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/tmp/verify-ZXTXVf/u/.config/opencode type=directory ignores=6 http.span=87 role=server
+timestamp=2026-11-16T08:06:33.937Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:06:33.941Z level=INFO run=bdf78ab2 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:33.941Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/ type=entries ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:33.941Z level=INFO run=bdf78ab2 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:33.941Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=98 role=server
+timestamp=2026-11-16T08:06:33.942Z level=INFO run=bdf78ab2 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:33.942Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/tmp/verify-ZXTXVf type=entries ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:33.942Z level=INFO run=bdf78ab2 message="watcher started" path=/tmp/verify-ZXTXVf type=entries backend=node ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:33.942Z level=INFO run=bdf78ab2 message="watcher subscribe" path=/tmp/verify-ZXTXVf/u type=entries ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:33.942Z level=INFO run=bdf78ab2 message="watcher started" path=/tmp/verify-ZXTXVf/u type=entries backend=node ignores=0 http.span=99 role=server
+timestamp=2026-11-16T08:06:33.984Z level=INFO run=bdf78ab2 message="watcher started" path=/tmp/verify-ZXTXVf/u/.config/opencode type=directory backend=inotify ignores=6 http.span=141 role=server
+timestamp=2026-11-16T08:06:34.014Z level=INFO run=bdf78ab2 message="location services booted" directory=/tmp/verify-ZXTXVf/u workspaceID=undefined durationMs=170 http.span=171 role=server
+timestamp=2026-11-16T08:06:34.021Z level=INFO run=bdf78ab2 msg="loading plugin" id=@accomplish_ai/agent-core@0.4.0 entrypoint=file:///tmp/verify-ZXTXVf/u/cache/opencode/npm/@accomplish_ai/agent-core@0.4.0/1794816392494/node_modules/@accomplish_ai/agent-core/dist/index.js http.span=178 role=server
+timestamp=2026-11-16T08:06:34.180Z level=WARN run=bdf78ab2 message="failed to load plugin" target=@accomplish_ai/agent-core@0.4.0 ref=err_c0e24c4c cause="Cause([Die(Error: Failed to load native module: pty.node, checked: build/Release, build/Debug, prebuilds/linux-x64: ResolveMessage: Cannot find module './prebuilds/linux-x64//pty.node'\nRequire stack:\n- /tmp/verify-ZXTXVf/u/cache/opencode/npm/@accomplish_ai/agent-core@0.4.0/1794816392494/node_modules/node-pty/lib/utils.js)])" http.span=337 role=server

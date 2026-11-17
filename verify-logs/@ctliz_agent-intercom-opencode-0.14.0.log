@@ -1,0 +1,56 @@
+spec: @ctliz/agent-intercom-opencode@0.14.0
+apiNames: @ctliz/agent-intercom-opencode, agent-intercom-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-zxRP9M/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33959
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:48:50.326Z level=INFO run=f13ae968 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ctliz/agent-intercom-opencode@0.14.0\"]" role=cli
+timestamp=2026-11-16T08:48:51.554Z level=INFO run=140b2c0e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:48:51.908Z level=INFO run=140b2c0e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:48:51.926Z level=INFO run=140b2c0e message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
+timestamp=2026-11-16T08:48:52.285Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u/.config/opencode type=directory ignores=6 http.span=70 role=server
+timestamp=2026-11-16T08:48:52.301Z level=INFO run=140b2c0e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=86 role=server
+timestamp=2026-11-16T08:48:52.303Z level=INFO run=140b2c0e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=88 role=server
+timestamp=2026-11-16T08:48:52.305Z level=INFO run=140b2c0e message="watcher subscribe" path=/ type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:48:52.305Z level=INFO run=140b2c0e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:48:52.306Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=91 role=server
+timestamp=2026-11-16T08:48:52.307Z level=INFO run=140b2c0e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:48:52.307Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M type=entries ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:48:52.308Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:48:52.308Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u type=entries ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:48:52.308Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:48:52.334Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u/.config/opencode type=directory backend=inotify ignores=6 http.span=119 role=server
+timestamp=2026-11-16T08:48:52.365Z level=INFO run=140b2c0e message="location services booted" directory=/tmp/verify-zxRP9M/u workspaceID=undefined durationMs=147 http.span=150 role=server
+timestamp=2026-11-16T08:48:52.429Z level=INFO run=140b2c0e msg="loading plugin" id=@ctliz/agent-intercom-opencode@0.14.0 entrypoint=file:///tmp/verify-zxRP9M/u/cache/opencode/npm/@ctliz/agent-intercom-opencode@0.14.0/1794818931204/node_modules/@ctliz/agent-intercom-opencode/dist/plugin.mjs http.span=214 role=server
+timestamp=2026-11-16T08:48:52.629Z level=WARN run=140b2c0e message="failed to load plugin" target=@ctliz/agent-intercom-opencode@0.14.0 ref=err_02645d62 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=414 role=server
+timestamp=2026-11-16T08:48:53.989Z level=ERROR run=140b2c0e message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1774 role=server
+timestamp=2026-11-16T08:48:54.035Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:54.036Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:54.036Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:54.036Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:54.052Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:48:54.052Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:54.053Z level=INFO run=140b2c0e message="watcher subscribe" path=/tmp/verify-zxRP9M/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:48:54.053Z level=INFO run=140b2c0e message="watcher started" path=/tmp/verify-zxRP9M/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:54.078Z level=INFO run=140b2c0e message=event event.id=evt_1e38b853e001AA63Gm0UEyEL1G event.created=1794818934078 event.type=provider.updated event.location.directory=/tmp/verify-zxRP9M/u event.location.workspaceID=undefined event.data={} http.span=1863 role=server
+timestamp=2026-11-16T08:48:54.092Z level=INFO run=140b2c0e message=event event.id=evt_1e38b854b0017F52WUC8b9i71c event.created=1794818934091 event.type=model.updated event.location.directory=/tmp/verify-zxRP9M/u event.location.workspaceID=undefined event.data={} http.span=1877 role=server
+timestamp=2026-11-16T08:48:54.095Z level=INFO run=140b2c0e message=event event.id=evt_1e38b854f001S65NgYDE6G5oa9 event.created=1794818934095 event.type=agent.updated event.location.directory=/tmp/verify-zxRP9M/u event.location.workspaceID=undefined event.data={} http.span=1880 role=server
+timestamp=2026-11-16T08:48:54.096Z level=INFO run=140b2c0e message=event event.id=evt_1e38b854f002Nx22XtYNprCaF3 event.created=1794818934096 event.type=command.updated event.location.directory=/tmp/verify-zxRP9M/u event.location.workspaceID=undefined event.data={} http.span=1881 role=server
+timestamp=2026-11-16T08:48:54.362Z level=INFO run=140b2c0e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:48:54.363Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:48:54.363Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:48:54.371Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:54.371Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:54.411Z level=INFO run=140b2c0e message="watcher stopped" path=/etc type=entries http.span=2196 role=server
+timestamp=2026-11-16T08:48:54.411Z level=INFO run=140b2c0e message="watcher stopped" path=/ type=entries http.span=2196 role=server
+timestamp=2026-11-16T08:48:54.411Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp type=entries http.span=2196 role=server
+timestamp=2026-11-16T08:48:54.412Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M type=entries http.span=2197 role=server
+timestamp=2026-11-16T08:48:54.412Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u type=entries http.span=2197 role=server
+timestamp=2026-11-16T08:48:54.420Z level=INFO run=140b2c0e message="watcher stopped" path=/tmp/verify-zxRP9M/u/.config/opencode type=directory http.span=2205 role=server

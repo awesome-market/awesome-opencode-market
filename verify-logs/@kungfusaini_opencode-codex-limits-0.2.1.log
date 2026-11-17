@@ -1,0 +1,34 @@
+spec: @kungfusaini/opencode-codex-limits@0.2.1
+apiNames: @kungfusaini/opencode-codex-limits, opencode-codex-limits
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-6AeU2g/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43931
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:14:04.002Z level=INFO run=5a379f7a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@kungfusaini/opencode-codex-limits@0.2.1\"]" role=cli
+timestamp=2026-11-16T10:14:10.341Z level=INFO run=c86ea348 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:14:10.546Z level=INFO run=c86ea348 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:14:10.565Z level=INFO run=c86ea348 message="database schema bootstrap completed" migrations=59 durationMs=19 role=server
+timestamp=2026-11-16T10:14:10.743Z level=INFO run=c86ea348 message="watcher subscribe" path=/tmp/verify-6AeU2g/u/.config/opencode type=directory ignores=6 http.span=30 role=server
+timestamp=2026-11-16T10:14:10.748Z level=INFO run=c86ea348 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T10:14:10.749Z level=INFO run=c86ea348 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T10:14:10.749Z level=INFO run=c86ea348 message="watcher subscribe" path=/ type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T10:14:10.749Z level=INFO run=c86ea348 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher subscribe" path=/tmp/verify-6AeU2g type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher started" path=/tmp/verify-6AeU2g type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher subscribe" path=/tmp/verify-6AeU2g/u type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.750Z level=INFO run=c86ea348 message="watcher started" path=/tmp/verify-6AeU2g/u type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T10:14:10.815Z level=INFO run=c86ea348 message="watcher started" path=/tmp/verify-6AeU2g/u/.config/opencode type=directory backend=inotify ignores=6 http.span=102 role=server
+timestamp=2026-11-16T10:14:10.837Z level=INFO run=c86ea348 message="location services booted" directory=/tmp/verify-6AeU2g/u workspaceID=undefined durationMs=123 http.span=124 role=server
+timestamp=2026-11-16T10:14:10.843Z level=INFO run=c86ea348 msg="loading plugin" id=@kungfusaini/opencode-codex-limits@0.2.1 entrypoint=file:///tmp/verify-6AeU2g/u/cache/opencode/npm/@kungfusaini/opencode-codex-limits@0.2.1/1794824049873/node_modules/@kungfusaini/opencode-codex-limits/src/index.js http.span=130 role=server
+timestamp=2026-11-16T10:14:10.940Z level=WARN run=c86ea348 message="failed to load plugin" target=@kungfusaini/opencode-codex-limits@0.2.1 ref=err_63616e88 cause="Cause([Die(Error: Environment variable \"OPENTUI_FORCE_WCWIDTH\" is already registered with different configuration. Existing: {\"name\":\"OPENTUI_FORCE_WCWIDTH\",\"description\":\"Use wcwidth for character width calculations when the variable is present\",\"type\":\"string\",\"required\":false}, New: {\"name\":\"OPENTUI_FORCE_WCWIDTH\",\"description\":\"Use wcwidth for character width calculations\",\"type\":\"boolean\",\"default\":false})])" http.span=227 role=server

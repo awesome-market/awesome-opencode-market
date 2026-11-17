@@ -1,0 +1,58 @@
+spec: @indy2kro/agentenv@1.2.2
+apiNames: @indy2kro/agentenv, agentenv
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-cOLbie/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36163
+server password [redacted]
+error: unknown command 'serve'
+(Did you mean remove?)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:49.995Z level=INFO run=2db408ef message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@indy2kro/agentenv@1.2.2\"]" role=cli
+timestamp=2026-11-16T09:37:53.075Z level=INFO run=e0090af6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:53.474Z level=INFO run=e0090af6 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:53.591Z level=INFO run=e0090af6 message="database schema bootstrap completed" migrations=59 durationMs=117 role=server
+timestamp=2026-11-16T09:37:54.121Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u/.config/opencode type=directory ignores=6 http.span=112 role=server
+timestamp=2026-11-16T09:37:54.140Z level=INFO run=e0090af6 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=131 role=server
+timestamp=2026-11-16T09:37:54.141Z level=INFO run=e0090af6 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=132 role=server
+timestamp=2026-11-16T09:37:54.141Z level=INFO run=e0090af6 message="watcher subscribe" path=/ type=entries ignores=0 http.span=132 role=server
+timestamp=2026-11-16T09:37:54.142Z level=INFO run=e0090af6 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=133 role=server
+timestamp=2026-11-16T09:37:54.142Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=133 role=server
+timestamp=2026-11-16T09:37:54.149Z level=INFO run=e0090af6 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=140 role=server
+timestamp=2026-11-16T09:37:54.150Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie type=entries ignores=0 http.span=141 role=server
+timestamp=2026-11-16T09:37:54.150Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie type=entries backend=node ignores=0 http.span=141 role=server
+timestamp=2026-11-16T09:37:54.150Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u type=entries ignores=0 http.span=141 role=server
+timestamp=2026-11-16T09:37:54.150Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u type=entries backend=node ignores=0 http.span=141 role=server
+timestamp=2026-11-16T09:37:54.211Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u/.config/opencode type=directory backend=inotify ignores=6 http.span=202 role=server
+timestamp=2026-11-16T09:37:54.259Z level=INFO run=e0090af6 message="location services booted" directory=/tmp/verify-cOLbie/u workspaceID=undefined durationMs=249 http.span=250 role=server
+timestamp=2026-11-16T09:37:54.262Z level=INFO run=e0090af6 msg="loading plugin" id=@indy2kro/agentenv@1.2.2 entrypoint=file:///tmp/verify-cOLbie/u/cache/opencode/npm/@indy2kro/agentenv@1.2.2/1794821872476/node_modules/@indy2kro/agentenv/dist/index.js http.span=253 role=server
+timestamp=2026-11-16T09:37:54.403Z level=WARN run=e0090af6 message="failed to load plugin" target=@indy2kro/agentenv@1.2.2 ref=err_ee2b8cfd cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=394 role=server
+timestamp=2026-11-16T09:37:55.731Z level=ERROR run=e0090af6 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1722 role=server
+timestamp=2026-11-16T09:37:55.741Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:55.741Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:55.742Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:55.742Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:55.774Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T09:37:55.775Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:55.776Z level=INFO run=e0090af6 message="watcher subscribe" path=/tmp/verify-cOLbie/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T09:37:55.777Z level=INFO run=e0090af6 message="watcher started" path=/tmp/verify-cOLbie/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:55.857Z level=INFO run=e0090af6 message=event event.id=evt_1e3b86891001rXng2cY2MWfDiP event.created=1794821875857 event.type=provider.updated event.location.directory=/tmp/verify-cOLbie/u event.location.workspaceID=undefined event.data={} http.span=1848 role=server
+timestamp=2026-11-16T09:37:55.867Z level=INFO run=e0090af6 message=event event.id=evt_1e3b8689b001nLPGV7GL0491P3 event.created=1794821875867 event.type=model.updated event.location.directory=/tmp/verify-cOLbie/u event.location.workspaceID=undefined event.data={} http.span=1858 role=server
+timestamp=2026-11-16T09:37:55.870Z level=INFO run=e0090af6 message=event event.id=evt_1e3b8689e001iJklDntOPh4h4A event.created=1794821875870 event.type=agent.updated event.location.directory=/tmp/verify-cOLbie/u event.location.workspaceID=undefined event.data={} http.span=1861 role=server
+timestamp=2026-11-16T09:37:55.870Z level=INFO run=e0090af6 message=event event.id=evt_1e3b8689e002ls6b4msCUwgJMK event.created=1794821875870 event.type=command.updated event.location.directory=/tmp/verify-cOLbie/u event.location.workspaceID=undefined event.data={} http.span=1861 role=server
+timestamp=2026-11-16T09:37:56.074Z level=INFO run=e0090af6 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T09:37:56.074Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T09:37:56.074Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T09:37:56.085Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:37:56.085Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:37:56.128Z level=INFO run=e0090af6 message="watcher stopped" path=/etc type=entries http.span=2119 role=server
+timestamp=2026-11-16T09:37:56.129Z level=INFO run=e0090af6 message="watcher stopped" path=/ type=entries http.span=2120 role=server
+timestamp=2026-11-16T09:37:56.129Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp type=entries http.span=2120 role=server
+timestamp=2026-11-16T09:37:56.129Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie type=entries http.span=2120 role=server
+timestamp=2026-11-16T09:37:56.129Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u type=entries http.span=2120 role=server
+timestamp=2026-11-16T09:37:56.133Z level=INFO run=e0090af6 message="watcher stopped" path=/tmp/verify-cOLbie/u/.config/opencode type=directory http.span=2124 role=server

@@ -1,0 +1,56 @@
+spec: opencode-continual-learning@1.0.0
+apiNames: opencode-continual-learning
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xioRs3/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45599
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:48:26.914Z level=INFO run=7a9dd53e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-continual-learning@1.0.0\"]" role=cli
+timestamp=2026-11-16T08:48:32.891Z level=INFO run=a0d33881 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:48:33.247Z level=INFO run=a0d33881 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:48:33.280Z level=INFO run=a0d33881 message="database schema bootstrap completed" migrations=59 durationMs=33 role=server
+timestamp=2026-11-16T08:48:33.540Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u/.config/opencode type=directory ignores=6 http.span=42 role=server
+timestamp=2026-11-16T08:48:33.544Z level=INFO run=a0d33881 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T08:48:33.545Z level=INFO run=a0d33881 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:48:33.545Z level=INFO run=a0d33881 message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T08:48:33.546Z level=INFO run=a0d33881 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:48:33.546Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:48:33.546Z level=INFO run=a0d33881 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T08:48:33.547Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3 type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:48:33.547Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3 type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:48:33.547Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T08:48:33.548Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T08:48:33.573Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u/.config/opencode type=directory backend=inotify ignores=6 http.span=75 role=server
+timestamp=2026-11-16T08:48:33.592Z level=INFO run=a0d33881 message="location services booted" directory=/tmp/verify-xioRs3/u workspaceID=undefined durationMs=93 http.span=94 role=server
+timestamp=2026-11-16T08:48:33.606Z level=INFO run=a0d33881 msg="loading plugin" id=opencode-continual-learning@1.0.0 entrypoint=file:///tmp/verify-xioRs3/u/cache/opencode/npm/opencode-continual-learning@1.0.0/1794818912490/node_modules/opencode-continual-learning/src/plugin.ts http.span=108 role=server
+timestamp=2026-11-16T08:48:33.608Z level=WARN run=a0d33881 message="failed to load plugin" target=opencode-continual-learning@1.0.0 ref=err_a8c73eb8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=110 role=server
+timestamp=2026-11-16T08:48:34.931Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:34.931Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:34.932Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:34.935Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:34.986Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:48:34.987Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:34.991Z level=INFO run=a0d33881 message="watcher subscribe" path=/tmp/verify-xioRs3/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:48:34.991Z level=INFO run=a0d33881 message="watcher started" path=/tmp/verify-xioRs3/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:35.107Z level=INFO run=a0d33881 message=event event.id=evt_1e38b3b20001lJd3XA8BxOl8g4 event.created=1794818915104 event.type=provider.updated event.location.directory=/tmp/verify-xioRs3/u event.location.workspaceID=undefined event.data={} http.span=1609 role=server
+timestamp=2026-11-16T08:48:35.140Z level=INFO run=a0d33881 message=event event.id=evt_1e38b3b44001uCvFjZ5A4bL0ZQ event.created=1794818915140 event.type=model.updated event.location.directory=/tmp/verify-xioRs3/u event.location.workspaceID=undefined event.data={} http.span=1642 role=server
+timestamp=2026-11-16T08:48:35.195Z level=INFO run=a0d33881 message=event event.id=evt_1e38b3b7b0010sNF0uCdQg7EUi event.created=1794818915195 event.type=agent.updated event.location.directory=/tmp/verify-xioRs3/u event.location.workspaceID=undefined event.data={} http.span=1697 role=server
+timestamp=2026-11-16T08:48:35.197Z level=INFO run=a0d33881 message=event event.id=evt_1e38b3b7d001FvilmFvHP7NFTc event.created=1794818915197 event.type=command.updated event.location.directory=/tmp/verify-xioRs3/u event.location.workspaceID=undefined event.data={} http.span=1699 role=server
+timestamp=2026-11-16T08:48:35.362Z level=ERROR run=a0d33881 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1864 role=server
+timestamp=2026-11-16T08:48:35.729Z level=INFO run=a0d33881 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:48:35.729Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:48:35.729Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:48:35.741Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:35.742Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:35.795Z level=INFO run=a0d33881 message="watcher stopped" path=/etc type=entries http.span=2297 role=server
+timestamp=2026-11-16T08:48:35.796Z level=INFO run=a0d33881 message="watcher stopped" path=/ type=entries http.span=2298 role=server
+timestamp=2026-11-16T08:48:35.797Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp type=entries http.span=2299 role=server
+timestamp=2026-11-16T08:48:35.797Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3 type=entries http.span=2299 role=server
+timestamp=2026-11-16T08:48:35.797Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u type=entries http.span=2299 role=server
+timestamp=2026-11-16T08:48:35.799Z level=INFO run=a0d33881 message="watcher stopped" path=/tmp/verify-xioRs3/u/.config/opencode type=directory http.span=2301 role=server

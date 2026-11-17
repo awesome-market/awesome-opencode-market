@@ -1,0 +1,57 @@
+spec: alvaress@0.4.1
+apiNames: alvaress
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-UVhmVP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39743
+server password [redacted]
+[alvaress] Comando desconocido: serve. Usa "alvaress --help".
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:27.546Z level=INFO run=f1e513a1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"alvaress@0.4.1\"]" role=cli
+timestamp=2026-11-16T08:06:29.260Z level=INFO run=62292e45 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:29.676Z level=INFO run=62292e45 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:29.727Z level=INFO run=62292e45 message="database schema bootstrap completed" migrations=59 durationMs=51 role=server
+timestamp=2026-11-16T08:06:30.402Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u/.config/opencode type=directory ignores=6 http.span=125 role=server
+timestamp=2026-11-16T08:06:30.424Z level=INFO run=62292e45 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=147 role=server
+timestamp=2026-11-16T08:06:30.429Z level=INFO run=62292e45 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=152 role=server
+timestamp=2026-11-16T08:06:30.429Z level=INFO run=62292e45 message="watcher subscribe" path=/ type=entries ignores=0 http.span=152 role=server
+timestamp=2026-11-16T08:06:30.430Z level=INFO run=62292e45 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=153 role=server
+timestamp=2026-11-16T08:06:30.430Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=153 role=server
+timestamp=2026-11-16T08:06:30.432Z level=INFO run=62292e45 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=155 role=server
+timestamp=2026-11-16T08:06:30.432Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP type=entries ignores=0 http.span=155 role=server
+timestamp=2026-11-16T08:06:30.432Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP type=entries backend=node ignores=0 http.span=155 role=server
+timestamp=2026-11-16T08:06:30.432Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u type=entries ignores=0 http.span=155 role=server
+timestamp=2026-11-16T08:06:30.433Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u type=entries backend=node ignores=0 http.span=156 role=server
+timestamp=2026-11-16T08:06:30.486Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=209 role=server
+timestamp=2026-11-16T08:06:30.514Z level=INFO run=62292e45 message="location services booted" directory=/tmp/verify-UVhmVP/u workspaceID=undefined durationMs=237 http.span=237 role=server
+timestamp=2026-11-16T08:06:30.538Z level=INFO run=62292e45 msg="loading plugin" id=alvaress@0.4.1 entrypoint=file:///tmp/verify-UVhmVP/u/cache/opencode/npm/alvaress@0.4.1/1794816388515/node_modules/alvaress/dist/index.js http.span=261 role=server
+timestamp=2026-11-16T08:06:30.871Z level=WARN run=62292e45 message="failed to load plugin" target=alvaress@0.4.1 ref=err_cb6d8bb4 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=594 role=server
+timestamp=2026-11-16T08:06:32.202Z level=ERROR run=62292e45 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1925 role=server
+timestamp=2026-11-16T08:06:32.310Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:32.310Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.310Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:32.311Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.402Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:32.405Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.410Z level=INFO run=62292e45 message="watcher subscribe" path=/tmp/verify-UVhmVP/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:32.410Z level=INFO run=62292e45 message="watcher started" path=/tmp/verify-UVhmVP/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.482Z level=INFO run=62292e45 message=event event.id=evt_1e364bd2200100y75E8ZNT4RnQ event.created=1794816392482 event.type=provider.updated event.location.directory=/tmp/verify-UVhmVP/u event.location.workspaceID=undefined event.data={} http.span=2205 role=server
+timestamp=2026-11-16T08:06:32.507Z level=INFO run=62292e45 message=event event.id=evt_1e364bd3a001eKrdUBiWhZSBUT event.created=1794816392507 event.type=model.updated event.location.directory=/tmp/verify-UVhmVP/u event.location.workspaceID=undefined event.data={} http.span=2230 role=server
+timestamp=2026-11-16T08:06:32.512Z level=INFO run=62292e45 message=event event.id=evt_1e364bd40001xqR6E8d2HFzNt5 event.created=1794816392512 event.type=agent.updated event.location.directory=/tmp/verify-UVhmVP/u event.location.workspaceID=undefined event.data={} http.span=2235 role=server
+timestamp=2026-11-16T08:06:32.512Z level=INFO run=62292e45 message=event event.id=evt_1e364bd40002Q1ePC1CCeyeZLd event.created=1794816392512 event.type=command.updated event.location.directory=/tmp/verify-UVhmVP/u event.location.workspaceID=undefined event.data={} http.span=2235 role=server
+timestamp=2026-11-16T08:06:32.977Z level=INFO run=62292e45 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:06:32.977Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:06:32.977Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:06:32.990Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:32.993Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:33.061Z level=INFO run=62292e45 message="watcher stopped" path=/etc type=entries http.span=2784 role=server
+timestamp=2026-11-16T08:06:33.061Z level=INFO run=62292e45 message="watcher stopped" path=/ type=entries http.span=2784 role=server
+timestamp=2026-11-16T08:06:33.062Z level=INFO run=62292e45 message="watcher stopped" path=/tmp type=entries http.span=2785 role=server
+timestamp=2026-11-16T08:06:33.062Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP type=entries http.span=2785 role=server
+timestamp=2026-11-16T08:06:33.062Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u type=entries http.span=2785 role=server
+timestamp=2026-11-16T08:06:33.064Z level=INFO run=62292e45 message="watcher stopped" path=/tmp/verify-UVhmVP/u/.config/opencode type=directory http.span=2787 role=server

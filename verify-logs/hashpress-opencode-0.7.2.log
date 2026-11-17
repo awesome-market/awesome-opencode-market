@@ -1,0 +1,56 @@
+spec: hashpress-opencode@0.7.2
+apiNames: hashpress-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-TP3tok/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41815
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:54.000Z level=INFO run=02adc4cc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"hashpress-opencode@0.7.2\"]" role=cli
+timestamp=2026-11-16T09:37:58.896Z level=INFO run=bc91c651 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:59.150Z level=INFO run=bc91c651 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:59.172Z level=INFO run=bc91c651 message="database schema bootstrap completed" migrations=59 durationMs=22 role=server
+timestamp=2026-11-16T09:37:59.358Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u/.config/opencode type=directory ignores=6 http.span=32 role=server
+timestamp=2026-11-16T09:37:59.362Z level=INFO run=bc91c651 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:59.363Z level=INFO run=bc91c651 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T09:37:59.364Z level=INFO run=bc91c651 message="watcher subscribe" path=/ type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:59.364Z level=INFO run=bc91c651 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:59.364Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:59.365Z level=INFO run=bc91c651 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:37:59.365Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:37:59.365Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:37:59.365Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:37:59.366Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:37:59.395Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u/.config/opencode type=directory backend=inotify ignores=6 http.span=69 role=server
+timestamp=2026-11-16T09:37:59.425Z level=INFO run=bc91c651 msg="loading plugin" id=hashpress-opencode@0.7.2 entrypoint=file:///tmp/verify-TP3tok/u/cache/opencode/npm/hashpress-opencode@0.7.2/1794821878683/node_modules/hashpress-opencode/dist/index.js http.span=99 role=server
+timestamp=2026-11-16T09:37:59.462Z level=WARN run=bc91c651 message="failed to load plugin" target=hashpress-opencode@0.7.2 ref=err_c06020f5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=136 role=server
+timestamp=2026-11-16T09:37:59.483Z level=INFO run=bc91c651 message="location services booted" directory=/tmp/verify-TP3tok/u workspaceID=undefined durationMs=155 http.span=157 role=server
+timestamp=2026-11-16T09:38:00.592Z level=ERROR run=bc91c651 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1266 role=server
+timestamp=2026-11-16T09:38:00.690Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:38:00.690Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:00.692Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:38:00.694Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:00.763Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T09:38:00.764Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:00.766Z level=INFO run=bc91c651 message="watcher subscribe" path=/tmp/verify-TP3tok/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T09:38:00.767Z level=INFO run=bc91c651 message="watcher started" path=/tmp/verify-TP3tok/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:00.808Z level=INFO run=bc91c651 message=event event.id=evt_1e3b87be80011oFBqz5fi00uaV event.created=1794821880808 event.type=provider.updated event.location.directory=/tmp/verify-TP3tok/u event.location.workspaceID=undefined event.data={} http.span=1482 role=server
+timestamp=2026-11-16T09:38:00.836Z level=INFO run=bc91c651 message=event event.id=evt_1e3b87c04001lgwgRHnwdjua50 event.created=1794821880836 event.type=model.updated event.location.directory=/tmp/verify-TP3tok/u event.location.workspaceID=undefined event.data={} http.span=1510 role=server
+timestamp=2026-11-16T09:38:00.843Z level=INFO run=bc91c651 message=event event.id=evt_1e3b87c0a0018clICHO2Kq3FhD event.created=1794821880842 event.type=agent.updated event.location.directory=/tmp/verify-TP3tok/u event.location.workspaceID=undefined event.data={} http.span=1517 role=server
+timestamp=2026-11-16T09:38:00.844Z level=INFO run=bc91c651 message=event event.id=evt_1e3b87c0c001xrgITsf7WIFYIr event.created=1794821880844 event.type=command.updated event.location.directory=/tmp/verify-TP3tok/u event.location.workspaceID=undefined event.data={} http.span=1518 role=server
+timestamp=2026-11-16T09:38:01.322Z level=INFO run=bc91c651 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T09:38:01.323Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T09:38:01.323Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T09:38:01.330Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:38:01.331Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:38:01.356Z level=INFO run=bc91c651 message="watcher stopped" path=/etc type=entries http.span=2030 role=server
+timestamp=2026-11-16T09:38:01.356Z level=INFO run=bc91c651 message="watcher stopped" path=/ type=entries http.span=2030 role=server
+timestamp=2026-11-16T09:38:01.356Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp type=entries http.span=2030 role=server
+timestamp=2026-11-16T09:38:01.357Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok type=entries http.span=2031 role=server
+timestamp=2026-11-16T09:38:01.357Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u type=entries http.span=2031 role=server
+timestamp=2026-11-16T09:38:01.360Z level=INFO run=bc91c651 message="watcher stopped" path=/tmp/verify-TP3tok/u/.config/opencode type=directory http.span=2034 role=server

@@ -1,0 +1,47 @@
+spec: telegram-agent-relay@0.1.1
+apiNames: telegram-agent-relay
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-juBMjk/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42907
+server password [redacted]
+❌ ERROR: Missing required configuration.
+Provide via flags (--token, --chat, --user), .env file, or environment variables.
+
+
+Telegram Agent Relay CLI 🚀
+Walkie-talkie connecting Telegram to local AI agent sessions.
+
+Usage:
+  npx telegram-agent-relay [command] [options]
+  telegram-agent-relay [command] [options]
+Commands:
+  start                     Start the bridge (default)
+  status                    Check status and local lock
+  --help, -h                Show this help message
+  --version, -v             Show version
+
+Options:
+  --token <token>           Telegram Bot Token (or TELEGRAM_BOT_TOKEN)
+  --chat <id>               Allowed Telegram Chat ID (or ALLOWED_CHAT_ID)
+  --user <id>               Allowed Telegram User ID (or ALLOWED_USER_ID)
+  --backend <orca|tmux|cmux> Terminal backend (default: orca)
+  --target <id>             Specific target pane / handle (optional)
+
+Environment variables (.env file in working directory also supported):
+  TELEGRAM_BOT_TOKEN        Bot token from @BotFather
+  ALLOWED_CHAT_ID           Your Telegram chat id
+  ALLOWED_USER_ID           Your Telegram user id
+  TERMINAL_BACKEND          orca | tmux | cmux (default: orca)
+  TARGET_ID                 Target handle or pane id
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:06:22.030Z level=INFO run=b89ebfb6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"telegram-agent-relay@0.1.1\"]" role=cli
+timestamp=2026-11-16T12:06:24.430Z level=INFO run=22f5c51d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:06:25.055Z level=INFO run=22f5c51d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:06:25.131Z level=INFO run=22f5c51d message="database schema bootstrap completed" migrations=59 durationMs=75 role=server

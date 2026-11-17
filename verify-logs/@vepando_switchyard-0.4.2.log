@@ -1,0 +1,32 @@
+spec: @vepando/switchyard@0.4.2
+apiNames: @vepando/switchyard, switchyard
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-0PwSlZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42407
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:02.405Z level=INFO run=e852cfb5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@vepando/switchyard@0.4.2\"]" role=cli
+timestamp=2026-11-16T10:13:03.293Z level=INFO run=de504166 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:03.528Z level=INFO run=de504166 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:03.549Z level=INFO run=de504166 message="database schema bootstrap completed" migrations=59 durationMs=21 role=server
+timestamp=2026-11-16T10:13:03.849Z level=INFO run=de504166 message="watcher subscribe" path=/tmp/verify-0PwSlZ/u/.config/opencode type=directory ignores=6 http.span=37 role=server
+timestamp=2026-11-16T10:13:03.853Z level=INFO run=de504166 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T10:13:03.854Z level=INFO run=de504166 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T10:13:03.854Z level=INFO run=de504166 message="watcher subscribe" path=/ type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher subscribe" path=/tmp/verify-0PwSlZ type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher started" path=/tmp/verify-0PwSlZ type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.855Z level=INFO run=de504166 message="watcher subscribe" path=/tmp/verify-0PwSlZ/u type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:03.856Z level=INFO run=de504166 message="watcher started" path=/tmp/verify-0PwSlZ/u type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T10:13:03.885Z level=INFO run=de504166 message="watcher started" path=/tmp/verify-0PwSlZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=73 role=server
+timestamp=2026-11-16T10:13:03.902Z level=INFO run=de504166 message="location services booted" directory=/tmp/verify-0PwSlZ/u workspaceID=undefined durationMs=89 http.span=90 role=server
+timestamp=2026-11-16T10:13:03.908Z level=INFO run=de504166 msg="loading plugin" id=@vepando/switchyard@0.4.2 entrypoint=file:///tmp/verify-0PwSlZ/u/cache/opencode/npm/@vepando/switchyard@0.4.2/1794823982792/node_modules/@vepando/switchyard/dist/opencode.js http.span=96 role=server
+timestamp=2026-11-16T10:13:03.921Z level=WARN run=de504166 message="failed to load plugin" target=@vepando/switchyard@0.4.2 ref=err_b9c507b6 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=109 role=server

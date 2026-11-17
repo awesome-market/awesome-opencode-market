@@ -1,0 +1,32 @@
+spec: @iam2r/pi-upstream-compat@0.6.2
+apiNames: @iam2r/pi-upstream-compat, pi-upstream-compat
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ohU9yg/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44409
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:42.443Z level=INFO run=da3dbe82 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@iam2r/pi-upstream-compat@0.6.2\"]" role=cli
+timestamp=2026-11-16T09:37:43.196Z level=INFO run=af45440e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:43.540Z level=INFO run=af45440e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:43.561Z level=INFO run=af45440e message="database schema bootstrap completed" migrations=59 durationMs=21 role=server
+timestamp=2026-11-16T09:37:43.829Z level=INFO run=af45440e message="watcher subscribe" path=/tmp/verify-ohU9yg/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T09:37:43.835Z level=INFO run=af45440e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T09:37:43.836Z level=INFO run=af45440e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:43.836Z level=INFO run=af45440e message="watcher subscribe" path=/ type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:43.836Z level=INFO run=af45440e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:43.836Z level=INFO run=af45440e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:43.837Z level=INFO run=af45440e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:43.837Z level=INFO run=af45440e message="watcher subscribe" path=/tmp/verify-ohU9yg type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:43.837Z level=INFO run=af45440e message="watcher started" path=/tmp/verify-ohU9yg type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:43.837Z level=INFO run=af45440e message="watcher subscribe" path=/tmp/verify-ohU9yg/u type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:43.837Z level=INFO run=af45440e message="watcher started" path=/tmp/verify-ohU9yg/u type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:43.856Z level=INFO run=af45440e message="watcher started" path=/tmp/verify-ohU9yg/u/.config/opencode type=directory backend=inotify ignores=6 http.span=63 role=server
+timestamp=2026-11-16T09:37:43.874Z level=INFO run=af45440e message="location services booted" directory=/tmp/verify-ohU9yg/u workspaceID=undefined durationMs=80 http.span=81 role=server
+timestamp=2026-11-16T09:37:43.880Z level=INFO run=af45440e msg="loading plugin" id=@iam2r/pi-upstream-compat@0.6.2 entrypoint=file:///tmp/verify-ohU9yg/u/cache/opencode/npm/@iam2r/pi-upstream-compat@0.6.2/1794821862880/node_modules/@iam2r/pi-upstream-compat/src/index.ts http.span=87 role=server
+timestamp=2026-11-16T09:37:43.883Z level=WARN run=af45440e message="failed to load plugin" target=@iam2r/pi-upstream-compat@0.6.2 ref=err_601be8b9 cause="Cause([Die(ResolveMessage: Cannot find package '@earendil-works/pi-ai' imported from /tmp/verify-ohU9yg/u/cache/opencode/npm/@iam2r/pi-upstream-compat@0.6.2/1794821862880/node_modules/@iam2r/pi-upstream-compat/src/index.ts)])" http.span=90 role=server

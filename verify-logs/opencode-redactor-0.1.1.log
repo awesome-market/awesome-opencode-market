@@ -1,0 +1,32 @@
+spec: opencode-redactor@0.1.1
+apiNames: opencode-redactor
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-4zlnuj/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42087
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:40.576Z level=INFO run=0a601471 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-redactor@0.1.1\"]" role=cli
+timestamp=2026-11-16T11:33:40.967Z level=INFO run=e21e6dec message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:41.320Z level=INFO run=e21e6dec message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:41.333Z level=INFO run=e21e6dec message="database schema bootstrap completed" migrations=59 durationMs=13 role=server
+timestamp=2026-11-16T11:33:41.691Z level=INFO run=e21e6dec message="watcher subscribe" path=/tmp/verify-4zlnuj/u/.config/opencode type=directory ignores=6 http.span=29 role=server
+timestamp=2026-11-16T11:33:41.695Z level=INFO run=e21e6dec message="watcher subscribe" path=/etc type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-16T11:33:41.696Z level=INFO run=e21e6dec message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:41.696Z level=INFO run=e21e6dec message="watcher subscribe" path=/ type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:41.696Z level=INFO run=e21e6dec message="watcher started" path=/ type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:41.696Z level=INFO run=e21e6dec message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T11:33:41.697Z level=INFO run=e21e6dec message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:41.697Z level=INFO run=e21e6dec message="watcher subscribe" path=/tmp/verify-4zlnuj type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:41.697Z level=INFO run=e21e6dec message="watcher started" path=/tmp/verify-4zlnuj type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:41.697Z level=INFO run=e21e6dec message="watcher subscribe" path=/tmp/verify-4zlnuj/u type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:41.697Z level=INFO run=e21e6dec message="watcher started" path=/tmp/verify-4zlnuj/u type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T11:33:41.737Z level=INFO run=e21e6dec message="watcher started" path=/tmp/verify-4zlnuj/u/.config/opencode type=directory backend=inotify ignores=6 http.span=75 role=server
+timestamp=2026-11-16T11:33:41.767Z level=INFO run=e21e6dec message="location services booted" directory=/tmp/verify-4zlnuj/u workspaceID=undefined durationMs=104 http.span=105 role=server
+timestamp=2026-11-16T11:33:41.770Z level=INFO run=e21e6dec msg="loading plugin" id=opencode-redactor@0.1.1 entrypoint=file:///tmp/verify-4zlnuj/u/cache/opencode/npm/opencode-redactor@0.1.1/1794828820711/node_modules/opencode-redactor/index.js http.span=108 role=server
+timestamp=2026-11-16T11:33:41.773Z level=WARN run=e21e6dec message="failed to load plugin" target=opencode-redactor@0.1.1 ref=err_7c3091c1 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=111 role=server

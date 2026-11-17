@@ -1,0 +1,20 @@
+spec: @sheiksadi/opencat@0.0.5
+apiNames: @sheiksadi/opencat, opencat
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-meSpg7/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34187
+server password [redacted]
+❌ Error: Missing SLACK_BOT_TOKEN or SLACK_APP_TOKEN.
+Please provide them via environment variables, a local .env file,
+or run 'npx @sheiksadi/opencat setup' to configure them interactively.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:07:12.306Z level=INFO run=9d8dae3c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@sheiksadi/opencat@0.0.5\"]" role=cli
+timestamp=2026-11-16T08:07:21.405Z level=INFO run=a0dbbdb0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:07:21.992Z level=INFO run=a0dbbdb0 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:07:22.071Z level=INFO run=a0dbbdb0 message="database schema bootstrap completed" migrations=59 durationMs=79 role=server

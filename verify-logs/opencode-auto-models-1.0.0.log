@@ -1,0 +1,32 @@
+spec: opencode-auto-models@1.0.0
+apiNames: opencode-auto-models
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-M4yBZI/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35135
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:24.411Z level=INFO run=f6d034d6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-auto-models@1.0.0\"]" role=cli
+timestamp=2026-11-16T11:33:26.020Z level=INFO run=cc3b4f98 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:26.320Z level=INFO run=cc3b4f98 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:26.503Z level=INFO run=cc3b4f98 message="database schema bootstrap completed" migrations=59 durationMs=183 role=server
+timestamp=2026-11-16T11:33:26.747Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/tmp/verify-M4yBZI/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-16T11:33:26.750Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T11:33:26.751Z level=INFO run=cc3b4f98 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T11:33:26.751Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T11:33:26.751Z level=INFO run=cc3b4f98 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T11:33:26.751Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T11:33:26.752Z level=INFO run=cc3b4f98 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:26.752Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/tmp/verify-M4yBZI type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:26.752Z level=INFO run=cc3b4f98 message="watcher started" path=/tmp/verify-M4yBZI type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:26.752Z level=INFO run=cc3b4f98 message="watcher subscribe" path=/tmp/verify-M4yBZI/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:26.752Z level=INFO run=cc3b4f98 message="watcher started" path=/tmp/verify-M4yBZI/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:26.790Z level=INFO run=cc3b4f98 message="watcher started" path=/tmp/verify-M4yBZI/u/.config/opencode type=directory backend=inotify ignores=6 http.span=63 role=server
+timestamp=2026-11-16T11:33:26.799Z level=INFO run=cc3b4f98 message="location services booted" directory=/tmp/verify-M4yBZI/u workspaceID=undefined durationMs=71 http.span=72 role=server
+timestamp=2026-11-16T11:33:26.810Z level=INFO run=cc3b4f98 msg="loading plugin" id=opencode-auto-models@1.0.0 entrypoint=file:///tmp/verify-M4yBZI/u/cache/opencode/npm/opencode-auto-models@1.0.0/1794828805803/node_modules/opencode-auto-models/index.ts http.span=83 role=server
+timestamp=2026-11-16T11:33:26.812Z level=WARN run=cc3b4f98 message="failed to load plugin" target=opencode-auto-models@1.0.0 ref=err_832b5f9b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=85 role=server

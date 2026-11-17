@@ -1,0 +1,32 @@
+spec: bbingz/scnet-auth#5654a49ac03503b8ac9f63515a657c1cdee5dfd7
+apiNames: bbingz/scnet-auth, scnet-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-73bLiE/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33709
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:25.319Z level=INFO run=4a46b16b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"bbingz/scnet-auth#5654a49ac03503b8ac9f63515a657c1cdee5dfd7\"]" role=cli
+timestamp=2026-11-16T08:47:26.100Z level=INFO run=d39eaea1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:26.293Z level=INFO run=d39eaea1 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:26.312Z level=INFO run=d39eaea1 message="database schema bootstrap completed" migrations=59 durationMs=19 role=server
+timestamp=2026-11-16T08:47:26.587Z level=INFO run=d39eaea1 message="watcher subscribe" path=/tmp/verify-73bLiE/u/.config/opencode type=directory ignores=6 http.span=17 role=server
+timestamp=2026-11-16T08:47:26.591Z level=INFO run=d39eaea1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:26.591Z level=INFO run=d39eaea1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:26.592Z level=INFO run=d39eaea1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:26.592Z level=INFO run=d39eaea1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:26.592Z level=INFO run=d39eaea1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:26.592Z level=INFO run=d39eaea1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:26.592Z level=INFO run=d39eaea1 message="watcher subscribe" path=/tmp/verify-73bLiE type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:26.593Z level=INFO run=d39eaea1 message="watcher started" path=/tmp/verify-73bLiE type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:26.593Z level=INFO run=d39eaea1 message="watcher subscribe" path=/tmp/verify-73bLiE/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:26.593Z level=INFO run=d39eaea1 message="watcher started" path=/tmp/verify-73bLiE/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:26.622Z level=INFO run=d39eaea1 message="watcher started" path=/tmp/verify-73bLiE/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T08:47:26.643Z level=INFO run=d39eaea1 msg="loading plugin" id=bbingz/scnet-auth#5654a49ac03503b8ac9f63515a657c1cdee5dfd7 entrypoint=file:///tmp/verify-73bLiE/u/cache/opencode/npm/git-scnet-auth-728a967c6cb8/1794818845918/node_modules/scnet-auth/index.mjs http.span=73 role=server
+timestamp=2026-11-16T08:47:26.648Z level=WARN run=d39eaea1 message="failed to load plugin" target=bbingz/scnet-auth#5654a49ac03503b8ac9f63515a657c1cdee5dfd7 ref=err_97314f8a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=78 role=server
+timestamp=2026-11-16T08:47:26.660Z level=INFO run=d39eaea1 message="location services booted" directory=/tmp/verify-73bLiE/u workspaceID=undefined durationMs=90 http.span=90 role=server

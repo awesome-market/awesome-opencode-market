@@ -1,0 +1,36 @@
+spec: opencode-lmstudio-warm@0.3.2
+apiNames: opencode-lmstudio-warm
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-AFpuVw/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:32837
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:50.302Z level=INFO run=1328ea67 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-lmstudio-warm@0.3.2\"]" role=cli
+timestamp=2026-11-16T08:51:51.054Z level=INFO run=6e2ea51c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:51:51.268Z level=INFO run=6e2ea51c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:51:51.277Z level=INFO run=6e2ea51c message="database schema bootstrap completed" migrations=59 durationMs=9 role=server
+timestamp=2026-11-16T08:51:51.506Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp/verify-AFpuVw/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T08:51:51.509Z level=INFO run=6e2ea51c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:51:51.510Z level=INFO run=6e2ea51c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:51.510Z level=INFO run=6e2ea51c message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:51.510Z level=INFO run=6e2ea51c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:51.510Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:51.510Z level=INFO run=6e2ea51c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:51.511Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp/verify-AFpuVw type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.511Z level=INFO run=6e2ea51c message="watcher started" path=/tmp/verify-AFpuVw type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.511Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp/verify-AFpuVw/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.511Z level=INFO run=6e2ea51c message="watcher started" path=/tmp/verify-AFpuVw/u type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:51.530Z level=INFO run=6e2ea51c message="watcher started" path=/tmp/verify-AFpuVw/u/.config/opencode type=directory backend=inotify ignores=6 http.span=40 role=server
+timestamp=2026-11-16T08:51:51.540Z level=INFO run=6e2ea51c message="location services booted" directory=/tmp/verify-AFpuVw/u workspaceID=undefined durationMs=49 http.span=50 role=server
+timestamp=2026-11-16T08:51:51.541Z level=INFO run=6e2ea51c msg="loading plugin" id=opencode-lmstudio-warm@0.3.2 entrypoint=file:///tmp/verify-AFpuVw/u/cache/opencode/npm/opencode-lmstudio-warm@0.3.2/1794819110841/node_modules/opencode-lmstudio-warm/src/index.ts http.span=51 role=server
+timestamp=2026-11-16T08:51:51.566Z level=WARN run=6e2ea51c message="failed to load plugin" target=opencode-lmstudio-warm@0.3.2 ref=err_5c14158c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=76 role=server
+timestamp=2026-11-16T08:51:52.047Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp/verify-AFpuVw/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:52.047Z level=INFO run=6e2ea51c message="watcher started" path=/tmp/verify-AFpuVw/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:52.047Z level=INFO run=6e2ea51c message="watcher subscribe" path=/tmp/verify-AFpuVw/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:52.047Z level=INFO run=6e2ea51c message="watcher started" path=/tmp/verify-AFpuVw/u/AGENTS.md type=file backend=node ignores=0 role=server

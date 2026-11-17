@@ -1,0 +1,18 @@
+spec: agents-reverse-engineer@1.2.21
+apiNames: agents-reverse-engineer
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-hLIWE1/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39179
+server password [redacted]
+agents-reverse-engineer v1.2.21
+
+Unknown command: serve
+Run 'are --help' for usage information.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:22.001Z level=INFO run=0d10f6bc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"agents-reverse-engineer@1.2.21\"]" role=cli

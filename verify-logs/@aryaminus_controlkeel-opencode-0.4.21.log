@@ -1,0 +1,32 @@
+spec: @aryaminus/controlkeel-opencode@0.4.21
+apiNames: @aryaminus/controlkeel-opencode, controlkeel-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-2DXl8G/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41963
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:31.154Z level=INFO run=9d2cba64 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@aryaminus/controlkeel-opencode@0.4.21\"]" role=cli
+timestamp=2026-11-16T08:47:33.803Z level=INFO run=e5eb3bb9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:34.167Z level=INFO run=e5eb3bb9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:34.183Z level=INFO run=e5eb3bb9 message="database schema bootstrap completed" migrations=59 durationMs=16 role=server
+timestamp=2026-11-16T08:47:34.458Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/tmp/verify-2DXl8G/u/.config/opencode type=directory ignores=6 http.span=22 role=server
+timestamp=2026-11-16T08:47:34.461Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.462Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/tmp/verify-2DXl8G type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:34.463Z level=INFO run=e5eb3bb9 message="watcher started" path=/tmp/verify-2DXl8G type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:34.463Z level=INFO run=e5eb3bb9 message="watcher subscribe" path=/tmp/verify-2DXl8G/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:34.463Z level=INFO run=e5eb3bb9 message="watcher started" path=/tmp/verify-2DXl8G/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:34.480Z level=INFO run=e5eb3bb9 message="watcher started" path=/tmp/verify-2DXl8G/u/.config/opencode type=directory backend=inotify ignores=6 http.span=44 role=server
+timestamp=2026-11-16T08:47:34.497Z level=INFO run=e5eb3bb9 message="location services booted" directory=/tmp/verify-2DXl8G/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-16T08:47:34.499Z level=INFO run=e5eb3bb9 msg="loading plugin" id=@aryaminus/controlkeel-opencode@0.4.21 entrypoint=file:///tmp/verify-2DXl8G/u/cache/opencode/npm/@aryaminus/controlkeel-opencode@0.4.21/1794818853531/node_modules/@aryaminus/controlkeel-opencode/index.js http.span=63 role=server
+timestamp=2026-11-16T08:47:34.533Z level=WARN run=e5eb3bb9 message="failed to load plugin" target=@aryaminus/controlkeel-opencode@0.4.21 ref=err_06e47c72 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=97 role=server

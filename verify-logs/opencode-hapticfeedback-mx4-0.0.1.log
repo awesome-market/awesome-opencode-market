@@ -1,0 +1,32 @@
+spec: opencode-hapticfeedback-mx4@0.0.1
+apiNames: opencode-hapticfeedback-mx4
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-aWC64M/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33969
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:24.847Z level=INFO run=04086f87 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-hapticfeedback-mx4@0.0.1\"]" role=cli
+timestamp=2026-11-16T11:33:25.400Z level=INFO run=eebf83ee message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:25.655Z level=INFO run=eebf83ee message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:25.704Z level=INFO run=eebf83ee message="database schema bootstrap completed" migrations=59 durationMs=49 role=server
+timestamp=2026-11-16T11:33:26.051Z level=INFO run=eebf83ee message="watcher subscribe" path=/tmp/verify-aWC64M/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T11:33:26.057Z level=INFO run=eebf83ee message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T11:33:26.058Z level=INFO run=eebf83ee message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T11:33:26.058Z level=INFO run=eebf83ee message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T11:33:26.058Z level=INFO run=eebf83ee message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T11:33:26.059Z level=INFO run=eebf83ee message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T11:33:26.059Z level=INFO run=eebf83ee message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T11:33:26.059Z level=INFO run=eebf83ee message="watcher subscribe" path=/tmp/verify-aWC64M type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T11:33:26.059Z level=INFO run=eebf83ee message="watcher started" path=/tmp/verify-aWC64M type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T11:33:26.059Z level=INFO run=eebf83ee message="watcher subscribe" path=/tmp/verify-aWC64M/u type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T11:33:26.060Z level=INFO run=eebf83ee message="watcher started" path=/tmp/verify-aWC64M/u type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T11:33:26.106Z level=INFO run=eebf83ee message="watcher started" path=/tmp/verify-aWC64M/u/.config/opencode type=directory backend=inotify ignores=6 http.span=95 role=server
+timestamp=2026-11-16T11:33:26.150Z level=INFO run=eebf83ee message="location services booted" directory=/tmp/verify-aWC64M/u workspaceID=undefined durationMs=137 http.span=139 role=server
+timestamp=2026-11-16T11:33:26.160Z level=INFO run=eebf83ee msg="loading plugin" id=opencode-hapticfeedback-mx4@0.0.1 entrypoint=file:///tmp/verify-aWC64M/u/cache/opencode/npm/opencode-hapticfeedback-mx4@0.0.1/1794828805119/node_modules/opencode-hapticfeedback-mx4/src/index.js http.span=149 role=server
+timestamp=2026-11-16T11:33:26.162Z level=WARN run=eebf83ee message="failed to load plugin" target=opencode-hapticfeedback-mx4@0.0.1 ref=err_3ae7f9cb cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=151 role=server

@@ -1,0 +1,15 @@
+spec: megamemory@1.6.2
+apiNames: megamemory
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-RY5NoZ/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38123
+server password [redacted]
+Error: Invalid port '0'. Port must be a number between 1 and 65535.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:18.069Z level=INFO run=cf616d65 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"megamemory@1.6.2\"]" role=cli

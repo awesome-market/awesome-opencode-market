@@ -1,0 +1,32 @@
+spec: @sferralove/agentflow@3.1.1
+apiNames: @sferralove/agentflow, agentflow
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-x25VbC/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42055
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:46.600Z level=INFO run=b2b600d1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@sferralove/agentflow@3.1.1\"]" role=cli
+timestamp=2026-11-16T12:05:47.704Z level=INFO run=9b62ebec message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:48.353Z level=INFO run=9b62ebec message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:48.408Z level=INFO run=9b62ebec message="database schema bootstrap completed" migrations=59 durationMs=55 role=server
+timestamp=2026-11-16T12:05:48.851Z level=INFO run=9b62ebec message="watcher subscribe" path=/tmp/verify-x25VbC/u/.config/opencode type=directory ignores=6 http.span=78 role=server
+timestamp=2026-11-16T12:05:48.855Z level=INFO run=9b62ebec message="watcher subscribe" path=/etc type=entries ignores=0 http.span=82 role=server
+timestamp=2026-11-16T12:05:48.855Z level=INFO run=9b62ebec message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=82 role=server
+timestamp=2026-11-16T12:05:48.856Z level=INFO run=9b62ebec message="watcher subscribe" path=/ type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T12:05:48.856Z level=INFO run=9b62ebec message="watcher started" path=/ type=entries backend=node ignores=0 http.span=83 role=server
+timestamp=2026-11-16T12:05:48.856Z level=INFO run=9b62ebec message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T12:05:48.856Z level=INFO run=9b62ebec message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=83 role=server
+timestamp=2026-11-16T12:05:48.857Z level=INFO run=9b62ebec message="watcher subscribe" path=/tmp/verify-x25VbC type=entries ignores=0 http.span=84 role=server
+timestamp=2026-11-16T12:05:48.859Z level=INFO run=9b62ebec message="watcher started" path=/tmp/verify-x25VbC type=entries backend=node ignores=0 http.span=86 role=server
+timestamp=2026-11-16T12:05:48.859Z level=INFO run=9b62ebec message="watcher subscribe" path=/tmp/verify-x25VbC/u type=entries ignores=0 http.span=86 role=server
+timestamp=2026-11-16T12:05:48.860Z level=INFO run=9b62ebec message="watcher started" path=/tmp/verify-x25VbC/u type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T12:05:48.885Z level=INFO run=9b62ebec message="watcher started" path=/tmp/verify-x25VbC/u/.config/opencode type=directory backend=inotify ignores=6 http.span=112 role=server
+timestamp=2026-11-16T12:05:48.928Z level=INFO run=9b62ebec message="location services booted" directory=/tmp/verify-x25VbC/u workspaceID=undefined durationMs=154 http.span=155 role=server
+timestamp=2026-11-16T12:05:48.935Z level=INFO run=9b62ebec msg="loading plugin" id=@sferralove/agentflow@3.1.1 entrypoint=file:///tmp/verify-x25VbC/u/cache/opencode/npm/@sferralove/agentflow@3.1.1/1794830747100/node_modules/@sferralove/agentflow/dist/index.js http.span=162 role=server
+timestamp=2026-11-16T12:05:48.955Z level=WARN run=9b62ebec message="failed to load plugin" target=@sferralove/agentflow@3.1.1 ref=err_76e60744 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=182 role=server

@@ -1,0 +1,32 @@
+spec: 3056810551/magpie-hark-web#b89b3dd1cbe57a58add3391d87cc04f083773427
+apiNames: 3056810551/magpie-hark-web, magpie-hark-web
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-m9UpOd/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38985
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:10.403Z level=INFO run=d72af771 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"3056810551/magpie-hark-web#b89b3dd1cbe57a58add3391d87cc04f083773427\"]" role=cli
+timestamp=2026-11-16T08:06:11.243Z level=INFO run=d7425267 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:12.146Z level=INFO run=d7425267 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:12.336Z level=INFO run=d7425267 message="database schema bootstrap completed" migrations=59 durationMs=190 role=server
+timestamp=2026-11-16T08:06:12.694Z level=INFO run=d7425267 message="watcher subscribe" path=/tmp/verify-m9UpOd/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T08:06:12.698Z level=INFO run=d7425267 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T08:06:12.699Z level=INFO run=d7425267 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T08:06:12.700Z level=INFO run=d7425267 message="watcher subscribe" path=/ type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T08:06:12.700Z level=INFO run=d7425267 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T08:06:12.701Z level=INFO run=d7425267 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T08:06:12.701Z level=INFO run=d7425267 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T08:06:12.702Z level=INFO run=d7425267 message="watcher subscribe" path=/tmp/verify-m9UpOd type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T08:06:12.702Z level=INFO run=d7425267 message="watcher started" path=/tmp/verify-m9UpOd type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T08:06:12.703Z level=INFO run=d7425267 message="watcher subscribe" path=/tmp/verify-m9UpOd/u type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T08:06:12.703Z level=INFO run=d7425267 message="watcher started" path=/tmp/verify-m9UpOd/u type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T08:06:12.740Z level=INFO run=d7425267 message="watcher started" path=/tmp/verify-m9UpOd/u/.config/opencode type=directory backend=inotify ignores=6 http.span=82 role=server
+timestamp=2026-11-16T08:06:12.768Z level=INFO run=d7425267 message="location services booted" directory=/tmp/verify-m9UpOd/u workspaceID=undefined durationMs=109 http.span=110 role=server
+timestamp=2026-11-16T08:06:12.771Z level=INFO run=d7425267 msg="loading plugin" id=3056810551/magpie-hark-web#b89b3dd1cbe57a58add3391d87cc04f083773427 entrypoint=file:///tmp/verify-m9UpOd/u/cache/opencode/npm/git-magpie-hark-web-271f47ab7c2d/1794816370914/node_modules/magpie-hark-web/index.mjs http.span=113 role=server
+timestamp=2026-11-16T08:06:12.774Z level=WARN run=d7425267 message="failed to load plugin" target=3056810551/magpie-hark-web#b89b3dd1cbe57a58add3391d87cc04f083773427 ref=err_0853077b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=116 role=server

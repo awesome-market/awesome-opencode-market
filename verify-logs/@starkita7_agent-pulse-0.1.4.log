@@ -1,0 +1,32 @@
+spec: @starkita7/agent-pulse@0.1.4
+apiNames: @starkita7/agent-pulse, agent-pulse
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-iuRde4/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41921
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:27.134Z level=INFO run=10f1ed0b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@starkita7/agent-pulse@0.1.4\"]" role=cli
+timestamp=2026-11-16T08:06:31.867Z level=INFO run=71e1ca34 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:32.344Z level=INFO run=71e1ca34 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:32.442Z level=INFO run=71e1ca34 message="database schema bootstrap completed" migrations=59 durationMs=98 role=server
+timestamp=2026-11-16T08:06:32.576Z level=INFO run=71e1ca34 message="watcher subscribe" path=/tmp/verify-iuRde4/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T08:06:32.579Z level=INFO run=71e1ca34 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:06:32.580Z level=INFO run=71e1ca34 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:32.580Z level=INFO run=71e1ca34 message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:32.580Z level=INFO run=71e1ca34 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:32.581Z level=INFO run=71e1ca34 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:32.581Z level=INFO run=71e1ca34 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:32.581Z level=INFO run=71e1ca34 message="watcher subscribe" path=/tmp/verify-iuRde4 type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:32.581Z level=INFO run=71e1ca34 message="watcher started" path=/tmp/verify-iuRde4 type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:32.581Z level=INFO run=71e1ca34 message="watcher subscribe" path=/tmp/verify-iuRde4/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:32.582Z level=INFO run=71e1ca34 message="watcher started" path=/tmp/verify-iuRde4/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:06:32.602Z level=INFO run=71e1ca34 message="watcher started" path=/tmp/verify-iuRde4/u/.config/opencode type=directory backend=inotify ignores=6 http.span=42 role=server
+timestamp=2026-11-16T08:06:32.611Z level=INFO run=71e1ca34 message="location services booted" directory=/tmp/verify-iuRde4/u workspaceID=undefined durationMs=51 http.span=51 role=server
+timestamp=2026-11-16T08:06:32.621Z level=INFO run=71e1ca34 msg="loading plugin" id=@starkita7/agent-pulse@0.1.4 entrypoint=file:///tmp/verify-iuRde4/u/cache/opencode/npm/@starkita7/agent-pulse@0.1.4/1794816391663/node_modules/@starkita7/agent-pulse/dist/index.js http.span=61 role=server
+timestamp=2026-11-16T08:06:32.658Z level=WARN run=71e1ca34 message="failed to load plugin" target=@starkita7/agent-pulse@0.1.4 ref=err_096aed7c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=98 role=server

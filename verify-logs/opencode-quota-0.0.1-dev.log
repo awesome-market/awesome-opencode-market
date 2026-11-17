@@ -1,0 +1,56 @@
+spec: opencode-quota@0.0.1-dev
+apiNames: opencode-quota
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-MINEzU/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37111
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:18.702Z level=INFO run=708bfcd2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-quota@0.0.1-dev\"]" role=cli
+timestamp=2026-11-16T10:13:21.354Z level=INFO run=7bbbb843 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:21.750Z level=INFO run=7bbbb843 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:21.811Z level=INFO run=7bbbb843 message="database schema bootstrap completed" migrations=59 durationMs=61 role=server
+timestamp=2026-11-16T10:13:22.353Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T10:13:22.358Z level=INFO run=7bbbb843 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T10:13:22.359Z level=INFO run=7bbbb843 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T10:13:22.360Z level=INFO run=7bbbb843 message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T10:13:22.361Z level=INFO run=7bbbb843 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T10:13:22.361Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T10:13:22.362Z level=INFO run=7bbbb843 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T10:13:22.362Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T10:13:22.363Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T10:13:22.363Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T10:13:22.366Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T10:13:22.430Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u/.config/opencode type=directory backend=inotify ignores=6 http.span=117 role=server
+timestamp=2026-11-16T10:13:22.445Z level=INFO run=7bbbb843 message="location services booted" directory=/tmp/verify-MINEzU/u workspaceID=undefined durationMs=132 http.span=132 role=server
+timestamp=2026-11-16T10:13:22.468Z level=INFO run=7bbbb843 msg="loading plugin" id=opencode-quota@0.0.1-dev entrypoint=file:///tmp/verify-MINEzU/u/cache/opencode/npm/opencode-quota@0.0.1-dev/1794824001005/node_modules/opencode-quota/dist/index.js http.span=155 role=server
+timestamp=2026-11-16T10:13:22.523Z level=WARN run=7bbbb843 message="failed to load plugin" target=opencode-quota@0.0.1-dev ref=err_675ba6c2 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=210 role=server
+timestamp=2026-11-16T10:13:23.792Z level=ERROR run=7bbbb843 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1479 role=server
+timestamp=2026-11-16T10:13:23.881Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:23.881Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:23.881Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:23.882Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:23.934Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:23.935Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:23.935Z level=INFO run=7bbbb843 message="watcher subscribe" path=/tmp/verify-MINEzU/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:23.936Z level=INFO run=7bbbb843 message="watcher started" path=/tmp/verify-MINEzU/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:23.963Z level=INFO run=7bbbb843 message=event event.id=evt_1e3d8e17b00141zb5vjYCv76W7 event.created=1794824003963 event.type=provider.updated event.location.directory=/tmp/verify-MINEzU/u event.location.workspaceID=undefined event.data={} http.span=1650 role=server
+timestamp=2026-11-16T10:13:23.981Z level=INFO run=7bbbb843 message=event event.id=evt_1e3d8e18d001l0QGTkCgvVYE5V event.created=1794824003981 event.type=model.updated event.location.directory=/tmp/verify-MINEzU/u event.location.workspaceID=undefined event.data={} http.span=1668 role=server
+timestamp=2026-11-16T10:13:23.984Z level=INFO run=7bbbb843 message=event event.id=evt_1e3d8e190001RipsgV8I0dIU7V event.created=1794824003984 event.type=agent.updated event.location.directory=/tmp/verify-MINEzU/u event.location.workspaceID=undefined event.data={} http.span=1671 role=server
+timestamp=2026-11-16T10:13:23.984Z level=INFO run=7bbbb843 message=event event.id=evt_1e3d8e190002GKjVhak9x2cOHU event.created=1794824003984 event.type=command.updated event.location.directory=/tmp/verify-MINEzU/u event.location.workspaceID=undefined event.data={} http.span=1671 role=server
+timestamp=2026-11-16T10:13:24.488Z level=INFO run=7bbbb843 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:24.488Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:13:24.488Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:13:24.498Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:24.499Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:24.518Z level=INFO run=7bbbb843 message="watcher stopped" path=/etc type=entries http.span=2205 role=server
+timestamp=2026-11-16T10:13:24.518Z level=INFO run=7bbbb843 message="watcher stopped" path=/ type=entries http.span=2205 role=server
+timestamp=2026-11-16T10:13:24.518Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp type=entries http.span=2205 role=server
+timestamp=2026-11-16T10:13:24.518Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU type=entries http.span=2205 role=server
+timestamp=2026-11-16T10:13:24.519Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u type=entries http.span=2206 role=server
+timestamp=2026-11-16T10:13:24.519Z level=INFO run=7bbbb843 message="watcher stopped" path=/tmp/verify-MINEzU/u/.config/opencode type=directory http.span=2206 role=server

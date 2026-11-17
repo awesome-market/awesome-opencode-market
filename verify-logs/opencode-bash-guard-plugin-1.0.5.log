@@ -1,0 +1,58 @@
+spec: opencode-bash-guard-plugin@1.0.5
+apiNames: opencode-bash-guard-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-NCVRDc/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33831
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:23.733Z level=INFO run=231c3ff9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-bash-guard-plugin@1.0.5\"]" role=cli
+timestamp=2026-11-16T11:33:27.168Z level=INFO run=c216708c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:27.507Z level=INFO run=c216708c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:27.554Z level=INFO run=c216708c message="database schema bootstrap completed" migrations=59 durationMs=47 role=server
+timestamp=2026-11-16T11:33:27.917Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u/.config/opencode type=directory ignores=6 http.span=22 role=server
+timestamp=2026-11-16T11:33:27.920Z level=INFO run=c216708c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T11:33:27.921Z level=INFO run=c216708c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T11:33:27.921Z level=INFO run=c216708c message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T11:33:27.921Z level=INFO run=c216708c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.922Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T11:33:27.946Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u/.config/opencode type=directory backend=inotify ignores=6 http.span=51 role=server
+timestamp=2026-11-16T11:33:27.952Z level=INFO run=c216708c message="location services booted" directory=/tmp/verify-NCVRDc/u workspaceID=undefined durationMs=57 http.span=57 role=server
+timestamp=2026-11-16T11:33:27.967Z level=INFO run=c216708c msg="loading plugin" id=opencode-bash-guard-plugin@1.0.5 entrypoint=file:///tmp/verify-NCVRDc/u/cache/opencode/npm/opencode-bash-guard-plugin@1.0.5/1794828807013/node_modules/opencode-bash-guard-plugin/index.ts http.span=72 role=server
+timestamp=2026-11-16T11:33:27.968Z level=WARN run=c216708c message="failed to load plugin" target=opencode-bash-guard-plugin@1.0.5 ref=err_2ac10050 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=73 role=server
+timestamp=2026-11-16T11:33:28.475Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:28.476Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:28.476Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:33:28.476Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:28.525Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:33:28.525Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:28.526Z level=INFO run=c216708c message="watcher subscribe" path=/tmp/verify-NCVRDc/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:33:28.526Z level=INFO run=c216708c message="watcher started" path=/tmp/verify-NCVRDc/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:33:28.551Z level=INFO run=c216708c message=event event.id=evt_1e4223167001QlreAzqfgzoNjO event.created=1794828808551 event.type=provider.updated event.location.directory=/tmp/verify-NCVRDc/u event.location.workspaceID=undefined event.data={} http.span=656 role=server
+timestamp=2026-11-16T11:33:28.559Z level=INFO run=c216708c message=event event.id=evt_1e422316f001bgHaQ9FpmZeS2M event.created=1794828808559 event.type=model.updated event.location.directory=/tmp/verify-NCVRDc/u event.location.workspaceID=undefined event.data={} http.span=664 role=server
+timestamp=2026-11-16T11:33:28.561Z level=INFO run=c216708c message=event event.id=evt_1e4223171001XGIE6G4Z5c6l3Q event.created=1794828808561 event.type=agent.updated event.location.directory=/tmp/verify-NCVRDc/u event.location.workspaceID=undefined event.data={} http.span=666 role=server
+timestamp=2026-11-16T11:33:28.561Z level=INFO run=c216708c message=event event.id=evt_1e4223171002k3mkCqWTMMX3bD event.created=1794828808561 event.type=command.updated event.location.directory=/tmp/verify-NCVRDc/u event.location.workspaceID=undefined event.data={} http.span=666 role=server
+timestamp=2026-11-16T11:33:28.855Z level=ERROR run=c216708c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=960 role=server
+timestamp=2026-11-16T11:33:29.311Z level=INFO run=c216708c message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:33:29.311Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:33:29.311Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:33:29.313Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:29.313Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:33:29.322Z level=INFO run=c216708c message="watcher stopped" path=/etc type=entries http.span=1427 role=server
+timestamp=2026-11-16T11:33:29.323Z level=INFO run=c216708c message="watcher stopped" path=/ type=entries http.span=1428 role=server
+timestamp=2026-11-16T11:33:29.323Z level=INFO run=c216708c message="watcher stopped" path=/tmp type=entries http.span=1428 role=server
+timestamp=2026-11-16T11:33:29.323Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc type=entries http.span=1428 role=server
+timestamp=2026-11-16T11:33:29.323Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u type=entries http.span=1428 role=server
+timestamp=2026-11-16T11:33:29.326Z level=INFO run=c216708c message="watcher stopped" path=/tmp/verify-NCVRDc/u/.config/opencode type=directory http.span=1431 role=server

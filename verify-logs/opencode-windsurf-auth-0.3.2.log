@@ -1,0 +1,32 @@
+spec: opencode-windsurf-auth@0.3.2
+apiNames: opencode-windsurf-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Ybc8jq/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45149
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:33.953Z level=INFO run=5c9b519e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-windsurf-auth@0.3.2\"]" role=cli
+timestamp=2026-11-16T12:05:35.371Z level=INFO run=e3207ff5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:35.986Z level=INFO run=e3207ff5 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:36.039Z level=INFO run=e3207ff5 message="database schema bootstrap completed" migrations=59 durationMs=53 role=server
+timestamp=2026-11-16T12:05:36.372Z level=INFO run=e3207ff5 message="watcher subscribe" path=/tmp/verify-Ybc8jq/u/.config/opencode type=directory ignores=6 http.span=42 role=server
+timestamp=2026-11-16T12:05:36.376Z level=INFO run=e3207ff5 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T12:05:36.378Z level=INFO run=e3207ff5 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:05:36.378Z level=INFO run=e3207ff5 message="watcher subscribe" path=/ type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:05:36.378Z level=INFO run=e3207ff5 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T12:05:36.379Z level=INFO run=e3207ff5 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T12:05:36.380Z level=INFO run=e3207ff5 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:05:36.380Z level=INFO run=e3207ff5 message="watcher subscribe" path=/tmp/verify-Ybc8jq type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:05:36.380Z level=INFO run=e3207ff5 message="watcher started" path=/tmp/verify-Ybc8jq type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:05:36.380Z level=INFO run=e3207ff5 message="watcher subscribe" path=/tmp/verify-Ybc8jq/u type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-16T12:05:36.381Z level=INFO run=e3207ff5 message="watcher started" path=/tmp/verify-Ybc8jq/u type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T12:05:36.412Z level=INFO run=e3207ff5 message="watcher started" path=/tmp/verify-Ybc8jq/u/.config/opencode type=directory backend=inotify ignores=6 http.span=82 role=server
+timestamp=2026-11-16T12:05:36.426Z level=INFO run=e3207ff5 message="location services booted" directory=/tmp/verify-Ybc8jq/u workspaceID=undefined durationMs=96 http.span=96 role=server
+timestamp=2026-11-16T12:05:36.439Z level=INFO run=e3207ff5 msg="loading plugin" id=opencode-windsurf-auth@0.3.2 entrypoint=file:///tmp/verify-Ybc8jq/u/cache/opencode/npm/opencode-windsurf-auth@0.3.2/1794830735097/node_modules/opencode-windsurf-auth/dist/index.js http.span=109 role=server
+timestamp=2026-11-16T12:05:36.452Z level=WARN run=e3207ff5 message="failed to load plugin" target=opencode-windsurf-auth@0.3.2 ref=err_e2790d52 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=122 role=server

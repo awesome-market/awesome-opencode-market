@@ -1,0 +1,32 @@
+spec: opencode-image-relay@0.0.3
+apiNames: opencode-image-relay
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-OUJImN/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37293
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:26.317Z level=INFO run=ba0a7658 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-image-relay@0.0.3\"]" role=cli
+timestamp=2026-11-16T08:47:27.069Z level=INFO run=e30bfd91 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:27.335Z level=INFO run=e30bfd91 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:27.352Z level=INFO run=e30bfd91 message="database schema bootstrap completed" migrations=59 durationMs=17 role=server
+timestamp=2026-11-16T08:47:27.693Z level=INFO run=e30bfd91 message="watcher subscribe" path=/tmp/verify-OUJImN/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-16T08:47:27.698Z level=INFO run=e30bfd91 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:27.698Z level=INFO run=e30bfd91 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:27.698Z level=INFO run=e30bfd91 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:27.699Z level=INFO run=e30bfd91 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:27.699Z level=INFO run=e30bfd91 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:27.699Z level=INFO run=e30bfd91 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:27.699Z level=INFO run=e30bfd91 message="watcher subscribe" path=/tmp/verify-OUJImN type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:27.699Z level=INFO run=e30bfd91 message="watcher started" path=/tmp/verify-OUJImN type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:27.700Z level=INFO run=e30bfd91 message="watcher subscribe" path=/tmp/verify-OUJImN/u type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:47:27.700Z level=INFO run=e30bfd91 message="watcher started" path=/tmp/verify-OUJImN/u type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:47:27.721Z level=INFO run=e30bfd91 message="watcher started" path=/tmp/verify-OUJImN/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-16T08:47:27.731Z level=INFO run=e30bfd91 message="location services booted" directory=/tmp/verify-OUJImN/u workspaceID=undefined durationMs=58 http.span=59 role=server
+timestamp=2026-11-16T08:47:27.739Z level=INFO run=e30bfd91 msg="loading plugin" id=opencode-image-relay@0.0.3 entrypoint=file:///tmp/verify-OUJImN/u/cache/opencode/npm/opencode-image-relay@0.0.3/1794818846654/node_modules/opencode-image-relay/src/index.ts http.span=67 role=server
+timestamp=2026-11-16T08:47:27.740Z level=WARN run=e30bfd91 message="failed to load plugin" target=opencode-image-relay@0.0.3 ref=err_71488d9b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=68 role=server

@@ -1,0 +1,31 @@
+spec: @crixue/opencode-voice-stt@0.2.1
+apiNames: @crixue/opencode-voice-stt, opencode-voice-stt
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-UYGDKM/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38251
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:35.243Z level=INFO run=b240fee6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@crixue/opencode-voice-stt@0.2.1\"]" role=cli
+timestamp=2026-11-16T08:47:35.914Z level=INFO run=af71cc63 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:36.074Z level=INFO run=af71cc63 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:36.098Z level=INFO run=af71cc63 message="database schema bootstrap completed" migrations=59 durationMs=24 role=server
+timestamp=2026-11-16T08:47:36.473Z level=INFO run=af71cc63 message="watcher subscribe" path=/tmp/verify-UYGDKM/u/.config/opencode type=directory ignores=6 http.span=70 role=server
+timestamp=2026-11-16T08:47:36.482Z level=INFO run=af71cc63 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=79 role=server
+timestamp=2026-11-16T08:47:36.484Z level=INFO run=af71cc63 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=81 role=server
+timestamp=2026-11-16T08:47:36.484Z level=INFO run=af71cc63 message="watcher subscribe" path=/ type=entries ignores=0 http.span=81 role=server
+timestamp=2026-11-16T08:47:36.485Z level=INFO run=af71cc63 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=82 role=server
+timestamp=2026-11-16T08:47:36.486Z level=INFO run=af71cc63 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T08:47:36.486Z level=INFO run=af71cc63 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=83 role=server
+timestamp=2026-11-16T08:47:36.486Z level=INFO run=af71cc63 message="watcher subscribe" path=/tmp/verify-UYGDKM type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T08:47:36.486Z level=INFO run=af71cc63 message="watcher started" path=/tmp/verify-UYGDKM type=entries backend=node ignores=0 http.span=83 role=server
+timestamp=2026-11-16T08:47:36.487Z level=INFO run=af71cc63 message="watcher subscribe" path=/tmp/verify-UYGDKM/u type=entries ignores=0 http.span=84 role=server
+timestamp=2026-11-16T08:47:36.488Z level=INFO run=af71cc63 message="watcher started" path=/tmp/verify-UYGDKM/u type=entries backend=node ignores=0 http.span=85 role=server
+timestamp=2026-11-16T08:47:36.527Z level=INFO run=af71cc63 message="watcher started" path=/tmp/verify-UYGDKM/u/.config/opencode type=directory backend=inotify ignores=6 http.span=124 role=server
+timestamp=2026-11-16T08:47:36.543Z level=INFO run=af71cc63 message="location services booted" directory=/tmp/verify-UYGDKM/u workspaceID=undefined durationMs=138 http.span=140 role=server
+timestamp=2026-11-16T08:47:36.557Z level=INFO run=af71cc63 msg="loading plugin" id=@crixue/opencode-voice-stt@0.2.1 entrypoint=file:///tmp/verify-UYGDKM/u/cache/opencode/npm/@crixue/opencode-voice-stt@0.2.1/1794818855644/node_modules/@crixue/opencode-voice-stt/index.js http.span=154 role=server

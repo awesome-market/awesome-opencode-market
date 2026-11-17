@@ -1,0 +1,15 @@
+spec: @levra7/opencode-telegram-bot@0.20.7
+apiNames: @levra7/opencode-telegram-bot, opencode-telegram-bot
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-pjHzOv/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39593
+server password [redacted]
+Failed to start bot: Missing required environment variable: TELEGRAM_ADMIN_USER_ID (or legacy TELEGRAM_ALLOWED_USER_ID) (expected in /tmp/verify-pjHzOv/u/.env)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:14.265Z level=INFO run=5da57d87 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@levra7/opencode-telegram-bot@0.20.7\"]" role=cli

@@ -1,0 +1,56 @@
+spec: opencode-smart-voice-notify@1.4.0
+apiNames: opencode-smart-voice-notify
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Gb4vo5/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42851
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:30.267Z level=INFO run=7280ec58 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-smart-voice-notify@1.4.0\"]" role=cli
+timestamp=2026-11-16T02:54:45.142Z level=INFO run=01c9ce57 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:45.258Z level=INFO run=01c9ce57 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:45.268Z level=INFO run=01c9ce57 message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T02:54:45.375Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u/.config/opencode type=directory ignores=6 http.span=14 role=server
+timestamp=2026-11-16T02:54:45.377Z level=INFO run=01c9ce57 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T02:54:45.378Z level=INFO run=01c9ce57 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:54:45.378Z level=INFO run=01c9ce57 message="watcher subscribe" path=/ type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:54:45.378Z level=INFO run=01c9ce57 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:54:45.379Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:45.379Z level=INFO run=01c9ce57 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:45.379Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5 type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:45.379Z level=ERROR run=01c9ce57 message="failed to watch directory" path=/tmp/verify-Gb4vo5 error="Error: EACCES: permission denied, watch '/tmp/verify-Gb4vo5'" http.span=18 role=server
+timestamp=2026-11-16T02:54:45.380Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:54:45.380Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:54:45.395Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u/.config/opencode type=directory backend=inotify ignores=6 http.span=34 role=server
+timestamp=2026-11-16T02:54:45.406Z level=INFO run=01c9ce57 message="location services booted" directory=/tmp/verify-Gb4vo5/u workspaceID=undefined durationMs=45 http.span=45 role=server
+timestamp=2026-11-16T02:54:45.408Z level=INFO run=01c9ce57 msg="loading plugin" id=opencode-smart-voice-notify@1.4.0 entrypoint=file:///tmp/verify-Gb4vo5/u/cache/opencode/npm/opencode-smart-voice-notify@1.4.0/1794797685022/node_modules/opencode-smart-voice-notify/dist/index.js http.span=47 role=server
+timestamp=2026-11-16T02:54:45.431Z level=WARN run=01c9ce57 message="failed to load plugin" target=opencode-smart-voice-notify@1.4.0 ref=err_114ffbc7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=70 role=server
+timestamp=2026-11-16T02:54:45.813Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5 type=entries ignores=0 http.span=452 role=server
+timestamp=2026-11-16T02:54:45.814Z level=ERROR run=01c9ce57 message="failed to watch directory" path=/tmp/verify-Gb4vo5 error="Error: EACCES: permission denied, watch '/tmp/verify-Gb4vo5'" http.span=453 role=server
+timestamp=2026-11-16T02:54:45.817Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:45.818Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:45.818Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:45.818Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:45.828Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:54:45.828Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:45.828Z level=INFO run=01c9ce57 message="watcher subscribe" path=/tmp/verify-Gb4vo5/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:54:45.828Z level=INFO run=01c9ce57 message="watcher started" path=/tmp/verify-Gb4vo5/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:45.840Z level=INFO run=01c9ce57 message=event event.id=evt_1e2474c50001boiXjS3qIh7IG8 event.created=1794797685840 event.type=provider.updated event.location.directory=/tmp/verify-Gb4vo5/u event.location.workspaceID=undefined event.data={} http.span=479 role=server
+timestamp=2026-11-16T02:54:45.846Z level=INFO run=01c9ce57 message=event event.id=evt_1e2474c56001yHLkZPWmjor4bH event.created=1794797685846 event.type=model.updated event.location.directory=/tmp/verify-Gb4vo5/u event.location.workspaceID=undefined event.data={} http.span=485 role=server
+timestamp=2026-11-16T02:54:45.848Z level=INFO run=01c9ce57 message=event event.id=evt_1e2474c57001Bedb4IkJD2L5fm event.created=1794797685847 event.type=agent.updated event.location.directory=/tmp/verify-Gb4vo5/u event.location.workspaceID=undefined event.data={} http.span=487 role=server
+timestamp=2026-11-16T02:54:45.848Z level=INFO run=01c9ce57 message=event event.id=evt_1e2474c58001Dl1it4YRhwcJOU event.created=1794797685848 event.type=command.updated event.location.directory=/tmp/verify-Gb4vo5/u event.location.workspaceID=undefined event.data={} http.span=487 role=server
+timestamp=2026-11-16T02:54:45.960Z level=INFO run=01c9ce57 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:54:45.960Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:54:45.960Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:54:45.962Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:45.963Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:45.973Z level=INFO run=01c9ce57 message="watcher stopped" path=/etc type=entries http.span=612 role=server
+timestamp=2026-11-16T02:54:45.973Z level=INFO run=01c9ce57 message="watcher stopped" path=/ type=entries http.span=612 role=server
+timestamp=2026-11-16T02:54:45.973Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp type=entries http.span=612 role=server
+timestamp=2026-11-16T02:54:45.973Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u type=entries http.span=612 role=server
+timestamp=2026-11-16T02:54:45.974Z level=INFO run=01c9ce57 message="watcher stopped" path=/tmp/verify-Gb4vo5/u/.config/opencode type=directory http.span=613 role=server

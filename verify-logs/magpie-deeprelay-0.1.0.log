@@ -1,0 +1,32 @@
+spec: magpie-deeprelay@0.1.0
+apiNames: magpie-deeprelay
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-gj9T6n/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34241
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:02.257Z level=INFO run=9aafd032 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-deeprelay@0.1.0\"]" role=cli
+timestamp=2026-11-16T10:13:02.834Z level=INFO run=3dfa02b6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:03.327Z level=INFO run=3dfa02b6 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:03.390Z level=INFO run=3dfa02b6 message="database schema bootstrap completed" migrations=59 durationMs=63 role=server
+timestamp=2026-11-16T10:13:03.691Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/tmp/verify-gj9T6n/u/.config/opencode type=directory ignores=6 http.span=25 role=server
+timestamp=2026-11-16T10:13:03.694Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:03.694Z level=INFO run=3dfa02b6 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:03.695Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/ type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:03.695Z level=INFO run=3dfa02b6 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:03.695Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:03.695Z level=INFO run=3dfa02b6 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:03.696Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/tmp/verify-gj9T6n type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:03.696Z level=INFO run=3dfa02b6 message="watcher started" path=/tmp/verify-gj9T6n type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:03.696Z level=INFO run=3dfa02b6 message="watcher subscribe" path=/tmp/verify-gj9T6n/u type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:03.696Z level=INFO run=3dfa02b6 message="watcher started" path=/tmp/verify-gj9T6n/u type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:03.720Z level=INFO run=3dfa02b6 message="watcher started" path=/tmp/verify-gj9T6n/u/.config/opencode type=directory backend=inotify ignores=6 http.span=54 role=server
+timestamp=2026-11-16T10:13:03.730Z level=INFO run=3dfa02b6 message="location services booted" directory=/tmp/verify-gj9T6n/u workspaceID=undefined durationMs=63 http.span=64 role=server
+timestamp=2026-11-16T10:13:03.749Z level=INFO run=3dfa02b6 msg="loading plugin" id=magpie-deeprelay@0.1.0 entrypoint=file:///tmp/verify-gj9T6n/u/cache/opencode/npm/magpie-deeprelay@0.1.0/1794823982439/node_modules/magpie-deeprelay/index.mjs http.span=83 role=server
+timestamp=2026-11-16T10:13:03.751Z level=WARN run=3dfa02b6 message="failed to load plugin" target=magpie-deeprelay@0.1.0 ref=err_39aaf7a1 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=85 role=server

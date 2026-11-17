@@ -1,0 +1,57 @@
+spec: cortico-world-opencode-quota@0.2.4
+apiNames: cortico-world-opencode-quota
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-W2oy0m/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36521
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:00.864Z level=INFO run=5b4cf4e8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"cortico-world-opencode-quota@0.2.4\"]" role=cli
+timestamp=2026-11-16T02:53:01.598Z level=INFO run=86c0b500 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:01.966Z level=INFO run=86c0b500 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:01.988Z level=INFO run=86c0b500 message="database schema bootstrap completed" migrations=59 durationMs=23 role=server
+timestamp=2026-11-16T02:53:02.457Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u/.config/opencode type=directory ignores=6 http.span=88 role=server
+timestamp=2026-11-16T02:53:02.462Z level=INFO run=86c0b500 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=93 role=server
+timestamp=2026-11-16T02:53:02.462Z level=INFO run=86c0b500 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-16T02:53:02.463Z level=INFO run=86c0b500 message="watcher subscribe" path=/ type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T02:53:02.463Z level=INFO run=86c0b500 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=94 role=server
+timestamp=2026-11-16T02:53:02.463Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T02:53:02.464Z level=INFO run=86c0b500 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=95 role=server
+timestamp=2026-11-16T02:53:02.464Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m type=entries ignores=0 http.span=95 role=server
+timestamp=2026-11-16T02:53:02.465Z level=ERROR run=86c0b500 message="failed to watch directory" path=/tmp/verify-W2oy0m error="Error: EACCES: permission denied, watch '/tmp/verify-W2oy0m'" http.span=96 role=server
+timestamp=2026-11-16T02:53:02.466Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u type=entries ignores=0 http.span=97 role=server
+timestamp=2026-11-16T02:53:02.466Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u type=entries backend=node ignores=0 http.span=97 role=server
+timestamp=2026-11-16T02:53:02.505Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u/.config/opencode type=directory backend=inotify ignores=6 http.span=136 role=server
+timestamp=2026-11-16T02:53:02.549Z level=INFO run=86c0b500 msg="loading plugin" id=cortico-world-opencode-quota@0.2.4 entrypoint=file:///tmp/verify-W2oy0m/u/cache/opencode/npm/cortico-world-opencode-quota@0.2.4/1794797581153/node_modules/cortico-world-opencode-quota/src/index.ts http.span=180 role=server
+timestamp=2026-11-16T02:53:02.552Z level=WARN run=86c0b500 message="failed to load plugin" target=cortico-world-opencode-quota@0.2.4 ref=err_937997a2 cause="Cause([Die(ResolveMessage: Cannot find package 'cortico' imported from /tmp/verify-W2oy0m/u/cache/opencode/npm/cortico-world-opencode-quota@0.2.4/1794797581153/node_modules/cortico-world-opencode-quota/src/definition.ts)])" http.span=183 role=server
+timestamp=2026-11-16T02:53:02.572Z level=INFO run=86c0b500 message="location services booted" directory=/tmp/verify-W2oy0m/u workspaceID=undefined durationMs=202 http.span=203 role=server
+timestamp=2026-11-16T02:53:03.926Z level=ERROR run=86c0b500 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1557 role=server
+timestamp=2026-11-16T02:53:04.080Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m type=entries ignores=0 http.span=1711 role=server
+timestamp=2026-11-16T02:53:04.081Z level=ERROR run=86c0b500 message="failed to watch directory" path=/tmp/verify-W2oy0m error="Error: EACCES: permission denied, watch '/tmp/verify-W2oy0m'" http.span=1712 role=server
+timestamp=2026-11-16T02:53:04.083Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:04.084Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:04.084Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:04.084Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:04.130Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:53:04.130Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:04.131Z level=INFO run=86c0b500 message="watcher subscribe" path=/tmp/verify-W2oy0m/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:53:04.131Z level=INFO run=86c0b500 message="watcher started" path=/tmp/verify-W2oy0m/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:04.200Z level=INFO run=86c0b500 message=event event.id=evt_1e245bf48001gBSBQhHb4e5lpq event.created=1794797584200 event.type=provider.updated event.location.directory=/tmp/verify-W2oy0m/u event.location.workspaceID=undefined event.data={} http.span=1831 role=server
+timestamp=2026-11-16T02:53:04.219Z level=INFO run=86c0b500 message=event event.id=evt_1e245bf5b001eLRR07tRHXEwGG event.created=1794797584219 event.type=model.updated event.location.directory=/tmp/verify-W2oy0m/u event.location.workspaceID=undefined event.data={} http.span=1850 role=server
+timestamp=2026-11-16T02:53:04.223Z level=INFO run=86c0b500 message=event event.id=evt_1e245bf5f001xN6q503R6fa3Fq event.created=1794797584223 event.type=agent.updated event.location.directory=/tmp/verify-W2oy0m/u event.location.workspaceID=undefined event.data={} http.span=1854 role=server
+timestamp=2026-11-16T02:53:04.224Z level=INFO run=86c0b500 message=event event.id=evt_1e245bf60001Yr1poNOZ8y415W event.created=1794797584224 event.type=command.updated event.location.directory=/tmp/verify-W2oy0m/u event.location.workspaceID=undefined event.data={} http.span=1855 role=server
+timestamp=2026-11-16T02:53:04.611Z level=INFO run=86c0b500 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:53:04.611Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:53:04.611Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:53:04.617Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:04.617Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:04.642Z level=INFO run=86c0b500 message="watcher stopped" path=/etc type=entries http.span=2273 role=server
+timestamp=2026-11-16T02:53:04.643Z level=INFO run=86c0b500 message="watcher stopped" path=/ type=entries http.span=2274 role=server
+timestamp=2026-11-16T02:53:04.643Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp type=entries http.span=2274 role=server
+timestamp=2026-11-16T02:53:04.643Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u type=entries http.span=2274 role=server
+timestamp=2026-11-16T02:53:04.644Z level=INFO run=86c0b500 message="watcher stopped" path=/tmp/verify-W2oy0m/u/.config/opencode type=directory http.span=2275 role=server

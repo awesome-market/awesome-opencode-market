@@ -1,0 +1,40 @@
+spec: alchemylab@3.6.0
+apiNames: alchemylab
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-mHS5ih/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33427
+server password [redacted]
+
+=== MCP STARTUP DIAGNOSTICS ===
+Script path (process.argv[1]): /$bunfs/root/opencode
+Base directory: /tmp/verify-mHS5ih/u/serve
+ENABLE_DEBUG_TOOLS env: undefined
+DEBUG_LOGGING env: undefined
+isDevBuild(): false
+isDebugToolsEnabled(): false
+===============================
+
+2026-11-17T08:31:28.930Z [[31merror[39m]: Failed to start HTTP API server {"service":"mcp-http-server","error":"RangeError: options.port should be >= 0 and < 65536. Received NaN\n    at validatePort (unknown)\n    at listen (node:net:2194:19)\n    at <anonymous> (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:15343:84)\n    at new Promise (native:1:11)\n    at r (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:15342:26)\n    at <anonymous> (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:15345:10)\n    at <anonymous> (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:6974:19)\n    at 25992 (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:6990:1353)\n    at e (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:4:13)\n    at 28156 (/tmp/verify-mHS5ih/u/cache/opencode/npm/alchemylab@3.6.0/1794904287088/node_modules/alchemylab/dist/index.js:7014:123)"}
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T08:31:24.813Z level=INFO run=6df75632 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"alchemylab@3.6.0\"]" role=cli
+timestamp=2026-11-17T08:31:27.463Z level=INFO run=b65bd0cf message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T08:31:27.867Z level=INFO run=b65bd0cf message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T08:31:27.910Z level=INFO run=b65bd0cf message="database schema bootstrap completed" migrations=59 durationMs=43 role=server
+timestamp=2026-11-17T08:31:28.385Z level=INFO run=b65bd0cf message="watcher subscribe" path=/tmp/verify-mHS5ih/u/.config/opencode type=directory ignores=6 http.span=60 role=server
+timestamp=2026-11-17T08:31:28.392Z level=INFO run=b65bd0cf message="watcher subscribe" path=/etc type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-17T08:31:28.392Z level=INFO run=b65bd0cf message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-17T08:31:28.393Z level=INFO run=b65bd0cf message="watcher subscribe" path=/ type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-17T08:31:28.393Z level=INFO run=b65bd0cf message="watcher started" path=/ type=entries backend=node ignores=0 http.span=68 role=server
+timestamp=2026-11-17T08:31:28.393Z level=INFO run=b65bd0cf message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-17T08:31:28.394Z level=INFO run=b65bd0cf message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-17T08:31:28.394Z level=INFO run=b65bd0cf message="watcher subscribe" path=/tmp/verify-mHS5ih type=entries ignores=0 http.span=69 role=server
+timestamp=2026-11-17T08:31:28.394Z level=INFO run=b65bd0cf message="watcher started" path=/tmp/verify-mHS5ih type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-17T08:31:28.394Z level=INFO run=b65bd0cf message="watcher subscribe" path=/tmp/verify-mHS5ih/u type=entries ignores=0 http.span=69 role=server
+timestamp=2026-11-17T08:31:28.394Z level=INFO run=b65bd0cf message="watcher started" path=/tmp/verify-mHS5ih/u type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-17T08:31:28.437Z level=INFO run=b65bd0cf message="watcher started" path=/tmp/verify-mHS5ih/u/.config/opencode type=directory backend=inotify ignores=6 http.span=112 role=server

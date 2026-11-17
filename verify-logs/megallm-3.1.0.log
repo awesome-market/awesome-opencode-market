@@ -1,0 +1,35 @@
+spec: megallm@3.1.0
+apiNames: megallm
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-lzuhLv/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36297
+server password [redacted]
+
+
+👋 Setup terminated.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:23.891Z level=INFO run=053baa46 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"megallm@3.1.0\"]" role=cli
+timestamp=2026-11-16T10:13:32.152Z level=INFO run=e6754819 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:32.862Z level=INFO run=e6754819 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:32.923Z level=INFO run=e6754819 message="database schema bootstrap completed" migrations=59 durationMs=61 role=server
+timestamp=2026-11-16T10:13:33.431Z level=INFO run=e6754819 message="watcher subscribe" path=/tmp/verify-lzuhLv/u/.config/opencode type=directory ignores=6 http.span=72 role=server
+timestamp=2026-11-16T10:13:33.435Z level=INFO run=e6754819 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-16T10:13:33.436Z level=INFO run=e6754819 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=77 role=server
+timestamp=2026-11-16T10:13:33.436Z level=INFO run=e6754819 message="watcher subscribe" path=/ type=entries ignores=0 http.span=77 role=server
+timestamp=2026-11-16T10:13:33.437Z level=INFO run=e6754819 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=78 role=server
+timestamp=2026-11-16T10:13:33.437Z level=INFO run=e6754819 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=78 role=server
+timestamp=2026-11-16T10:13:33.437Z level=INFO run=e6754819 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=78 role=server
+timestamp=2026-11-16T10:13:33.437Z level=INFO run=e6754819 message="watcher subscribe" path=/tmp/verify-lzuhLv type=entries ignores=0 http.span=78 role=server
+timestamp=2026-11-16T10:13:33.438Z level=INFO run=e6754819 message="watcher started" path=/tmp/verify-lzuhLv type=entries backend=node ignores=0 http.span=79 role=server
+timestamp=2026-11-16T10:13:33.438Z level=INFO run=e6754819 message="watcher subscribe" path=/tmp/verify-lzuhLv/u type=entries ignores=0 http.span=79 role=server
+timestamp=2026-11-16T10:13:33.441Z level=INFO run=e6754819 message="watcher started" path=/tmp/verify-lzuhLv/u type=entries backend=node ignores=0 http.span=82 role=server
+timestamp=2026-11-16T10:13:33.484Z level=INFO run=e6754819 message="watcher started" path=/tmp/verify-lzuhLv/u/.config/opencode type=directory backend=inotify ignores=6 http.span=125 role=server
+timestamp=2026-11-16T10:13:33.515Z level=INFO run=e6754819 message="location services booted" directory=/tmp/verify-lzuhLv/u workspaceID=undefined durationMs=155 http.span=156 role=server
+timestamp=2026-11-16T10:13:33.529Z level=INFO run=e6754819 msg="loading plugin" id=megallm@3.1.0 entrypoint=file:///tmp/verify-lzuhLv/u/cache/opencode/npm/megallm@3.1.0/1794824011804/node_modules/megallm/src/cli.js http.span=170 role=server
+timestamp=2026-11-16T10:13:33.700Z level=WARN run=e6754819 message="failed to load plugin" target=megallm@3.1.0 ref=err_862ea529 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=341 role=server

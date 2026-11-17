@@ -1,0 +1,16 @@
+spec: bg-tasks-mcp@0.8.0
+apiNames: bg-tasks-mcp
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-X8eVcR/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41587
+server password [redacted]
+[bg-tasks] Error: unknown argument "serve"
+Run with --help for usage.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:53:58.500Z level=INFO run=86f257f3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"bg-tasks-mcp@0.8.0\"]" role=cli

@@ -1,0 +1,39 @@
+spec: codemax-opencode-setup@1.1.0
+apiNames: codemax-opencode-setup
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-QjrdYx/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44821
+server password [redacted]
+
+  [36m╔══════════════════════════════════════════╗[0m
+  [36m║     [1mCodeMax × OpenCode Setup[0m[36m            ║[0m
+  [36m╚══════════════════════════════════════════╝[0m
+
+  [36m[1/4] Validating API key...[0m
+  [33m⚠ Could not reach server: ECONNREFUSED: Unable to connect. Is the computer able to access the url?[0m
+  [33mContinue anyway? (y/n): [0m
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:34.892Z level=INFO run=d0e01176 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"codemax-opencode-setup@1.1.0\"]" role=cli
+timestamp=2026-11-16T08:47:35.536Z level=INFO run=d2c4c22c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:35.757Z level=INFO run=d2c4c22c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:35.798Z level=INFO run=d2c4c22c message="database schema bootstrap completed" migrations=59 durationMs=41 role=server
+timestamp=2026-11-16T08:47:36.173Z level=INFO run=d2c4c22c message="watcher subscribe" path=/tmp/verify-QjrdYx/u/.config/opencode type=directory ignores=6 http.span=53 role=server
+timestamp=2026-11-16T08:47:36.177Z level=INFO run=d2c4c22c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:47:36.177Z level=INFO run=d2c4c22c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:47:36.178Z level=INFO run=d2c4c22c message="watcher subscribe" path=/ type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:36.178Z level=INFO run=d2c4c22c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:36.178Z level=INFO run=d2c4c22c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:36.179Z level=INFO run=d2c4c22c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:36.179Z level=INFO run=d2c4c22c message="watcher subscribe" path=/tmp/verify-QjrdYx type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:36.179Z level=INFO run=d2c4c22c message="watcher started" path=/tmp/verify-QjrdYx type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:36.179Z level=INFO run=d2c4c22c message="watcher subscribe" path=/tmp/verify-QjrdYx/u type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:36.179Z level=INFO run=d2c4c22c message="watcher started" path=/tmp/verify-QjrdYx/u type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:36.203Z level=INFO run=d2c4c22c message="watcher started" path=/tmp/verify-QjrdYx/u/.config/opencode type=directory backend=inotify ignores=6 http.span=83 role=server
+timestamp=2026-11-16T08:47:36.219Z level=INFO run=d2c4c22c message="location services booted" directory=/tmp/verify-QjrdYx/u workspaceID=undefined durationMs=98 http.span=99 role=server
+timestamp=2026-11-16T08:47:36.223Z level=INFO run=d2c4c22c msg="loading plugin" id=codemax-opencode-setup@1.1.0 entrypoint=file:///tmp/verify-QjrdYx/u/cache/opencode/npm/codemax-opencode-setup@1.1.0/1794818855154/node_modules/codemax-opencode-setup/index.js http.span=103 role=server
+timestamp=2026-11-16T08:47:36.229Z level=WARN run=d2c4c22c message="failed to load plugin" target=codemax-opencode-setup@1.1.0 ref=err_69eb89c1 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=109 role=server

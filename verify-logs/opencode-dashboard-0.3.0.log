@@ -1,0 +1,48 @@
+spec: opencode-dashboard@0.3.0
+apiNames: opencode-dashboard
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-mwyYbc/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45375
+server password [redacted]
+[dashboard-server] Running on http://localhost:3333
+[dashboard-server] PID: 3586
+[dashboard-server] Idle auto-shutdown timeout: 300000ms
+[dashboard-server] Build hash: 3cfaf3d5dc82
+[dashboard-server] Endpoints:
+  POST   /api/plugin/register
+  POST   /api/plugin/event
+  POST   /api/plugin/heartbeat
+  DELETE /api/plugin/:id
+  GET    /api/state
+  GET    /api/events
+  GET    /api/health
+[server] No plugins or clients connected. Auto-shutdown in 300s...
+
+[dashboard-server] Shutting down...
+[dashboard-server] Server stopped.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:35.808Z level=INFO run=7c00b038 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-dashboard@0.3.0\"]" role=cli
+timestamp=2026-11-16T09:37:39.785Z level=INFO run=42fd6ea7 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:40.313Z level=INFO run=42fd6ea7 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:40.335Z level=INFO run=42fd6ea7 message="database schema bootstrap completed" migrations=59 durationMs=22 role=server
+timestamp=2026-11-16T09:37:40.476Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/tmp/verify-mwyYbc/u/.config/opencode type=directory ignores=6 http.span=12 role=server
+timestamp=2026-11-16T09:37:40.479Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T09:37:40.479Z level=INFO run=42fd6ea7 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T09:37:40.479Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/ type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T09:37:40.479Z level=INFO run=42fd6ea7 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/tmp/verify-mwyYbc type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher started" path=/tmp/verify-mwyYbc type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher subscribe" path=/tmp/verify-mwyYbc/u type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.480Z level=INFO run=42fd6ea7 message="watcher started" path=/tmp/verify-mwyYbc/u type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T09:37:40.492Z level=INFO run=42fd6ea7 message="watcher started" path=/tmp/verify-mwyYbc/u/.config/opencode type=directory backend=inotify ignores=6 http.span=28 role=server
+timestamp=2026-11-16T09:37:40.497Z level=INFO run=42fd6ea7 message="location services booted" directory=/tmp/verify-mwyYbc/u workspaceID=undefined durationMs=32 http.span=33 role=server
+timestamp=2026-11-16T09:37:40.504Z level=INFO run=42fd6ea7 msg="loading plugin" id=opencode-dashboard@0.3.0 entrypoint=file:///tmp/verify-mwyYbc/u/cache/opencode/npm/opencode-dashboard@0.3.0/1794821859594/node_modules/opencode-dashboard/server/index.ts http.span=40 role=server
+timestamp=2026-11-16T09:37:40.511Z level=WARN run=42fd6ea7 message="failed to load plugin" target=opencode-dashboard@0.3.0 ref=err_3d4d49d5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=47 role=server

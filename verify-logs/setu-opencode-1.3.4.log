@@ -1,0 +1,32 @@
+spec: setu-opencode@1.3.4
+apiNames: setu-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-uytVhQ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33261
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:21.023Z level=INFO run=2af692f4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"setu-opencode@1.3.4\"]" role=cli
+timestamp=2026-11-16T12:05:25.898Z level=INFO run=7fc25f40 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:26.183Z level=INFO run=7fc25f40 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:26.210Z level=INFO run=7fc25f40 message="database schema bootstrap completed" migrations=59 durationMs=27 role=server
+timestamp=2026-11-16T12:05:26.386Z level=INFO run=7fc25f40 message="watcher subscribe" path=/tmp/verify-uytVhQ/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T12:05:26.388Z level=INFO run=7fc25f40 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T12:05:26.389Z level=INFO run=7fc25f40 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T12:05:26.389Z level=INFO run=7fc25f40 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T12:05:26.389Z level=INFO run=7fc25f40 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher subscribe" path=/tmp/verify-uytVhQ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher started" path=/tmp/verify-uytVhQ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher subscribe" path=/tmp/verify-uytVhQ/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.390Z level=INFO run=7fc25f40 message="watcher started" path=/tmp/verify-uytVhQ/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:26.403Z level=INFO run=7fc25f40 message="watcher started" path=/tmp/verify-uytVhQ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=33 role=server
+timestamp=2026-11-16T12:05:26.415Z level=INFO run=7fc25f40 message="location services booted" directory=/tmp/verify-uytVhQ/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T12:05:26.417Z level=INFO run=7fc25f40 msg="loading plugin" id=setu-opencode@1.3.4 entrypoint=file:///tmp/verify-uytVhQ/u/cache/opencode/npm/setu-opencode@1.3.4/1794830725689/node_modules/setu-opencode/dist/index.js http.span=47 role=server
+timestamp=2026-11-16T12:05:26.452Z level=WARN run=7fc25f40 message="failed to load plugin" target=setu-opencode@1.3.4 ref=err_0e0ba4a4 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=82 role=server

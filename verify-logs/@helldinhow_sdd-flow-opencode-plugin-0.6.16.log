@@ -1,0 +1,32 @@
+spec: @helldinhow/sdd-flow-opencode-plugin@0.6.16
+apiNames: @helldinhow/sdd-flow-opencode-plugin, sdd-flow-opencode-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-KmsdsB/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44643
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:39.736Z level=INFO run=83c78c18 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@helldinhow/sdd-flow-opencode-plugin@0.6.16\"]" role=cli
+timestamp=2026-11-16T09:37:42.748Z level=INFO run=8db06a7c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:42.972Z level=INFO run=8db06a7c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:43.018Z level=INFO run=8db06a7c message="database schema bootstrap completed" migrations=59 durationMs=46 role=server
+timestamp=2026-11-16T09:37:43.397Z level=INFO run=8db06a7c message="watcher subscribe" path=/tmp/verify-KmsdsB/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T09:37:43.400Z level=INFO run=8db06a7c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T09:37:43.400Z level=INFO run=8db06a7c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T09:37:43.400Z level=INFO run=8db06a7c message="watcher subscribe" path=/ type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T09:37:43.400Z level=INFO run=8db06a7c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher subscribe" path=/tmp/verify-KmsdsB type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher started" path=/tmp/verify-KmsdsB type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher subscribe" path=/tmp/verify-KmsdsB/u type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.401Z level=INFO run=8db06a7c message="watcher started" path=/tmp/verify-KmsdsB/u type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T09:37:43.419Z level=INFO run=8db06a7c message="watcher started" path=/tmp/verify-KmsdsB/u/.config/opencode type=directory backend=inotify ignores=6 http.span=48 role=server
+timestamp=2026-11-16T09:37:43.428Z level=INFO run=8db06a7c message="location services booted" directory=/tmp/verify-KmsdsB/u workspaceID=undefined durationMs=57 http.span=57 role=server
+timestamp=2026-11-16T09:37:43.436Z level=INFO run=8db06a7c msg="loading plugin" id=@helldinhow/sdd-flow-opencode-plugin@0.6.16 entrypoint=file:///tmp/verify-KmsdsB/u/cache/opencode/npm/@helldinhow/sdd-flow-opencode-plugin@0.6.16/1794821862338/node_modules/@helldinhow/sdd-flow-opencode-plugin/plugin/sdd.ts http.span=65 role=server
+timestamp=2026-11-16T09:37:43.439Z level=WARN run=8db06a7c message="failed to load plugin" target=@helldinhow/sdd-flow-opencode-plugin@0.6.16 ref=err_1621df91 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=68 role=server

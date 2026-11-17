@@ -1,0 +1,55 @@
+spec: opencode-agy@0.14.0
+apiNames: opencode-agy
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-pzvRNS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40671
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:48:34.967Z level=INFO run=b552c4a6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-agy@0.14.0\"]" role=cli
+timestamp=2026-11-16T08:48:40.725Z level=INFO run=c88b0250 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:48:40.858Z level=INFO run=c88b0250 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:48:40.868Z level=INFO run=c88b0250 message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T08:48:41.200Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T08:48:41.203Z level=INFO run=c88b0250 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:48:41.203Z level=INFO run=c88b0250 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:48:41.203Z level=INFO run=c88b0250 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:48:41.203Z level=INFO run=c88b0250 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.204Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:48:41.219Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=35 role=server
+timestamp=2026-11-16T08:48:41.228Z level=INFO run=c88b0250 message="location services booted" directory=/tmp/verify-pzvRNS/u workspaceID=undefined durationMs=43 http.span=44 role=server
+timestamp=2026-11-16T08:48:41.233Z level=INFO run=c88b0250 msg="loading plugin" id=opencode-agy@0.14.0 entrypoint=file:///tmp/verify-pzvRNS/u/cache/opencode/npm/opencode-agy@0.14.0/1794818920586/node_modules/opencode-agy/dist/index.js http.span=49 role=server
+timestamp=2026-11-16T08:48:41.244Z level=WARN run=c88b0250 message="failed to load plugin" target=opencode-agy@0.14.0 ref=err_a55f9ff6 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=60 role=server
+timestamp=2026-11-16T08:48:41.664Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:41.665Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:41.665Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:48:41.665Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:41.676Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:48:41.676Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:41.677Z level=INFO run=c88b0250 message="watcher subscribe" path=/tmp/verify-pzvRNS/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:48:41.677Z level=INFO run=c88b0250 message="watcher started" path=/tmp/verify-pzvRNS/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:48:41.694Z level=INFO run=c88b0250 message=event event.id=evt_1e38b54de001AsCVSNi0M5jhLG event.created=1794818921694 event.type=provider.updated event.location.directory=/tmp/verify-pzvRNS/u event.location.workspaceID=undefined event.data={} http.span=510 role=server
+timestamp=2026-11-16T08:48:41.702Z level=INFO run=c88b0250 message=event event.id=evt_1e38b54e6001GRwLk9gwUuDm0e event.created=1794818921702 event.type=model.updated event.location.directory=/tmp/verify-pzvRNS/u event.location.workspaceID=undefined event.data={} http.span=518 role=server
+timestamp=2026-11-16T08:48:41.703Z level=INFO run=c88b0250 message=event event.id=evt_1e38b54e700137f8Zy8O18Jc0Z event.created=1794818921703 event.type=agent.updated event.location.directory=/tmp/verify-pzvRNS/u event.location.workspaceID=undefined event.data={} http.span=519 role=server
+timestamp=2026-11-16T08:48:41.704Z level=INFO run=c88b0250 message=event event.id=evt_1e38b54e8001KJ3MqeF3qvYcLl event.created=1794818921704 event.type=command.updated event.location.directory=/tmp/verify-pzvRNS/u event.location.workspaceID=undefined event.data={} http.span=520 role=server
+timestamp=2026-11-16T08:48:41.768Z level=INFO run=c88b0250 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:48:41.768Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:48:41.768Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:48:41.771Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:41.771Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:48:41.781Z level=INFO run=c88b0250 message="watcher stopped" path=/etc type=entries http.span=597 role=server
+timestamp=2026-11-16T08:48:41.781Z level=INFO run=c88b0250 message="watcher stopped" path=/ type=entries http.span=597 role=server
+timestamp=2026-11-16T08:48:41.781Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp type=entries http.span=597 role=server
+timestamp=2026-11-16T08:48:41.781Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS type=entries http.span=597 role=server
+timestamp=2026-11-16T08:48:41.781Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u type=entries http.span=597 role=server
+timestamp=2026-11-16T08:48:41.783Z level=INFO run=c88b0250 message="watcher stopped" path=/tmp/verify-pzvRNS/u/.config/opencode type=directory http.span=599 role=server

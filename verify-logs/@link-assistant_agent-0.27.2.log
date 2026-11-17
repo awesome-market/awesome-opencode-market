@@ -1,0 +1,373 @@
+spec: @link-assistant/agent@0.27.2
+apiNames: @link-assistant/agent, agent
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-UoOA0m/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34051
+server password [redacted]
+{
+  "type": "config",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.619Z",
+  "service": "default",
+  "source": "lino-arguments (CLI args > env vars > .lenv > defaults)",
+  "config": {
+    "verbose": false,
+    "dryRun": false,
+    "generateTitle": false,
+    "outputResponseModel": true,
+    "summarizeSession": true,
+    "retryOnRateLimits": true,
+    "compactJson": false,
+    "disableAutoupdate": false,
+    "disablePrune": false,
+    "enableExperimentalModels": false,
+    "disableAutocompact": false,
+    "experimental": false,
+    "experimentalWatcher": false,
+    "retryTimeout": 604800,
+    "maxRetryDelay": 1200,
+    "minRetryInterval": 30,
+    "streamChunkTimeoutMs": 120000,
+    "streamStepTimeoutMs": 600000,
+    "mcpDefaultToolCallTimeout": 120000,
+    "mcpMaxToolCallTimeout": 600000,
+    "verifyImagesAtReadTool": true,
+    "readOnly": false,
+    "permissionMode": "auto",
+    "bashShell": "auto",
+    "legacyToolOutput": false,
+    "legacyEditMatching": false,
+    "globFollowSymlinks": false,
+    "grepHidden": true,
+    "grepTimeoutMs": 30000,
+    "readMaxLines": 2000,
+    "readMaxBytes": 51200,
+    "legacyErrorNames": false,
+    "legacyTokenUsage": false,
+    "legacyLoopExit": false,
+    "mcpConnectTimeout": 30000
+  },
+  "message": "Agent configuration resolved"
+}
+
+{
+  "type": "status",
+  "mode": "stdin-stream",
+  "message": "Agent CLI in continuous listening mode. Accepts JSON and plain text input.",
+  "hint": "Press CTRL+C to exit. Use --help for options.",
+  "acceptedFormats": [
+    "JSON object with \"message\" field",
+    "Plain text"
+  ],
+  "options": {
+    "inputFormat": "text",
+    "interactive": true,
+    "autoMergeQueuedMessages": true,
+    "alwaysAcceptStdin": true,
+    "compactJson": false
+  }
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.619Z",
+  "service": "default",
+  "version": "0.27.2",
+  "command": "bun /$bunfs/root/opencode serve --port 0",
+  "workingDirectory": "/tmp/verify-UoOA0m/u",
+  "scriptPath": "/tmp/verify-UoOA0m/u/cache/opencode/npm/@link-assistant/agent@0.27.2/1794824006982/node_modules/@link-assistant/agent/src/index.js",
+  "message": "Agent started (continuous mode)"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.620Z",
+  "service": "default",
+  "directory": "/tmp/verify-UoOA0m/u",
+  "message": "creating instance"
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.620Z",
+  "service": "project",
+  "directory": "/tmp/verify-UoOA0m/u",
+  "message": "fromDirectory"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.623Z",
+  "service": "storage",
+  "index": 0,
+  "message": "running migration"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.625Z",
+  "service": "storage",
+  "index": 1,
+  "message": "running migration"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.628Z",
+  "service": "default",
+  "processArgv": [
+    "bun",
+    "/$bunfs/root/opencode",
+    "serve",
+    "--port",
+    "0"
+  ],
+  "bunArgv": [
+    "bun",
+    "/$bunfs/root/opencode",
+    "serve",
+    "--port",
+    "0"
+  ],
+  "cliModelArg": "(null - not found in argv)",
+  "yargsModel": "kilo/nemotron-3-ultra-free",
+  "message": "model resolution: argv sources"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.628Z",
+  "service": "default",
+  "rawModel": "kilo/nemotron-3-ultra-free",
+  "providerID": "kilo",
+  "modelID": "nemotron-3-ultra-free",
+  "message": "using explicit provider/model"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.630Z",
+  "service": "provider",
+  "status": "started",
+  "message": "state"
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.631Z",
+  "service": "config",
+  "path": "/tmp/verify-UoOA0m/u/.config/link-assistant-agent/config.json",
+  "message": "loading"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.632Z",
+  "service": "config",
+  "path": "/tmp/verify-UoOA0m/u/.config/link-assistant-agent/opencode.json",
+  "message": "loading"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.633Z",
+  "service": "config",
+  "path": "/tmp/verify-UoOA0m/u/.config/link-assistant-agent/opencode.jsonc",
+  "message": "loading"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.647Z",
+  "service": "models.dev",
+  "path": "/tmp/verify-UoOA0m/u/cache/link-assistant-agent/models.json",
+  "message": "no cache found, awaiting refresh"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.647Z",
+  "service": "models.dev",
+  "file": {},
+  "message": "refreshing"
+}
+
+{
+  "type": "log",
+  "level": "error",
+  "timestamp": "2026-11-16T10:13:28.649Z",
+  "service": "models.dev",
+  "error": {
+    "code": "ECONNREFUSED",
+    "path": "https://models.dev/api.json",
+    "errno": 0
+  },
+  "message": "Failed to fetch models.dev"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.649Z",
+  "service": "models.dev",
+  "path": "/tmp/verify-UoOA0m/u/cache/link-assistant-agent/models.json",
+  "message": "cache unavailable, using bundled data"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.650Z",
+  "service": "provider",
+  "status": "completed",
+  "duration": 20,
+  "message": "state"
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.650Z",
+  "service": "default",
+  "reason": "ECONNREFUSED: Unable to connect. Is the computer able to access the url?",
+  "message": "skipping model existence validation due to infrastructure error"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.651Z",
+  "service": "default",
+  "models": [
+    "kilo/nemotron-3-ultra-free",
+    "kilo/nemotron-3.5-lightning-free",
+    "same"
+  ],
+  "source": "default",
+  "message": "compaction models cascade configured"
+}
+
+{
+  "type": "model_resolved",
+  "timestamp": "2026-11-16T10:13:28.651Z",
+  "requested": null,
+  "selector": "kilo/nemotron-3-ultra-free",
+  "providerID": "kilo",
+  "modelID": "nemotron-3-ultra-free",
+  "source": "default",
+  "matchesRequest": true
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.664Z",
+  "service": "server",
+  "method": "POST",
+  "path": "/session",
+  "message": "request"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.665Z",
+  "service": "server",
+  "status": "started",
+  "method": "POST",
+  "path": "/session",
+  "message": "request"
+}
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.667Z",
+  "service": "session",
+  "id": "ses_e1c270c24ffehNe9wxo50VHeuU",
+  "version": "0.27.2",
+  "projectID": "global",
+  "directory": "/tmp/verify-UoOA0m/u",
+  "title": "New session - 2026-11-16T10:13:28.667Z",
+  "time": {
+    "created": 1794824008667,
+    "updated": 1794824008667
+  },
+  "message": "created"
+}
+
+{
+  "type": "session.created",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.668Z",
+  "service": "bus",
+  "message": "publishing"
+}
+
+{
+  "type": "session.updated",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.669Z",
+  "service": "bus",
+  "message": "publishing"
+}
+
+{
+  "type": "log",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.669Z",
+  "service": "server",
+  "status": "completed",
+  "duration": 4,
+  "method": "POST",
+  "path": "/session",
+  "message": "request"
+}
+{
+  "type": "*",
+  "level": "info",
+  "timestamp": "2026-11-16T10:13:28.670Z",
+  "service": "bus",
+  "message": "subscribing"
+}
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:07.515Z level=INFO run=dab9f554 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@link-assistant/agent@0.27.2\"]" role=cli
+timestamp=2026-11-16T10:13:27.253Z level=INFO run=38639cac message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:27.436Z level=INFO run=38639cac message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:27.504Z level=INFO run=38639cac message="database schema bootstrap completed" migrations=59 durationMs=68 role=server
+timestamp=2026-11-16T10:13:27.674Z level=INFO run=38639cac message="watcher subscribe" path=/tmp/verify-UoOA0m/u/.config/opencode type=directory ignores=6 http.span=24 role=server
+timestamp=2026-11-16T10:13:27.678Z level=INFO run=38639cac message="watcher subscribe" path=/etc type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:27.678Z level=INFO run=38639cac message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:27.679Z level=INFO run=38639cac message="watcher subscribe" path=/ type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:27.679Z level=INFO run=38639cac message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:27.679Z level=INFO run=38639cac message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T10:13:27.680Z level=INFO run=38639cac message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:27.680Z level=INFO run=38639cac message="watcher subscribe" path=/tmp/verify-UoOA0m type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:27.680Z level=INFO run=38639cac message="watcher started" path=/tmp/verify-UoOA0m type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:27.680Z level=INFO run=38639cac message="watcher subscribe" path=/tmp/verify-UoOA0m/u type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:27.680Z level=INFO run=38639cac message="watcher started" path=/tmp/verify-UoOA0m/u type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T10:13:27.706Z level=INFO run=38639cac message="watcher started" path=/tmp/verify-UoOA0m/u/.config/opencode type=directory backend=inotify ignores=6 http.span=56 role=server
+timestamp=2026-11-16T10:13:27.720Z level=INFO run=38639cac message="location services booted" directory=/tmp/verify-UoOA0m/u workspaceID=undefined durationMs=69 http.span=70 role=server
+timestamp=2026-11-16T10:13:27.728Z level=INFO run=38639cac msg="loading plugin" id=@link-assistant/agent@0.27.2 entrypoint=file:///tmp/verify-UoOA0m/u/cache/opencode/npm/@link-assistant/agent@0.27.2/1794824006982/node_modules/@link-assistant/agent/src/index.js http.span=78 role=server
+timestamp=2026-11-16T10:13:29.064Z level=ERROR run=38639cac message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1414 role=server
+timestamp=2026-11-16T10:13:47.741Z level=INFO run=38639cac message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/etc type=entries http.span=20093 role=server
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/ type=entries http.span=20093 role=server
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/tmp type=entries http.span=20093 role=server
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/tmp/verify-UoOA0m type=entries http.span=20093 role=server
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/tmp/verify-UoOA0m/u type=entries http.span=20093 role=server
+timestamp=2026-11-16T10:13:47.743Z level=INFO run=38639cac message="watcher stopped" path=/tmp/verify-UoOA0m/u/.config/opencode type=directory http.span=20093 role=server

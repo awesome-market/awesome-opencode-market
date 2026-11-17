@@ -1,0 +1,32 @@
+spec: rsih-opencode@0.2.0-preview.2
+apiNames: rsih-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-2Ba9oF/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35631
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:34.989Z level=INFO run=2e76f27a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"rsih-opencode@0.2.0-preview.2\"]" role=cli
+timestamp=2026-11-16T12:05:35.494Z level=INFO run=1a774c56 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:35.715Z level=INFO run=1a774c56 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:35.753Z level=INFO run=1a774c56 message="database schema bootstrap completed" migrations=59 durationMs=38 role=server
+timestamp=2026-11-16T12:05:35.970Z level=INFO run=1a774c56 message="watcher subscribe" path=/tmp/verify-2Ba9oF/u/.config/opencode type=directory ignores=6 http.span=42 role=server
+timestamp=2026-11-16T12:05:35.972Z level=INFO run=1a774c56 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T12:05:35.973Z level=INFO run=1a774c56 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T12:05:35.973Z level=INFO run=1a774c56 message="watcher subscribe" path=/ type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T12:05:35.974Z level=INFO run=1a774c56 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T12:05:35.974Z level=INFO run=1a774c56 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T12:05:35.974Z level=INFO run=1a774c56 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T12:05:35.974Z level=INFO run=1a774c56 message="watcher subscribe" path=/tmp/verify-2Ba9oF type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T12:05:35.975Z level=INFO run=1a774c56 message="watcher started" path=/tmp/verify-2Ba9oF type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T12:05:35.975Z level=INFO run=1a774c56 message="watcher subscribe" path=/tmp/verify-2Ba9oF/u type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T12:05:35.975Z level=INFO run=1a774c56 message="watcher started" path=/tmp/verify-2Ba9oF/u type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T12:05:35.992Z level=INFO run=1a774c56 message="watcher started" path=/tmp/verify-2Ba9oF/u/.config/opencode type=directory backend=inotify ignores=6 http.span=64 role=server
+timestamp=2026-11-16T12:05:36.001Z level=INFO run=1a774c56 message="location services booted" directory=/tmp/verify-2Ba9oF/u workspaceID=undefined durationMs=72 http.span=73 role=server
+timestamp=2026-11-16T12:05:36.009Z level=INFO run=1a774c56 msg="loading plugin" id=rsih-opencode@0.2.0-preview.2 entrypoint=file:///tmp/verify-2Ba9oF/u/cache/opencode/npm/rsih-opencode@0.2.0-preview.2/1794830735232/node_modules/rsih-opencode/index.js http.span=81 role=server
+timestamp=2026-11-16T12:05:36.010Z level=WARN run=1a774c56 message="failed to load plugin" target=rsih-opencode@0.2.0-preview.2 ref=err_b3e38e4a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=82 role=server

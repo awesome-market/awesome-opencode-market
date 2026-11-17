@@ -1,0 +1,115 @@
+spec: aios-forge@1.2.1
+apiNames: aios-forge
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-iSh7qS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41671
+server password [redacted]
+Unknown command: serve
+
+AIOS Forge CLI
+
+Usage:
+  aios-forge init <project-name> [--force] [--dry-run] [--lang=en|pt-BR|es|fr] [--tool=codex|claude|gemini|opencode] [--locale=en]
+  aios-forge install [path] [--force] [--dry-run] [--lang=en|pt-BR|es|fr] [--tool=codex|claude|gemini|opencode] [--locale=en]
+  aios-forge update [path] [--dry-run] [--lang=en|pt-BR|es|fr] [--locale=en]
+  aios-forge info [path] [--json] [--locale=en]
+  aios-forge doctor [path] [--fix] [--dry-run] [--json] [--locale=en]
+  aios-forge i18n:add <locale> [--force] [--dry-run] [--locale=en]
+  aios-forge agents [path] [--lang=en|pt-BR|es|fr] [--locale=en]
+  aios-forge agent:prompt <agent> [path] [--tool=codex|claude|gemini|opencode] [--lang=en|pt-BR|es|fr] [--locale=en]
+  aios-forge context:validate [path] [--json] [--locale=en]
+  aios-forge setup:context [path] [--defaults] [--project-type=web_app|api|site|script|dapp] [--framework=<name>] [--backend=<name>] [--frontend=<name>] [--database=<name>] [--auth=<name>] [--uiux=<name>] [--language=en] [--web3-enabled=true|false] [--locale=en]
+  aios-forge locale:apply [path] [--lang=en|pt-BR|es|fr] [--dry-run] [--locale=en]
+  aios-forge locale:diff [agent] [--lang=en|pt-BR|es|fr] [--json] [--locale=en]
+  aios-forge test:agents [--json] [--locale=en]
+  aios-forge test:smoke [workspace-path] [--lang=en|pt-BR|es|fr] [--web3=ethereum|solana|cardano] [--profile=standard|mixed|parallel] [--keep] [--json] [--locale=en]
+  aios-forge test:package [source-path] [--keep] [--dry-run] [--json] [--locale=en]
+  aios-forge workflow:plan [path] [--classification=MICRO|SMALL|MEDIUM] [--json] [--locale=en]
+  aios-forge parallel:init [path] [--workers=2..6] [--force] [--dry-run] [--json] [--locale=en]
+  aios-forge parallel:doctor [path] [--workers=2..6] [--fix] [--force] [--dry-run] [--json] [--locale=en]
+  aios-forge parallel:assign [path] [--source=auto|prd|architecture|discovery|<file>] [--workers=2..6] [--force] [--dry-run] [--json] [--locale=en]
+  aios-forge parallel:status [path] [--json] [--locale=en]
+  aios-forge mcp:init [path] [--tool=claude|codex|gemini|opencode] [--dry-run] [--json] [--locale=en]
+  aios-forge mcp:doctor [path] [--strict-env] [--json] [--locale=en]
+  aios-forge qa:doctor [path] [--json] [--locale=en]
+  aios-forge qa:init [path] [--url=<app-url>] [--dry-run] [--json] [--locale=en]
+  aios-forge qa:run [path] [--url=<app-url>] [--persona=naive|hacker|power|mobile] [--headed] [--html] [--json] [--locale=en]
+  aios-forge qa:scan [path] [--url=<app-url>] [--depth=3] [--max-pages=50] [--headed] [--html] [--json] [--locale=en]
+  aios-forge qa:report [path] [--html] [--json] [--locale=en]
+  aios-forge scan:project [path] [--provider=<name>] [--dry-run] [--json] [--locale=en]
+  aios-forge config <set KEY=value|show|get KEY> [--json] [--locale=en]
+  aios-forge genome:doctor <file> [--json] [--locale=en]
+  aios-forge genome:migrate <file-or-dir> [--write] [--no-backup] [--json] [--locale=en]
+  aios-forge dashboard:init [path] [--dir=<path>] [--repo=<git-url>] [--project-name=<name>] [--skip-install] [--dry-run] [--json] [--locale=en]
+  aios-forge dashboard:dev [path] [--dir=<path>] [--host=127.0.0.1] [--port=3000] [--project-name=<name>] [--dry-run] [--json] [--locale=en]
+  aios-forge dashboard:open [path] [--host=127.0.0.1] [--port=3000] [--url=<url>] [--dry-run] [--json] [--locale=en]
+  aios-forge squad:status [path] [--json] [--locale=en]
+  aios-forge squad:doctor [path] [--squad=<slug>] [--stale-minutes=5] [--json] [--locale=en]
+  aios-forge squad:repair-genomes <manifest.json> [--write] [--no-backup] [--json] [--locale=en]
+  aios-forge squad:validate [path] --squad=<slug> [--locale=en]
+  aios-forge squad:export [path] --squad=<slug> [--locale=en]
+  aios-forge squad:pipeline [path] [--sub=list|show|status] [--pipeline=<slug>] [--locale=en]
+  aios-forge runtime:init [path] [--json] [--locale=en]
+  aios-forge runtime:ingest [path] [--squad=<slug>] [--agent=<name>] [--session=<key>] [--task=<key>] [--json] [--locale=en]
+  aios-forge runtime:task:start [path] --title=<text> [--squad=<slug>] [--session=<key>] [--goal=<text>] [--by=<agent>] [--task=<key>] [--json] [--locale=en]
+  aios-forge runtime:start [path] --agent=<name> [--squad=<slug>] [--session=<key>] [--title=<text>] [--run=<key>] [--json] [--locale=en]
+  aios-forge runtime:update [path] --run=<key> [--message=<text>] [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aios-forge runtime:task:finish [path] --task=<key> [--goal=<text>] [--json] [--locale=en]
+  aios-forge runtime:finish [path] --run=<key> [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aios-forge runtime:task:fail [path] --task=<key> [--goal=<text>] [--json] [--locale=en]
+  aios-forge runtime:fail [path] --run=<key> [--message=<text>] [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aios-forge runtime:status [path] [--json] [--locale=en]
+  aios-forge cloud:import:squad [path] --url=<snapshot-url> [--force] [--snapshots-only] [--dry-run] [--json] [--locale=en]
+  aios-forge cloud:import:genome [path] --url=<snapshot-url> [--force] [--snapshots-only] [--dry-run] [--json] [--locale=en]
+  aios-forge cloud:publish:squad [path] --slug=<slug> --resource-version=<version> [--url=<publish-url>|--base-url=<site>] [--title=<text>] [--summary=<text>] [--compatibility-min=<version>] [--compatibility-max=<version>] [--linked-genome-version=<version>] [--dry-run] [--json] [--locale=en]
+  aios-forge cloud:publish:genome [path] --slug=<slug> --resource-version=<version> [--url=<publish-url>|--base-url=<site>] [--title=<text>] [--summary=<text>] [--source-kind=LOCAL|AIOSLITE|IMPORTED|REMOTE_PROVIDER] [--dry-run] [--json] [--locale=en]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:38.711Z level=INFO run=0bc3c85e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"aios-forge@1.2.1\"]" role=cli
+timestamp=2026-11-16T08:06:41.592Z level=INFO run=77b716b5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:42.310Z level=INFO run=77b716b5 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:42.365Z level=INFO run=77b716b5 message="database schema bootstrap completed" migrations=59 durationMs=55 role=server
+timestamp=2026-11-16T08:06:42.862Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u/.config/opencode type=directory ignores=6 http.span=75 role=server
+timestamp=2026-11-16T08:06:42.875Z level=INFO run=77b716b5 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T08:06:42.877Z level=INFO run=77b716b5 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:06:42.877Z level=INFO run=77b716b5 message="watcher subscribe" path=/ type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T08:06:42.878Z level=INFO run=77b716b5 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=91 role=server
+timestamp=2026-11-16T08:06:42.878Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=91 role=server
+timestamp=2026-11-16T08:06:42.879Z level=INFO run=77b716b5 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:06:42.879Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS type=entries ignores=0 http.span=92 role=server
+timestamp=2026-11-16T08:06:42.880Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-16T08:06:42.881Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u type=entries ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:06:42.881Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u type=entries backend=node ignores=0 http.span=94 role=server
+timestamp=2026-11-16T08:06:42.917Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=130 role=server
+timestamp=2026-11-16T08:06:42.944Z level=INFO run=77b716b5 message="location services booted" directory=/tmp/verify-iSh7qS/u workspaceID=undefined durationMs=156 http.span=157 role=server
+timestamp=2026-11-16T08:06:42.961Z level=INFO run=77b716b5 msg="loading plugin" id=aios-forge@1.2.1 entrypoint=file:///tmp/verify-iSh7qS/u/cache/opencode/npm/aios-forge@1.2.1/1794816400934/node_modules/aios-forge/src/cli.js http.span=174 role=server
+timestamp=2026-11-16T08:06:43.180Z level=WARN run=77b716b5 message="failed to load plugin" target=aios-forge@1.2.1 ref=err_9bad84a5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=393 role=server
+timestamp=2026-11-16T08:06:44.569Z level=ERROR run=77b716b5 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1782 role=server
+timestamp=2026-11-16T08:06:45.003Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:45.003Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:45.007Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:45.007Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:45.039Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:45.039Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:45.041Z level=INFO run=77b716b5 message="watcher subscribe" path=/tmp/verify-iSh7qS/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:45.042Z level=INFO run=77b716b5 message="watcher started" path=/tmp/verify-iSh7qS/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:45.097Z level=INFO run=77b716b5 message=event event.id=evt_1e364ee69001YwuRy0bZVLtFNU event.created=1794816405097 event.type=provider.updated event.location.directory=/tmp/verify-iSh7qS/u event.location.workspaceID=undefined event.data={} http.span=2310 role=server
+timestamp=2026-11-16T08:06:45.127Z level=INFO run=77b716b5 message=event event.id=evt_1e364ee86001b2eaC3rN6ZPP4h event.created=1794816405127 event.type=model.updated event.location.directory=/tmp/verify-iSh7qS/u event.location.workspaceID=undefined event.data={} http.span=2340 role=server
+timestamp=2026-11-16T08:06:45.131Z level=INFO run=77b716b5 message=event event.id=evt_1e364ee8b001tdmLzkwikBObTC event.created=1794816405131 event.type=agent.updated event.location.directory=/tmp/verify-iSh7qS/u event.location.workspaceID=undefined event.data={} http.span=2344 role=server
+timestamp=2026-11-16T08:06:45.132Z level=INFO run=77b716b5 message=event event.id=evt_1e364ee8c001p7og0zBi47NO2X event.created=1794816405132 event.type=command.updated event.location.directory=/tmp/verify-iSh7qS/u event.location.workspaceID=undefined event.data={} http.span=2345 role=server
+timestamp=2026-11-16T08:06:45.602Z level=INFO run=77b716b5 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:06:45.602Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:06:45.602Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:06:45.625Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:45.625Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:45.687Z level=INFO run=77b716b5 message="watcher stopped" path=/etc type=entries http.span=2900 role=server
+timestamp=2026-11-16T08:06:45.687Z level=INFO run=77b716b5 message="watcher stopped" path=/ type=entries http.span=2900 role=server
+timestamp=2026-11-16T08:06:45.687Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp type=entries http.span=2900 role=server
+timestamp=2026-11-16T08:06:45.687Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS type=entries http.span=2900 role=server
+timestamp=2026-11-16T08:06:45.687Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u type=entries http.span=2900 role=server
+timestamp=2026-11-16T08:06:45.691Z level=INFO run=77b716b5 message="watcher stopped" path=/tmp/verify-iSh7qS/u/.config/opencode type=directory http.span=2904 role=server

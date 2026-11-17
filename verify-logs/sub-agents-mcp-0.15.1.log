@@ -1,0 +1,27 @@
+spec: sub-agents-mcp@0.15.1
+apiNames: sub-agents-mcp
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-MLWBXf/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33523
+server password [redacted]
+Failed to start MCP server: AGENTS_DIR environment variable is required.
+Please set it to an absolute path in your MCP configuration.
+Example for Cursor IDE (~/.cursor/mcp.json):
+  "env": {
+    "AGENTS_DIR": "/Users/username/projects/my-app/agents"
+  }
+Example for Claude Desktop:
+  "env": {
+    "AGENTS_DIR": "/Users/username/claude-agents"
+  }
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:32.770Z level=INFO run=ebde01e5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"sub-agents-mcp@0.15.1\"]" role=cli
+timestamp=2026-11-16T07:35:37.821Z level=INFO run=ac6d45a6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:38.802Z level=INFO run=ac6d45a6 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:38.827Z level=INFO run=ac6d45a6 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server

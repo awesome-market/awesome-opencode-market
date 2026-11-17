@@ -1,0 +1,55 @@
+spec: @renai-labs/ren-tui-plugin@0.0.3
+apiNames: @renai-labs/ren-tui-plugin, ren-tui-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-qkN0kI/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37015
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:41.193Z level=INFO run=cb09606e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@renai-labs/ren-tui-plugin@0.0.3\"]" role=cli
+timestamp=2026-11-16T12:05:42.056Z level=INFO run=b96acd8b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:42.458Z level=INFO run=b96acd8b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:42.533Z level=INFO run=b96acd8b message="database schema bootstrap completed" migrations=59 durationMs=75 role=server
+timestamp=2026-11-16T12:05:43.061Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u/.config/opencode type=directory ignores=6 http.span=111 role=server
+timestamp=2026-11-16T12:05:43.066Z level=INFO run=b96acd8b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:43.067Z level=INFO run=b96acd8b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=117 role=server
+timestamp=2026-11-16T12:05:43.067Z level=INFO run=b96acd8b message="watcher subscribe" path=/ type=entries ignores=0 http.span=117 role=server
+timestamp=2026-11-16T12:05:43.068Z level=INFO run=b96acd8b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=118 role=server
+timestamp=2026-11-16T12:05:43.069Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=119 role=server
+timestamp=2026-11-16T12:05:43.069Z level=INFO run=b96acd8b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=119 role=server
+timestamp=2026-11-16T12:05:43.069Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI type=entries ignores=0 http.span=119 role=server
+timestamp=2026-11-16T12:05:43.070Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI type=entries backend=node ignores=0 http.span=120 role=server
+timestamp=2026-11-16T12:05:43.071Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u type=entries ignores=0 http.span=121 role=server
+timestamp=2026-11-16T12:05:43.072Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u type=entries backend=node ignores=0 http.span=122 role=server
+timestamp=2026-11-16T12:05:43.117Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u/.config/opencode type=directory backend=inotify ignores=6 http.span=167 role=server
+timestamp=2026-11-16T12:05:43.138Z level=INFO run=b96acd8b message="location services booted" directory=/tmp/verify-qkN0kI/u workspaceID=undefined durationMs=186 http.span=188 role=server
+timestamp=2026-11-16T12:05:43.161Z level=INFO run=b96acd8b msg="loading plugin" id=@renai-labs/ren-tui-plugin@0.0.3 entrypoint=file:///tmp/verify-qkN0kI/u/cache/opencode/npm/@renai-labs/ren-tui-plugin@0.0.3/1794830741539/node_modules/@renai-labs/ren-tui-plugin/dist/index.js http.span=211 role=server
+timestamp=2026-11-16T12:05:43.247Z level=WARN run=b96acd8b message="failed to load plugin" target=@renai-labs/ren-tui-plugin@0.0.3 ref=err_821f7e40 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=297 role=server
+timestamp=2026-11-16T12:05:44.709Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:44.709Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:44.709Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:44.710Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:44.750Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:44.750Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:44.751Z level=INFO run=b96acd8b message="watcher subscribe" path=/tmp/verify-qkN0kI/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:44.752Z level=INFO run=b96acd8b message="watcher started" path=/tmp/verify-qkN0kI/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:44.807Z level=INFO run=b96acd8b message=event event.id=evt_1e43fbce7001czqCn9kgr3XSxK event.created=1794830744807 event.type=provider.updated event.location.directory=/tmp/verify-qkN0kI/u event.location.workspaceID=undefined event.data={} http.span=1857 role=server
+timestamp=2026-11-16T12:05:44.830Z level=INFO run=b96acd8b message=event event.id=evt_1e43fbcfe001IB4WtxPGo4uYwh event.created=1794830744830 event.type=model.updated event.location.directory=/tmp/verify-qkN0kI/u event.location.workspaceID=undefined event.data={} http.span=1880 role=server
+timestamp=2026-11-16T12:05:44.841Z level=INFO run=b96acd8b message=event event.id=evt_1e43fbd08001Y58xfBgDBw2dqd event.created=1794830744840 event.type=agent.updated event.location.directory=/tmp/verify-qkN0kI/u event.location.workspaceID=undefined event.data={} http.span=1891 role=server
+timestamp=2026-11-16T12:05:44.841Z level=INFO run=b96acd8b message=event event.id=evt_1e43fbd09001kvUTpk6GGUdZlh event.created=1794830744841 event.type=command.updated event.location.directory=/tmp/verify-qkN0kI/u event.location.workspaceID=undefined event.data={} http.span=1891 role=server
+timestamp=2026-11-16T12:05:45.035Z level=INFO run=b96acd8b message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:05:45.035Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:05:45.035Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:05:45.046Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:45.047Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:45.071Z level=INFO run=b96acd8b message="watcher stopped" path=/etc type=entries http.span=2121 role=server
+timestamp=2026-11-16T12:05:45.073Z level=INFO run=b96acd8b message="watcher stopped" path=/ type=entries http.span=2123 role=server
+timestamp=2026-11-16T12:05:45.073Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp type=entries http.span=2123 role=server
+timestamp=2026-11-16T12:05:45.073Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI type=entries http.span=2123 role=server
+timestamp=2026-11-16T12:05:45.073Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u type=entries http.span=2123 role=server
+timestamp=2026-11-16T12:05:45.088Z level=INFO run=b96acd8b message="watcher stopped" path=/tmp/verify-qkN0kI/u/.config/opencode type=directory http.span=2138 role=server

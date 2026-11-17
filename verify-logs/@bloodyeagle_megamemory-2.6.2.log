@@ -1,0 +1,15 @@
+spec: @bloodyeagle/megamemory@2.6.2
+apiNames: @bloodyeagle/megamemory, megamemory
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ONmhA5/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39899
+server password [redacted]
+Error: Invalid port '0'. Port must be a number between 1 and 65535.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T20:00:58.806Z level=INFO run=87b50806 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@bloodyeagle/megamemory@2.6.2\"]" role=cli

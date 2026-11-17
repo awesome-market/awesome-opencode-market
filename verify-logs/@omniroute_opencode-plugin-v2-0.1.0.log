@@ -1,0 +1,57 @@
+spec: @omniroute/opencode-plugin-v2@0.1.0
+apiNames: @omniroute/opencode-plugin-v2, opencode-plugin-v2
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-jd97E1/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45209
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:44.248Z level=INFO run=2110f435 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@omniroute/opencode-plugin-v2@0.1.0\"]" role=cli
+timestamp=2026-11-16T07:35:57.234Z level=INFO run=ce94311e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:57.567Z level=INFO run=ce94311e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:57.678Z level=INFO run=ce94311e message="database schema bootstrap completed" migrations=59 durationMs=111 role=server
+timestamp=2026-11-16T07:35:57.961Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u/.config/opencode type=directory ignores=6 http.span=15 role=server
+timestamp=2026-11-16T07:35:57.963Z level=INFO run=ce94311e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher subscribe" path=/ type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.964Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1 type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:35:57.965Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1 type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:35:57.965Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:35:57.965Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:35:57.978Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u/.config/opencode type=directory backend=inotify ignores=6 http.span=32 role=server
+timestamp=2026-11-16T07:35:57.985Z level=INFO run=ce94311e message="location services booted" directory=/tmp/verify-jd97E1/u workspaceID=undefined durationMs=39 http.span=39 role=server
+timestamp=2026-11-16T07:35:57.992Z level=INFO run=ce94311e msg="loading plugin" id=@omniroute/opencode-plugin-v2@0.1.0 entrypoint=file:///tmp/verify-jd97E1/u/cache/opencode/npm/@omniroute/opencode-plugin-v2@0.1.0/1794814557044/node_modules/@omniroute/opencode-plugin-v2/dist/index.js http.span=46 role=server
+timestamp=2026-11-16T07:35:58.456Z level=WARN run=ce94311e message="failed to load plugin" plugin.id=omniroute-v2 cause="Cause([Die(Error: [omniroute-v2] invalid plugin options — baseURL: Invalid input: expected string, received undefined)])" http.span=510 role=server
+timestamp=2026-11-16T07:35:58.457Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:58.457Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:58.458Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:58.458Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:58.470Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:58.471Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:58.471Z level=INFO run=ce94311e message="watcher subscribe" path=/tmp/verify-jd97E1/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:58.471Z level=INFO run=ce94311e message="watcher started" path=/tmp/verify-jd97E1/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:58.484Z level=INFO run=ce94311e message=event event.id=evt_1e348c114001DreSb20QBG5yJn event.created=1794814558484 event.type=provider.updated event.location.directory=/tmp/verify-jd97E1/u event.location.workspaceID=undefined event.data={} http.span=538 role=server
+timestamp=2026-11-16T07:35:58.493Z level=INFO run=ce94311e message=event event.id=evt_1e348c11d001VBnh7YWmdg0uv2 event.created=1794814558493 event.type=model.updated event.location.directory=/tmp/verify-jd97E1/u event.location.workspaceID=undefined event.data={} http.span=547 role=server
+timestamp=2026-11-16T07:35:58.496Z level=INFO run=ce94311e message=event event.id=evt_1e348c120001Wc3rJYhQ8Mw9IY event.created=1794814558496 event.type=agent.updated event.location.directory=/tmp/verify-jd97E1/u event.location.workspaceID=undefined event.data={} http.span=550 role=server
+timestamp=2026-11-16T07:35:58.496Z level=INFO run=ce94311e message=event event.id=evt_1e348c1200024aFaddQUW65xAS event.created=1794814558496 event.type=command.updated event.location.directory=/tmp/verify-jd97E1/u event.location.workspaceID=undefined event.data={} http.span=550 role=server
+timestamp=2026-11-16T07:35:58.633Z level=INFO run=ce94311e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:35:58.633Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:35:58.633Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:35:58.636Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:58.637Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/etc type=entries http.span=702 role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/ type=entries http.span=702 role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/tmp type=entries http.span=702 role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1 type=entries http.span=702 role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u type=entries http.span=702 role=server
+timestamp=2026-11-16T07:35:58.648Z level=INFO run=ce94311e message="watcher stopped" path=/tmp/verify-jd97E1/u/.config/opencode type=directory http.span=702 role=server

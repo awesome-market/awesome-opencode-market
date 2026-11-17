@@ -1,0 +1,56 @@
+spec: anis-dr/opencode-mermaid-renderer#67aba506fd36c2834ef1a073d26c6dcc11198b94
+apiNames: anis-dr/opencode-mermaid-renderer, opencode-mermaid-renderer
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-hRSOej/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34445
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:07:16.826Z level=INFO run=d83c4d96 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"anis-dr/opencode-mermaid-renderer#67aba506fd36c2834ef1a073d26c6dcc11198b94\"]" role=cli
+timestamp=2026-11-16T08:07:23.507Z level=INFO run=c0fa5a60 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:07:23.827Z level=INFO run=c0fa5a60 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:07:23.982Z level=INFO run=c0fa5a60 message="database schema bootstrap completed" migrations=59 durationMs=155 role=server
+timestamp=2026-11-16T08:07:24.167Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u/.config/opencode type=directory ignores=6 http.span=24 role=server
+timestamp=2026-11-16T08:07:24.170Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:07:24.171Z level=INFO run=c0fa5a60 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:07:24.171Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:07:24.171Z level=INFO run=c0fa5a60 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:07:24.171Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T08:07:24.172Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:07:24.172Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:07:24.172Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:07:24.172Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:07:24.172Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:07:24.188Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u/.config/opencode type=directory backend=inotify ignores=6 http.span=45 role=server
+timestamp=2026-11-16T08:07:24.204Z level=INFO run=c0fa5a60 message="location services booted" directory=/tmp/verify-hRSOej/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-16T08:07:24.208Z level=INFO run=c0fa5a60 msg="loading plugin" id=anis-dr/opencode-mermaid-renderer#67aba506fd36c2834ef1a073d26c6dcc11198b94 entrypoint=file:///tmp/verify-hRSOej/u/cache/opencode/npm/git-opencode-mermaid-renderer-807d95255279/1794816443213/node_modules/opencode-mermaid-renderer/index.ts http.span=65 role=server
+timestamp=2026-11-16T08:07:24.232Z level=WARN run=c0fa5a60 message="failed to load plugin" target=anis-dr/opencode-mermaid-renderer#67aba506fd36c2834ef1a073d26c6dcc11198b94 ref=err_8f108623 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=89 role=server
+timestamp=2026-11-16T08:07:24.876Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:07:24.876Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:07:24.876Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:07:24.877Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:07:24.891Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:07:24.891Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:07:24.892Z level=INFO run=c0fa5a60 message="watcher subscribe" path=/tmp/verify-hRSOej/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:07:24.892Z level=INFO run=c0fa5a60 message="watcher started" path=/tmp/verify-hRSOej/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:07:24.912Z level=INFO run=c0fa5a60 message=event event.id=evt_1e36589f00010empHoXqYMmMAB event.created=1794816444912 event.type=provider.updated event.location.directory=/tmp/verify-hRSOej/u event.location.workspaceID=undefined event.data={} http.span=769 role=server
+timestamp=2026-11-16T08:07:24.925Z level=INFO run=c0fa5a60 message=event event.id=evt_1e36589fc001H34vF3nUVXBSns event.created=1794816444925 event.type=model.updated event.location.directory=/tmp/verify-hRSOej/u event.location.workspaceID=undefined event.data={} http.span=782 role=server
+timestamp=2026-11-16T08:07:24.938Z level=INFO run=c0fa5a60 message=event event.id=evt_1e3658a0a001cAGtntDVhUwb0b event.created=1794816444938 event.type=agent.updated event.location.directory=/tmp/verify-hRSOej/u event.location.workspaceID=undefined event.data={} http.span=795 role=server
+timestamp=2026-11-16T08:07:24.939Z level=INFO run=c0fa5a60 message=event event.id=evt_1e3658a0b001Lpezdq12ij7riN event.created=1794816444939 event.type=command.updated event.location.directory=/tmp/verify-hRSOej/u event.location.workspaceID=undefined event.data={} http.span=796 role=server
+timestamp=2026-11-16T08:07:25.160Z level=ERROR run=c0fa5a60 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1017 role=server
+timestamp=2026-11-16T08:07:25.400Z level=INFO run=c0fa5a60 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:07:25.400Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:07:25.400Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:07:25.405Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:07:25.406Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:07:25.427Z level=INFO run=c0fa5a60 message="watcher stopped" path=/etc type=entries http.span=1284 role=server
+timestamp=2026-11-16T08:07:25.427Z level=INFO run=c0fa5a60 message="watcher stopped" path=/ type=entries http.span=1284 role=server
+timestamp=2026-11-16T08:07:25.427Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp type=entries http.span=1284 role=server
+timestamp=2026-11-16T08:07:25.427Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej type=entries http.span=1284 role=server
+timestamp=2026-11-16T08:07:25.427Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u type=entries http.span=1284 role=server
+timestamp=2026-11-16T08:07:25.437Z level=INFO run=c0fa5a60 message="watcher stopped" path=/tmp/verify-hRSOej/u/.config/opencode type=directory http.span=1294 role=server

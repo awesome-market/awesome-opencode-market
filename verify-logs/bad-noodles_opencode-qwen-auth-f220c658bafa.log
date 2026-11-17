@@ -1,0 +1,32 @@
+spec: bad-noodles/opencode-qwen-auth#f220c658bafae4e66dfce5d257accd713ac79cef
+apiNames: bad-noodles/opencode-qwen-auth, opencode-qwen-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-XwzvbX/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46009
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:25.067Z level=INFO run=44429efc message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"bad-noodles/opencode-qwen-auth#f220c658bafae4e66dfce5d257accd713ac79cef\"]" role=cli
+timestamp=2026-11-16T08:47:25.830Z level=INFO run=bdb102e8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:26.089Z level=INFO run=bdb102e8 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:26.106Z level=INFO run=bdb102e8 message="database schema bootstrap completed" migrations=59 durationMs=17 role=server
+timestamp=2026-11-16T08:47:26.303Z level=INFO run=bdb102e8 message="watcher subscribe" path=/tmp/verify-XwzvbX/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-16T08:47:26.307Z level=INFO run=bdb102e8 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:47:26.307Z level=INFO run=bdb102e8 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:47:26.308Z level=INFO run=bdb102e8 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:26.308Z level=INFO run=bdb102e8 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:26.308Z level=INFO run=bdb102e8 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:26.308Z level=INFO run=bdb102e8 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:26.308Z level=INFO run=bdb102e8 message="watcher subscribe" path=/tmp/verify-XwzvbX type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:47:26.309Z level=INFO run=bdb102e8 message="watcher started" path=/tmp/verify-XwzvbX type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:26.309Z level=INFO run=bdb102e8 message="watcher subscribe" path=/tmp/verify-XwzvbX/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:26.309Z level=INFO run=bdb102e8 message="watcher started" path=/tmp/verify-XwzvbX/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:47:26.331Z level=INFO run=bdb102e8 message="watcher started" path=/tmp/verify-XwzvbX/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-16T08:47:26.337Z level=INFO run=bdb102e8 message="location services booted" directory=/tmp/verify-XwzvbX/u workspaceID=undefined durationMs=55 http.span=55 role=server
+timestamp=2026-11-16T08:47:26.354Z level=INFO run=bdb102e8 msg="loading plugin" id=bad-noodles/opencode-qwen-auth#f220c658bafae4e66dfce5d257accd713ac79cef entrypoint=file:///tmp/verify-XwzvbX/u/cache/opencode/npm/git-opencode-qwen-auth-7602ac7361e5/1794818845621/node_modules/opencode-qwen-auth/index.js http.span=72 role=server
+timestamp=2026-11-16T08:47:26.356Z level=WARN run=bdb102e8 message="failed to load plugin" target=bad-noodles/opencode-qwen-auth#f220c658bafae4e66dfce5d257accd713ac79cef ref=err_eec8fd10 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=74 role=server

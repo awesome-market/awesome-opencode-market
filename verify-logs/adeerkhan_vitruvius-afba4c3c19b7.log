@@ -1,0 +1,57 @@
+spec: adeerkhan/vitruvius#afba4c3c19b78890c89a546b6a54bc93f3b9ff11
+apiNames: adeerkhan/vitruvius, vitruvius
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-F07BNx/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36335
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-15T12:34:48.631Z level=INFO run=80e4aea6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"adeerkhan/vitruvius#afba4c3c19b78890c89a546b6a54bc93f3b9ff11\"]" role=cli
+timestamp=2026-11-15T12:34:52.947Z level=INFO run=b0ee6852 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-15T12:34:53.561Z level=INFO run=b0ee6852 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-15T12:34:53.607Z level=INFO run=b0ee6852 message="database schema bootstrap completed" migrations=59 durationMs=46 role=server
+timestamp=2026-11-15T12:34:53.883Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u/.config/opencode type=directory ignores=6 http.span=48 role=server
+timestamp=2026-11-15T12:34:53.889Z level=INFO run=b0ee6852 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-15T12:34:53.890Z level=INFO run=b0ee6852 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-15T12:34:53.890Z level=INFO run=b0ee6852 message="watcher subscribe" path=/ type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-15T12:34:53.891Z level=INFO run=b0ee6852 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-15T12:34:53.891Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-15T12:34:53.891Z level=INFO run=b0ee6852 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-15T12:34:53.891Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-15T12:34:53.891Z level=ERROR run=b0ee6852 message="failed to watch directory" path=/tmp/verify-F07BNx error="Error: EACCES: permission denied, watch '/tmp/verify-F07BNx'" http.span=56 role=server
+timestamp=2026-11-15T12:34:53.893Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-15T12:34:53.893Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-15T12:34:53.920Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u/.config/opencode type=directory backend=inotify ignores=6 http.span=85 role=server
+timestamp=2026-11-15T12:34:53.957Z level=INFO run=b0ee6852 message="location services booted" directory=/tmp/verify-F07BNx/u workspaceID=undefined durationMs=121 http.span=122 role=server
+timestamp=2026-11-15T12:34:53.964Z level=INFO run=b0ee6852 msg="loading plugin" id=adeerkhan/vitruvius#afba4c3c19b78890c89a546b6a54bc93f3b9ff11 entrypoint=file:///tmp/verify-F07BNx/u/cache/opencode/npm/git-vitruvius-baadcd982d62/1794746092523/node_modules/@adeerkhan/vitruvius/installer/hosts/opencode/plugins/vitruvius.mjs http.span=129 role=server
+timestamp=2026-11-15T12:34:53.965Z level=WARN run=b0ee6852 message="failed to load plugin" target=adeerkhan/vitruvius#afba4c3c19b78890c89a546b6a54bc93f3b9ff11 ref=err_e1428592 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=130 role=server
+timestamp=2026-11-15T12:34:55.058Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-15T12:34:55.058Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-15T12:34:55.058Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-15T12:34:55.058Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-15T12:34:55.060Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx type=entries ignores=0 http.span=1225 role=server
+timestamp=2026-11-15T12:34:55.061Z level=ERROR run=b0ee6852 message="failed to watch directory" path=/tmp/verify-F07BNx error="Error: EACCES: permission denied, watch '/tmp/verify-F07BNx'" http.span=1226 role=server
+timestamp=2026-11-15T12:34:55.087Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-15T12:34:55.088Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-15T12:34:55.092Z level=INFO run=b0ee6852 message="watcher subscribe" path=/tmp/verify-F07BNx/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-15T12:34:55.092Z level=INFO run=b0ee6852 message="watcher started" path=/tmp/verify-F07BNx/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-15T12:34:55.115Z level=INFO run=b0ee6852 message=event event.id=evt_1df34160b001wt5wo3vNMUzEnf event.created=1794746095115 event.type=provider.updated event.location.directory=/tmp/verify-F07BNx/u event.location.workspaceID=undefined event.data={} http.span=1280 role=server
+timestamp=2026-11-15T12:34:55.135Z level=INFO run=b0ee6852 message=event event.id=evt_1df34161f0019czC6VPu2FwjYu event.created=1794746095135 event.type=model.updated event.location.directory=/tmp/verify-F07BNx/u event.location.workspaceID=undefined event.data={} http.span=1300 role=server
+timestamp=2026-11-15T12:34:55.138Z level=INFO run=b0ee6852 message=event event.id=evt_1df341622001XXVYSAqrOu2ecF event.created=1794746095138 event.type=agent.updated event.location.directory=/tmp/verify-F07BNx/u event.location.workspaceID=undefined event.data={} http.span=1303 role=server
+timestamp=2026-11-15T12:34:55.138Z level=INFO run=b0ee6852 message=event event.id=evt_1df341622002XBeT41HeJfASvS event.created=1794746095138 event.type=command.updated event.location.directory=/tmp/verify-F07BNx/u event.location.workspaceID=undefined event.data={} http.span=1303 role=server
+timestamp=2026-11-15T12:34:55.220Z level=ERROR run=b0ee6852 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1385 role=server
+timestamp=2026-11-15T12:34:55.287Z level=INFO run=b0ee6852 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-15T12:34:55.287Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-15T12:34:55.287Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-15T12:34:55.295Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u/AGENTS.md type=file role=server
+timestamp=2026-11-15T12:34:55.295Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-15T12:34:55.316Z level=INFO run=b0ee6852 message="watcher stopped" path=/etc type=entries http.span=1481 role=server
+timestamp=2026-11-15T12:34:55.316Z level=INFO run=b0ee6852 message="watcher stopped" path=/ type=entries http.span=1481 role=server
+timestamp=2026-11-15T12:34:55.316Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp type=entries http.span=1481 role=server
+timestamp=2026-11-15T12:34:55.316Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u type=entries http.span=1481 role=server
+timestamp=2026-11-15T12:34:55.318Z level=INFO run=b0ee6852 message="watcher stopped" path=/tmp/verify-F07BNx/u/.config/opencode type=directory http.span=1483 role=server

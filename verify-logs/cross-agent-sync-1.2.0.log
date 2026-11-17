@@ -1,0 +1,32 @@
+spec: cross-agent-sync@1.2.0
+apiNames: cross-agent-sync
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-sabiWI/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:32907
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:25.293Z level=INFO run=42976046 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"cross-agent-sync@1.2.0\"]" role=cli
+timestamp=2026-11-16T07:35:25.769Z level=INFO run=97c27c20 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:25.921Z level=INFO run=97c27c20 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:25.949Z level=INFO run=97c27c20 message="database schema bootstrap completed" migrations=59 durationMs=28 role=server
+timestamp=2026-11-16T07:35:26.207Z level=INFO run=97c27c20 message="watcher subscribe" path=/tmp/verify-sabiWI/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T07:35:26.211Z level=INFO run=97c27c20 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:26.211Z level=INFO run=97c27c20 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:26.212Z level=INFO run=97c27c20 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:26.212Z level=INFO run=97c27c20 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:26.212Z level=INFO run=97c27c20 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:26.212Z level=INFO run=97c27c20 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:26.212Z level=INFO run=97c27c20 message="watcher subscribe" path=/tmp/verify-sabiWI type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:26.213Z level=INFO run=97c27c20 message="watcher started" path=/tmp/verify-sabiWI type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:35:26.213Z level=INFO run=97c27c20 message="watcher subscribe" path=/tmp/verify-sabiWI/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:35:26.213Z level=INFO run=97c27c20 message="watcher started" path=/tmp/verify-sabiWI/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T07:35:26.240Z level=INFO run=97c27c20 message="watcher started" path=/tmp/verify-sabiWI/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T07:35:26.264Z level=INFO run=97c27c20 msg="loading plugin" id=cross-agent-sync@1.2.0 entrypoint=file:///tmp/verify-sabiWI/u/cache/opencode/npm/cross-agent-sync@1.2.0/1794814525503/node_modules/cross-agent-sync/dist/index.js http.span=76 role=server
+timestamp=2026-11-16T07:35:26.278Z level=WARN run=97c27c20 message="failed to load plugin" target=cross-agent-sync@1.2.0 ref=err_3b663f02 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=90 role=server
+timestamp=2026-11-16T07:35:26.295Z level=INFO run=97c27c20 message="location services booted" directory=/tmp/verify-sabiWI/u workspaceID=undefined durationMs=107 http.span=107 role=server

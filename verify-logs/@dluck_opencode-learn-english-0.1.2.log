@@ -1,0 +1,32 @@
+spec: @dluck/opencode-learn-english@0.1.2
+apiNames: @dluck/opencode-learn-english, opencode-learn-english
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-uXEh21/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38951
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:52.328Z level=INFO run=e89b64a6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@dluck/opencode-learn-english@0.1.2\"]" role=cli
+timestamp=2026-11-16T08:51:57.620Z level=INFO run=01883b85 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:51:57.881Z level=INFO run=01883b85 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:51:57.895Z level=INFO run=01883b85 message="database schema bootstrap completed" migrations=59 durationMs=14 role=server
+timestamp=2026-11-16T08:51:58.317Z level=INFO run=01883b85 message="watcher subscribe" path=/tmp/verify-uXEh21/u/.config/opencode type=directory ignores=6 http.span=50 role=server
+timestamp=2026-11-16T08:51:58.320Z level=INFO run=01883b85 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T08:51:58.321Z level=INFO run=01883b85 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:51:58.321Z level=INFO run=01883b85 message="watcher subscribe" path=/ type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:51:58.321Z level=INFO run=01883b85 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:51:58.321Z level=INFO run=01883b85 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:51:58.322Z level=INFO run=01883b85 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:51:58.322Z level=INFO run=01883b85 message="watcher subscribe" path=/tmp/verify-uXEh21 type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:51:58.322Z level=INFO run=01883b85 message="watcher started" path=/tmp/verify-uXEh21 type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:51:58.322Z level=INFO run=01883b85 message="watcher subscribe" path=/tmp/verify-uXEh21/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:51:58.323Z level=INFO run=01883b85 message="watcher started" path=/tmp/verify-uXEh21/u type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T08:51:58.348Z level=INFO run=01883b85 message="watcher started" path=/tmp/verify-uXEh21/u/.config/opencode type=directory backend=inotify ignores=6 http.span=81 role=server
+timestamp=2026-11-16T08:51:58.366Z level=INFO run=01883b85 message="location services booted" directory=/tmp/verify-uXEh21/u workspaceID=undefined durationMs=99 http.span=99 role=server
+timestamp=2026-11-16T08:51:58.376Z level=INFO run=01883b85 msg="loading plugin" id=@dluck/opencode-learn-english@0.1.2 entrypoint=file:///tmp/verify-uXEh21/u/cache/opencode/npm/@dluck/opencode-learn-english@0.1.2/1794819117339/node_modules/@dluck/opencode-learn-english/dist/index.js http.span=109 role=server
+timestamp=2026-11-16T08:51:58.378Z level=WARN run=01883b85 message="failed to load plugin" target=@dluck/opencode-learn-english@0.1.2 ref=err_a429b842 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=111 role=server

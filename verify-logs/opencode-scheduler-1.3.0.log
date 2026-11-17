@@ -1,0 +1,34 @@
+spec: opencode-scheduler@1.3.0
+apiNames: opencode-scheduler
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-nIRPNQ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37307
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:55.650Z level=INFO run=adaf2ee1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-scheduler@1.3.0\"]" role=cli
+timestamp=2026-11-16T08:52:01.104Z level=INFO run=a5d0b377 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:52:01.380Z level=INFO run=a5d0b377 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:52:01.401Z level=INFO run=a5d0b377 message="database schema bootstrap completed" migrations=59 durationMs=21 role=server
+timestamp=2026-11-16T08:52:01.811Z level=INFO run=a5d0b377 message="watcher subscribe" path=/tmp/verify-nIRPNQ/u/.config/opencode type=directory ignores=6 http.span=55 role=server
+timestamp=2026-11-16T08:52:01.814Z level=INFO run=a5d0b377 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:01.814Z level=INFO run=a5d0b377 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher subscribe" path=/ type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher subscribe" path=/tmp/verify-nIRPNQ type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.815Z level=INFO run=a5d0b377 message="watcher started" path=/tmp/verify-nIRPNQ type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:52:01.816Z level=INFO run=a5d0b377 message="watcher subscribe" path=/tmp/verify-nIRPNQ/u type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-16T08:52:01.816Z level=INFO run=a5d0b377 message="watcher started" path=/tmp/verify-nIRPNQ/u type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T08:52:01.831Z level=INFO run=a5d0b377 message="watcher started" path=/tmp/verify-nIRPNQ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=75 role=server
+timestamp=2026-11-16T08:52:01.856Z level=INFO run=a5d0b377 message="location services booted" directory=/tmp/verify-nIRPNQ/u workspaceID=undefined durationMs=99 http.span=100 role=server
+timestamp=2026-11-16T08:52:01.861Z level=INFO run=a5d0b377 msg="loading plugin" id=opencode-scheduler@1.3.0 entrypoint=file:///tmp/verify-nIRPNQ/u/cache/opencode/npm/opencode-scheduler@1.3.0/1794819120842/node_modules/opencode-scheduler/dist/index.js http.span=105 role=server
+timestamp=2026-11-16T08:52:01.871Z level=WARN run=a5d0b377 message="failed to load plugin" target=opencode-scheduler@1.3.0 ref=err_463f4e30 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=115 role=server

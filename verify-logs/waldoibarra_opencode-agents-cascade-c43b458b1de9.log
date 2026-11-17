@@ -1,0 +1,57 @@
+spec: waldoibarra/opencode-agents-cascade#c43b458b1de98392223f12e5835204b02d6c7b3b
+apiNames: waldoibarra/opencode-agents-cascade, opencode-agents-cascade
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-wSMl5v/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41227
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:05.809Z level=INFO run=3c37f4f4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"waldoibarra/opencode-agents-cascade#c43b458b1de98392223f12e5835204b02d6c7b3b\"]" role=cli
+timestamp=2026-11-16T02:53:06.861Z level=INFO run=038e43f9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:07.197Z level=INFO run=038e43f9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:07.239Z level=INFO run=038e43f9 message="database schema bootstrap completed" migrations=59 durationMs=42 role=server
+timestamp=2026-11-16T02:53:07.620Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u/.config/opencode type=directory ignores=6 http.span=39 role=server
+timestamp=2026-11-16T02:53:07.629Z level=INFO run=038e43f9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T02:53:07.630Z level=INFO run=038e43f9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-16T02:53:07.630Z level=INFO run=038e43f9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-16T02:53:07.636Z level=INFO run=038e43f9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:07.636Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:07.636Z level=INFO run=038e43f9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:07.637Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T02:53:07.637Z level=ERROR run=038e43f9 message="failed to watch directory" path=/tmp/verify-wSMl5v error="Error: EACCES: permission denied, watch '/tmp/verify-wSMl5v'" http.span=56 role=server
+timestamp=2026-11-16T02:53:07.638Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:53:07.638Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:53:07.669Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u/.config/opencode type=directory backend=inotify ignores=6 http.span=88 role=server
+timestamp=2026-11-16T02:53:07.723Z level=INFO run=038e43f9 message="location services booted" directory=/tmp/verify-wSMl5v/u workspaceID=undefined durationMs=141 http.span=142 role=server
+timestamp=2026-11-16T02:53:07.745Z level=INFO run=038e43f9 msg="loading plugin" id=waldoibarra/opencode-agents-cascade#c43b458b1de98392223f12e5835204b02d6c7b3b entrypoint=file:///tmp/verify-wSMl5v/u/cache/opencode/npm/git-opencode-agents-cascade-221f27f6af49/1794797586491/node_modules/opencode-agents-cascade/src/index.ts http.span=164 role=server
+timestamp=2026-11-16T02:53:07.749Z level=WARN run=038e43f9 message="failed to load plugin" target=waldoibarra/opencode-agents-cascade#c43b458b1de98392223f12e5835204b02d6c7b3b ref=err_d3e2c6c8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=168 role=server
+timestamp=2026-11-16T02:53:09.256Z level=ERROR run=038e43f9 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1675 role=server
+timestamp=2026-11-16T02:53:09.349Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v type=entries ignores=0 http.span=1768 role=server
+timestamp=2026-11-16T02:53:09.349Z level=ERROR run=038e43f9 message="failed to watch directory" path=/tmp/verify-wSMl5v error="Error: EACCES: permission denied, watch '/tmp/verify-wSMl5v'" http.span=1768 role=server
+timestamp=2026-11-16T02:53:09.362Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:09.363Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:09.363Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:09.364Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:09.406Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:53:09.407Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:09.409Z level=INFO run=038e43f9 message="watcher subscribe" path=/tmp/verify-wSMl5v/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:53:09.410Z level=INFO run=038e43f9 message="watcher started" path=/tmp/verify-wSMl5v/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:09.452Z level=INFO run=038e43f9 message=event event.id=evt_1e245d3cc001StpQ17qs6V1X3z event.created=1794797589452 event.type=provider.updated event.location.directory=/tmp/verify-wSMl5v/u event.location.workspaceID=undefined event.data={} http.span=1871 role=server
+timestamp=2026-11-16T02:53:09.471Z level=INFO run=038e43f9 message=event event.id=evt_1e245d3de001cwSYIgQ5KZagh6 event.created=1794797589470 event.type=model.updated event.location.directory=/tmp/verify-wSMl5v/u event.location.workspaceID=undefined event.data={} http.span=1890 role=server
+timestamp=2026-11-16T02:53:09.475Z level=INFO run=038e43f9 message=event event.id=evt_1e245d3e2001R3LGUqgFQDaQfK event.created=1794797589475 event.type=agent.updated event.location.directory=/tmp/verify-wSMl5v/u event.location.workspaceID=undefined event.data={} http.span=1894 role=server
+timestamp=2026-11-16T02:53:09.475Z level=INFO run=038e43f9 message=event event.id=evt_1e245d3e3001bIE5NCZQ0zc86V event.created=1794797589475 event.type=command.updated event.location.directory=/tmp/verify-wSMl5v/u event.location.workspaceID=undefined event.data={} http.span=1894 role=server
+timestamp=2026-11-16T02:53:09.930Z level=INFO run=038e43f9 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:53:09.931Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:53:09.931Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:53:09.935Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:09.935Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:09.958Z level=INFO run=038e43f9 message="watcher stopped" path=/etc type=entries http.span=2377 role=server
+timestamp=2026-11-16T02:53:09.958Z level=INFO run=038e43f9 message="watcher stopped" path=/ type=entries http.span=2377 role=server
+timestamp=2026-11-16T02:53:09.958Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp type=entries http.span=2377 role=server
+timestamp=2026-11-16T02:53:09.958Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u type=entries http.span=2377 role=server
+timestamp=2026-11-16T02:53:09.958Z level=INFO run=038e43f9 message="watcher stopped" path=/tmp/verify-wSMl5v/u/.config/opencode type=directory http.span=2377 role=server

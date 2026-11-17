@@ -1,0 +1,376 @@
+spec: greprag@5.85.7
+apiNames: greprag
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-JDwaFx/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44367
+server password [redacted]
+Unknown command: serve
+
+greprag — agent memory for Claude Code, Codex, OpenCode, and Grok Build
+
+Commands:
+  (no command)                    Open the local GrepRAG app
+  app | dashboard [--port N]      Open the local app (use --no-open on remote machines)
+  init [--api-key <existing-key>]
+                                  Auto-detect/ask for Codex, Claude Code, or OpenCode
+  init --claude [--api-key <existing-key>]
+                                  Configure hooks + API key for Claude Code
+  init --global [--name <name>]    Create ~/.greprag/project.json (global anchor)
+  init --opencode [--api-key <existing-key>]
+                                  Configure plugin + anchor for OpenCode
+  init --codex [--api-key <existing-key>]
+                                  Configure lifecycle hooks + anchor for Codex
+  init --grok [--api-key <existing-key>]
+                                  Configure Grok Build hooks + skill + rules
+  grok spawn [--cwd <path>] [--prompt "<text>"]
+                                  Open a fresh Grok TUI in a new terminal
+                                  (Windows schtasks bootloader — survives the
+                                  tool Job Object; child arms its own watch)
+  init --all [--root <path>]       Standard init for cwd, then bulk-register every
+                                   other git repo at depth 1 under <path> (default:
+                                   parent of repo root). Each becomes inbox-addressable.
+  status [--json] [--claude|--codex|--opencode|--grok]
+                                  Installation, auth, platform hooks/plugins, and project state
+  announce [--session <8hex>] [--path]
+                                  Print the full SessionStart announce (the harness
+                                  inlines only ~2KB; the rest is parked on disk)
+  codex doctor                   Diagnose Codex hooks, trust setup, and current thread
+  project-id                       Print the current project_id
+  session-id [--full]              Print this session's id (8-hex, 16-hex for UUIDv7, or full UUID with --full).
+  discover [--json]                Tenant-wide structure: every project, per-shape row counts,
+                                   activity ranges. For cross-project advisors.
+  doc <command>                    Mirror, search, and read project Markdown docs.
+  docptr <command>                 Document-pointer registry and reference backfill.
+  parity [seed]                    Doctrine drift-from-canon: the parity table (unit ·
+                                   lead · stale followers), plus the operator-run seed.
+  repodoc <index|status>           Stable identity for a repo's own Markdown: blocks keep
+                                   their ids through edits, splits, merges and renames.
+  instructions <render|status>
+                                  Render Codex/OpenCode AGENTS.md from the git CLAUDE.md.
+  doctor [--inspect] [--yes]       Diagnose + repair orphan project_ids and identity drift
+  desk <run|ensure|status>         The desk line: this machine answers which sessions
+                                   are live when the cloud asks.
+  smell "<text>"                   Shortcut for `greprag fix log "<text>"`.
+  context status [--session <id>]  Context-size governor readout: live tokens, threshold,
+                                   % consumed, turns since the crossover advisory last fired.
+                                   "context --help" for config (threshold + off-switch).
+  delivery <command>                Resolve and inspect repo delivery profiles.
+  deploy-gate [--target <id>]       Repo-independent deploy pre-flight: may a deploy run
+                                   from here, is one already running, what is shipping.
+                                   Read-only; the artifact proof stays with the repo.
+  merge-lock <acquire|release|status>  Serialise merges into a shared canonical
+                                   checkout. Take it before you merge, release after.
+  deploy-lock <acquire|release|status> --target <id>
+                                   One deploy at a time per target. Pass --pid so the
+                                   lock names the deploying process, not this command.
+  deploy-record --target <id>       Remember what this checkout last shipped, so the
+                                   gate can say what a deploy is about to ship.
+  deploy-verify --origin <url> --sha <commit>
+                                   Prove production is serving the commit you shipped.
+                                   Refuses if the build stamp is edge-cacheable.
+  procedure <command>               Governed operational procedure watches and runs.
+  skillgain <command>               Skill-learning queue and installation helpers.
+
+Inbox (email-style messaging across tenants):
+  inbox [--all] [--front-desk] [--session <id>] [--project <name>] [--peek]
+                                List unread, auto-scoped to THIS session: its own
+                                lines (sender OR recipient) only. Other sessions'
+                                private lines AND the front desk are hidden by
+                                default — the front desk (cold opens + inbound
+                                email) is opt-in via --front-desk.
+                                --all = audit peek: drop the per-session scope
+                                (every session's lines) AND include read history.
+                                --session scopes to one specific session's view.
+                                --project filters by project name.
+                                --peek: NON-MUTATING — does not mark any message read.
+  inbox watchers [--json]       List currently-attached live watchers
+                                (Claude / Codex / OpenCode / Grok). Each row:
+                                project · title (session_id) [platform] repo —
+                                project + nano title from session memory, repo
+                                from ~/.greprag/projects.json. Codex task
+                                discovery also uses codex_app.list_threads.
+  inbox watch                   Long-lived SSE stream — prints each message as it lands.
+                                Self-supervising by default: a parent process
+                                respawns the SSE loop (via CreateProcess) on any
+                                non-clean exit — within-session robustness, not
+                                reload-survival. "inbox watch --help" for details.
+    [--project <name>]          Filter to one project inbox (default: tenant-wide).
+    [--session <id>]            Filter to messages targeting this session
+                                (cold opens never wake it — use --receptionist).
+    [--receptionist]            Attend the front desk — wake live on a tenant
+                                catch-all (cold open / inbound email). Without it,
+                                cold opens surface only on a manual inbox check.
+    [--mechanic]                Live Mechanic — keep normal session/project
+                                delivery AND wake on tenant mechanic_friction events.
+    [--since <id|iso>]          Resume after a message id or timestamp.
+    [--json]                    Emit raw JSON per line (for piping to Monitor).
+    [--quiet]                   JSON on stdout only (Grok monitor). Auto-on under GROK_SESSION_ID.
+    [--no-supervise]            Run the SSE loop directly (no supervisor) — tests/debug.
+  inbox claim <id>              Receptionist: claim a front-desk record (cold open /
+                                inbound email). First claimant wins; a co-armed
+                                receptionist stands down — no double-reply.
+  inbox keep <id>               Extend a read message's TTL (default delete after 14 days)
+  inbox delete <id>             Permanently delete a message
+  send "body" --to <addr>       Send a message. Body is markdown.
+                                <addr> is a bare handle (tenant catch-all) or
+                                handle/<target> — see Addresses below.
+  send --body-file <path> --to <addr>
+                                Send a long/multiline body from a file.
+  send --stdin --to <addr>      Read message body from stdin.
+    --from-session <id>         Sender's session — denormalized so the recipient can
+                                reply by session without re-discovery.
+    --memory <uuid>             (repeatable) back-pointer to a memory row
+    --artifact <type:id>        (repeatable) e.g. commit:abc123, pr:#42, deploy:def
+    --file <path[:lines]>       (repeatable) e.g. src/auth.ts, src/auth.ts:42, src/x.ts:10-15
+    --ref-json '<json>'         escape hatch — full references object
+    --in-reply-to <id>          Thread a reply back to a front-desk record (cold open /
+                                inbound email) — sets references.in_reply_to so the
+                                ensuing private line continues that conversation.
+    --to-desk                   Self-addressed internal mail — posts to THIS project's own
+                                desk (no recipient; omit --to). Requires --type.
+    --type <internal-type>      Internal messageType for --to-desk (e.g. lore_smell). Queue
+                                item drained by its consumer — never wakes a watcher and is
+                                hidden from the default inbox (audit via 'inbox --all').
+  retract <code>                Pull back a previously-sent message (code is printed on send).
+  discord pair                  Pair Discord DMs to this project — generates a code to DM the bot.
+  discord unpair                Remove the Discord pairing.
+  discord me                    Show current Discord pairing state.
+  discord typing               Refresh the "typing…" indicator on the paired DM thread.
+  send "body" --to discord:<snowflake>
+                                Outbound DM to a paired Discord user from any session.
+                                Unread → hard delete. Read → body replaced with a retracted notice.
+                                Idempotent: double-retract is a no-op.
+
+  Addresses:
+    Cold open: <handle>@greprag.com                 tenant catch-all — first contact when
+                                                    you don't know their session. Lands in
+                                                    their inbox for a manual check; silent
+                                                    (no session wake, no operator ping).
+    Session:   <handle>@greprag.com/<session-uuid>  session-to-session (normal, live)
+    Self-desk: --to-desk --type <internal-type>     internal queue item on your own project
+                                                    desk — no recipient, no wake; drained by
+                                                    its typed consumer (e.g. lore_smell).
+    --session and --project flags were removed; the address carries the target.
+    Project broadcasts (<handle>@greprag.com/<project-name>) were removed.
+
+Email (agent-email front desk — drain inbound attachments to local disk):
+  email [pending]               List pending front-desk email (envelope only).
+  email pull --id <record>      Pull ONE record's attachments to local disk.
+  email pull --all-pending      Pull EVERY pending record's attachments.
+    [--to <dir>]                Save dir. Default: --to > $GREPRAG_EMAIL_DIR >
+                               anchor email_dir > ~/.greprag/email/<project>.
+    [--quiet]                  Only print the one-line summary.
+                               Saved as <subject-slug>-<index>.<ext>; re-pulls
+                               are idempotent. Auto-save: set email_autosave=true
+                               in .greprag/project.json so the mail hook pulls
+                               new attachments each turn.
+
+Memory (episodic project memory — turn/hourly/daily/ship-event):
+  memory search "<query>"        Lexical retrieval over the project's memory.
+                                Same v5 RRF + adjacency pipeline as 'corpus
+                                search'. Use when looking up a specific
+                                problem, bug, or topic.
+    [--limit N=5] [--shape <name>] [--project <name>] [--format markdown|json]
+  memory recap                   Recent daily summaries (SessionStart shape).
+    [--daily-last N=7] [--project <name>] [--format markdown|json]
+  memory daily   [--last N=7]    Most-recent daily summaries.
+  memory hourly  [--last N=24]   Most-recent hourly summaries.
+  memory turns   [--last N=20]   Raw per-turn envelopes (21-day TTL).
+  memory ships   [--last N=50]   Ship-event rows (commits/PRs/deploys/releases).
+    Common flags: [--project <name>] [--from ISO --to ISO] [--format markdown|json]
+  memory compact <hour|day|week> [--now ISO]
+                                Manual compaction trigger (backfill / admin use).
+  memory delete                  Bulk-delete nodes by filters (combinable). DRY
+                                RUN by default; pass --yes to execute. ≥1 filter
+                                required.
+    [--project <name>] [--shape <name>] [--from ISO] [--to ISO] [--session <id>] [--yes]
+  (Aliases: 'briefing' → 'recap' (renamed v5.16.0); 'odyssey' → 'memory'
+   top-level verb (kept for v5.8.0 scripts).)
+
+Project fixes (emergent friction → fix → repair):
+  fix spawn --type <harness|doctrine|injection|env|code> "<one unit>"
+                                [--parent-session <id>]
+                                THE friction reflex: emit a FIX CHIP mission for
+                                exactly this typed friction, now; the chip investigates,
+                                then >=90 repairs autonomously, <90 parks findings.
+  fix log "<text>" [--scope <S>] [--repaired] [--project <name>] [--source-session <id>]
+                                Audit/design-input note only, NOT the friction reflex.
+                                --repaired records a known durable rule directly
+                                (requires --scope).
+                                Top-level alias: greprag smell "<text>".
+  fix list [--all] [--repaired] [--project <name>] [--format json]
+                                Open queue by default; --repaired = resolved durable
+                                rules grouped by scope; --all = tenant-wide census.
+  fix repair <id> "<rule>" [--scope <S>] [--project <name>]
+                                Resolve a fix: record the durable rule, close the entry.
+  fix land <id> --commits <h1,h2> --summary "..." [--files <f,..>] [--units <u,..>] [--harness <h,..>]
+                                Close a fix with repair-ledger write-back.
+  fix ledger [--limit N] [--project <name>] [--format json]
+                                Fleet-activity digest: what chips repaired, when.
+  fix delete <nodeId> [--project <name>]
+                                Hard-remove a fix (noise / cleanup).
+  fix search "<query>" [--scope <S>] [--limit N=10] [--project <name>] [--format markdown|json]
+                                Lexical search across the project's fixes.
+  fix scopes [--project <name>] Distinct scope labels present in this project.
+
+Mechanic control plane (repairs as data — 'greprag mechanic --help'):
+  mechanic status [--format json]      Inventory of live repairs; ⚑ = ready to graduate.
+  mechanic set | unset                 Mark / unmark THIS project as the live Mechanic role.
+  mechanic role [status]               Show whether THIS project is the live Mechanic.
+  mechanic friction "<summary>"        RETIRED: use 'greprag fix spawn --type <type> "<unit>"'.
+  mechanic reply --to <8hex> "<msg>"   Reply on the typed mechanic rail.
+  mechanic attest <nodeId> ...           Record operator-attested regression evidence.
+  mechanic enable <nodeId>             Ratify a shadow repair → active.
+  mechanic disable <nodeId> [--retire] active → shadow (default) or terminal retire.
+  mechanic why <nodeId>                Provenance: friction → fix → repair chain.
+  mechanic off | on                    Panic switch — suspend/resume ALL repairs (local file).
+
+Corpus (upload + search arbitrary text — books, codebases, references):
+  corpus upload <file|url> --raw|--enriched   Create a store + ingest. Mode REQUIRED:
+    [--name <N>] [--kind <K>]   --raw (lexical — docs/code) | --enriched (per-node
+    [--refresh hourly|daily|manual|off]   LLM vocab bridge — prose/voice). K: docs|
+                                prose|transcript|codebase|voice|generic (default docs). html/pdf/docx/
+                                xlsx/csv convert server-side. --refresh tracks a URL
+                                for the freshness loop (URLs only; default off).
+  search "<query>" [--limit 8] [--kind K] [--store <ref>] [--section "<h>"] [--json]
+                                One search across EVERYTHING greprag holds —
+                                reference banks, repo markdown, skills, memory.
+                                Start here; the corpus forms below are narrower.
+  corpus search <store> "<intent>" [--limit 5] [--section "<h>"] [--shape S]
+                                Single-store search. <store> is a UUID or name.
+  corpus search "<intent>" --all|--store <ref>...  [--kind K] [--limit 8]
+                                Multistore search (RRF-fused). --all = every store.
+  corpus section <store> "<heading>" [--max-chars N]
+                                Every node under a heading (forgiving: any depth,
+                                dash/case-insensitive).
+  corpus walk <store> <nodeId> [--before 2 --after 2] [--max-chars N]
+                                Show a node and its surrounding context. Both
+                                print full node text; --max-chars N cuts each node.
+  corpus status <store>         Write-side enrichment progress (per-node vocab bridge).
+  corpus refresh <store>        Manually re-check a tracked source (re-ingest changed blocks).
+  corpus sources <store>        Freshness state: source, policy, last change, next check.
+  corpus list [--kind K]        List stores under this tenant.
+  corpus delete <store> [--yes] Delete a store and its nodes.
+
+Crush (pre-LLM tool-output compression — safe inside pipes, always exits 0):
+  crush --type <log|search|json> [--ccr] [--query "words"]
+                                Read stdin, write the crushed version to stdout.
+                                log = build/test output (keep errors/traces/summaries),
+                                search = grep/rg output (keep scored top matches),
+                                json = large arrays (keep errors/outliers/first+last).
+                                --ccr stashes the ORIGINAL locally and appends a
+                                trailing <<ccr:HASH>> marker. If compression wouldn't
+                                save tokens (or input is tiny), stdin passes through
+                                verbatim — never breaks the pipe.
+  crush stats                   Totals + ratios from the pipe-wrap stats log
+                                (~/.greprag/crush-stats.jsonl — one record per
+                                --stats invocation; the PreToolUse pipe-wrap
+                                hook passes --stats on every rewrite).
+  retrieve <hash>               Print a CCR-stashed original back to stdout.
+                                Store: ~/.greprag/ccr.db (override GREPRAG_CCR_DB).
+  ccr put --type <t>            Internal: stash stdin byte-exact in the CCR store,
+                                print its 16-hex hash (the opencode inline crusher
+                                uses this to persist originals it crushed in-process).
+
+Archive (governed compact — lossless PNG snapshot of the pre-compact transcript):
+  archive render --transcript <path> [--out-dir <dir>] [--session <8hex>]
+                                Render the transcript main chain to pixel-font
+                                PNGs (~30K chars/page, pixel round-trip verified)
+                                and index pages in the CCR store. The PreCompact
+                                hook runs this automatically before compaction.
+  archive list [--session <id>] Indexed archives with page -> turn ranges.
+  archive snippet [--session <id>]
+                                Print the documented /compact instruction block
+                                (preserve/compress rules + archive pointer line).
+
+Identity (public handle + vanity alias — real email is auth-only, never a routing address):
+  identity show  |  whoami      Print numeric handle + claimed aliases.
+  identity claim <alias>        Claim a vanity alias (e.g. "travis" → travis@greprag.com).
+  identity release <alias>      Drop a claimed alias.
+
+Skills (opt-in advisor skills bundled with the CLI):
+  skill list                    Show bundled skills and install status
+  skill install <name>          Install a bundled advisor (e.g. discord, content-advisor)
+  skill uninstall <name>        Remove a previously-installed advisor
+  skill source stamp <name> --project <p> --path <rel> [--path <rel>...] [--baseline <ref>]
+                                Stamp a skill-staleness baseline against local Git
+  skill history <name>          Every revision of a mirrored skill: date, author, reason, changes
+  skill diff <name> <revA> [<revB>]
+                                Unified diff between two revisions (revB defaults to current)
+
+Load (on-demand doctrine — the CLI is the payload, no .md files):
+  load                          Browse the catalog (chip-spawn, codex chips, mechanic, …)
+  load <name>                   Print that entry's full method inline
+
+Loadout (gift a skill bundle to another tenant — offer, never auto-install):
+  loadout send --to <handle>@greprag.com --skill <name> [--skill <n> …]
+                [--dir <path>] [--advisor <name>] [--note "…"]
+                                Freeze + send a loadout. --skill pulls from your
+                                mirror; --dir snapshots a skill dir from disk.
+  loadout list                  Offered loadouts waiting at your front desk.
+  loadout open <id>             Manifest + a bounded content preview (never ingests).
+  loadout equip <id>            Equip it (alias: accept) — copies skills to your load
+                                store + self-inflates via 'greprag load'.
+  loadout decline <id>          Decline — GCs the snapshot.
+  loadout status                Loadouts you've sent (offered/equipped/declined).
+  loadout unequip <name> [--delete-skills]
+                                Stop a loadout's auto-inflate.
+
+Persona (tenant-scoped speaking instructions):
+  persona list                  List built-in Persona templates.
+  persona use <template>        Activate a built-in Persona template.
+  persona set <text>|--file <f>|--stdin
+                                Save and activate a custom Persona verbatim.
+  persona show                  Show the active Persona.
+  persona clear                 Remove the active Persona.
+
+Instructions (~/.claude/CLAUDE.md in the dotclaude git repo is the source):
+  instructions render [--check] Write ~/.codex/AGENTS.md and
+                                ~/.config/opencode/AGENTS.md from the git CLAUDE.md
+                                plus ~/.claude/instructions/<harness>.md.
+  instructions status           Show whether each rendered file is current.
+  agents ...                    Deprecated alias for instructions.
+
+Project metadata (rename / merge / list):
+  project rename <new-name> [--yes]
+                                Rename the project at cwd (anchor + registry + API
+                                + store metadata). Confirms before writing.
+  project merge --from <X> --into <Y> [--apply] [--name <override>] [--json]
+                                Consolidate one project into another. Defaults to
+                                dry-run. --from/--into accept a UUID or project_name.
+                                --name renames the target in the same step.
+  project list [--json]         Every project under this tenant, with anchor + rows.
+
+Opencode (bridge inbox SSE into a running opencode desktop session — the
+Monitor equivalent, since opencode is turn-based by default):
+  opencode relay --session <id>  [options]
+                                Subscribe to /v1/inbox/stream and inject each
+                                message as a fresh turn in the named opencode
+                                desktop session via /session/{id}/prompt_async.
+                                See `greprag opencode --help` for flags.
+
+Other:
+  expand --chunk <id>           Expand a memory cluster (siblings, adjacent, linked)
+  help [--all]                  Show this overview. --all appends every command's
+                                full --help — the complete, always-current guide.
+
+Examples:
+  greprag                                            # open the local customer app
+  greprag init                                       # standard repo setup
+  greprag init --global                              # Cowork / unanchored sessions
+  greprag init --all                                 # register every sibling repo for inbox
+  greprag init --all --root C:\                     # scan a specific directory
+  greprag inbox
+  greprag send "done with migration" --to alice@greprag.com/abc12345
+                                                     # session-targeted (normal)
+  greprag send "deploy approved" --to alice@greprag.com
+                                                     # cold open — alice's front desk
+  greprag send "Bug in auth flow — repro at line 42" --to alice@greprag.com/abc12345     --file src/auth.ts:42 --artifact commit:abc123
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:46.230Z level=INFO run=a7462335 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"greprag@5.85.7\"]" role=cli

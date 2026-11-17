@@ -1,0 +1,19 @@
+spec: @valorbrain/connect@0.13.0
+apiNames: @valorbrain/connect, connect
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-VjJV7l/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45775
+server password [redacted]
+! warning: ignoring unknown flag(s): --port — this is @valorbrain/connect 0.13.0; see --help
+No token, and nobody here to approve in a browser (CI or piped output). Pass --token vbm_… (Settings → MCP Tokens), set VALORBRAIN_MCP_TOKEN, run `npx -y @valorbrain/cli init --agent` first, or add --no-browser to print the approval link anyway.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:39.782Z level=INFO run=00355aa5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@valorbrain/connect@0.13.0\"]" role=cli
+timestamp=2026-11-16T07:35:40.698Z level=INFO run=da641301 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:41.342Z level=INFO run=da641301 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:41.439Z level=INFO run=da641301 message="database schema bootstrap completed" migrations=59 durationMs=97 role=server

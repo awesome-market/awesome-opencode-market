@@ -1,0 +1,56 @@
+spec: modelquota@0.3.0
+apiNames: modelquota
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-jrm1HG/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36771
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:19.122Z level=INFO run=4093972c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"modelquota@0.3.0\"]" role=cli
+timestamp=2026-11-16T10:13:24.598Z level=INFO run=97a4c84e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:24.921Z level=INFO run=97a4c84e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:24.937Z level=INFO run=97a4c84e message="database schema bootstrap completed" migrations=59 durationMs=16 role=server
+timestamp=2026-11-16T10:13:25.295Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u/.config/opencode type=directory ignores=6 http.span=65 role=server
+timestamp=2026-11-16T10:13:25.312Z level=INFO run=97a4c84e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=82 role=server
+timestamp=2026-11-16T10:13:25.312Z level=INFO run=97a4c84e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=82 role=server
+timestamp=2026-11-16T10:13:25.313Z level=INFO run=97a4c84e message="watcher subscribe" path=/ type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T10:13:25.313Z level=INFO run=97a4c84e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=83 role=server
+timestamp=2026-11-16T10:13:25.313Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T10:13:25.314Z level=INFO run=97a4c84e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=84 role=server
+timestamp=2026-11-16T10:13:25.314Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG type=entries ignores=0 http.span=84 role=server
+timestamp=2026-11-16T10:13:25.314Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG type=entries backend=node ignores=0 http.span=84 role=server
+timestamp=2026-11-16T10:13:25.314Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u type=entries ignores=0 http.span=84 role=server
+timestamp=2026-11-16T10:13:25.314Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u type=entries backend=node ignores=0 http.span=84 role=server
+timestamp=2026-11-16T10:13:25.350Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u/.config/opencode type=directory backend=inotify ignores=6 http.span=120 role=server
+timestamp=2026-11-16T10:13:25.364Z level=INFO run=97a4c84e message="location services booted" directory=/tmp/verify-jrm1HG/u workspaceID=undefined durationMs=133 http.span=134 role=server
+timestamp=2026-11-16T10:13:25.369Z level=INFO run=97a4c84e msg="loading plugin" id=modelquota@0.3.0 entrypoint=file:///tmp/verify-jrm1HG/u/cache/opencode/npm/modelquota@0.3.0/1794824004242/node_modules/modelquota/dist/server.js http.span=139 role=server
+timestamp=2026-11-16T10:13:25.374Z level=WARN run=97a4c84e message="failed to load plugin" target=modelquota@0.3.0 ref=err_d602e496 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=144 role=server
+timestamp=2026-11-16T10:13:26.452Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:26.452Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:26.452Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:26.452Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:26.487Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:26.487Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:26.488Z level=INFO run=97a4c84e message="watcher subscribe" path=/tmp/verify-jrm1HG/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:26.489Z level=INFO run=97a4c84e message="watcher started" path=/tmp/verify-jrm1HG/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:26.542Z level=INFO run=97a4c84e message=event event.id=evt_1e3d8eb8e0019a6SMvKyZIyRi5 event.created=1794824006542 event.type=provider.updated event.location.directory=/tmp/verify-jrm1HG/u event.location.workspaceID=undefined event.data={} http.span=1312 role=server
+timestamp=2026-11-16T10:13:26.566Z level=INFO run=97a4c84e message=event event.id=evt_1e3d8eba6001GDhwIT9psrzhF1 event.created=1794824006566 event.type=model.updated event.location.directory=/tmp/verify-jrm1HG/u event.location.workspaceID=undefined event.data={} http.span=1336 role=server
+timestamp=2026-11-16T10:13:26.572Z level=INFO run=97a4c84e message=event event.id=evt_1e3d8ebac001xFe6KS5Blv1LrT event.created=1794824006572 event.type=agent.updated event.location.directory=/tmp/verify-jrm1HG/u event.location.workspaceID=undefined event.data={} http.span=1342 role=server
+timestamp=2026-11-16T10:13:26.573Z level=INFO run=97a4c84e message=event event.id=evt_1e3d8ebad001NHS9YY003hF66v event.created=1794824006573 event.type=command.updated event.location.directory=/tmp/verify-jrm1HG/u event.location.workspaceID=undefined event.data={} http.span=1343 role=server
+timestamp=2026-11-16T10:13:26.694Z level=ERROR run=97a4c84e message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1464 role=server
+timestamp=2026-11-16T10:13:26.797Z level=INFO run=97a4c84e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:26.797Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:13:26.797Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:13:26.806Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:26.807Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:26.827Z level=INFO run=97a4c84e message="watcher stopped" path=/etc type=entries http.span=1597 role=server
+timestamp=2026-11-16T10:13:26.827Z level=INFO run=97a4c84e message="watcher stopped" path=/ type=entries http.span=1597 role=server
+timestamp=2026-11-16T10:13:26.827Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp type=entries http.span=1597 role=server
+timestamp=2026-11-16T10:13:26.827Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG type=entries http.span=1597 role=server
+timestamp=2026-11-16T10:13:26.827Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u type=entries http.span=1597 role=server
+timestamp=2026-11-16T10:13:26.831Z level=INFO run=97a4c84e message="watcher stopped" path=/tmp/verify-jrm1HG/u/.config/opencode type=directory http.span=1601 role=server

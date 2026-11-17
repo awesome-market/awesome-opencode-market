@@ -1,0 +1,40 @@
+spec: ainative-opencode-memory-mcp@0.1.2
+apiNames: ainative-opencode-memory-mcp
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-RRTxSy/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46379
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:49.721Z level=INFO run=39125a2a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"ainative-opencode-memory-mcp@0.1.2\"]" role=cli
+timestamp=2026-11-16T02:53:53.067Z level=INFO run=6c892f6b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:53.295Z level=INFO run=6c892f6b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:53.324Z level=INFO run=6c892f6b message="database schema bootstrap completed" migrations=59 durationMs=29 role=server
+timestamp=2026-11-16T02:53:53.767Z level=INFO run=6c892f6b message="watcher subscribe" path=/tmp/verify-RRTxSy/u/.config/opencode type=directory ignores=6 http.span=51 role=server
+timestamp=2026-11-16T02:53:53.770Z level=INFO run=6c892f6b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T02:53:53.771Z level=INFO run=6c892f6b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:53.771Z level=INFO run=6c892f6b message="watcher subscribe" path=/ type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:53.771Z level=INFO run=6c892f6b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:53.771Z level=INFO run=6c892f6b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:53:53.772Z level=INFO run=6c892f6b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T02:53:53.772Z level=INFO run=6c892f6b message="watcher subscribe" path=/tmp/verify-RRTxSy type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T02:53:53.773Z level=ERROR run=6c892f6b message="failed to watch directory" path=/tmp/verify-RRTxSy error="Error: EACCES: permission denied, watch '/tmp/verify-RRTxSy'" http.span=57 role=server
+timestamp=2026-11-16T02:53:53.773Z level=INFO run=6c892f6b message="watcher subscribe" path=/tmp/verify-RRTxSy/u type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:53:53.774Z level=INFO run=6c892f6b message="watcher started" path=/tmp/verify-RRTxSy/u type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T02:53:53.811Z level=INFO run=6c892f6b message="watcher started" path=/tmp/verify-RRTxSy/u/.config/opencode type=directory backend=inotify ignores=6 http.span=95 role=server
+timestamp=2026-11-16T02:53:53.851Z level=INFO run=6c892f6b msg="loading plugin" id=ainative-opencode-memory-mcp@0.1.2 entrypoint=file:///tmp/verify-RRTxSy/u/cache/opencode/npm/ainative-opencode-memory-mcp@0.1.2/1794797632748/node_modules/ainative-opencode-memory-mcp/index.js http.span=135 role=server
+timestamp=2026-11-16T02:53:54.157Z level=INFO run=6c892f6b message="location services booted" directory=/tmp/verify-RRTxSy/u workspaceID=undefined durationMs=440 http.span=441 role=server
+timestamp=2026-11-16T02:53:54.189Z level=INFO run=6c892f6b message="watcher subscribe" path=/tmp/verify-RRTxSy type=entries ignores=0 http.span=473 role=server
+timestamp=2026-11-16T02:53:54.190Z level=ERROR run=6c892f6b message="failed to watch directory" path=/tmp/verify-RRTxSy error="Error: EACCES: permission denied, watch '/tmp/verify-RRTxSy'" http.span=474 role=server
+timestamp=2026-11-16T02:54:03.822Z level=ERROR run=6c892f6b message="Failed to fetch models.dev" cause="Cause([Fail(TimeoutError: Operation timed out after '10s')])" http.span=10106 role=server
+timestamp=2026-11-16T02:54:13.836Z level=INFO run=6c892f6b message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:54:13.837Z level=INFO run=6c892f6b message="watcher stopped" path=/etc type=entries http.span=20121 role=server
+timestamp=2026-11-16T02:54:13.837Z level=INFO run=6c892f6b message="watcher stopped" path=/ type=entries http.span=20121 role=server
+timestamp=2026-11-16T02:54:13.837Z level=INFO run=6c892f6b message="watcher stopped" path=/tmp type=entries http.span=20121 role=server
+timestamp=2026-11-16T02:54:13.837Z level=INFO run=6c892f6b message="watcher stopped" path=/tmp/verify-RRTxSy/u type=entries http.span=20121 role=server
+timestamp=2026-11-16T02:54:13.838Z level=INFO run=6c892f6b message="watcher stopped" path=/tmp/verify-RRTxSy/u/.config/opencode type=directory http.span=20122 role=server

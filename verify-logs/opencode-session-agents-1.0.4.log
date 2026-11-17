@@ -1,0 +1,55 @@
+spec: opencode-session-agents@1.0.4
+apiNames: opencode-session-agents
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-wsvtaR/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40927
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:27.070Z level=INFO run=a347fac2 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-session-agents@1.0.4\"]" role=cli
+timestamp=2026-11-16T08:06:31.374Z level=INFO run=bd598614 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:31.530Z level=INFO run=bd598614 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:31.542Z level=INFO run=bd598614 message="database schema bootstrap completed" migrations=59 durationMs=12 role=server
+timestamp=2026-11-16T08:06:31.835Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T08:06:31.838Z level=INFO run=bd598614 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:06:31.838Z level=INFO run=bd598614 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.839Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:06:31.840Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:31.840Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:06:31.854Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u/.config/opencode type=directory backend=inotify ignores=6 http.span=35 role=server
+timestamp=2026-11-16T08:06:31.861Z level=INFO run=bd598614 message="location services booted" directory=/tmp/verify-wsvtaR/u workspaceID=undefined durationMs=42 http.span=42 role=server
+timestamp=2026-11-16T08:06:31.868Z level=INFO run=bd598614 msg="loading plugin" id=opencode-session-agents@1.0.4 entrypoint=file:///tmp/verify-wsvtaR/u/cache/opencode/npm/opencode-session-agents@1.0.4/1794816391198/node_modules/opencode-session-agents/dist/index.js http.span=49 role=server
+timestamp=2026-11-16T08:06:31.891Z level=WARN run=bd598614 message="failed to load plugin" target=opencode-session-agents@1.0.4 ref=err_2c13f029 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=72 role=server
+timestamp=2026-11-16T08:06:32.322Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:32.322Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.322Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:32.322Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.332Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:32.332Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.332Z level=INFO run=bd598614 message="watcher subscribe" path=/tmp/verify-wsvtaR/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:32.332Z level=INFO run=bd598614 message="watcher started" path=/tmp/verify-wsvtaR/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:32.348Z level=INFO run=bd598614 message=event event.id=evt_1e364bc9c001RdrQz6LbK94ukm event.created=1794816392348 event.type=provider.updated event.location.directory=/tmp/verify-wsvtaR/u event.location.workspaceID=undefined event.data={} http.span=529 role=server
+timestamp=2026-11-16T08:06:32.356Z level=INFO run=bd598614 message=event event.id=evt_1e364bca3001LLz4PihF8WLbIy event.created=1794816392356 event.type=model.updated event.location.directory=/tmp/verify-wsvtaR/u event.location.workspaceID=undefined event.data={} http.span=537 role=server
+timestamp=2026-11-16T08:06:32.357Z level=INFO run=bd598614 message=event event.id=evt_1e364bca5001AglJGJFETW7mYx event.created=1794816392357 event.type=agent.updated event.location.directory=/tmp/verify-wsvtaR/u event.location.workspaceID=undefined event.data={} http.span=538 role=server
+timestamp=2026-11-16T08:06:32.358Z level=INFO run=bd598614 message=event event.id=evt_1e364bca6001sySqD1L05avgf2 event.created=1794816392358 event.type=command.updated event.location.directory=/tmp/verify-wsvtaR/u event.location.workspaceID=undefined event.data={} http.span=539 role=server
+timestamp=2026-11-16T08:06:32.411Z level=INFO run=bd598614 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:06:32.411Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:06:32.411Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:06:32.413Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:32.414Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:32.423Z level=INFO run=bd598614 message="watcher stopped" path=/etc type=entries http.span=604 role=server
+timestamp=2026-11-16T08:06:32.423Z level=INFO run=bd598614 message="watcher stopped" path=/ type=entries http.span=604 role=server
+timestamp=2026-11-16T08:06:32.423Z level=INFO run=bd598614 message="watcher stopped" path=/tmp type=entries http.span=604 role=server
+timestamp=2026-11-16T08:06:32.424Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR type=entries http.span=605 role=server
+timestamp=2026-11-16T08:06:32.424Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u type=entries http.span=605 role=server
+timestamp=2026-11-16T08:06:32.425Z level=INFO run=bd598614 message="watcher stopped" path=/tmp/verify-wsvtaR/u/.config/opencode type=directory http.span=606 role=server

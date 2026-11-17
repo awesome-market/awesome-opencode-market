@@ -1,0 +1,56 @@
+spec: opencode-prompt-guard@1.0.1
+apiNames: opencode-prompt-guard
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-itiVUT/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43655
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:51.507Z level=INFO run=2506edb4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-prompt-guard@1.0.1\"]" role=cli
+timestamp=2026-11-16T11:34:05.421Z level=INFO run=32768d7a message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:34:05.800Z level=INFO run=32768d7a message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:34:05.826Z level=INFO run=32768d7a message="database schema bootstrap completed" migrations=59 durationMs=26 role=server
+timestamp=2026-11-16T11:34:06.178Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u/.config/opencode type=directory ignores=6 http.span=57 role=server
+timestamp=2026-11-16T11:34:06.184Z level=INFO run=32768d7a message="watcher subscribe" path=/etc type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T11:34:06.186Z level=INFO run=32768d7a message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=65 role=server
+timestamp=2026-11-16T11:34:06.187Z level=INFO run=32768d7a message="watcher subscribe" path=/ type=entries ignores=0 http.span=66 role=server
+timestamp=2026-11-16T11:34:06.187Z level=INFO run=32768d7a message="watcher started" path=/ type=entries backend=node ignores=0 http.span=66 role=server
+timestamp=2026-11-16T11:34:06.188Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-16T11:34:06.188Z level=INFO run=32768d7a message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-16T11:34:06.188Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-16T11:34:06.189Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT type=entries backend=node ignores=0 http.span=68 role=server
+timestamp=2026-11-16T11:34:06.189Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-16T11:34:06.190Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-16T11:34:06.242Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u/.config/opencode type=directory backend=inotify ignores=6 http.span=121 role=server
+timestamp=2026-11-16T11:34:06.275Z level=INFO run=32768d7a msg="loading plugin" id=opencode-prompt-guard@1.0.1 entrypoint=file:///tmp/verify-itiVUT/u/cache/opencode/npm/opencode-prompt-guard@1.0.1/1794828845098/node_modules/opencode-prompt-guard/dist/index.js http.span=154 role=server
+timestamp=2026-11-16T11:34:06.530Z level=WARN run=32768d7a message="failed to load plugin" target=opencode-prompt-guard@1.0.1 ref=err_e4fbe9d7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=409 role=server
+timestamp=2026-11-16T11:34:06.546Z level=INFO run=32768d7a message="location services booted" directory=/tmp/verify-itiVUT/u workspaceID=undefined durationMs=424 http.span=425 role=server
+timestamp=2026-11-16T11:34:07.830Z level=ERROR run=32768d7a message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1709 role=server
+timestamp=2026-11-16T11:34:07.834Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:07.834Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:07.835Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T11:34:07.835Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:07.866Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T11:34:07.866Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:07.868Z level=INFO run=32768d7a message="watcher subscribe" path=/tmp/verify-itiVUT/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T11:34:07.868Z level=INFO run=32768d7a message="watcher started" path=/tmp/verify-itiVUT/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T11:34:07.949Z level=INFO run=32768d7a message=event event.id=evt_1e422cb4d0012uBv8IEbWzVqDp event.created=1794828847949 event.type=provider.updated event.location.directory=/tmp/verify-itiVUT/u event.location.workspaceID=undefined event.data={} http.span=1828 role=server
+timestamp=2026-11-16T11:34:07.994Z level=INFO run=32768d7a message=event event.id=evt_1e422cb7a001BstG29jZp19dej event.created=1794828847994 event.type=model.updated event.location.directory=/tmp/verify-itiVUT/u event.location.workspaceID=undefined event.data={} http.span=1873 role=server
+timestamp=2026-11-16T11:34:08.000Z level=INFO run=32768d7a message=event event.id=evt_1e422cb80001O0ffFjUfwwAwaJ event.created=1794828848000 event.type=agent.updated event.location.directory=/tmp/verify-itiVUT/u event.location.workspaceID=undefined event.data={} http.span=1879 role=server
+timestamp=2026-11-16T11:34:08.001Z level=INFO run=32768d7a message=event event.id=evt_1e422cb81001HLtn4dT7GMFRbQ event.created=1794828848001 event.type=command.updated event.location.directory=/tmp/verify-itiVUT/u event.location.workspaceID=undefined event.data={} http.span=1880 role=server
+timestamp=2026-11-16T11:34:08.363Z level=INFO run=32768d7a message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T11:34:08.363Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T11:34:08.363Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T11:34:08.382Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:08.384Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T11:34:08.448Z level=INFO run=32768d7a message="watcher stopped" path=/etc type=entries http.span=2327 role=server
+timestamp=2026-11-16T11:34:08.448Z level=INFO run=32768d7a message="watcher stopped" path=/ type=entries http.span=2327 role=server
+timestamp=2026-11-16T11:34:08.448Z level=INFO run=32768d7a message="watcher stopped" path=/tmp type=entries http.span=2327 role=server
+timestamp=2026-11-16T11:34:08.448Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT type=entries http.span=2327 role=server
+timestamp=2026-11-16T11:34:08.448Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u type=entries http.span=2327 role=server
+timestamp=2026-11-16T11:34:08.498Z level=INFO run=32768d7a message="watcher stopped" path=/tmp/verify-itiVUT/u/.config/opencode type=directory http.span=2377 role=server

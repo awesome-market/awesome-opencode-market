@@ -1,0 +1,32 @@
+spec: @noppu-labs/opencode-toolkit-core@0.1.1
+apiNames: @noppu-labs/opencode-toolkit-core, opencode-toolkit-core
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-nuBuaC/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35003
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:54:15.333Z level=INFO run=ead5753d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@noppu-labs/opencode-toolkit-core@0.1.1\"]" role=cli
+timestamp=2026-11-16T02:54:16.003Z level=INFO run=b992253d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:16.290Z level=INFO run=b992253d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:16.323Z level=INFO run=b992253d message="database schema bootstrap completed" migrations=59 durationMs=33 role=server
+timestamp=2026-11-16T02:54:16.687Z level=INFO run=b992253d message="watcher subscribe" path=/tmp/verify-nuBuaC/u/.config/opencode type=directory ignores=6 http.span=57 role=server
+timestamp=2026-11-16T02:54:16.690Z level=INFO run=b992253d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-16T02:54:16.691Z level=INFO run=b992253d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T02:54:16.691Z level=INFO run=b992253d message="watcher subscribe" path=/ type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T02:54:16.691Z level=INFO run=b992253d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T02:54:16.692Z level=INFO run=b992253d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-16T02:54:16.692Z level=INFO run=b992253d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T02:54:16.692Z level=INFO run=b992253d message="watcher subscribe" path=/tmp/verify-nuBuaC type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-16T02:54:16.692Z level=ERROR run=b992253d message="failed to watch directory" path=/tmp/verify-nuBuaC error="Error: EACCES: permission denied, watch '/tmp/verify-nuBuaC'" http.span=62 role=server
+timestamp=2026-11-16T02:54:16.693Z level=INFO run=b992253d message="watcher subscribe" path=/tmp/verify-nuBuaC/u type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T02:54:16.694Z level=INFO run=b992253d message="watcher started" path=/tmp/verify-nuBuaC/u type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T02:54:16.740Z level=INFO run=b992253d message="watcher started" path=/tmp/verify-nuBuaC/u/.config/opencode type=directory backend=inotify ignores=6 http.span=110 role=server
+timestamp=2026-11-16T02:54:16.770Z level=INFO run=b992253d msg="loading plugin" id=@noppu-labs/opencode-toolkit-core@0.1.1 entrypoint=file:///tmp/verify-nuBuaC/u/cache/opencode/npm/@noppu-labs/opencode-toolkit-core@0.1.1/1794797655644/node_modules/@noppu-labs/opencode-toolkit-core/index.ts http.span=140 role=server
+timestamp=2026-11-16T02:54:16.772Z level=WARN run=b992253d message="failed to load plugin" target=@noppu-labs/opencode-toolkit-core@0.1.1 ref=err_b1e38939 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=142 role=server
+timestamp=2026-11-16T02:54:16.783Z level=INFO run=b992253d message="location services booted" directory=/tmp/verify-nuBuaC/u workspaceID=undefined durationMs=153 http.span=153 role=server

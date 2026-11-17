@@ -1,0 +1,55 @@
+spec: autosquid/omo-mem#8a2132024b541241434b8c6ec6f5ee440fd88ef5
+apiNames: autosquid/omo-mem, omo-mem
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-AE453I/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35233
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:35.560Z level=INFO run=e05bd86d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"autosquid/omo-mem#8a2132024b541241434b8c6ec6f5ee440fd88ef5\"]" role=cli
+timestamp=2026-11-16T08:47:39.830Z level=INFO run=1d4473f9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:40.260Z level=INFO run=1d4473f9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:40.377Z level=INFO run=1d4473f9 message="database schema bootstrap completed" migrations=59 durationMs=117 role=server
+timestamp=2026-11-16T08:47:40.738Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u/.config/opencode type=directory ignores=6 http.span=65 role=server
+timestamp=2026-11-16T08:47:40.745Z level=INFO run=1d4473f9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=72 role=server
+timestamp=2026-11-16T08:47:40.746Z level=INFO run=1d4473f9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=73 role=server
+timestamp=2026-11-16T08:47:40.747Z level=INFO run=1d4473f9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T08:47:40.748Z level=INFO run=1d4473f9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-16T08:47:40.748Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=75 role=server
+timestamp=2026-11-16T08:47:40.749Z level=INFO run=1d4473f9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:47:40.749Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:47:40.749Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I type=entries backend=node ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:47:40.749Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:47:40.749Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u type=entries backend=node ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:47:40.771Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u/.config/opencode type=directory backend=inotify ignores=6 http.span=98 role=server
+timestamp=2026-11-16T08:47:40.779Z level=INFO run=1d4473f9 message="location services booted" directory=/tmp/verify-AE453I/u workspaceID=undefined durationMs=106 http.span=106 role=server
+timestamp=2026-11-16T08:47:40.790Z level=INFO run=1d4473f9 msg="loading plugin" id=autosquid/omo-mem#8a2132024b541241434b8c6ec6f5ee440fd88ef5 entrypoint=file:///tmp/verify-AE453I/u/cache/opencode/npm/git-omo-mem-f67ab6b0d678/1794818859499/node_modules/opencode-omo-mem/plugin/omo-mem.js http.span=117 role=server
+timestamp=2026-11-16T08:47:40.826Z level=WARN run=1d4473f9 message="failed to load plugin" target=autosquid/omo-mem#8a2132024b541241434b8c6ec6f5ee440fd88ef5 ref=err_61cff54b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=153 role=server
+timestamp=2026-11-16T08:47:41.535Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:41.535Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:41.538Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:41.538Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:41.584Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:47:41.585Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:41.587Z level=INFO run=1d4473f9 message="watcher subscribe" path=/tmp/verify-AE453I/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:47:41.588Z level=INFO run=1d4473f9 message="watcher started" path=/tmp/verify-AE453I/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:41.622Z level=INFO run=1d4473f9 message=event event.id=evt_1e38a6a36001lZq4kLoH7eiVM9 event.created=1794818861622 event.type=provider.updated event.location.directory=/tmp/verify-AE453I/u event.location.workspaceID=undefined event.data={} http.span=949 role=server
+timestamp=2026-11-16T08:47:41.632Z level=INFO run=1d4473f9 message=event event.id=evt_1e38a6a400012sAHsICwnqsAf5 event.created=1794818861632 event.type=model.updated event.location.directory=/tmp/verify-AE453I/u event.location.workspaceID=undefined event.data={} http.span=959 role=server
+timestamp=2026-11-16T08:47:41.635Z level=INFO run=1d4473f9 message=event event.id=evt_1e38a6a420017QRDgVnNUgiNdv event.created=1794818861634 event.type=agent.updated event.location.directory=/tmp/verify-AE453I/u event.location.workspaceID=undefined event.data={} http.span=962 role=server
+timestamp=2026-11-16T08:47:41.635Z level=INFO run=1d4473f9 message=event event.id=evt_1e38a6a43001VhaDNzSvlDCNtD event.created=1794818861635 event.type=command.updated event.location.directory=/tmp/verify-AE453I/u event.location.workspaceID=undefined event.data={} http.span=962 role=server
+timestamp=2026-11-16T08:47:42.081Z level=INFO run=1d4473f9 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:47:42.081Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:47:42.081Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:47:42.088Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:42.093Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:42.137Z level=INFO run=1d4473f9 message="watcher stopped" path=/etc type=entries http.span=1464 role=server
+timestamp=2026-11-16T08:47:42.138Z level=INFO run=1d4473f9 message="watcher stopped" path=/ type=entries http.span=1465 role=server
+timestamp=2026-11-16T08:47:42.138Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp type=entries http.span=1465 role=server
+timestamp=2026-11-16T08:47:42.139Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I type=entries http.span=1466 role=server
+timestamp=2026-11-16T08:47:42.139Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u type=entries http.span=1466 role=server
+timestamp=2026-11-16T08:47:42.140Z level=INFO run=1d4473f9 message="watcher stopped" path=/tmp/verify-AE453I/u/.config/opencode type=directory http.span=1467 role=server

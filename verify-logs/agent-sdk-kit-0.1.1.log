@@ -1,0 +1,32 @@
+spec: agent-sdk-kit@0.1.1
+apiNames: agent-sdk-kit
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-1LhjyE/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36317
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:25.276Z level=INFO run=4fc5bfd0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"agent-sdk-kit@0.1.1\"]" role=cli
+timestamp=2026-11-16T12:05:27.433Z level=INFO run=1299e93e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:27.773Z level=INFO run=1299e93e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:27.808Z level=INFO run=1299e93e message="database schema bootstrap completed" migrations=59 durationMs=35 role=server
+timestamp=2026-11-16T12:05:28.114Z level=INFO run=1299e93e message="watcher subscribe" path=/tmp/verify-1LhjyE/u/.config/opencode type=directory ignores=6 http.span=25 role=server
+timestamp=2026-11-16T12:05:28.117Z level=INFO run=1299e93e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T12:05:28.117Z level=INFO run=1299e93e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T12:05:28.117Z level=INFO run=1299e93e message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher subscribe" path=/tmp/verify-1LhjyE type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher started" path=/tmp/verify-1LhjyE type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.118Z level=INFO run=1299e93e message="watcher subscribe" path=/tmp/verify-1LhjyE/u type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T12:05:28.119Z level=INFO run=1299e93e message="watcher started" path=/tmp/verify-1LhjyE/u type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T12:05:28.146Z level=INFO run=1299e93e message="watcher started" path=/tmp/verify-1LhjyE/u/.config/opencode type=directory backend=inotify ignores=6 http.span=57 role=server
+timestamp=2026-11-16T12:05:28.174Z level=INFO run=1299e93e message="location services booted" directory=/tmp/verify-1LhjyE/u workspaceID=undefined durationMs=84 http.span=85 role=server
+timestamp=2026-11-16T12:05:28.178Z level=INFO run=1299e93e msg="loading plugin" id=agent-sdk-kit@0.1.1 entrypoint=file:///tmp/verify-1LhjyE/u/cache/opencode/npm/agent-sdk-kit@0.1.1/1794830727184/node_modules/agent-sdk-kit/dist/index.mjs http.span=89 role=server
+timestamp=2026-11-16T12:05:28.188Z level=WARN run=1299e93e message="failed to load plugin" target=agent-sdk-kit@0.1.1 ref=err_6b985736 cause="Cause([Die(ResolveMessage: Cannot find package '@github/copilot-sdk' imported from /tmp/verify-1LhjyE/u/cache/opencode/npm/agent-sdk-kit@0.1.1/1794830727184/node_modules/agent-sdk-kit/dist/index.mjs)])" http.span=99 role=server

@@ -1,0 +1,57 @@
+spec: GanyuanRan/Aegis#ab3e7710496e638823162d6aa46c3ca525b0acd2
+apiNames: GanyuanRan/Aegis, Aegis, ganyuanran/aegis, aegis
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-34VaVm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34495
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:52:45.200Z level=INFO run=afa5171f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"GanyuanRan/Aegis#ab3e7710496e638823162d6aa46c3ca525b0acd2\"]" role=cli
+timestamp=2026-11-16T02:52:55.147Z level=INFO run=37f14286 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:52:55.576Z level=INFO run=37f14286 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:52:55.639Z level=INFO run=37f14286 message="database schema bootstrap completed" migrations=59 durationMs=63 role=server
+timestamp=2026-11-16T02:52:56.084Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u/.config/opencode type=directory ignores=6 http.span=90 role=server
+timestamp=2026-11-16T02:52:56.115Z level=INFO run=37f14286 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=121 role=server
+timestamp=2026-11-16T02:52:56.116Z level=INFO run=37f14286 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=122 role=server
+timestamp=2026-11-16T02:52:56.116Z level=INFO run=37f14286 message="watcher subscribe" path=/ type=entries ignores=0 http.span=122 role=server
+timestamp=2026-11-16T02:52:56.117Z level=INFO run=37f14286 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=123 role=server
+timestamp=2026-11-16T02:52:56.117Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=123 role=server
+timestamp=2026-11-16T02:52:56.117Z level=INFO run=37f14286 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=123 role=server
+timestamp=2026-11-16T02:52:56.118Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm type=entries ignores=0 http.span=124 role=server
+timestamp=2026-11-16T02:52:56.118Z level=ERROR run=37f14286 message="failed to watch directory" path=/tmp/verify-34VaVm error="Error: EACCES: permission denied, watch '/tmp/verify-34VaVm'" http.span=124 role=server
+timestamp=2026-11-16T02:52:56.119Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u type=entries ignores=0 http.span=125 role=server
+timestamp=2026-11-16T02:52:56.121Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u type=entries backend=node ignores=0 http.span=127 role=server
+timestamp=2026-11-16T02:52:56.170Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=176 role=server
+timestamp=2026-11-16T02:52:56.192Z level=INFO run=37f14286 message="location services booted" directory=/tmp/verify-34VaVm/u workspaceID=undefined durationMs=195 http.span=198 role=server
+timestamp=2026-11-16T02:52:56.238Z level=INFO run=37f14286 msg="loading plugin" id=GanyuanRan/Aegis#ab3e7710496e638823162d6aa46c3ca525b0acd2 entrypoint=file:///tmp/verify-34VaVm/u/cache/opencode/npm/git-Aegis-b74d512df13f/1794797574703/node_modules/aegis/.opencode/plugins/aegis.js http.span=244 role=server
+timestamp=2026-11-16T02:52:56.244Z level=WARN run=37f14286 message="failed to load plugin" target=GanyuanRan/Aegis#ab3e7710496e638823162d6aa46c3ca525b0acd2 ref=err_75fa25a5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=250 role=server
+timestamp=2026-11-16T02:52:57.729Z level=ERROR run=37f14286 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1735 role=server
+timestamp=2026-11-16T02:52:57.747Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm type=entries ignores=0 http.span=1753 role=server
+timestamp=2026-11-16T02:52:57.748Z level=ERROR run=37f14286 message="failed to watch directory" path=/tmp/verify-34VaVm error="Error: EACCES: permission denied, watch '/tmp/verify-34VaVm'" http.span=1754 role=server
+timestamp=2026-11-16T02:52:57.891Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:57.892Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:57.892Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:57.892Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:57.909Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:52:57.911Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:57.915Z level=INFO run=37f14286 message="watcher subscribe" path=/tmp/verify-34VaVm/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:52:57.922Z level=INFO run=37f14286 message="watcher started" path=/tmp/verify-34VaVm/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:57.999Z level=INFO run=37f14286 message=event event.id=evt_1e245a70f001zE3iXPMNySc6VT event.created=1794797577999 event.type=provider.updated event.location.directory=/tmp/verify-34VaVm/u event.location.workspaceID=undefined event.data={} http.span=2005 role=server
+timestamp=2026-11-16T02:52:58.028Z level=INFO run=37f14286 message=event event.id=evt_1e245a72c0014gWUy0d1IRnc1M event.created=1794797578028 event.type=model.updated event.location.directory=/tmp/verify-34VaVm/u event.location.workspaceID=undefined event.data={} http.span=2034 role=server
+timestamp=2026-11-16T02:52:58.038Z level=INFO run=37f14286 message=event event.id=evt_1e245a7360011q6fybIPRrX6QQ event.created=1794797578038 event.type=agent.updated event.location.directory=/tmp/verify-34VaVm/u event.location.workspaceID=undefined event.data={} http.span=2044 role=server
+timestamp=2026-11-16T02:52:58.039Z level=INFO run=37f14286 message=event event.id=evt_1e245a737001jVK1fLXeB0E510 event.created=1794797578039 event.type=command.updated event.location.directory=/tmp/verify-34VaVm/u event.location.workspaceID=undefined event.data={} http.span=2045 role=server
+timestamp=2026-11-16T02:52:58.521Z level=INFO run=37f14286 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:52:58.524Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:52:58.524Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:52:58.534Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:58.534Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:58.579Z level=INFO run=37f14286 message="watcher stopped" path=/etc type=entries http.span=2585 role=server
+timestamp=2026-11-16T02:52:58.580Z level=INFO run=37f14286 message="watcher stopped" path=/ type=entries http.span=2586 role=server
+timestamp=2026-11-16T02:52:58.580Z level=INFO run=37f14286 message="watcher stopped" path=/tmp type=entries http.span=2586 role=server
+timestamp=2026-11-16T02:52:58.580Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u type=entries http.span=2586 role=server
+timestamp=2026-11-16T02:52:58.584Z level=INFO run=37f14286 message="watcher stopped" path=/tmp/verify-34VaVm/u/.config/opencode type=directory http.span=2590 role=server

@@ -1,0 +1,55 @@
+spec: omni-skills-forge@2.1.1
+apiNames: omni-skills-forge
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-DKCoYk/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37101
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:27.707Z level=INFO run=482430d0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"omni-skills-forge@2.1.1\"]" role=cli
+timestamp=2026-11-16T07:35:47.755Z level=INFO run=1d8caddd message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:48.069Z level=INFO run=1d8caddd message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:48.077Z level=INFO run=1d8caddd message="database schema bootstrap completed" migrations=59 durationMs=8 role=server
+timestamp=2026-11-16T07:35:48.236Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u/.config/opencode type=directory ignores=6 http.span=12 role=server
+timestamp=2026-11-16T07:35:48.238Z level=INFO run=1d8caddd message="watcher subscribe" path=/etc type=entries ignores=0 http.span=14 role=server
+timestamp=2026-11-16T07:35:48.238Z level=INFO run=1d8caddd message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=14 role=server
+timestamp=2026-11-16T07:35:48.238Z level=INFO run=1d8caddd message="watcher subscribe" path=/ type=entries ignores=0 http.span=14 role=server
+timestamp=2026-11-16T07:35:48.238Z level=INFO run=1d8caddd message="watcher started" path=/ type=entries backend=node ignores=0 http.span=14 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.239Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T07:35:48.249Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u/.config/opencode type=directory backend=inotify ignores=6 http.span=25 role=server
+timestamp=2026-11-16T07:35:48.254Z level=INFO run=1d8caddd message="location services booted" directory=/tmp/verify-DKCoYk/u workspaceID=undefined durationMs=29 http.span=30 role=server
+timestamp=2026-11-16T07:35:48.260Z level=INFO run=1d8caddd msg="loading plugin" id=omni-skills-forge@2.1.1 entrypoint=file:///tmp/verify-DKCoYk/u/cache/opencode/npm/omni-skills-forge@2.1.1/1794814547502/node_modules/omni-skills-forge/src/index.js http.span=36 role=server
+timestamp=2026-11-16T07:35:48.323Z level=WARN run=1d8caddd message="failed to load plugin" target=omni-skills-forge@2.1.1 ref=err_d0ac8a33 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=99 role=server
+timestamp=2026-11-16T07:35:48.645Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:48.645Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:48.645Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:48.645Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:48.667Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:48.667Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:48.667Z level=INFO run=1d8caddd message="watcher subscribe" path=/tmp/verify-DKCoYk/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:48.668Z level=INFO run=1d8caddd message="watcher started" path=/tmp/verify-DKCoYk/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:48.680Z level=INFO run=1d8caddd message=event event.id=evt_1e3489ac8001ZMeAl7i7s21EuM event.created=1794814548680 event.type=provider.updated event.location.directory=/tmp/verify-DKCoYk/u event.location.workspaceID=undefined event.data={} http.span=456 role=server
+timestamp=2026-11-16T07:35:48.686Z level=INFO run=1d8caddd message=event event.id=evt_1e3489ace001ITvNJfpgMZpaJZ event.created=1794814548686 event.type=model.updated event.location.directory=/tmp/verify-DKCoYk/u event.location.workspaceID=undefined event.data={} http.span=462 role=server
+timestamp=2026-11-16T07:35:48.687Z level=INFO run=1d8caddd message=event event.id=evt_1e3489acf001pbtW3n90xKlO5b event.created=1794814548687 event.type=agent.updated event.location.directory=/tmp/verify-DKCoYk/u event.location.workspaceID=undefined event.data={} http.span=463 role=server
+timestamp=2026-11-16T07:35:48.687Z level=INFO run=1d8caddd message=event event.id=evt_1e3489acf0029IWW6RXS9ZahD8 event.created=1794814548687 event.type=command.updated event.location.directory=/tmp/verify-DKCoYk/u event.location.workspaceID=undefined event.data={} http.span=463 role=server
+timestamp=2026-11-16T07:35:48.788Z level=INFO run=1d8caddd message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:35:48.789Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:35:48.789Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:35:48.791Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:48.791Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/etc type=entries http.span=575 role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/ type=entries http.span=575 role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp type=entries http.span=575 role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk type=entries http.span=575 role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u type=entries http.span=575 role=server
+timestamp=2026-11-16T07:35:48.799Z level=INFO run=1d8caddd message="watcher stopped" path=/tmp/verify-DKCoYk/u/.config/opencode type=directory http.span=575 role=server

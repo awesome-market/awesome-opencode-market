@@ -1,0 +1,15 @@
+spec: gateclaw-telegram-bot@0.15.0
+apiNames: gateclaw-telegram-bot
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-sVd8Gp/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43065
+server password [redacted]
+Failed to start bot: Missing required environment variable: TELEGRAM_BOT_TOKEN (expected in /tmp/verify-sVd8Gp/u/.env)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:26.699Z level=INFO run=2f766363 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"gateclaw-telegram-bot@0.15.0\"]" role=cli

@@ -1,0 +1,18 @@
+spec: opencode-account-manager@0.6.9
+apiNames: opencode-account-manager
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-w7iGsM/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41101
+server password [redacted]
+error: unknown option '--port'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:34:31.395Z level=INFO run=3fd198cb message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-account-manager@0.6.9\"]" role=cli
+timestamp=2026-11-16T11:34:34.975Z level=INFO run=3f72f987 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:34:35.368Z level=INFO run=3f72f987 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:34:35.422Z level=INFO run=3f72f987 message="database schema bootstrap completed" migrations=59 durationMs=54 role=server

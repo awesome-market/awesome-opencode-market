@@ -1,0 +1,32 @@
+spec: opencode-pixel-agents@0.3.0
+apiNames: opencode-pixel-agents
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-3UJ0RY/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41139
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:20.290Z level=INFO run=847c294e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-pixel-agents@0.3.0\"]" role=cli
+timestamp=2026-11-16T10:13:26.203Z level=INFO run=50650393 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:26.558Z level=INFO run=50650393 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:26.654Z level=INFO run=50650393 message="database schema bootstrap completed" migrations=59 durationMs=96 role=server
+timestamp=2026-11-16T10:13:26.864Z level=INFO run=50650393 message="watcher subscribe" path=/tmp/verify-3UJ0RY/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T10:13:26.868Z level=INFO run=50650393 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T10:13:26.869Z level=INFO run=50650393 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T10:13:26.869Z level=INFO run=50650393 message="watcher subscribe" path=/ type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T10:13:26.870Z level=INFO run=50650393 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T10:13:26.870Z level=INFO run=50650393 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T10:13:26.870Z level=INFO run=50650393 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T10:13:26.871Z level=INFO run=50650393 message="watcher subscribe" path=/tmp/verify-3UJ0RY type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:26.871Z level=INFO run=50650393 message="watcher started" path=/tmp/verify-3UJ0RY type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T10:13:26.872Z level=INFO run=50650393 message="watcher subscribe" path=/tmp/verify-3UJ0RY/u type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T10:13:26.873Z level=INFO run=50650393 message="watcher started" path=/tmp/verify-3UJ0RY/u type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T10:13:26.898Z level=INFO run=50650393 message="watcher started" path=/tmp/verify-3UJ0RY/u/.config/opencode type=directory backend=inotify ignores=6 http.span=70 role=server
+timestamp=2026-11-16T10:13:26.917Z level=INFO run=50650393 message="location services booted" directory=/tmp/verify-3UJ0RY/u workspaceID=undefined durationMs=88 http.span=89 role=server
+timestamp=2026-11-16T10:13:26.919Z level=INFO run=50650393 msg="loading plugin" id=opencode-pixel-agents@0.3.0 entrypoint=file:///tmp/verify-3UJ0RY/u/cache/opencode/npm/opencode-pixel-agents@0.3.0/1794824005873/node_modules/opencode-pixel-agents/dist/index.js http.span=91 role=server
+timestamp=2026-11-16T10:13:26.961Z level=WARN run=50650393 message="failed to load plugin" target=opencode-pixel-agents@0.3.0 ref=err_e32dab72 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=133 role=server

@@ -1,0 +1,32 @@
+spec: magpie-workbuddy-growth@1.0.3
+apiNames: magpie-workbuddy-growth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xULore/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39645
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:35.702Z level=INFO run=1dd31465 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-workbuddy-growth@1.0.3\"]" role=cli
+timestamp=2026-11-16T08:47:36.248Z level=INFO run=3c83301d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:36.545Z level=INFO run=3c83301d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:36.587Z level=INFO run=3c83301d message="database schema bootstrap completed" migrations=59 durationMs=42 role=server
+timestamp=2026-11-16T08:47:37.050Z level=INFO run=3c83301d message="watcher subscribe" path=/tmp/verify-xULore/u/.config/opencode type=directory ignores=6 http.span=51 role=server
+timestamp=2026-11-16T08:47:37.053Z level=INFO run=3c83301d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T08:47:37.054Z level=INFO run=3c83301d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T08:47:37.055Z level=INFO run=3c83301d message="watcher subscribe" path=/ type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T08:47:37.055Z level=INFO run=3c83301d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T08:47:37.056Z level=INFO run=3c83301d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:47:37.056Z level=INFO run=3c83301d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T08:47:37.057Z level=INFO run=3c83301d message="watcher subscribe" path=/tmp/verify-xULore type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:37.057Z level=INFO run=3c83301d message="watcher started" path=/tmp/verify-xULore type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:37.057Z level=INFO run=3c83301d message="watcher subscribe" path=/tmp/verify-xULore/u type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-16T08:47:37.058Z level=INFO run=3c83301d message="watcher started" path=/tmp/verify-xULore/u type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-16T08:47:37.084Z level=INFO run=3c83301d message="watcher started" path=/tmp/verify-xULore/u/.config/opencode type=directory backend=inotify ignores=6 http.span=85 role=server
+timestamp=2026-11-16T08:47:37.099Z level=INFO run=3c83301d message="location services booted" directory=/tmp/verify-xULore/u workspaceID=undefined durationMs=97 http.span=100 role=server
+timestamp=2026-11-16T08:47:37.115Z level=INFO run=3c83301d msg="loading plugin" id=magpie-workbuddy-growth@1.0.3 entrypoint=file:///tmp/verify-xULore/u/cache/opencode/npm/magpie-workbuddy-growth@1.0.3/1794818855977/node_modules/magpie-workbuddy-growth/index.mjs http.span=116 role=server
+timestamp=2026-11-16T08:47:37.117Z level=WARN run=3c83301d message="failed to load plugin" target=magpie-workbuddy-growth@1.0.3 ref=err_6aa52be2 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=118 role=server

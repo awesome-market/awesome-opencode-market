@@ -1,0 +1,32 @@
+spec: @ringofstorms/oh-my-opencode-slim@64.2.0
+apiNames: @ringofstorms/oh-my-opencode-slim, oh-my-opencode-slim
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-WFlpbJ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39893
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:14.554Z level=INFO run=0bb8ce98 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ringofstorms/oh-my-opencode-slim@64.2.0\"]" role=cli
+timestamp=2026-11-16T08:06:23.022Z level=INFO run=9893306b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:23.934Z level=INFO run=9893306b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:24.072Z level=INFO run=9893306b message="database schema bootstrap completed" migrations=59 durationMs=138 role=server
+timestamp=2026-11-16T08:06:24.327Z level=INFO run=9893306b message="watcher subscribe" path=/tmp/verify-WFlpbJ/u/.config/opencode type=directory ignores=6 http.span=32 role=server
+timestamp=2026-11-16T08:06:24.330Z level=INFO run=9893306b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T08:06:24.331Z level=INFO run=9893306b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T08:06:24.331Z level=INFO run=9893306b message="watcher subscribe" path=/ type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T08:06:24.331Z level=INFO run=9893306b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher subscribe" path=/tmp/verify-WFlpbJ type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher started" path=/tmp/verify-WFlpbJ type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher subscribe" path=/tmp/verify-WFlpbJ/u type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.332Z level=INFO run=9893306b message="watcher started" path=/tmp/verify-WFlpbJ/u type=entries backend=node ignores=0 http.span=37 role=server
+timestamp=2026-11-16T08:06:24.349Z level=INFO run=9893306b message="watcher started" path=/tmp/verify-WFlpbJ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=54 role=server
+timestamp=2026-11-16T08:06:24.377Z level=INFO run=9893306b msg="loading plugin" id=@ringofstorms/oh-my-opencode-slim@64.2.0 entrypoint=file:///tmp/verify-WFlpbJ/u/cache/opencode/npm/@ringofstorms/oh-my-opencode-slim@64.2.0/1794816382706/node_modules/@ringofstorms/oh-my-opencode-slim/dist/index.js http.span=82 role=server
+timestamp=2026-11-16T08:06:24.434Z level=WARN run=9893306b message="failed to load plugin" target=@ringofstorms/oh-my-opencode-slim@64.2.0 ref=err_e81218a8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=139 role=server
+timestamp=2026-11-16T08:06:24.461Z level=INFO run=9893306b message="location services booted" directory=/tmp/verify-WFlpbJ/u workspaceID=undefined durationMs=164 http.span=166 role=server

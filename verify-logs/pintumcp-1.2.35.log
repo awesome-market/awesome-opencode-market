@@ -1,0 +1,41 @@
+spec: pintumcp@1.2.35
+apiNames: pintumcp
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-et4iBA/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35669
+server password [redacted]
+Unknown command: serve
+
+pintumcp — Agent Alerts MCP Server
+
+Usage:
+  npx pintumcp              Install and configure all AI tools
+  npx pintumcp install      Install Python env + configure tools
+  npx pintumcp detect       Scan for installed AI coding tools
+  npx pintumcp test         Send a test notification
+  npx pintumcp doctor       Check popup, sound and icon; send a test alert
+  npx pintumcp tray         Show every agent's status in the macOS menu bar (tray stop to quit)
+  npx pintumcp board        Watch every agent's status live in your terminal (--once for one frame)
+  npx pintumcp hooks install  Let Claude Code report its status automatically (hooks remove to undo; hooks status to check)
+  npx pintumcp uninstall    Remove pintumcp from every AI tool's config
+  npx pintumcp run          Start MCP server (stdio mode)
+  npx pintumcp help         Show this help
+
+Supported AI Tools:
+  • MiMoCode       ~/.config/mimocode/mimocode.jsonc
+  • OpenCode       ~/.config/opencode/opencode.json
+  • Claude Desktop ~/Library/Application Support/Claude/claude_desktop_config.json
+  • Claude Code    ~/.claude/settings.json
+  • Codex          ~/.codex/config.toml
+  • Kiro (app+CLI) ~/.kiro/settings/mcp.json
+  • Antigravity    ~/Library/Application Support/Antigravity/User/settings.json
+  • VS Code        ~/Library/Application Support/Code/User/settings.json
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:32.466Z level=INFO run=bd189195 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"pintumcp@1.2.35\"]" role=cli

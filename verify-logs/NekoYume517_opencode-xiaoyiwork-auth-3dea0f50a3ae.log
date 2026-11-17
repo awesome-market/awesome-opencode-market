@@ -1,0 +1,56 @@
+spec: NekoYume517/opencode-xiaoyiwork-auth#3dea0f50a3aeaa23ac506053c0e61ecf6ca8756c
+apiNames: NekoYume517/opencode-xiaoyiwork-auth, opencode-xiaoyiwork-auth, nekoyume517/opencode-xiaoyiwork-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-loujLC/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46243
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T13:21:31.333Z level=INFO run=77ba4814 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"NekoYume517/opencode-xiaoyiwork-auth#3dea0f50a3aeaa23ac506053c0e61ecf6ca8756c\"]" role=cli
+timestamp=2026-11-16T13:21:32.175Z level=INFO run=9ce295ed message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T13:21:33.028Z level=INFO run=9ce295ed message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T13:21:33.115Z level=INFO run=9ce295ed message="database schema bootstrap completed" migrations=59 durationMs=87 role=server
+timestamp=2026-11-16T13:21:33.455Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u/.config/opencode type=directory ignores=6 http.span=61 role=server
+timestamp=2026-11-16T13:21:33.476Z level=INFO run=9ce295ed message="watcher subscribe" path=/etc type=entries ignores=0 http.span=82 role=server
+timestamp=2026-11-16T13:21:33.480Z level=INFO run=9ce295ed message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=86 role=server
+timestamp=2026-11-16T13:21:33.481Z level=INFO run=9ce295ed message="watcher subscribe" path=/ type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T13:21:33.482Z level=INFO run=9ce295ed message="watcher started" path=/ type=entries backend=node ignores=0 http.span=88 role=server
+timestamp=2026-11-16T13:21:33.482Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T13:21:33.483Z level=INFO run=9ce295ed message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T13:21:33.483Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC type=entries ignores=0 http.span=89 role=server
+timestamp=2026-11-16T13:21:33.483Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T13:21:33.484Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u type=entries ignores=0 http.span=90 role=server
+timestamp=2026-11-16T13:21:33.484Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u type=entries backend=node ignores=0 http.span=90 role=server
+timestamp=2026-11-16T13:21:33.521Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u/.config/opencode type=directory backend=inotify ignores=6 http.span=127 role=server
+timestamp=2026-11-16T13:21:33.538Z level=INFO run=9ce295ed message="location services booted" directory=/tmp/verify-loujLC/u workspaceID=undefined durationMs=143 http.span=144 role=server
+timestamp=2026-11-16T13:21:33.543Z level=INFO run=9ce295ed msg="loading plugin" id=NekoYume517/opencode-xiaoyiwork-auth#3dea0f50a3aeaa23ac506053c0e61ecf6ca8756c entrypoint=file:///tmp/verify-loujLC/u/cache/opencode/npm/git-opencode-xiaoyiwork-auth-3607539490bb/1794835291900/node_modules/opencode-xiaoyiwork-auth/index.mjs http.span=149 role=server
+timestamp=2026-11-16T13:21:33.548Z level=WARN run=9ce295ed message="failed to load plugin" target=NekoYume517/opencode-xiaoyiwork-auth#3dea0f50a3aeaa23ac506053c0e61ecf6ca8756c ref=err_5f0d7569 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=154 role=server
+timestamp=2026-11-16T13:21:34.311Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T13:21:34.312Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:21:34.312Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T13:21:34.312Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:21:34.327Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T13:21:34.327Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:21:34.328Z level=INFO run=9ce295ed message="watcher subscribe" path=/tmp/verify-loujLC/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T13:21:34.328Z level=INFO run=9ce295ed message="watcher started" path=/tmp/verify-loujLC/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T13:21:34.350Z level=INFO run=9ce295ed message=event event.id=evt_1e485288e001AdLPOTiepLPWBf event.created=1794835294350 event.type=provider.updated event.location.directory=/tmp/verify-loujLC/u event.location.workspaceID=undefined event.data={} http.span=956 role=server
+timestamp=2026-11-16T13:21:34.360Z level=INFO run=9ce295ed message=event event.id=evt_1e485289800101K2e5SupC1NNj event.created=1794835294360 event.type=model.updated event.location.directory=/tmp/verify-loujLC/u event.location.workspaceID=undefined event.data={} http.span=966 role=server
+timestamp=2026-11-16T13:21:34.363Z level=INFO run=9ce295ed message=event event.id=evt_1e485289b001FAlnb7sXacIQNu event.created=1794835294363 event.type=agent.updated event.location.directory=/tmp/verify-loujLC/u event.location.workspaceID=undefined event.data={} http.span=969 role=server
+timestamp=2026-11-16T13:21:34.363Z level=INFO run=9ce295ed message=event event.id=evt_1e485289b002d5sRyXhZNUJQR6 event.created=1794835294363 event.type=command.updated event.location.directory=/tmp/verify-loujLC/u event.location.workspaceID=undefined event.data={} http.span=969 role=server
+timestamp=2026-11-16T13:21:34.430Z level=ERROR run=9ce295ed message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1036 role=server
+timestamp=2026-11-16T13:21:34.752Z level=INFO run=9ce295ed message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T13:21:34.752Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T13:21:34.752Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T13:21:34.756Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T13:21:34.756Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T13:21:34.771Z level=INFO run=9ce295ed message="watcher stopped" path=/etc type=entries http.span=1377 role=server
+timestamp=2026-11-16T13:21:34.771Z level=INFO run=9ce295ed message="watcher stopped" path=/ type=entries http.span=1377 role=server
+timestamp=2026-11-16T13:21:34.771Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp type=entries http.span=1377 role=server
+timestamp=2026-11-16T13:21:34.771Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC type=entries http.span=1377 role=server
+timestamp=2026-11-16T13:21:34.771Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u type=entries http.span=1377 role=server
+timestamp=2026-11-16T13:21:34.774Z level=INFO run=9ce295ed message="watcher stopped" path=/tmp/verify-loujLC/u/.config/opencode type=directory http.span=1380 role=server

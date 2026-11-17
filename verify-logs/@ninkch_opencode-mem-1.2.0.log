@@ -1,0 +1,32 @@
+spec: @ninkch/opencode-mem@1.2.0
+apiNames: @ninkch/opencode-mem, opencode-mem
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-DZEKmk/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35419
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:20.592Z level=INFO run=ebae953d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ninkch/opencode-mem@1.2.0\"]" role=cli
+timestamp=2026-11-16T10:13:27.975Z level=INFO run=9ac41f82 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:28.151Z level=INFO run=9ac41f82 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:28.283Z level=INFO run=9ac41f82 message="database schema bootstrap completed" migrations=59 durationMs=132 role=server
+timestamp=2026-11-16T10:13:28.452Z level=INFO run=9ac41f82 message="watcher subscribe" path=/tmp/verify-DZEKmk/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T10:13:28.454Z level=INFO run=9ac41f82 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T10:13:28.455Z level=INFO run=9ac41f82 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T10:13:28.455Z level=INFO run=9ac41f82 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher subscribe" path=/tmp/verify-DZEKmk type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher started" path=/tmp/verify-DZEKmk type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher subscribe" path=/tmp/verify-DZEKmk/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.456Z level=INFO run=9ac41f82 message="watcher started" path=/tmp/verify-DZEKmk/u type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:28.473Z level=INFO run=9ac41f82 message="watcher started" path=/tmp/verify-DZEKmk/u/.config/opencode type=directory backend=inotify ignores=6 http.span=40 role=server
+timestamp=2026-11-16T10:13:28.481Z level=INFO run=9ac41f82 message="location services booted" directory=/tmp/verify-DZEKmk/u workspaceID=undefined durationMs=47 http.span=48 role=server
+timestamp=2026-11-16T10:13:28.493Z level=INFO run=9ac41f82 msg="loading plugin" id=@ninkch/opencode-mem@1.2.0 entrypoint=file:///tmp/verify-DZEKmk/u/cache/opencode/npm/@ninkch/opencode-mem@1.2.0/1794824007681/node_modules/@ninkch/opencode-mem/dist/index.js http.span=60 role=server
+timestamp=2026-11-16T10:13:28.526Z level=WARN run=9ac41f82 message="failed to load plugin" target=@ninkch/opencode-mem@1.2.0 ref=err_48d38ca7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=93 role=server

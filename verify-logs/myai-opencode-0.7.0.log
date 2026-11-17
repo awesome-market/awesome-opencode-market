@@ -1,0 +1,32 @@
+spec: myai-opencode@0.7.0
+apiNames: myai-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Q9etNh/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34365
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:16.698Z level=INFO run=b09ef476 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"myai-opencode@0.7.0\"]" role=cli
+timestamp=2026-11-16T10:13:23.872Z level=INFO run=02501165 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:24.001Z level=INFO run=02501165 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:24.009Z level=INFO run=02501165 message="database schema bootstrap completed" migrations=59 durationMs=8 role=server
+timestamp=2026-11-16T10:13:24.368Z level=INFO run=02501165 message="watcher subscribe" path=/tmp/verify-Q9etNh/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T10:13:24.372Z level=INFO run=02501165 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:24.372Z level=INFO run=02501165 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T10:13:24.373Z level=INFO run=02501165 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T10:13:24.373Z level=INFO run=02501165 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T10:13:24.373Z level=INFO run=02501165 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T10:13:24.373Z level=INFO run=02501165 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T10:13:24.374Z level=INFO run=02501165 message="watcher subscribe" path=/tmp/verify-Q9etNh type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:13:24.374Z level=INFO run=02501165 message="watcher started" path=/tmp/verify-Q9etNh type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:13:24.374Z level=INFO run=02501165 message="watcher subscribe" path=/tmp/verify-Q9etNh/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:13:24.374Z level=INFO run=02501165 message="watcher started" path=/tmp/verify-Q9etNh/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:13:24.390Z level=INFO run=02501165 message="watcher started" path=/tmp/verify-Q9etNh/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-16T10:13:24.398Z level=INFO run=02501165 message="location services booted" directory=/tmp/verify-Q9etNh/u workspaceID=undefined durationMs=49 http.span=49 role=server
+timestamp=2026-11-16T10:13:24.405Z level=INFO run=02501165 msg="loading plugin" id=myai-opencode@0.7.0 entrypoint=file:///tmp/verify-Q9etNh/u/cache/opencode/npm/myai-opencode@0.7.0/1794824003663/node_modules/myai-opencode/dist/index.js http.span=56 role=server
+timestamp=2026-11-16T10:13:24.440Z level=WARN run=02501165 message="failed to load plugin" target=myai-opencode@0.7.0 ref=err_ba6251f0 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=91 role=server

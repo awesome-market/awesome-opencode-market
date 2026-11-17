@@ -1,0 +1,47 @@
+spec: @drfok/opencode-ttc-plugin@0.1.5
+apiNames: @drfok/opencode-ttc-plugin, opencode-ttc-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-iFHaKY/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40765
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:58.364Z level=INFO run=2792a817 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@drfok/opencode-ttc-plugin@0.1.5\"]" role=cli
+timestamp=2026-11-16T10:14:15.423Z level=INFO run=c4396134 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:14:23.506Z level=INFO run=c4396134 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:14:23.608Z level=INFO run=c4396134 message="database schema bootstrap completed" migrations=59 durationMs=102 role=server
+timestamp=2026-11-16T10:14:24.003Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-16T10:14:24.006Z level=INFO run=c4396134 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher subscribe" path=/ type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.007Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T10:14:24.008Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:14:24.008Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:14:24.008Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:14:24.026Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u/.config/opencode type=directory backend=inotify ignores=6 http.span=44 role=server
+timestamp=2026-11-16T10:14:24.041Z level=INFO run=c4396134 message="location services booted" directory=/tmp/verify-iFHaKY/u workspaceID=undefined durationMs=59 http.span=59 role=server
+timestamp=2026-11-16T10:14:24.044Z level=INFO run=c4396134 msg="loading plugin" id=@drfok/opencode-ttc-plugin@0.1.5 entrypoint=file:///tmp/verify-iFHaKY/u/cache/opencode/npm/@drfok/opencode-ttc-plugin@0.1.5/1794824053670/node_modules/@drfok/opencode-ttc-plugin/opencode-plugins/ttc-message-transform.js http.span=62 role=server
+timestamp=2026-11-16T10:14:24.048Z level=WARN run=c4396134 message="failed to load plugin" target=@drfok/opencode-ttc-plugin@0.1.5 ref=err_adadc8cb cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=66 role=server
+timestamp=2026-11-16T10:14:24.747Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:14:24.747Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:24.747Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:14:24.747Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:24.759Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:14:24.759Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:24.760Z level=INFO run=c4396134 message="watcher subscribe" path=/tmp/verify-iFHaKY/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:14:24.760Z level=INFO run=c4396134 message="watcher started" path=/tmp/verify-iFHaKY/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:24.775Z level=INFO run=c4396134 message=event event.id=evt_1e3d9cf07001b1YnOrG9FD4YLx event.created=1794824064775 event.type=provider.updated event.location.directory=/tmp/verify-iFHaKY/u event.location.workspaceID=undefined event.data={} http.span=793 role=server
+timestamp=2026-11-16T10:14:24.782Z level=INFO run=c4396134 message=event event.id=evt_1e3d9cf0e001lhXJcGgQl6bwym event.created=1794824064782 event.type=model.updated event.location.directory=/tmp/verify-iFHaKY/u event.location.workspaceID=undefined event.data={} http.span=800 role=server
+timestamp=2026-11-16T10:14:24.783Z level=INFO run=c4396134 message=event event.id=evt_1e3d9cf0f001c4VuOBse2caoRU event.created=1794824064783 event.type=agent.updated event.location.directory=/tmp/verify-iFHaKY/u event.location.workspaceID=undefined event.data={} http.span=801 role=server
+timestamp=2026-11-16T10:14:24.784Z level=INFO run=c4396134 message=event event.id=evt_1e3d9cf10001FEZBKPdTz7A2Ei event.created=1794824064784 event.type=command.updated event.location.directory=/tmp/verify-iFHaKY/u event.location.workspaceID=undefined event.data={} http.span=802 role=server
+timestamp=2026-11-16T10:14:25.037Z level=ERROR run=c4396134 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1055 role=server

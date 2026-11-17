@@ -1,0 +1,31 @@
+spec: opencode-annotate@2.0.1
+apiNames: opencode-annotate
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-XCW5gC/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37137
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:58.055Z level=INFO run=7ec9e501 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-annotate@2.0.1\"]" role=cli
+timestamp=2026-11-16T08:51:58.346Z level=INFO run=8f14a830 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:51:58.660Z level=INFO run=8f14a830 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:51:58.670Z level=INFO run=8f14a830 message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T08:51:58.818Z level=INFO run=8f14a830 message="watcher subscribe" path=/tmp/verify-XCW5gC/u/.config/opencode type=directory ignores=6 http.span=17 role=server
+timestamp=2026-11-16T08:51:58.821Z level=INFO run=8f14a830 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:58.821Z level=INFO run=8f14a830 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:58.821Z level=INFO run=8f14a830 message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher subscribe" path=/tmp/verify-XCW5gC type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher started" path=/tmp/verify-XCW5gC type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.822Z level=INFO run=8f14a830 message="watcher subscribe" path=/tmp/verify-XCW5gC/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:51:58.823Z level=INFO run=8f14a830 message="watcher started" path=/tmp/verify-XCW5gC/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:51:58.833Z level=INFO run=8f14a830 message="watcher started" path=/tmp/verify-XCW5gC/u/.config/opencode type=directory backend=inotify ignores=6 http.span=32 role=server
+timestamp=2026-11-16T08:51:58.837Z level=INFO run=8f14a830 message="location services booted" directory=/tmp/verify-XCW5gC/u workspaceID=undefined durationMs=36 http.span=36 role=server
+timestamp=2026-11-16T08:51:58.848Z level=INFO run=8f14a830 msg="loading plugin" id=opencode-annotate@2.0.1 entrypoint=file:///tmp/verify-XCW5gC/u/cache/opencode/npm/opencode-annotate@2.0.1/1794819118145/node_modules/opencode-annotate/server.js http.span=47 role=server

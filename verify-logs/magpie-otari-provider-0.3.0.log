@@ -1,0 +1,57 @@
+spec: magpie-otari-provider@0.3.0
+apiNames: magpie-otari-provider
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-noS7go/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40327
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:52:43.358Z level=INFO run=7da1a68d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-otari-provider@0.3.0\"]" role=cli
+timestamp=2026-11-16T02:52:44.007Z level=INFO run=60e5a069 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:52:44.450Z level=INFO run=60e5a069 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:52:44.529Z level=INFO run=60e5a069 message="database schema bootstrap completed" migrations=59 durationMs=79 role=server
+timestamp=2026-11-16T02:52:44.967Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u/.config/opencode type=directory ignores=6 http.span=50 role=server
+timestamp=2026-11-16T02:52:44.971Z level=INFO run=60e5a069 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T02:52:44.972Z level=INFO run=60e5a069 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T02:52:44.973Z level=INFO run=60e5a069 message="watcher subscribe" path=/ type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T02:52:44.973Z level=INFO run=60e5a069 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T02:52:44.974Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:52:44.974Z level=INFO run=60e5a069 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:52:44.974Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go type=entries ignores=0 http.span=57 role=server
+timestamp=2026-11-16T02:52:44.975Z level=ERROR run=60e5a069 message="failed to watch directory" path=/tmp/verify-noS7go error="Error: EACCES: permission denied, watch '/tmp/verify-noS7go'" http.span=58 role=server
+timestamp=2026-11-16T02:52:44.976Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T02:52:44.977Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T02:52:45.028Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u/.config/opencode type=directory backend=inotify ignores=6 http.span=111 role=server
+timestamp=2026-11-16T02:52:45.042Z level=INFO run=60e5a069 message="location services booted" directory=/tmp/verify-noS7go/u workspaceID=undefined durationMs=125 http.span=125 role=server
+timestamp=2026-11-16T02:52:45.061Z level=INFO run=60e5a069 msg="loading plugin" id=magpie-otari-provider@0.3.0 entrypoint=file:///tmp/verify-noS7go/u/cache/opencode/npm/magpie-otari-provider@0.3.0/1794797563529/node_modules/magpie-otari-provider/index.mjs http.span=144 role=server
+timestamp=2026-11-16T02:52:45.070Z level=WARN run=60e5a069 message="failed to load plugin" target=magpie-otari-provider@0.3.0 ref=err_0f0a6e17 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=153 role=server
+timestamp=2026-11-16T02:52:46.402Z level=ERROR run=60e5a069 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1485 role=server
+timestamp=2026-11-16T02:52:46.445Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:46.445Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:46.446Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:46.446Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:46.458Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go type=entries ignores=0 http.span=1541 role=server
+timestamp=2026-11-16T02:52:46.461Z level=ERROR run=60e5a069 message="failed to watch directory" path=/tmp/verify-noS7go error="Error: EACCES: permission denied, watch '/tmp/verify-noS7go'" http.span=1544 role=server
+timestamp=2026-11-16T02:52:46.501Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:52:46.501Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:46.504Z level=INFO run=60e5a069 message="watcher subscribe" path=/tmp/verify-noS7go/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:52:46.504Z level=INFO run=60e5a069 message="watcher started" path=/tmp/verify-noS7go/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:46.564Z level=INFO run=60e5a069 message=event event.id=evt_1e2457a64001fhzmm6DTY3Ju5H event.created=1794797566564 event.type=provider.updated event.location.directory=/tmp/verify-noS7go/u event.location.workspaceID=undefined event.data={} http.span=1647 role=server
+timestamp=2026-11-16T02:52:46.579Z level=INFO run=60e5a069 message=event event.id=evt_1e2457a73001GerqjAkpI48tdq event.created=1794797566579 event.type=model.updated event.location.directory=/tmp/verify-noS7go/u event.location.workspaceID=undefined event.data={} http.span=1662 role=server
+timestamp=2026-11-16T02:52:46.583Z level=INFO run=60e5a069 message=event event.id=evt_1e2457a770011eaIF0L9Dfzsf5 event.created=1794797566583 event.type=agent.updated event.location.directory=/tmp/verify-noS7go/u event.location.workspaceID=undefined event.data={} http.span=1666 role=server
+timestamp=2026-11-16T02:52:46.583Z level=INFO run=60e5a069 message=event event.id=evt_1e2457a77002MIX7zsaYsrCLrd event.created=1794797566583 event.type=command.updated event.location.directory=/tmp/verify-noS7go/u event.location.workspaceID=undefined event.data={} http.span=1666 role=server
+timestamp=2026-11-16T02:52:47.120Z level=INFO run=60e5a069 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:52:47.120Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:52:47.120Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:52:47.133Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:47.135Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:52:47.170Z level=INFO run=60e5a069 message="watcher stopped" path=/etc type=entries http.span=2253 role=server
+timestamp=2026-11-16T02:52:47.170Z level=INFO run=60e5a069 message="watcher stopped" path=/ type=entries http.span=2253 role=server
+timestamp=2026-11-16T02:52:47.170Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp type=entries http.span=2253 role=server
+timestamp=2026-11-16T02:52:47.170Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u type=entries http.span=2253 role=server
+timestamp=2026-11-16T02:52:47.178Z level=INFO run=60e5a069 message="watcher stopped" path=/tmp/verify-noS7go/u/.config/opencode type=directory http.span=2261 role=server

@@ -1,0 +1,56 @@
+spec: @weldall/opencode@0.3.2
+apiNames: @weldall/opencode, opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-feunfM/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46371
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:07:00.148Z level=INFO run=02af0be5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@weldall/opencode@0.3.2\"]" role=cli
+timestamp=2026-11-16T12:07:00.947Z level=INFO run=500095a0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:07:01.407Z level=INFO run=500095a0 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:07:01.481Z level=INFO run=500095a0 message="database schema bootstrap completed" migrations=59 durationMs=74 role=server
+timestamp=2026-11-16T12:07:01.820Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u/.config/opencode type=directory ignores=6 http.span=53 role=server
+timestamp=2026-11-16T12:07:01.826Z level=INFO run=500095a0 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T12:07:01.827Z level=INFO run=500095a0 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T12:07:01.828Z level=INFO run=500095a0 message="watcher subscribe" path=/ type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:07:01.828Z level=INFO run=500095a0 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:07:01.828Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:07:01.829Z level=INFO run=500095a0 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:07:01.829Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:07:01.830Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T12:07:01.831Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u type=entries ignores=0 http.span=64 role=server
+timestamp=2026-11-16T12:07:01.831Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T12:07:01.886Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u/.config/opencode type=directory backend=inotify ignores=6 http.span=119 role=server
+timestamp=2026-11-16T12:07:01.956Z level=INFO run=500095a0 message="location services booted" directory=/tmp/verify-feunfM/u workspaceID=undefined durationMs=188 http.span=189 role=server
+timestamp=2026-11-16T12:07:01.963Z level=INFO run=500095a0 msg="loading plugin" id=@weldall/opencode@0.3.2 entrypoint=file:///tmp/verify-feunfM/u/cache/opencode/npm/@weldall/opencode@0.3.2/1794830820451/node_modules/@weldall/opencode/plugin.js http.span=196 role=server
+timestamp=2026-11-16T12:07:01.972Z level=WARN run=500095a0 message="failed to load plugin" target=@weldall/opencode@0.3.2 ref=err_a827b38a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=205 role=server
+timestamp=2026-11-16T12:07:03.227Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:07:03.227Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:07:03.227Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:07:03.228Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:07:03.245Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:07:03.245Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:07:03.246Z level=INFO run=500095a0 message="watcher subscribe" path=/tmp/verify-feunfM/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:07:03.247Z level=INFO run=500095a0 message="watcher started" path=/tmp/verify-feunfM/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:07:03.271Z level=INFO run=500095a0 message=event event.id=evt_1e440ef66001AikwT69wvXcH7S event.created=1794830823270 event.type=provider.updated event.location.directory=/tmp/verify-feunfM/u event.location.workspaceID=undefined event.data={} http.span=1504 role=server
+timestamp=2026-11-16T12:07:03.284Z level=INFO run=500095a0 message=event event.id=evt_1e440ef74001Z45WPz10xaqYR3 event.created=1794830823284 event.type=model.updated event.location.directory=/tmp/verify-feunfM/u event.location.workspaceID=undefined event.data={} http.span=1517 role=server
+timestamp=2026-11-16T12:07:03.287Z level=INFO run=500095a0 message=event event.id=evt_1e440ef77001QJ7kf0O0dMl2u1 event.created=1794830823287 event.type=agent.updated event.location.directory=/tmp/verify-feunfM/u event.location.workspaceID=undefined event.data={} http.span=1520 role=server
+timestamp=2026-11-16T12:07:03.288Z level=INFO run=500095a0 message=event event.id=evt_1e440ef78001oKqvQSfx0wEuWd event.created=1794830823288 event.type=command.updated event.location.directory=/tmp/verify-feunfM/u event.location.workspaceID=undefined event.data={} http.span=1521 role=server
+timestamp=2026-11-16T12:07:03.401Z level=ERROR run=500095a0 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1634 role=server
+timestamp=2026-11-16T12:07:03.484Z level=INFO run=500095a0 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:07:03.489Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:07:03.489Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:07:03.498Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:07:03.500Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:07:03.533Z level=INFO run=500095a0 message="watcher stopped" path=/etc type=entries http.span=1766 role=server
+timestamp=2026-11-16T12:07:03.533Z level=INFO run=500095a0 message="watcher stopped" path=/ type=entries http.span=1766 role=server
+timestamp=2026-11-16T12:07:03.533Z level=INFO run=500095a0 message="watcher stopped" path=/tmp type=entries http.span=1766 role=server
+timestamp=2026-11-16T12:07:03.533Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM type=entries http.span=1766 role=server
+timestamp=2026-11-16T12:07:03.533Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u type=entries http.span=1766 role=server
+timestamp=2026-11-16T12:07:03.536Z level=INFO run=500095a0 message="watcher stopped" path=/tmp/verify-feunfM/u/.config/opencode type=directory http.span=1769 role=server

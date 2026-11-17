@@ -1,0 +1,57 @@
+spec: HYKSC-X/magpie-relay-identity#fb2cac6960c2ba9a4b578e141a7ccf88f353be3a
+apiNames: HYKSC-X/magpie-relay-identity, magpie-relay-identity, hyksc-x/magpie-relay-identity
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vSD4Kb/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42965
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:52.250Z level=INFO run=cf75a698 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"HYKSC-X/magpie-relay-identity#fb2cac6960c2ba9a4b578e141a7ccf88f353be3a\"]" role=cli
+timestamp=2026-11-16T02:53:53.210Z level=INFO run=63699522 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:53.582Z level=INFO run=63699522 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:53.649Z level=INFO run=63699522 message="database schema bootstrap completed" migrations=59 durationMs=67 role=server
+timestamp=2026-11-16T02:53:54.101Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T02:53:54.104Z level=INFO run=63699522 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T02:53:54.105Z level=INFO run=63699522 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:53:54.105Z level=INFO run=63699522 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:53:54.105Z level=INFO run=63699522 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T02:53:54.106Z level=INFO run=63699522 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T02:53:54.106Z level=INFO run=63699522 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T02:53:54.106Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T02:53:54.106Z level=ERROR run=63699522 message="failed to watch directory" path=/tmp/verify-vSD4Kb error="Error: EACCES: permission denied, watch '/tmp/verify-vSD4Kb'" http.span=31 role=server
+timestamp=2026-11-16T02:53:54.108Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-16T02:53:54.108Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-16T02:53:54.127Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T02:53:54.135Z level=INFO run=63699522 message="location services booted" directory=/tmp/verify-vSD4Kb/u workspaceID=undefined durationMs=59 http.span=60 role=server
+timestamp=2026-11-16T02:53:54.147Z level=INFO run=63699522 msg="loading plugin" id=HYKSC-X/magpie-relay-identity#fb2cac6960c2ba9a4b578e141a7ccf88f353be3a entrypoint=file:///tmp/verify-vSD4Kb/u/cache/opencode/npm/git-magpie-relay-identity-36e810d32780/1794797632785/node_modules/magpie-relay-identity/index.mjs http.span=72 role=server
+timestamp=2026-11-16T02:53:54.149Z level=WARN run=63699522 message="failed to load plugin" target=HYKSC-X/magpie-relay-identity#fb2cac6960c2ba9a4b578e141a7ccf88f353be3a ref=err_8341b052 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=74 role=server
+timestamp=2026-11-16T02:53:55.337Z level=ERROR run=63699522 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1262 role=server
+timestamp=2026-11-16T02:53:55.425Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:55.427Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:55.427Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:55.428Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:55.459Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb type=entries ignores=0 http.span=1384 role=server
+timestamp=2026-11-16T02:53:55.460Z level=ERROR run=63699522 message="failed to watch directory" path=/tmp/verify-vSD4Kb error="Error: EACCES: permission denied, watch '/tmp/verify-vSD4Kb'" http.span=1385 role=server
+timestamp=2026-11-16T02:53:55.491Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:53:55.492Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:55.497Z level=INFO run=63699522 message="watcher subscribe" path=/tmp/verify-vSD4Kb/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:53:55.497Z level=INFO run=63699522 message="watcher started" path=/tmp/verify-vSD4Kb/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:55.573Z level=INFO run=63699522 message=event event.id=evt_1e24687f4001yJuRXTp4mA7Kl0 event.created=1794797635572 event.type=provider.updated event.location.directory=/tmp/verify-vSD4Kb/u event.location.workspaceID=undefined event.data={} http.span=1498 role=server
+timestamp=2026-11-16T02:53:55.627Z level=INFO run=63699522 message=event event.id=evt_1e246882b001QhL4TFNt2dQ08H event.created=1794797635627 event.type=model.updated event.location.directory=/tmp/verify-vSD4Kb/u event.location.workspaceID=undefined event.data={} http.span=1552 role=server
+timestamp=2026-11-16T02:53:55.632Z level=INFO run=63699522 message=event event.id=evt_1e2468830001jIzSKLKm2ShalC event.created=1794797635632 event.type=agent.updated event.location.directory=/tmp/verify-vSD4Kb/u event.location.workspaceID=undefined event.data={} http.span=1557 role=server
+timestamp=2026-11-16T02:53:55.633Z level=INFO run=63699522 message=event event.id=evt_1e2468831001WuhzIgchl6an20 event.created=1794797635633 event.type=command.updated event.location.directory=/tmp/verify-vSD4Kb/u event.location.workspaceID=undefined event.data={} http.span=1558 role=server
+timestamp=2026-11-16T02:53:56.132Z level=INFO run=63699522 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:53:56.135Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:53:56.138Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:53:56.167Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:56.167Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:56.293Z level=INFO run=63699522 message="watcher stopped" path=/etc type=entries http.span=2218 role=server
+timestamp=2026-11-16T02:53:56.293Z level=INFO run=63699522 message="watcher stopped" path=/ type=entries http.span=2218 role=server
+timestamp=2026-11-16T02:53:56.293Z level=INFO run=63699522 message="watcher stopped" path=/tmp type=entries http.span=2218 role=server
+timestamp=2026-11-16T02:53:56.293Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u type=entries http.span=2218 role=server
+timestamp=2026-11-16T02:53:56.315Z level=INFO run=63699522 message="watcher stopped" path=/tmp/verify-vSD4Kb/u/.config/opencode type=directory http.span=2240 role=server

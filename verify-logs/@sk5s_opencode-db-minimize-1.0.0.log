@@ -1,0 +1,63 @@
+spec: @sk5s/opencode-db-minimize@1.0.0
+apiNames: @sk5s/opencode-db-minimize, opencode-db-minimize
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-4ouT60/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41103
+server password [redacted]
+DESCRIPTION
+  OpenCode command line interface
+
+USAGE
+  opencode <subcommand> [flags] [<directory>]
+
+ARGUMENTS
+  directory string    Directory to start OpenCode in (optional)
+
+FLAGS
+  --standalone            Run with a private server instead of the background service
+  --server string         Connect to a server URL instead of the background service
+  --auto                  Auto-approve permissions that are not explicitly denied
+  --continue, -c          Continue the last session
+  --session, -s string    Session ID to continue, or to create if it does not exist
+  --prompt string         Prompt to use
+
+GLOBAL FLAGS
+  --help, -h                                                          Show help information
+  --version, -v                                                       Show version information
+  --wizard                                                            Start wizard mode for a command
+  --completions <bash|zsh|fish|powershell|sh|pwsh>                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  --log-level <all|trace|debug|info|warn|warning|error|fatal|none>    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  --print-logs                                                        Print logs to stderr (server logs require --standalone)
+
+SUBCOMMANDS
+  upgrade, update    Upgrade OpenCode to the latest or a specific version
+  uninstall          Uninstall OpenCode, keeping session data, configuration, and state
+  acp                Start an Agent Client Protocol server
+  api                Make a request to the running server
+  debug              Debugging and troubleshooting tools
+  auth               manage integrations and credentials
+  mcp                Manage MCP (Model Context Protocol) servers
+  plugin             Manage plugins
+  models             List all available models
+  stats              Show shareable usage statistics
+  mini               Start the minimal interactive interface
+  run                Run OpenCode with a message
+  session            Manage sessions
+  service            Manage the background server
+  reload             Reload configuration
+  pair               Print one-time links to connect a browser or app
+  serve              Start the v2 API and web server
+
+ERRORS
+  Unrecognized flag: --disable-warning in command opencode
+  Unrecognized flag: --port in command opencode
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:38.206Z level=INFO run=c44843ec message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@sk5s/opencode-db-minimize@1.0.0\"]" role=cli
+timestamp=2026-11-16T12:05:39.319Z level=INFO run=2ea03b28 message="cli starting" version=2.3.0 channel=latest local=false args="[\"--disable-warning=ExperimentalWarning\",\"/$bunfs/root/opencode\",\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:39.326Z level=ERROR run=2ea03b28 message="cli process failed" cause="Cause([Fail(~effect/cli/CliError/ShowHelp: Help requested)])" args="[\"--disable-warning=ExperimentalWarning\",\"/$bunfs/root/opencode\",\"serve\",\"--port\",\"0\"]" role=cli

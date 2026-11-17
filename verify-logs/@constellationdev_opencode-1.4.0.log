@@ -1,0 +1,55 @@
+spec: @constellationdev/opencode@1.4.0
+apiNames: @constellationdev/opencode, opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-eUaPVC/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39943
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:37.877Z level=INFO run=0227fb56 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@constellationdev/opencode@1.4.0\"]" role=cli
+timestamp=2026-11-16T12:05:42.045Z level=INFO run=dab6620d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:42.251Z level=INFO run=dab6620d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:42.262Z level=INFO run=dab6620d message="database schema bootstrap completed" migrations=59 durationMs=11 role=server
+timestamp=2026-11-16T12:05:42.535Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u/.config/opencode type=directory ignores=6 http.span=22 role=server
+timestamp=2026-11-16T12:05:42.538Z level=INFO run=dab6620d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.539Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:05:42.540Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:05:42.540Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:05:42.540Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:05:42.554Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-16T12:05:42.562Z level=INFO run=dab6620d message="location services booted" directory=/tmp/verify-eUaPVC/u workspaceID=undefined durationMs=48 http.span=49 role=server
+timestamp=2026-11-16T12:05:42.567Z level=INFO run=dab6620d msg="loading plugin" id=@constellationdev/opencode@1.4.0 entrypoint=file:///tmp/verify-eUaPVC/u/cache/opencode/npm/@constellationdev/opencode@1.4.0/1794830741890/node_modules/@constellationdev/opencode/dist/index.js http.span=54 role=server
+timestamp=2026-11-16T12:05:42.568Z level=WARN run=dab6620d message="failed to load plugin" target=@constellationdev/opencode@1.4.0 ref=err_fc564a97 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=55 role=server
+timestamp=2026-11-16T12:05:43.041Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:43.041Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:43.041Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:43.041Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:43.049Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:43.050Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:43.050Z level=INFO run=dab6620d message="watcher subscribe" path=/tmp/verify-eUaPVC/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:43.050Z level=INFO run=dab6620d message="watcher started" path=/tmp/verify-eUaPVC/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:43.061Z level=INFO run=dab6620d message=event event.id=evt_1e43fb6150011SGJYoyznLFvfa event.created=1794830743061 event.type=provider.updated event.location.directory=/tmp/verify-eUaPVC/u event.location.workspaceID=undefined event.data={} http.span=548 role=server
+timestamp=2026-11-16T12:05:43.068Z level=INFO run=dab6620d message=event event.id=evt_1e43fb61c0013lsTnvNuvYdyGV event.created=1794830743068 event.type=model.updated event.location.directory=/tmp/verify-eUaPVC/u event.location.workspaceID=undefined event.data={} http.span=555 role=server
+timestamp=2026-11-16T12:05:43.069Z level=INFO run=dab6620d message=event event.id=evt_1e43fb61d001ZQYZMbAux75gql event.created=1794830743069 event.type=agent.updated event.location.directory=/tmp/verify-eUaPVC/u event.location.workspaceID=undefined event.data={} http.span=556 role=server
+timestamp=2026-11-16T12:05:43.070Z level=INFO run=dab6620d message=event event.id=evt_1e43fb61e001fsxdMGgt0OnqGF event.created=1794830743070 event.type=command.updated event.location.directory=/tmp/verify-eUaPVC/u event.location.workspaceID=undefined event.data={} http.span=557 role=server
+timestamp=2026-11-16T12:05:43.117Z level=INFO run=dab6620d message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:05:43.117Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:05:43.117Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:05:43.119Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:43.120Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:43.127Z level=INFO run=dab6620d message="watcher stopped" path=/etc type=entries http.span=614 role=server
+timestamp=2026-11-16T12:05:43.128Z level=INFO run=dab6620d message="watcher stopped" path=/ type=entries http.span=615 role=server
+timestamp=2026-11-16T12:05:43.128Z level=INFO run=dab6620d message="watcher stopped" path=/tmp type=entries http.span=615 role=server
+timestamp=2026-11-16T12:05:43.128Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC type=entries http.span=615 role=server
+timestamp=2026-11-16T12:05:43.128Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u type=entries http.span=615 role=server
+timestamp=2026-11-16T12:05:43.133Z level=INFO run=dab6620d message="watcher stopped" path=/tmp/verify-eUaPVC/u/.config/opencode type=directory http.span=620 role=server

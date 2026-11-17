@@ -1,0 +1,55 @@
+spec: @gitterm/bot@0.4.0
+apiNames: @gitterm/bot, bot
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-aQUKHm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41331
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:21.983Z level=INFO run=6b945b64 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@gitterm/bot@0.4.0\"]" role=cli
+timestamp=2026-11-16T12:05:35.963Z level=INFO run=174d47d3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:36.057Z level=INFO run=174d47d3 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:36.081Z level=INFO run=174d47d3 message="database schema bootstrap completed" migrations=59 durationMs=24 role=server
+timestamp=2026-11-16T12:05:36.197Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u/.config/opencode type=directory ignores=6 http.span=13 role=server
+timestamp=2026-11-16T12:05:36.199Z level=INFO run=174d47d3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.200Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T12:05:36.201Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T12:05:36.201Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T12:05:36.201Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T12:05:36.211Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=27 role=server
+timestamp=2026-11-16T12:05:36.220Z level=INFO run=174d47d3 message="location services booted" directory=/tmp/verify-aQUKHm/u workspaceID=undefined durationMs=35 http.span=36 role=server
+timestamp=2026-11-16T12:05:36.223Z level=INFO run=174d47d3 msg="loading plugin" id=@gitterm/bot@0.4.0 entrypoint=file:///tmp/verify-aQUKHm/u/cache/opencode/npm/@gitterm/bot@0.4.0/1794830735790/node_modules/@gitterm/bot/dist/index.js http.span=39 role=server
+timestamp=2026-11-16T12:05:36.248Z level=WARN run=174d47d3 message="failed to load plugin" target=@gitterm/bot@0.4.0 ref=err_5c86f6e9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=64 role=server
+timestamp=2026-11-16T12:05:36.627Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:36.627Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:36.627Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:36.627Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:36.638Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:36.638Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:36.639Z level=INFO run=174d47d3 message="watcher subscribe" path=/tmp/verify-aQUKHm/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:36.639Z level=INFO run=174d47d3 message="watcher started" path=/tmp/verify-aQUKHm/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:36.652Z level=INFO run=174d47d3 message=event event.id=evt_1e43f9d0c001Mtgq6tutom7wOz event.created=1794830736652 event.type=provider.updated event.location.directory=/tmp/verify-aQUKHm/u event.location.workspaceID=undefined event.data={} http.span=468 role=server
+timestamp=2026-11-16T12:05:36.659Z level=INFO run=174d47d3 message=event event.id=evt_1e43f9d1300122esTl7Biq0Hlh event.created=1794830736659 event.type=model.updated event.location.directory=/tmp/verify-aQUKHm/u event.location.workspaceID=undefined event.data={} http.span=475 role=server
+timestamp=2026-11-16T12:05:36.660Z level=INFO run=174d47d3 message=event event.id=evt_1e43f9d140014DImQisR05L7Hk event.created=1794830736660 event.type=agent.updated event.location.directory=/tmp/verify-aQUKHm/u event.location.workspaceID=undefined event.data={} http.span=476 role=server
+timestamp=2026-11-16T12:05:36.661Z level=INFO run=174d47d3 message=event event.id=evt_1e43f9d14002gefqlz5iixu4HU event.created=1794830736660 event.type=command.updated event.location.directory=/tmp/verify-aQUKHm/u event.location.workspaceID=undefined event.data={} http.span=477 role=server
+timestamp=2026-11-16T12:05:36.777Z level=INFO run=174d47d3 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:05:36.777Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:05:36.777Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:05:36.779Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:36.779Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:36.791Z level=INFO run=174d47d3 message="watcher stopped" path=/etc type=entries http.span=607 role=server
+timestamp=2026-11-16T12:05:36.791Z level=INFO run=174d47d3 message="watcher stopped" path=/ type=entries http.span=607 role=server
+timestamp=2026-11-16T12:05:36.791Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp type=entries http.span=607 role=server
+timestamp=2026-11-16T12:05:36.791Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm type=entries http.span=607 role=server
+timestamp=2026-11-16T12:05:36.791Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u type=entries http.span=607 role=server
+timestamp=2026-11-16T12:05:36.796Z level=INFO run=174d47d3 message="watcher stopped" path=/tmp/verify-aQUKHm/u/.config/opencode type=directory http.span=612 role=server

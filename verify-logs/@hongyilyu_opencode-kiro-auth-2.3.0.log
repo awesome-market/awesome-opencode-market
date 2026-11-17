@@ -1,0 +1,32 @@
+spec: @hongyilyu/opencode-kiro-auth@2.3.0
+apiNames: @hongyilyu/opencode-kiro-auth, opencode-kiro-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-zo1GRl/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41591
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:45.832Z level=INFO run=d2a3866c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@hongyilyu/opencode-kiro-auth@2.3.0\"]" role=cli
+timestamp=2026-11-16T09:37:51.239Z level=INFO run=8bdef615 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:51.537Z level=INFO run=8bdef615 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:51.574Z level=INFO run=8bdef615 message="database schema bootstrap completed" migrations=59 durationMs=37 role=server
+timestamp=2026-11-16T09:37:51.929Z level=INFO run=8bdef615 message="watcher subscribe" path=/tmp/verify-zo1GRl/u/.config/opencode type=directory ignores=6 http.span=30 role=server
+timestamp=2026-11-16T09:37:51.932Z level=INFO run=8bdef615 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-16T09:37:51.933Z level=INFO run=8bdef615 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-16T09:37:51.933Z level=INFO run=8bdef615 message="watcher subscribe" path=/ type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T09:37:51.934Z level=INFO run=8bdef615 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T09:37:51.934Z level=INFO run=8bdef615 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T09:37:51.934Z level=INFO run=8bdef615 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T09:37:51.934Z level=INFO run=8bdef615 message="watcher subscribe" path=/tmp/verify-zo1GRl type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-16T09:37:51.935Z level=INFO run=8bdef615 message="watcher started" path=/tmp/verify-zo1GRl type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:51.935Z level=INFO run=8bdef615 message="watcher subscribe" path=/tmp/verify-zo1GRl/u type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:51.935Z level=INFO run=8bdef615 message="watcher started" path=/tmp/verify-zo1GRl/u type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:51.958Z level=INFO run=8bdef615 message="watcher started" path=/tmp/verify-zo1GRl/u/.config/opencode type=directory backend=inotify ignores=6 http.span=59 role=server
+timestamp=2026-11-16T09:37:51.981Z level=INFO run=8bdef615 message="location services booted" directory=/tmp/verify-zo1GRl/u workspaceID=undefined durationMs=81 http.span=82 role=server
+timestamp=2026-11-16T09:37:51.986Z level=INFO run=8bdef615 msg="loading plugin" id=@hongyilyu/opencode-kiro-auth@2.3.0 entrypoint=file:///tmp/verify-zo1GRl/u/cache/opencode/npm/@hongyilyu/opencode-kiro-auth@2.3.0/1794821870792/node_modules/@hongyilyu/opencode-kiro-auth/index.ts http.span=87 role=server
+timestamp=2026-11-16T09:37:52.041Z level=WARN run=8bdef615 message="failed to load plugin" target=@hongyilyu/opencode-kiro-auth@2.3.0 ref=err_d792d8bb cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=142 role=server

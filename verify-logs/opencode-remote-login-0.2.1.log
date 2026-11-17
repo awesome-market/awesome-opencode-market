@@ -1,0 +1,32 @@
+spec: opencode-remote-login@0.2.1
+apiNames: opencode-remote-login
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-LWagVm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42073
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T11:33:47.755Z level=INFO run=5cd0ed90 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-remote-login@0.2.1\"]" role=cli
+timestamp=2026-11-16T11:33:53.773Z level=INFO run=e5efc1c8 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T11:33:54.209Z level=INFO run=e5efc1c8 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T11:33:54.280Z level=INFO run=e5efc1c8 message="database schema bootstrap completed" migrations=59 durationMs=71 role=server
+timestamp=2026-11-16T11:33:54.480Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/tmp/verify-LWagVm/u/.config/opencode type=directory ignores=6 http.span=35 role=server
+timestamp=2026-11-16T11:33:54.483Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T11:33:54.484Z level=INFO run=e5efc1c8 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T11:33:54.484Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/ type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/tmp/verify-LWagVm type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher started" path=/tmp/verify-LWagVm type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.485Z level=INFO run=e5efc1c8 message="watcher subscribe" path=/tmp/verify-LWagVm/u type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T11:33:54.486Z level=INFO run=e5efc1c8 message="watcher started" path=/tmp/verify-LWagVm/u type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T11:33:54.506Z level=INFO run=e5efc1c8 message="watcher started" path=/tmp/verify-LWagVm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=61 role=server
+timestamp=2026-11-16T11:33:54.518Z level=INFO run=e5efc1c8 msg="loading plugin" id=opencode-remote-login@0.2.1 entrypoint=file:///tmp/verify-LWagVm/u/cache/opencode/npm/opencode-remote-login@0.2.1/1794828833487/node_modules/opencode-remote-login/src/index.ts http.span=73 role=server
+timestamp=2026-11-16T11:33:54.520Z level=WARN run=e5efc1c8 message="failed to load plugin" target=opencode-remote-login@0.2.1 ref=err_1a79c450 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=75 role=server
+timestamp=2026-11-16T11:33:54.535Z level=INFO run=e5efc1c8 message="location services booted" directory=/tmp/verify-LWagVm/u workspaceID=undefined durationMs=89 http.span=90 role=server

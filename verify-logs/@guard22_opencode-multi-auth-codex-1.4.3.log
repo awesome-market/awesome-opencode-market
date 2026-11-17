@@ -1,0 +1,44 @@
+spec: @guard22/opencode-multi-auth-codex@1.4.3
+apiNames: @guard22/opencode-multi-auth-codex, opencode-multi-auth-codex
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Qo4CdZ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37323
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:41.372Z level=INFO run=bd6fbb6c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@guard22/opencode-multi-auth-codex@1.4.3\"]" role=cli
+timestamp=2026-11-16T09:37:43.466Z level=INFO run=c18764de message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:43.990Z level=INFO run=c18764de message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:44.266Z level=INFO run=c18764de message="database schema bootstrap completed" migrations=59 durationMs=276 role=server
+timestamp=2026-11-16T09:37:44.459Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u/.config/opencode type=directory ignores=6 http.span=29 role=server
+timestamp=2026-11-16T09:37:44.464Z level=INFO run=c18764de message="watcher subscribe" path=/etc type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-16T09:37:44.465Z level=INFO run=c18764de message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-16T09:37:44.466Z level=INFO run=c18764de message="watcher subscribe" path=/ type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:44.466Z level=INFO run=c18764de message="watcher started" path=/ type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-16T09:37:44.467Z level=INFO run=c18764de message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=37 role=server
+timestamp=2026-11-16T09:37:44.468Z level=INFO run=c18764de message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:44.468Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:44.468Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ type=entries backend=node ignores=0 http.span=38 role=server
+timestamp=2026-11-16T09:37:44.469Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T09:37:44.470Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:37:44.495Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=65 role=server
+timestamp=2026-11-16T09:37:44.517Z level=INFO run=c18764de message="location services booted" directory=/tmp/verify-Qo4CdZ/u workspaceID=undefined durationMs=86 http.span=87 role=server
+timestamp=2026-11-16T09:37:44.522Z level=INFO run=c18764de msg="loading plugin" id=@guard22/opencode-multi-auth-codex@1.4.3 entrypoint=file:///tmp/verify-Qo4CdZ/u/cache/opencode/npm/@guard22/opencode-multi-auth-codex@1.4.3/1794821863194/node_modules/@guard22/opencode-multi-auth-codex/dist/index.js http.span=92 role=server
+timestamp=2026-11-16T09:37:44.548Z level=WARN run=c18764de message="failed to load plugin" target=@guard22/opencode-multi-auth-codex@1.4.3 ref=err_9e6d962c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=118 role=server
+timestamp=2026-11-16T09:37:45.316Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:45.317Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:45.317Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:37:45.318Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:45.348Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T09:37:45.348Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:45.350Z level=INFO run=c18764de message="watcher subscribe" path=/tmp/verify-Qo4CdZ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T09:37:45.350Z level=INFO run=c18764de message="watcher started" path=/tmp/verify-Qo4CdZ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:37:45.396Z level=INFO run=c18764de message=event event.id=evt_1e3b83fb3001Bue3S9fx5WffVZ event.created=1794821865395 event.type=provider.updated event.location.directory=/tmp/verify-Qo4CdZ/u event.location.workspaceID=undefined event.data={} http.span=966 role=server
+timestamp=2026-11-16T09:37:45.407Z level=INFO run=c18764de message=event event.id=evt_1e3b83fbf001VzpCXNf3tjSsHb event.created=1794821865407 event.type=model.updated event.location.directory=/tmp/verify-Qo4CdZ/u event.location.workspaceID=undefined event.data={} http.span=977 role=server
+timestamp=2026-11-16T09:37:45.409Z level=INFO run=c18764de message=event event.id=evt_1e3b83fc1001iyfF7EI1YRwmMv event.created=1794821865409 event.type=agent.updated event.location.directory=/tmp/verify-Qo4CdZ/u event.location.workspaceID=undefined event.data={} http.span=979 role=server
+timestamp=2026-11-16T09:37:45.410Z level=INFO run=c18764de message=event event.id=evt_1e3b83fc2001QuqO6C5jZDRWL2 event.created=1794821865410 event.type=command.updated event.location.directory=/tmp/verify-Qo4CdZ/u event.location.workspaceID=undefined event.data={} http.span=980 role=server

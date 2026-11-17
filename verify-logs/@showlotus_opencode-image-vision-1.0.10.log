@@ -1,0 +1,56 @@
+spec: @showlotus/opencode-image-vision@1.0.10
+apiNames: @showlotus/opencode-image-vision, opencode-image-vision
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Vjd4TK/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39375
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:06:34.531Z level=INFO run=2a8a0c34 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@showlotus/opencode-image-vision@1.0.10\"]" role=cli
+timestamp=2026-11-16T12:06:38.732Z level=INFO run=25a4d90a message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:06:38.897Z level=INFO run=25a4d90a message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:06:38.948Z level=INFO run=25a4d90a message="database schema bootstrap completed" migrations=59 durationMs=51 role=server
+timestamp=2026-11-16T12:06:39.122Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u/.config/opencode type=directory ignores=6 http.span=22 role=server
+timestamp=2026-11-16T12:06:39.125Z level=INFO run=25a4d90a message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T12:06:39.125Z level=INFO run=25a4d90a message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T12:06:39.126Z level=INFO run=25a4d90a message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T12:06:39.127Z level=INFO run=25a4d90a message="watcher started" path=/ type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:06:39.127Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:06:39.127Z level=INFO run=25a4d90a message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:06:39.127Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:06:39.127Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T12:06:39.128Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T12:06:39.128Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T12:06:39.146Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u/.config/opencode type=directory backend=inotify ignores=6 http.span=46 role=server
+timestamp=2026-11-16T12:06:39.162Z level=INFO run=25a4d90a message="location services booted" directory=/tmp/verify-Vjd4TK/u workspaceID=undefined durationMs=61 http.span=62 role=server
+timestamp=2026-11-16T12:06:39.173Z level=INFO run=25a4d90a msg="loading plugin" id=@showlotus/opencode-image-vision@1.0.10 entrypoint=file:///tmp/verify-Vjd4TK/u/cache/opencode/npm/@showlotus/opencode-image-vision@1.0.10/1794830798422/node_modules/@showlotus/opencode-image-vision/plugin/index.js http.span=73 role=server
+timestamp=2026-11-16T12:06:39.218Z level=WARN run=25a4d90a message="failed to load plugin" target=@showlotus/opencode-image-vision@1.0.10 ref=err_03360d91 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=118 role=server
+timestamp=2026-11-16T12:06:39.796Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:06:39.796Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:39.796Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:06:39.797Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:39.819Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:06:39.820Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:39.821Z level=INFO run=25a4d90a message="watcher subscribe" path=/tmp/verify-Vjd4TK/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:06:39.821Z level=INFO run=25a4d90a message="watcher started" path=/tmp/verify-Vjd4TK/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:06:39.841Z level=INFO run=25a4d90a message=event event.id=evt_1e44093e1001Fb1ByJvS4DKS21 event.created=1794830799841 event.type=provider.updated event.location.directory=/tmp/verify-Vjd4TK/u event.location.workspaceID=undefined event.data={} http.span=741 role=server
+timestamp=2026-11-16T12:06:39.852Z level=INFO run=25a4d90a message=event event.id=evt_1e44093ec001mZjGU8nYK81w9c event.created=1794830799852 event.type=model.updated event.location.directory=/tmp/verify-Vjd4TK/u event.location.workspaceID=undefined event.data={} http.span=752 role=server
+timestamp=2026-11-16T12:06:39.862Z level=INFO run=25a4d90a message=event event.id=evt_1e44093f4001rAdxZZD2l8aKuL event.created=1794830799862 event.type=agent.updated event.location.directory=/tmp/verify-Vjd4TK/u event.location.workspaceID=undefined event.data={} http.span=762 role=server
+timestamp=2026-11-16T12:06:39.862Z level=INFO run=25a4d90a message=event event.id=evt_1e44093f6001klR5tigzl0GAwO event.created=1794830799862 event.type=command.updated event.location.directory=/tmp/verify-Vjd4TK/u event.location.workspaceID=undefined event.data={} http.span=762 role=server
+timestamp=2026-11-16T12:06:39.929Z level=ERROR run=25a4d90a message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=829 role=server
+timestamp=2026-11-16T12:06:40.276Z level=INFO run=25a4d90a message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:06:40.276Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:06:40.276Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:06:40.278Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:06:40.278Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/etc type=entries http.span=1189 role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/ type=entries http.span=1189 role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp type=entries http.span=1189 role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK type=entries http.span=1189 role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u type=entries http.span=1189 role=server
+timestamp=2026-11-16T12:06:40.289Z level=INFO run=25a4d90a message="watcher stopped" path=/tmp/verify-Vjd4TK/u/.config/opencode type=directory http.span=1189 role=server

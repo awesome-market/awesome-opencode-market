@@ -1,0 +1,58 @@
+spec: @agent-a/cli@0.1.17
+apiNames: @agent-a/cli, cli
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-50IscG/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36915
+server password [redacted]
+  Unknown command: serve
+
+
+  Agent-A CLI — Your AI Founding Team
+
+  Commands:
+
+    init    Install your AI founding team in OpenCode
+    test    Test your Agent-A API connection
+    models  List available Agent-A roles
+    help    Show this help message
+
+  Usage:
+
+    npx @agent-a/cli init     # Install your team
+    npx @agent-a/cli test     # Test connection
+    npx @agent-a/cli models   # List all models
+
+  Your AI Founding Team:
+
+    ■  Strategic Challenger — Strategy, challenge, focus
+    ▶  Frontend Designer — UI components, layouts, styling
+    ◆  Backend Hacker — APIs, databases, server logic
+    ●  Market Operator — problem, positioning, distribution
+
+  GET YOUR API KEY:
+
+    1. Go to https://agenta.chat/setup
+    2. Sign in with your email
+    3. Copy your API key (starts with ak_)
+
+  HOW TO USE:
+
+  OpenCode (local):
+    1. Type opencode in your terminal
+    2. Type /model to see available models
+    3. Select an Agent-A model (e.g. agent-a/strategic-challenger)
+    4. Start chatting
+
+  Hermes (remote):
+    1. Go to https://agenta.chat/setremoteteam
+    2. Add the Agent-A provider with your API key
+    3. Select any team member and start chatting
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:23.588Z level=INFO run=0764b633 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@agent-a/cli@0.1.17\"]" role=cli

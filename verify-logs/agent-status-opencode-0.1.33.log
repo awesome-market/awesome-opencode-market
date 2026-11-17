@@ -1,0 +1,32 @@
+spec: agent-status-opencode@0.1.33
+apiNames: agent-status-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-Fewixj/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33951
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:58.733Z level=INFO run=36606a29 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"agent-status-opencode@0.1.33\"]" role=cli
+timestamp=2026-11-16T09:37:59.289Z level=INFO run=c56db480 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:59.614Z level=INFO run=c56db480 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:59.678Z level=INFO run=c56db480 message="database schema bootstrap completed" migrations=59 durationMs=64 role=server
+timestamp=2026-11-16T09:38:00.005Z level=INFO run=c56db480 message="watcher subscribe" path=/tmp/verify-Fewixj/u/.config/opencode type=directory ignores=6 http.span=38 role=server
+timestamp=2026-11-16T09:38:00.013Z level=INFO run=c56db480 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T09:38:00.014Z level=INFO run=c56db480 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T09:38:00.015Z level=INFO run=c56db480 message="watcher subscribe" path=/ type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-16T09:38:00.017Z level=INFO run=c56db480 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-16T09:38:00.019Z level=INFO run=c56db480 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T09:38:00.022Z level=INFO run=c56db480 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T09:38:00.022Z level=INFO run=c56db480 message="watcher subscribe" path=/tmp/verify-Fewixj type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T09:38:00.022Z level=INFO run=c56db480 message="watcher started" path=/tmp/verify-Fewixj type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T09:38:00.022Z level=INFO run=c56db480 message="watcher subscribe" path=/tmp/verify-Fewixj/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T09:38:00.022Z level=INFO run=c56db480 message="watcher started" path=/tmp/verify-Fewixj/u type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T09:38:00.107Z level=INFO run=c56db480 message="watcher started" path=/tmp/verify-Fewixj/u/.config/opencode type=directory backend=inotify ignores=6 http.span=140 role=server
+timestamp=2026-11-16T09:38:00.146Z level=INFO run=c56db480 message="location services booted" directory=/tmp/verify-Fewixj/u workspaceID=undefined durationMs=177 http.span=179 role=server
+timestamp=2026-11-16T09:38:00.204Z level=INFO run=c56db480 msg="loading plugin" id=agent-status-opencode@0.1.33 entrypoint=file:///tmp/verify-Fewixj/u/cache/opencode/npm/agent-status-opencode@0.1.33/1794821878932/node_modules/agent-status-opencode/index.js http.span=237 role=server
+timestamp=2026-11-16T09:38:00.213Z level=WARN run=c56db480 message="failed to load plugin" target=agent-status-opencode@0.1.33 ref=err_81e5483a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=246 role=server

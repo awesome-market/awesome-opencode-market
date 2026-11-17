@@ -1,0 +1,32 @@
+spec: opencode-claude-hooks@0.1.0
+apiNames: opencode-claude-hooks
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-5Ky7b7/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45971
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:36:23.728Z level=INFO run=c64d2b5b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-claude-hooks@0.1.0\"]" role=cli
+timestamp=2026-11-16T07:36:27.205Z level=INFO run=1f54a842 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:36:27.534Z level=INFO run=1f54a842 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:36:27.562Z level=INFO run=1f54a842 message="database schema bootstrap completed" migrations=59 durationMs=28 role=server
+timestamp=2026-11-16T07:36:27.896Z level=INFO run=1f54a842 message="watcher subscribe" path=/tmp/verify-5Ky7b7/u/.config/opencode type=directory ignores=6 http.span=60 role=server
+timestamp=2026-11-16T07:36:27.905Z level=INFO run=1f54a842 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=69 role=server
+timestamp=2026-11-16T07:36:27.906Z level=INFO run=1f54a842 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=70 role=server
+timestamp=2026-11-16T07:36:27.906Z level=INFO run=1f54a842 message="watcher subscribe" path=/ type=entries ignores=0 http.span=70 role=server
+timestamp=2026-11-16T07:36:27.906Z level=INFO run=1f54a842 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=70 role=server
+timestamp=2026-11-16T07:36:27.906Z level=INFO run=1f54a842 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=70 role=server
+timestamp=2026-11-16T07:36:27.907Z level=INFO run=1f54a842 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=71 role=server
+timestamp=2026-11-16T07:36:27.911Z level=INFO run=1f54a842 message="watcher subscribe" path=/tmp/verify-5Ky7b7 type=entries ignores=0 http.span=75 role=server
+timestamp=2026-11-16T07:36:27.911Z level=INFO run=1f54a842 message="watcher started" path=/tmp/verify-5Ky7b7 type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-16T07:36:27.913Z level=INFO run=1f54a842 message="watcher subscribe" path=/tmp/verify-5Ky7b7/u type=entries ignores=0 http.span=77 role=server
+timestamp=2026-11-16T07:36:27.913Z level=INFO run=1f54a842 message="watcher started" path=/tmp/verify-5Ky7b7/u type=entries backend=node ignores=0 http.span=77 role=server
+timestamp=2026-11-16T07:36:27.961Z level=INFO run=1f54a842 message="watcher started" path=/tmp/verify-5Ky7b7/u/.config/opencode type=directory backend=inotify ignores=6 http.span=125 role=server
+timestamp=2026-11-16T07:36:27.994Z level=INFO run=1f54a842 msg="loading plugin" id=opencode-claude-hooks@0.1.0 entrypoint=file:///tmp/verify-5Ky7b7/u/cache/opencode/npm/opencode-claude-hooks@0.1.0/1794814586753/node_modules/opencode-claude-hooks/dist/index.js http.span=158 role=server
+timestamp=2026-11-16T07:36:28.008Z level=WARN run=1f54a842 message="failed to load plugin" target=opencode-claude-hooks@0.1.0 ref=err_46396470 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=172 role=server
+timestamp=2026-11-16T07:36:28.030Z level=INFO run=1f54a842 message="location services booted" directory=/tmp/verify-5Ky7b7/u workspaceID=undefined durationMs=193 http.span=194 role=server

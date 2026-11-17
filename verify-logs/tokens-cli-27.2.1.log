@@ -1,0 +1,22 @@
+spec: tokens-cli@27.2.1
+apiNames: tokens-cli
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-r8S3dd/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41077
+server password [redacted]
+error: unexpected argument '--port' found
+
+Usage: tokens serve [OPTIONS]
+
+For more information, try '--help'.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:23.556Z level=INFO run=ae21263b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"tokens-cli@27.2.1\"]" role=cli
+timestamp=2026-11-16T07:35:25.074Z level=INFO run=e02c7b5a message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:25.595Z level=INFO run=e02c7b5a message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:25.647Z level=INFO run=e02c7b5a message="database schema bootstrap completed" migrations=59 durationMs=52 role=server

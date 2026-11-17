@@ -1,0 +1,55 @@
+spec: @devcxl/opencode-spec@0.2.0
+apiNames: @devcxl/opencode-spec, opencode-spec
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-VRBmEQ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34957
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:54.828Z level=INFO run=a49f3b8d message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@devcxl/opencode-spec@0.2.0\"]" role=cli
+timestamp=2026-11-16T08:51:58.439Z level=INFO run=45fcdf93 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:51:58.803Z level=INFO run=45fcdf93 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:51:58.831Z level=INFO run=45fcdf93 message="database schema bootstrap completed" migrations=59 durationMs=28 role=server
+timestamp=2026-11-16T08:51:59.111Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-16T08:51:59.114Z level=INFO run=45fcdf93 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:51:59.115Z level=INFO run=45fcdf93 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T08:51:59.115Z level=INFO run=45fcdf93 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T08:51:59.115Z level=INFO run=45fcdf93 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T08:51:59.116Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:51:59.116Z level=INFO run=45fcdf93 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:51:59.116Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-16T08:51:59.117Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:51:59.117Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T08:51:59.118Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:51:59.134Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=43 role=server
+timestamp=2026-11-16T08:51:59.142Z level=INFO run=45fcdf93 message="location services booted" directory=/tmp/verify-VRBmEQ/u workspaceID=undefined durationMs=51 http.span=51 role=server
+timestamp=2026-11-16T08:51:59.154Z level=INFO run=45fcdf93 msg="loading plugin" id=@devcxl/opencode-spec@0.2.0 entrypoint=file:///tmp/verify-VRBmEQ/u/cache/opencode/npm/@devcxl/opencode-spec@0.2.0/1794819118217/node_modules/@devcxl/opencode-spec/dist/index.js http.span=63 role=server
+timestamp=2026-11-16T08:51:59.159Z level=WARN run=45fcdf93 message="failed to load plugin" target=@devcxl/opencode-spec@0.2.0 ref=err_5ca7ef69 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=68 role=server
+timestamp=2026-11-16T08:51:59.775Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:59.776Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:59.776Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:51:59.777Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:59.804Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:51:59.805Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:59.812Z level=INFO run=45fcdf93 message="watcher subscribe" path=/tmp/verify-VRBmEQ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:51:59.812Z level=INFO run=45fcdf93 message="watcher started" path=/tmp/verify-VRBmEQ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:51:59.869Z level=INFO run=45fcdf93 message=event event.id=evt_1e38e5afc001xYWS52K5mUw0Mw event.created=1794819119868 event.type=provider.updated event.location.directory=/tmp/verify-VRBmEQ/u event.location.workspaceID=undefined event.data={} http.span=778 role=server
+timestamp=2026-11-16T08:51:59.886Z level=INFO run=45fcdf93 message=event event.id=evt_1e38e5b0e0013eDniBtTSyU8lL event.created=1794819119886 event.type=model.updated event.location.directory=/tmp/verify-VRBmEQ/u event.location.workspaceID=undefined event.data={} http.span=795 role=server
+timestamp=2026-11-16T08:51:59.888Z level=INFO run=45fcdf93 message=event event.id=evt_1e38e5b10001Fss6Hvv85XZAgo event.created=1794819119888 event.type=agent.updated event.location.directory=/tmp/verify-VRBmEQ/u event.location.workspaceID=undefined event.data={} http.span=797 role=server
+timestamp=2026-11-16T08:51:59.891Z level=INFO run=45fcdf93 message=event event.id=evt_1e38e5b13001DAv6WalXkvMfPW event.created=1794819119891 event.type=command.updated event.location.directory=/tmp/verify-VRBmEQ/u event.location.workspaceID=undefined event.data={} http.span=800 role=server
+timestamp=2026-11-16T08:52:00.271Z level=INFO run=45fcdf93 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:52:00.271Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:52:00.271Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:52:00.280Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:00.283Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:00.307Z level=INFO run=45fcdf93 message="watcher stopped" path=/etc type=entries http.span=1216 role=server
+timestamp=2026-11-16T08:52:00.307Z level=INFO run=45fcdf93 message="watcher stopped" path=/ type=entries http.span=1216 role=server
+timestamp=2026-11-16T08:52:00.307Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp type=entries http.span=1216 role=server
+timestamp=2026-11-16T08:52:00.308Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ type=entries http.span=1217 role=server
+timestamp=2026-11-16T08:52:00.308Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u type=entries http.span=1217 role=server
+timestamp=2026-11-16T08:52:00.308Z level=INFO run=45fcdf93 message="watcher stopped" path=/tmp/verify-VRBmEQ/u/.config/opencode type=directory http.span=1217 role=server

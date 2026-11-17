@@ -1,0 +1,56 @@
+spec: maakhai/opencode-sudo#f9b1cb7ae56fe4bd478f4545be994ac2f1290597
+apiNames: maakhai/opencode-sudo, opencode-sudo
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xPLnFy/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:32945
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:57.546Z level=INFO run=f9b56b9a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"maakhai/opencode-sudo#f9b1cb7ae56fe4bd478f4545be994ac2f1290597\"]" role=cli
+timestamp=2026-11-16T02:54:09.930Z level=INFO run=a4c43d03 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:54:10.050Z level=INFO run=a4c43d03 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:54:10.060Z level=INFO run=a4c43d03 message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T02:54:10.163Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u/.config/opencode type=directory ignores=6 http.span=15 role=server
+timestamp=2026-11-16T02:54:10.165Z level=INFO run=a4c43d03 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:54:10.166Z level=INFO run=a4c43d03 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:10.166Z level=INFO run=a4c43d03 message="watcher subscribe" path=/ type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:10.166Z level=INFO run=a4c43d03 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:54:10.167Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:54:10.167Z level=INFO run=a4c43d03 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:54:10.167Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:54:10.167Z level=ERROR run=a4c43d03 message="failed to watch directory" path=/tmp/verify-xPLnFy error="Error: EACCES: permission denied, watch '/tmp/verify-xPLnFy'" http.span=19 role=server
+timestamp=2026-11-16T02:54:10.168Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T02:54:10.168Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T02:54:10.181Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u/.config/opencode type=directory backend=inotify ignores=6 http.span=33 role=server
+timestamp=2026-11-16T02:54:10.191Z level=INFO run=a4c43d03 message="location services booted" directory=/tmp/verify-xPLnFy/u workspaceID=undefined durationMs=43 http.span=43 role=server
+timestamp=2026-11-16T02:54:10.196Z level=INFO run=a4c43d03 msg="loading plugin" id=maakhai/opencode-sudo#f9b1cb7ae56fe4bd478f4545be994ac2f1290597 entrypoint=file:///tmp/verify-xPLnFy/u/cache/opencode/npm/git-opencode-sudo-e6b0d61d946b/1794797649804/node_modules/opencode-sudo/src/index.ts http.span=48 role=server
+timestamp=2026-11-16T02:54:10.587Z level=WARN run=a4c43d03 message="failed to load plugin" plugin.id=opencode-sudo cause="Cause([Die(Error: EACCES: permission denied, mkdir '/run/user/1001/opencode-sudo/6384-88fe28cb/bin')])" http.span=439 role=server
+timestamp=2026-11-16T02:54:10.590Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy type=entries ignores=0 http.span=442 role=server
+timestamp=2026-11-16T02:54:10.590Z level=ERROR run=a4c43d03 message="failed to watch directory" path=/tmp/verify-xPLnFy error="Error: EACCES: permission denied, watch '/tmp/verify-xPLnFy'" http.span=442 role=server
+timestamp=2026-11-16T02:54:10.591Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:10.591Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:10.591Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:54:10.591Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:10.601Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:54:10.601Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:10.602Z level=INFO run=a4c43d03 message="watcher subscribe" path=/tmp/verify-xPLnFy/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:54:10.602Z level=INFO run=a4c43d03 message="watcher started" path=/tmp/verify-xPLnFy/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:54:10.613Z level=INFO run=a4c43d03 message=event event.id=evt_1e246c2b5001PHY1QSxNJqw5hg event.created=1794797650613 event.type=provider.updated event.location.directory=/tmp/verify-xPLnFy/u event.location.workspaceID=undefined event.data={} http.span=465 role=server
+timestamp=2026-11-16T02:54:10.619Z level=INFO run=a4c43d03 message=event event.id=evt_1e246c2bb001epgpVIvLVsPzGe event.created=1794797650619 event.type=model.updated event.location.directory=/tmp/verify-xPLnFy/u event.location.workspaceID=undefined event.data={} http.span=471 role=server
+timestamp=2026-11-16T02:54:10.621Z level=INFO run=a4c43d03 message=event event.id=evt_1e246c2bc001642p65gO5njk21 event.created=1794797650620 event.type=agent.updated event.location.directory=/tmp/verify-xPLnFy/u event.location.workspaceID=undefined event.data={} http.span=473 role=server
+timestamp=2026-11-16T02:54:10.621Z level=INFO run=a4c43d03 message=event event.id=evt_1e246c2bd001IyzLdOoZRGgPWY event.created=1794797650621 event.type=command.updated event.location.directory=/tmp/verify-xPLnFy/u event.location.workspaceID=undefined event.data={} http.span=473 role=server
+timestamp=2026-11-16T02:54:10.736Z level=INFO run=a4c43d03 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:54:10.736Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:54:10.736Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:54:10.739Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:10.739Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:54:10.749Z level=INFO run=a4c43d03 message="watcher stopped" path=/etc type=entries http.span=601 role=server
+timestamp=2026-11-16T02:54:10.749Z level=INFO run=a4c43d03 message="watcher stopped" path=/ type=entries http.span=601 role=server
+timestamp=2026-11-16T02:54:10.749Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp type=entries http.span=601 role=server
+timestamp=2026-11-16T02:54:10.749Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u type=entries http.span=601 role=server
+timestamp=2026-11-16T02:54:10.750Z level=INFO run=a4c43d03 message="watcher stopped" path=/tmp/verify-xPLnFy/u/.config/opencode type=directory http.span=602 role=server

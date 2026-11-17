@@ -1,0 +1,85 @@
+spec: rumuze-edit@1.0.3
+apiNames: rumuze-edit
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-0M1g6g/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37023
+server password [redacted]
+
+[1m[36mrumuze-edit[0m v1.0.3
+Control OpenCode and AI coding agents on your machine directly from Telegram.
+
+[1mUSAGE:[0m
+  $ [36mrumuze-edit[0m <command> [options]
+  $ [36mnpx rumuze-edit[0m <command> [options]
+
+[1mCOMMANDS:[0m
+  [32minit[0m               Interactive setup wizard (pairs with your Telegram bot)
+  [32mstart[0m              Start the live control room for the current project
+  [32mstop[0m               Stop the background daemon
+  [32mstatus[0m             Show active status and processes
+  [32mservice install[0m    Install as persistent background service (launchd / systemd)
+  [32mservice uninstall[0m  Uninstall persistent background service
+  [32mservice status[0m     Check background service status
+  [32mhelp[0m               Show this help message
+
+[1mOPTIONS:[0m
+  [33m--dir <path>[0m       Set project directory (defaults to current directory)
+  [33m--daemon, -d[0m       Run in the background as a detached process
+  [33m--version, -v[0m      Display version number
+  [33m--help, -h[0m         Display help message
+
+[1mEXAMPLES:[0m
+  $ [36mnpx rumuze-edit init[0m
+  $ [36mnpx rumuze-edit start[0m
+  $ [36mnpx rumuze-edit start --dir /var/www/my-app --daemon[0m
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:36:22.106Z level=INFO run=366a41ed message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"rumuze-edit@1.0.3\"]" role=cli
+timestamp=2026-11-16T07:36:22.662Z level=INFO run=76ebdbf0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:36:23.772Z level=INFO run=76ebdbf0 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:36:23.942Z level=INFO run=76ebdbf0 message="database schema bootstrap completed" migrations=59 durationMs=170 role=server
+timestamp=2026-11-16T07:36:24.223Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u/.config/opencode type=directory ignores=6 http.span=41 role=server
+timestamp=2026-11-16T07:36:24.226Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T07:36:24.227Z level=INFO run=76ebdbf0 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T07:36:24.227Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/ type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T07:36:24.227Z level=INFO run=76ebdbf0 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T07:36:24.228Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:36:24.228Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:36:24.228Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:36:24.228Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:36:24.229Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:36:24.229Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:36:24.253Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u/.config/opencode type=directory backend=inotify ignores=6 http.span=71 role=server
+timestamp=2026-11-16T07:36:24.261Z level=INFO run=76ebdbf0 message="location services booted" directory=/tmp/verify-0M1g6g/u workspaceID=undefined durationMs=78 http.span=79 role=server
+timestamp=2026-11-16T07:36:24.282Z level=INFO run=76ebdbf0 msg="loading plugin" id=rumuze-edit@1.0.3 entrypoint=file:///tmp/verify-0M1g6g/u/cache/opencode/npm/rumuze-edit@1.0.3/1794814582362/node_modules/rumuze-edit/bin/rumuze-edit.js http.span=100 role=server
+timestamp=2026-11-16T07:36:24.286Z level=WARN run=76ebdbf0 message="failed to load plugin" target=rumuze-edit@1.0.3 ref=err_f72b4867 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=104 role=server
+timestamp=2026-11-16T07:36:25.407Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:25.407Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:25.408Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:36:25.408Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:25.432Z level=ERROR run=76ebdbf0 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1250 role=server
+timestamp=2026-11-16T07:36:25.440Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:36:25.440Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:25.441Z level=INFO run=76ebdbf0 message="watcher subscribe" path=/tmp/verify-0M1g6g/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:36:25.441Z level=INFO run=76ebdbf0 message="watcher started" path=/tmp/verify-0M1g6g/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:36:25.471Z level=INFO run=76ebdbf0 message=event event.id=evt_1e3492a7f001KLBuUmamhCBpcl event.created=1794814585471 event.type=provider.updated event.location.directory=/tmp/verify-0M1g6g/u event.location.workspaceID=undefined event.data={} http.span=1289 role=server
+timestamp=2026-11-16T07:36:25.491Z level=INFO run=76ebdbf0 message=event event.id=evt_1e3492a93001ZvrFnYCEovq69v event.created=1794814585491 event.type=model.updated event.location.directory=/tmp/verify-0M1g6g/u event.location.workspaceID=undefined event.data={} http.span=1309 role=server
+timestamp=2026-11-16T07:36:25.495Z level=INFO run=76ebdbf0 message=event event.id=evt_1e3492a960016mCXopkKph8den event.created=1794814585495 event.type=agent.updated event.location.directory=/tmp/verify-0M1g6g/u event.location.workspaceID=undefined event.data={} http.span=1313 role=server
+timestamp=2026-11-16T07:36:25.495Z level=INFO run=76ebdbf0 message=event event.id=evt_1e3492a97001PEfA4XXS9wbatm event.created=1794814585495 event.type=command.updated event.location.directory=/tmp/verify-0M1g6g/u event.location.workspaceID=undefined event.data={} http.span=1313 role=server
+timestamp=2026-11-16T07:36:25.641Z level=INFO run=76ebdbf0 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:36:25.641Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:36:25.641Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:36:25.652Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:25.653Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:36:25.684Z level=INFO run=76ebdbf0 message="watcher stopped" path=/etc type=entries http.span=1502 role=server
+timestamp=2026-11-16T07:36:25.684Z level=INFO run=76ebdbf0 message="watcher stopped" path=/ type=entries http.span=1502 role=server
+timestamp=2026-11-16T07:36:25.684Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp type=entries http.span=1502 role=server
+timestamp=2026-11-16T07:36:25.684Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g type=entries http.span=1502 role=server
+timestamp=2026-11-16T07:36:25.684Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u type=entries http.span=1502 role=server
+timestamp=2026-11-16T07:36:25.686Z level=INFO run=76ebdbf0 message="watcher stopped" path=/tmp/verify-0M1g6g/u/.config/opencode type=directory http.span=1504 role=server

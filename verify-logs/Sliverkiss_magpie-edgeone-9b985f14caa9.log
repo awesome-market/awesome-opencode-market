@@ -1,0 +1,56 @@
+spec: Sliverkiss/magpie-edgeone#9b985f14caa96c306c04a5e73468cef62a753629
+apiNames: Sliverkiss/magpie-edgeone, magpie-edgeone, sliverkiss/magpie-edgeone
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-k0Jqyg/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43239
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:21.279Z level=INFO run=f4185eb4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"Sliverkiss/magpie-edgeone#9b985f14caa96c306c04a5e73468cef62a753629\"]" role=cli
+timestamp=2026-11-16T07:35:22.367Z level=INFO run=184edff3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:22.937Z level=INFO run=184edff3 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:22.994Z level=INFO run=184edff3 message="database schema bootstrap completed" migrations=59 durationMs=58 role=server
+timestamp=2026-11-16T07:35:23.280Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u/.config/opencode type=directory ignores=6 http.span=40 role=server
+timestamp=2026-11-16T07:35:23.286Z level=INFO run=184edff3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:35:23.286Z level=INFO run=184edff3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-16T07:35:23.287Z level=INFO run=184edff3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:35:23.287Z level=INFO run=184edff3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:35:23.287Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T07:35:23.288Z level=INFO run=184edff3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T07:35:23.291Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T07:35:23.291Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T07:35:23.291Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T07:35:23.291Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-16T07:35:23.348Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u/.config/opencode type=directory backend=inotify ignores=6 http.span=108 role=server
+timestamp=2026-11-16T07:35:23.363Z level=INFO run=184edff3 message="location services booted" directory=/tmp/verify-k0Jqyg/u workspaceID=undefined durationMs=121 http.span=123 role=server
+timestamp=2026-11-16T07:35:23.386Z level=INFO run=184edff3 msg="loading plugin" id=Sliverkiss/magpie-edgeone#9b985f14caa96c306c04a5e73468cef62a753629 entrypoint=file:///tmp/verify-k0Jqyg/u/cache/opencode/npm/git-magpie-edgeone-1811233d129e/1794814521962/node_modules/magpie-edgeone/index.mjs http.span=146 role=server
+timestamp=2026-11-16T07:35:23.408Z level=WARN run=184edff3 message="failed to load plugin" target=Sliverkiss/magpie-edgeone#9b985f14caa96c306c04a5e73468cef62a753629 ref=err_d96e67ad cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=168 role=server
+timestamp=2026-11-16T07:35:24.679Z level=ERROR run=184edff3 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1439 role=server
+timestamp=2026-11-16T07:35:24.699Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:24.700Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:24.700Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T07:35:24.701Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:24.737Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T07:35:24.737Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:24.738Z level=INFO run=184edff3 message="watcher subscribe" path=/tmp/verify-k0Jqyg/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T07:35:24.740Z level=INFO run=184edff3 message="watcher started" path=/tmp/verify-k0Jqyg/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T07:35:24.772Z level=INFO run=184edff3 message=event event.id=evt_1e3483d64001pHQDuyVhc1C6Wt event.created=1794814524772 event.type=provider.updated event.location.directory=/tmp/verify-k0Jqyg/u event.location.workspaceID=undefined event.data={} http.span=1532 role=server
+timestamp=2026-11-16T07:35:24.789Z level=INFO run=184edff3 message=event event.id=evt_1e3483d75001U9o4Zu0SxQtRFp event.created=1794814524789 event.type=model.updated event.location.directory=/tmp/verify-k0Jqyg/u event.location.workspaceID=undefined event.data={} http.span=1549 role=server
+timestamp=2026-11-16T07:35:24.792Z level=INFO run=184edff3 message=event event.id=evt_1e3483d78001f58gqRAOUI1P35 event.created=1794814524792 event.type=agent.updated event.location.directory=/tmp/verify-k0Jqyg/u event.location.workspaceID=undefined event.data={} http.span=1552 role=server
+timestamp=2026-11-16T07:35:24.793Z level=INFO run=184edff3 message=event event.id=evt_1e3483d79001NlsDo9yoU2os6D event.created=1794814524793 event.type=command.updated event.location.directory=/tmp/verify-k0Jqyg/u event.location.workspaceID=undefined event.data={} http.span=1553 role=server
+timestamp=2026-11-16T07:35:24.963Z level=INFO run=184edff3 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T07:35:24.963Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T07:35:24.963Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T07:35:24.982Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:24.982Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T07:35:25.019Z level=INFO run=184edff3 message="watcher stopped" path=/etc type=entries http.span=1779 role=server
+timestamp=2026-11-16T07:35:25.019Z level=INFO run=184edff3 message="watcher stopped" path=/ type=entries http.span=1779 role=server
+timestamp=2026-11-16T07:35:25.019Z level=INFO run=184edff3 message="watcher stopped" path=/tmp type=entries http.span=1779 role=server
+timestamp=2026-11-16T07:35:25.019Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg type=entries http.span=1779 role=server
+timestamp=2026-11-16T07:35:25.019Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u type=entries http.span=1779 role=server
+timestamp=2026-11-16T07:35:25.025Z level=INFO run=184edff3 message="watcher stopped" path=/tmp/verify-k0Jqyg/u/.config/opencode type=directory http.span=1785 role=server

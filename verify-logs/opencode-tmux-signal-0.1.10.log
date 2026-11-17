@@ -1,0 +1,56 @@
+spec: opencode-tmux-signal@0.1.10
+apiNames: opencode-tmux-signal
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-bThRDX/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33553
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:27.489Z level=INFO run=961d8e94 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-tmux-signal@0.1.10\"]" role=cli
+timestamp=2026-11-16T08:06:34.693Z level=INFO run=04d8b48d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:35.178Z level=INFO run=04d8b48d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:35.255Z level=INFO run=04d8b48d message="database schema bootstrap completed" migrations=59 durationMs=78 role=server
+timestamp=2026-11-16T08:06:35.789Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u/.config/opencode type=directory ignores=6 http.span=67 role=server
+timestamp=2026-11-16T08:06:35.796Z level=INFO run=04d8b48d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-16T08:06:35.797Z level=INFO run=04d8b48d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-16T08:06:35.798Z level=INFO run=04d8b48d message="watcher subscribe" path=/ type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-16T08:06:35.799Z level=INFO run=04d8b48d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=77 role=server
+timestamp=2026-11-16T08:06:35.799Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=77 role=server
+timestamp=2026-11-16T08:06:35.800Z level=INFO run=04d8b48d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=78 role=server
+timestamp=2026-11-16T08:06:35.800Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX type=entries ignores=0 http.span=78 role=server
+timestamp=2026-11-16T08:06:35.800Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX type=entries backend=node ignores=0 http.span=78 role=server
+timestamp=2026-11-16T08:06:35.800Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u type=entries ignores=0 http.span=78 role=server
+timestamp=2026-11-16T08:06:35.801Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u type=entries backend=node ignores=0 http.span=79 role=server
+timestamp=2026-11-16T08:06:35.845Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u/.config/opencode type=directory backend=inotify ignores=6 http.span=123 role=server
+timestamp=2026-11-16T08:06:35.863Z level=INFO run=04d8b48d message="location services booted" directory=/tmp/verify-bThRDX/u workspaceID=undefined durationMs=138 http.span=141 role=server
+timestamp=2026-11-16T08:06:35.872Z level=INFO run=04d8b48d msg="loading plugin" id=opencode-tmux-signal@0.1.10 entrypoint=file:///tmp/verify-bThRDX/u/cache/opencode/npm/opencode-tmux-signal@0.1.10/1794816394119/node_modules/opencode-tmux-signal/dist/index.js http.span=150 role=server
+timestamp=2026-11-16T08:06:35.876Z level=WARN run=04d8b48d message="failed to load plugin" target=opencode-tmux-signal@0.1.10 ref=err_9279ebfd cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=154 role=server
+timestamp=2026-11-16T08:06:37.598Z level=ERROR run=04d8b48d message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1876 role=server
+timestamp=2026-11-16T08:06:37.641Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:37.643Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:37.643Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:37.644Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:37.699Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:37.700Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:37.702Z level=INFO run=04d8b48d message="watcher subscribe" path=/tmp/verify-bThRDX/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:37.703Z level=INFO run=04d8b48d message="watcher started" path=/tmp/verify-bThRDX/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:37.748Z level=INFO run=04d8b48d message=event event.id=evt_1e364d1b4001ecK5fVBrqb7EYb event.created=1794816397748 event.type=provider.updated event.location.directory=/tmp/verify-bThRDX/u event.location.workspaceID=undefined event.data={} http.span=2026 role=server
+timestamp=2026-11-16T08:06:37.770Z level=INFO run=04d8b48d message=event event.id=evt_1e364d1c8001eeYDJTp41PNYE8 event.created=1794816397769 event.type=model.updated event.location.directory=/tmp/verify-bThRDX/u event.location.workspaceID=undefined event.data={} http.span=2048 role=server
+timestamp=2026-11-16T08:06:37.775Z level=INFO run=04d8b48d message=event event.id=evt_1e364d1cf001EBtoVDRvVLc9Jt event.created=1794816397775 event.type=agent.updated event.location.directory=/tmp/verify-bThRDX/u event.location.workspaceID=undefined event.data={} http.span=2053 role=server
+timestamp=2026-11-16T08:06:37.790Z level=INFO run=04d8b48d message=event event.id=evt_1e364d1de001ylzPgNRKWiD0vg event.created=1794816397790 event.type=command.updated event.location.directory=/tmp/verify-bThRDX/u event.location.workspaceID=undefined event.data={} http.span=2068 role=server
+timestamp=2026-11-16T08:06:38.258Z level=INFO run=04d8b48d message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:06:38.261Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:06:38.261Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:06:38.270Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:38.270Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:38.319Z level=INFO run=04d8b48d message="watcher stopped" path=/etc type=entries http.span=2597 role=server
+timestamp=2026-11-16T08:06:38.319Z level=INFO run=04d8b48d message="watcher stopped" path=/ type=entries http.span=2597 role=server
+timestamp=2026-11-16T08:06:38.320Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp type=entries http.span=2598 role=server
+timestamp=2026-11-16T08:06:38.320Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX type=entries http.span=2598 role=server
+timestamp=2026-11-16T08:06:38.320Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u type=entries http.span=2598 role=server
+timestamp=2026-11-16T08:06:38.321Z level=INFO run=04d8b48d message="watcher stopped" path=/tmp/verify-bThRDX/u/.config/opencode type=directory http.span=2599 role=server

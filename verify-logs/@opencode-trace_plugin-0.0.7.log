@@ -1,0 +1,34 @@
+spec: @opencode-trace/plugin@0.0.7
+apiNames: @opencode-trace/plugin, plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-I7Lkoq/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40029
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:12.966Z level=INFO run=11884b96 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@opencode-trace/plugin@0.0.7\"]" role=cli
+timestamp=2026-11-16T08:06:20.773Z level=INFO run=9731f151 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:21.022Z level=INFO run=9731f151 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:21.034Z level=INFO run=9731f151 message="database schema bootstrap completed" migrations=59 durationMs=12 role=server
+timestamp=2026-11-16T08:06:21.233Z level=INFO run=9731f151 message="watcher subscribe" path=/tmp/verify-I7Lkoq/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T08:06:21.236Z level=INFO run=9731f151 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:06:21.237Z level=INFO run=9731f151 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:06:21.237Z level=INFO run=9731f151 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher subscribe" path=/tmp/verify-I7Lkoq type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher started" path=/tmp/verify-I7Lkoq type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.238Z level=INFO run=9731f151 message="watcher subscribe" path=/tmp/verify-I7Lkoq/u type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:21.239Z level=INFO run=9731f151 message="watcher started" path=/tmp/verify-I7Lkoq/u type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:06:21.265Z level=INFO run=9731f151 message="watcher started" path=/tmp/verify-I7Lkoq/u/.config/opencode type=directory backend=inotify ignores=6 http.span=58 role=server
+timestamp=2026-11-16T08:06:21.283Z level=INFO run=9731f151 message="location services booted" directory=/tmp/verify-I7Lkoq/u workspaceID=undefined durationMs=75 http.span=76 role=server
+timestamp=2026-11-16T08:06:21.286Z level=INFO run=9731f151 msg="loading plugin" id=@opencode-trace/plugin@0.0.7 entrypoint=file:///tmp/verify-I7Lkoq/u/cache/opencode/npm/@opencode-trace/plugin@0.0.7/1794816380438/node_modules/@opencode-trace/plugin/dist/trace.js http.span=79 role=server
+timestamp=2026-11-16T08:06:21.491Z level=WARN run=9731f151 message="failed to load plugin" target=@opencode-trace/plugin@0.0.7 ref=err_2a2552a7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=284 role=server

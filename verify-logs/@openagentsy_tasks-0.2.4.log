@@ -1,0 +1,32 @@
+spec: @openagentsy/tasks@0.2.4
+apiNames: @openagentsy/tasks, tasks
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ZaYxHe/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45155
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:36:12.552Z level=INFO run=51e5315b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@openagentsy/tasks@0.2.4\"]" role=cli
+timestamp=2026-11-16T07:36:21.788Z level=INFO run=86dd8fc3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:36:22.065Z level=INFO run=86dd8fc3 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:36:22.137Z level=INFO run=86dd8fc3 message="database schema bootstrap completed" migrations=59 durationMs=72 role=server
+timestamp=2026-11-16T07:36:22.260Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/tmp/verify-ZaYxHe/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-16T07:36:22.262Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:36:22.262Z level=INFO run=86dd8fc3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T07:36:22.263Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:36:22.263Z level=INFO run=86dd8fc3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:36:22.263Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:36:22.263Z level=INFO run=86dd8fc3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:36:22.263Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/tmp/verify-ZaYxHe type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T07:36:22.264Z level=INFO run=86dd8fc3 message="watcher started" path=/tmp/verify-ZaYxHe type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T07:36:22.264Z level=INFO run=86dd8fc3 message="watcher subscribe" path=/tmp/verify-ZaYxHe/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T07:36:22.264Z level=INFO run=86dd8fc3 message="watcher started" path=/tmp/verify-ZaYxHe/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T07:36:22.278Z level=INFO run=86dd8fc3 message="watcher started" path=/tmp/verify-ZaYxHe/u/.config/opencode type=directory backend=inotify ignores=6 http.span=34 role=server
+timestamp=2026-11-16T07:36:22.288Z level=INFO run=86dd8fc3 message="location services booted" directory=/tmp/verify-ZaYxHe/u workspaceID=undefined durationMs=43 http.span=44 role=server
+timestamp=2026-11-16T07:36:22.290Z level=INFO run=86dd8fc3 msg="loading plugin" id=@openagentsy/tasks@0.2.4 entrypoint=file:///tmp/verify-ZaYxHe/u/cache/opencode/npm/@openagentsy/tasks@0.2.4/1794814581639/node_modules/@openagentsy/tasks/dist/index.js http.span=46 role=server
+timestamp=2026-11-16T07:36:22.377Z level=WARN run=86dd8fc3 message="failed to load plugin" target=@openagentsy/tasks@0.2.4 ref=err_26d15793 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=133 role=server

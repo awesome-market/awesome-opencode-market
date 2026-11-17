@@ -1,0 +1,56 @@
+spec: opencode-mimo-compose@1.0.7
+apiNames: opencode-mimo-compose
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-gB9gMA/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43555
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:17.018Z level=INFO run=29ce9e0a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-mimo-compose@1.0.7\"]" role=cli
+timestamp=2026-11-16T10:13:22.478Z level=INFO run=f94222bb message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:22.853Z level=INFO run=f94222bb message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:22.874Z level=INFO run=f94222bb message="database schema bootstrap completed" migrations=59 durationMs=21 role=server
+timestamp=2026-11-16T10:13:23.336Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u/.config/opencode type=directory ignores=6 http.span=51 role=server
+timestamp=2026-11-16T10:13:23.339Z level=INFO run=f94222bb message="watcher subscribe" path=/etc type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T10:13:23.340Z level=INFO run=f94222bb message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T10:13:23.340Z level=INFO run=f94222bb message="watcher subscribe" path=/ type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T10:13:23.340Z level=INFO run=f94222bb message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-16T10:13:23.340Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-16T10:13:23.341Z level=INFO run=f94222bb message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T10:13:23.341Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T10:13:23.341Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T10:13:23.341Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-16T10:13:23.341Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-16T10:13:23.365Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u/.config/opencode type=directory backend=inotify ignores=6 http.span=80 role=server
+timestamp=2026-11-16T10:13:23.387Z level=INFO run=f94222bb message="location services booted" directory=/tmp/verify-gB9gMA/u workspaceID=undefined durationMs=101 http.span=102 role=server
+timestamp=2026-11-16T10:13:23.401Z level=INFO run=f94222bb msg="loading plugin" id=opencode-mimo-compose@1.0.7 entrypoint=file:///tmp/verify-gB9gMA/u/cache/opencode/npm/opencode-mimo-compose@1.0.7/1794824001987/node_modules/opencode-mimo-compose/src/index.js http.span=116 role=server
+timestamp=2026-11-16T10:13:23.403Z level=WARN run=f94222bb message="failed to load plugin" target=opencode-mimo-compose@1.0.7 ref=err_fb580e23 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=118 role=server
+timestamp=2026-11-16T10:13:24.560Z level=ERROR run=f94222bb message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1275 role=server
+timestamp=2026-11-16T10:13:24.573Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:24.573Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:24.573Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:24.573Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:24.600Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:24.601Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:24.601Z level=INFO run=f94222bb message="watcher subscribe" path=/tmp/verify-gB9gMA/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:24.601Z level=INFO run=f94222bb message="watcher started" path=/tmp/verify-gB9gMA/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:24.627Z level=INFO run=f94222bb message=event event.id=evt_1e3d8e413001cHX45m7apxRLYV event.created=1794824004627 event.type=provider.updated event.location.directory=/tmp/verify-gB9gMA/u event.location.workspaceID=undefined event.data={} http.span=1342 role=server
+timestamp=2026-11-16T10:13:24.639Z level=INFO run=f94222bb message=event event.id=evt_1e3d8e41f001I76QGote9cC47H event.created=1794824004639 event.type=model.updated event.location.directory=/tmp/verify-gB9gMA/u event.location.workspaceID=undefined event.data={} http.span=1354 role=server
+timestamp=2026-11-16T10:13:24.642Z level=INFO run=f94222bb message=event event.id=evt_1e3d8e422001yRk3hxNb07eBrK event.created=1794824004642 event.type=agent.updated event.location.directory=/tmp/verify-gB9gMA/u event.location.workspaceID=undefined event.data={} http.span=1357 role=server
+timestamp=2026-11-16T10:13:24.643Z level=INFO run=f94222bb message=event event.id=evt_1e3d8e4230014UROkCziVq7L6h event.created=1794824004643 event.type=command.updated event.location.directory=/tmp/verify-gB9gMA/u event.location.workspaceID=undefined event.data={} http.span=1358 role=server
+timestamp=2026-11-16T10:13:24.816Z level=INFO run=f94222bb message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:24.818Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:13:24.818Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:13:24.826Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:24.826Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/etc type=entries http.span=1564 role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/ type=entries http.span=1564 role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/tmp type=entries http.span=1564 role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA type=entries http.span=1564 role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u type=entries http.span=1564 role=server
+timestamp=2026-11-16T10:13:24.849Z level=INFO run=f94222bb message="watcher stopped" path=/tmp/verify-gB9gMA/u/.config/opencode type=directory http.span=1564 role=server

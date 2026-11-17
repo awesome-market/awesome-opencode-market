@@ -1,0 +1,55 @@
+spec: @fulcrum-agent-os/opencode-plugin@0.0.6
+apiNames: @fulcrum-agent-os/opencode-plugin, opencode-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-h29lhl/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36611
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:13:26.873Z level=INFO run=bfeb2e7c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@fulcrum-agent-os/opencode-plugin@0.0.6\"]" role=cli
+timestamp=2026-11-16T10:13:32.880Z level=INFO run=dadf6bb9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:13:33.141Z level=INFO run=dadf6bb9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:13:33.166Z level=INFO run=dadf6bb9 message="database schema bootstrap completed" migrations=59 durationMs=25 role=server
+timestamp=2026-11-16T10:13:33.541Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u/.config/opencode type=directory ignores=6 http.span=23 role=server
+timestamp=2026-11-16T10:13:33.544Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:13:33.544Z level=INFO run=dadf6bb9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:13:33.544Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=26 role=server
+timestamp=2026-11-16T10:13:33.545Z level=INFO run=dadf6bb9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T10:13:33.545Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T10:13:33.545Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-16T10:13:33.545Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T10:13:33.546Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:33.546Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:33.546Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-16T10:13:33.565Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u/.config/opencode type=directory backend=inotify ignores=6 http.span=47 role=server
+timestamp=2026-11-16T10:13:33.579Z level=INFO run=dadf6bb9 message="location services booted" directory=/tmp/verify-h29lhl/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-16T10:13:33.589Z level=INFO run=dadf6bb9 msg="loading plugin" id=@fulcrum-agent-os/opencode-plugin@0.0.6 entrypoint=file:///tmp/verify-h29lhl/u/cache/opencode/npm/@fulcrum-agent-os/opencode-plugin@0.0.6/1794824012587/node_modules/@fulcrum-agent-os/opencode-plugin/plugins/fulcrum.ts http.span=71 role=server
+timestamp=2026-11-16T10:13:33.644Z level=WARN run=dadf6bb9 message="failed to load plugin" target=@fulcrum-agent-os/opencode-plugin@0.0.6 ref=err_13267ff4 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=126 role=server
+timestamp=2026-11-16T10:13:34.410Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:34.411Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:34.411Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:13:34.411Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:34.426Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:13:34.427Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:34.427Z level=INFO run=dadf6bb9 message="watcher subscribe" path=/tmp/verify-h29lhl/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:13:34.427Z level=INFO run=dadf6bb9 message="watcher started" path=/tmp/verify-h29lhl/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:13:34.452Z level=INFO run=dadf6bb9 message=event event.id=evt_1e3d90a74001JIxnLHdCF2sKjG event.created=1794824014452 event.type=provider.updated event.location.directory=/tmp/verify-h29lhl/u event.location.workspaceID=undefined event.data={} http.span=934 role=server
+timestamp=2026-11-16T10:13:34.465Z level=INFO run=dadf6bb9 message=event event.id=evt_1e3d90a810018L9LXht2FW4Ops event.created=1794824014465 event.type=model.updated event.location.directory=/tmp/verify-h29lhl/u event.location.workspaceID=undefined event.data={} http.span=947 role=server
+timestamp=2026-11-16T10:13:34.469Z level=INFO run=dadf6bb9 message=event event.id=evt_1e3d90a85001l9QJSNl7I0ptFo event.created=1794824014469 event.type=agent.updated event.location.directory=/tmp/verify-h29lhl/u event.location.workspaceID=undefined event.data={} http.span=951 role=server
+timestamp=2026-11-16T10:13:34.469Z level=INFO run=dadf6bb9 message=event event.id=evt_1e3d90a85002A7Zif4NFy0LJrW event.created=1794824014469 event.type=command.updated event.location.directory=/tmp/verify-h29lhl/u event.location.workspaceID=undefined event.data={} http.span=951 role=server
+timestamp=2026-11-16T10:13:34.713Z level=INFO run=dadf6bb9 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:13:34.713Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:13:34.714Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:13:34.721Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:34.722Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:13:34.747Z level=INFO run=dadf6bb9 message="watcher stopped" path=/etc type=entries http.span=1229 role=server
+timestamp=2026-11-16T10:13:34.747Z level=INFO run=dadf6bb9 message="watcher stopped" path=/ type=entries http.span=1229 role=server
+timestamp=2026-11-16T10:13:34.747Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp type=entries http.span=1229 role=server
+timestamp=2026-11-16T10:13:34.747Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl type=entries http.span=1229 role=server
+timestamp=2026-11-16T10:13:34.747Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u type=entries http.span=1229 role=server
+timestamp=2026-11-16T10:13:34.750Z level=INFO run=dadf6bb9 message="watcher stopped" path=/tmp/verify-h29lhl/u/.config/opencode type=directory http.span=1232 role=server

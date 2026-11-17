@@ -1,0 +1,44 @@
+spec: gopeak@2.3.8
+apiNames: gopeak
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-lTqTmm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36571
+server password [redacted]
+[SERVER] Could not find Godot in common locations for linux
+[SERVER] Set GODOT_PATH=/path/to/godot environment variable or pass { godotPath: '/path/to/godot' } in the config to specify the correct path.
+[SERVER] Using default path: /usr/bin/godot, but this may not work.
+[SERVER] This fallback behavior will be removed in a future version. Set strictPathValidation: true to opt-in to the new behavior.
+[SERVER] Warning: Using potentially invalid Godot path: /usr/bin/godot
+[SERVER] This may cause issues when executing Godot commands
+[SERVER] This fallback behavior will be removed in a future version. Set strictPathValidation: true to opt-in to the new behavior.
+[SERVER] Using Godot at: /usr/bin/godot
+Godot MCP server running on stdio
+[2026-11-16T09:37:51.553Z] [GodotBridge:INFO] Unified HTTP+WS bridge listening on 127.0.0.1:6505
+[SERVER] Godot Editor Bridge started on 127.0.0.1:6505
+[2026-11-16T09:37:52.252Z] [GodotBridge:INFO] WebSocket bridge stopped
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:45.135Z level=INFO run=294db0bd message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"gopeak@2.3.8\"]" role=cli
+timestamp=2026-11-16T09:37:49.796Z level=INFO run=241d05dd message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:50.138Z level=INFO run=241d05dd message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:50.158Z level=INFO run=241d05dd message="database schema bootstrap completed" migrations=59 durationMs=20 role=server
+timestamp=2026-11-16T09:37:50.590Z level=INFO run=241d05dd message="watcher subscribe" path=/tmp/verify-lTqTmm/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T09:37:50.594Z level=INFO run=241d05dd message="watcher subscribe" path=/etc type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T09:37:50.597Z level=INFO run=241d05dd message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:50.597Z level=INFO run=241d05dd message="watcher subscribe" path=/ type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-16T09:37:50.598Z level=INFO run=241d05dd message="watcher started" path=/ type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:50.598Z level=INFO run=241d05dd message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:50.598Z level=INFO run=241d05dd message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:50.598Z level=INFO run=241d05dd message="watcher subscribe" path=/tmp/verify-lTqTmm type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:50.598Z level=INFO run=241d05dd message="watcher started" path=/tmp/verify-lTqTmm type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-16T09:37:50.599Z level=INFO run=241d05dd message="watcher subscribe" path=/tmp/verify-lTqTmm/u type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T09:37:50.599Z level=INFO run=241d05dd message="watcher started" path=/tmp/verify-lTqTmm/u type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T09:37:50.627Z level=INFO run=241d05dd message="watcher started" path=/tmp/verify-lTqTmm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=73 role=server
+timestamp=2026-11-16T09:37:50.639Z level=INFO run=241d05dd message="location services booted" directory=/tmp/verify-lTqTmm/u workspaceID=undefined durationMs=83 http.span=85 role=server
+timestamp=2026-11-16T09:37:50.660Z level=INFO run=241d05dd msg="loading plugin" id=gopeak@2.3.8 entrypoint=file:///tmp/verify-lTqTmm/u/cache/opencode/npm/gopeak@2.3.8/1794821869510/node_modules/gopeak/build/index.js http.span=106 role=server
+timestamp=2026-11-16T09:37:50.882Z level=WARN run=241d05dd message="failed to load plugin" target=gopeak@2.3.8 ref=err_ced57283 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=328 role=server

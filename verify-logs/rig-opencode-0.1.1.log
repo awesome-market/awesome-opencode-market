@@ -1,0 +1,32 @@
+spec: rig-opencode@0.1.1
+apiNames: rig-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-5jgmTe/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44561
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:31.373Z level=INFO run=c075c731 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"rig-opencode@0.1.1\"]" role=cli
+timestamp=2026-11-16T12:05:31.892Z level=INFO run=04ea3976 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:32.189Z level=INFO run=04ea3976 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:32.204Z level=INFO run=04ea3976 message="database schema bootstrap completed" migrations=59 durationMs=15 role=server
+timestamp=2026-11-16T12:05:32.554Z level=INFO run=04ea3976 message="watcher subscribe" path=/tmp/verify-5jgmTe/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-16T12:05:32.557Z level=INFO run=04ea3976 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T12:05:32.558Z level=INFO run=04ea3976 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T12:05:32.558Z level=INFO run=04ea3976 message="watcher subscribe" path=/ type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher subscribe" path=/tmp/verify-5jgmTe type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher started" path=/tmp/verify-5jgmTe type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.559Z level=INFO run=04ea3976 message="watcher subscribe" path=/tmp/verify-5jgmTe/u type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-16T12:05:32.560Z level=INFO run=04ea3976 message="watcher started" path=/tmp/verify-5jgmTe/u type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T12:05:32.576Z level=INFO run=04ea3976 message="watcher started" path=/tmp/verify-5jgmTe/u/.config/opencode type=directory backend=inotify ignores=6 http.span=58 role=server
+timestamp=2026-11-16T12:05:32.583Z level=INFO run=04ea3976 message="location services booted" directory=/tmp/verify-5jgmTe/u workspaceID=undefined durationMs=64 http.span=65 role=server
+timestamp=2026-11-16T12:05:32.595Z level=INFO run=04ea3976 msg="loading plugin" id=rig-opencode@0.1.1 entrypoint=file:///tmp/verify-5jgmTe/u/cache/opencode/npm/rig-opencode@0.1.1/1794830731551/node_modules/rig-opencode/dist/index.js http.span=77 role=server
+timestamp=2026-11-16T12:05:32.596Z level=WARN run=04ea3976 message="failed to load plugin" target=rig-opencode@0.1.1 ref=err_479fc87d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=78 role=server

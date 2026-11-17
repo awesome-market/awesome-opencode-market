@@ -1,0 +1,55 @@
+spec: @yuting4281/opencode-usage-plugin@0.3.0
+apiNames: @yuting4281/opencode-usage-plugin, opencode-usage-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vrPsPJ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34623
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:59.157Z level=INFO run=d2b19b50 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@yuting4281/opencode-usage-plugin@0.3.0\"]" role=cli
+timestamp=2026-11-16T08:52:15.192Z level=INFO run=a9796b2f message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:52:15.396Z level=INFO run=a9796b2f message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:52:15.406Z level=INFO run=a9796b2f message="database schema bootstrap completed" migrations=59 durationMs=10 role=server
+timestamp=2026-11-16T08:52:15.632Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u/.config/opencode type=directory ignores=6 http.span=13 role=server
+timestamp=2026-11-16T08:52:15.634Z level=INFO run=a9796b2f message="watcher subscribe" path=/etc type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T08:52:15.634Z level=INFO run=a9796b2f message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T08:52:15.634Z level=INFO run=a9796b2f message="watcher subscribe" path=/ type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-16T08:52:15.634Z level=INFO run=a9796b2f message="watcher started" path=/ type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.635Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-16T08:52:15.646Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=27 role=server
+timestamp=2026-11-16T08:52:15.655Z level=INFO run=a9796b2f message="location services booted" directory=/tmp/verify-vrPsPJ/u workspaceID=undefined durationMs=35 http.span=36 role=server
+timestamp=2026-11-16T08:52:15.657Z level=INFO run=a9796b2f msg="loading plugin" id=@yuting4281/opencode-usage-plugin@0.3.0 entrypoint=file:///tmp/verify-vrPsPJ/u/cache/opencode/npm/@yuting4281/opencode-usage-plugin@0.3.0/1794819134996/node_modules/@yuting4281/opencode-usage-plugin/tui.tsx http.span=38 role=server
+timestamp=2026-11-16T08:52:16.043Z level=WARN run=a9796b2f message="failed to load plugin" plugin.id=opencode.usage-bar cause="Cause([Die(TypeError: api.storage.store is not a function. (In 'api.storage.store(config.cacheKey, { initial: {} })', 'api.storage.store' is undefined))])" http.span=424 role=server
+timestamp=2026-11-16T08:52:16.046Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:16.046Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:16.046Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:16.046Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:16.054Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:52:16.054Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:16.055Z level=INFO run=a9796b2f message="watcher subscribe" path=/tmp/verify-vrPsPJ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:52:16.055Z level=INFO run=a9796b2f message="watcher started" path=/tmp/verify-vrPsPJ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:16.066Z level=INFO run=a9796b2f message=event event.id=evt_1e38e9a42001P3S3bfZzP8nJMf event.created=1794819136066 event.type=provider.updated event.location.directory=/tmp/verify-vrPsPJ/u event.location.workspaceID=undefined event.data={} http.span=447 role=server
+timestamp=2026-11-16T08:52:16.073Z level=INFO run=a9796b2f message=event event.id=evt_1e38e9a49001j1MF2plLvgux4w event.created=1794819136073 event.type=model.updated event.location.directory=/tmp/verify-vrPsPJ/u event.location.workspaceID=undefined event.data={} http.span=454 role=server
+timestamp=2026-11-16T08:52:16.074Z level=INFO run=a9796b2f message=event event.id=evt_1e38e9a4a001JlqxCygB3U524Z event.created=1794819136074 event.type=agent.updated event.location.directory=/tmp/verify-vrPsPJ/u event.location.workspaceID=undefined event.data={} http.span=455 role=server
+timestamp=2026-11-16T08:52:16.075Z level=INFO run=a9796b2f message=event event.id=evt_1e38e9a4b001hPBSTLpWi1Y9KA event.created=1794819136075 event.type=command.updated event.location.directory=/tmp/verify-vrPsPJ/u event.location.workspaceID=undefined event.data={} http.span=456 role=server
+timestamp=2026-11-16T08:52:16.191Z level=INFO run=a9796b2f message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:52:16.191Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:52:16.192Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:52:16.194Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:16.194Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:16.204Z level=INFO run=a9796b2f message="watcher stopped" path=/etc type=entries http.span=585 role=server
+timestamp=2026-11-16T08:52:16.204Z level=INFO run=a9796b2f message="watcher stopped" path=/ type=entries http.span=585 role=server
+timestamp=2026-11-16T08:52:16.204Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp type=entries http.span=585 role=server
+timestamp=2026-11-16T08:52:16.204Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ type=entries http.span=585 role=server
+timestamp=2026-11-16T08:52:16.204Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u type=entries http.span=585 role=server
+timestamp=2026-11-16T08:52:16.208Z level=INFO run=a9796b2f message="watcher stopped" path=/tmp/verify-vrPsPJ/u/.config/opencode type=directory http.span=589 role=server

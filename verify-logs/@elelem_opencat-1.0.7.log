@@ -1,0 +1,17 @@
+spec: @elelem/opencat@1.0.7
+apiNames: @elelem/opencat, opencat
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-GG2lmP/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36235
+server password [redacted]
+❌ Error: Missing SLACK_BOT_TOKEN or SLACK_APP_TOKEN.
+Please provide them via environment variables, a local .env file,
+or run 'npx @elelem/opencat setup' to configure them interactively.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:28.488Z level=INFO run=13db7a7a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@elelem/opencat@1.0.7\"]" role=cli

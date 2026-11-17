@@ -1,0 +1,55 @@
+spec: @cloud-atlas-ai/bottle@0.2.6
+apiNames: @cloud-atlas-ai/bottle, bottle
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-rAsDTi/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41787
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:47:35.620Z level=INFO run=60916019 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@cloud-atlas-ai/bottle@0.2.6\"]" role=cli
+timestamp=2026-11-16T08:47:38.935Z level=INFO run=8a8f1174 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:47:39.107Z level=INFO run=8a8f1174 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:47:39.127Z level=INFO run=8a8f1174 message="database schema bootstrap completed" migrations=59 durationMs=20 role=server
+timestamp=2026-11-16T08:47:39.371Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T08:47:39.373Z level=INFO run=8a8f1174 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T08:47:39.374Z level=INFO run=8a8f1174 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:39.374Z level=INFO run=8a8f1174 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T08:47:39.375Z level=INFO run=8a8f1174 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:39.375Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:39.375Z level=INFO run=8a8f1174 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:39.375Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:39.375Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T08:47:39.376Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-16T08:47:39.376Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T08:47:39.393Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-16T08:47:39.403Z level=INFO run=8a8f1174 message="location services booted" directory=/tmp/verify-rAsDTi/u workspaceID=undefined durationMs=50 http.span=51 role=server
+timestamp=2026-11-16T08:47:39.409Z level=INFO run=8a8f1174 msg="loading plugin" id=@cloud-atlas-ai/bottle@0.2.6 entrypoint=file:///tmp/verify-rAsDTi/u/cache/opencode/npm/@cloud-atlas-ai/bottle@0.2.6/1794818858672/node_modules/@cloud-atlas-ai/bottle/dist/index.js http.span=57 role=server
+timestamp=2026-11-16T08:47:39.420Z level=WARN run=8a8f1174 message="failed to load plugin" target=@cloud-atlas-ai/bottle@0.2.6 ref=err_60f8df1d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=68 role=server
+timestamp=2026-11-16T08:47:39.899Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:39.899Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:39.899Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:47:39.899Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:39.914Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:47:39.914Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:39.915Z level=INFO run=8a8f1174 message="watcher subscribe" path=/tmp/verify-rAsDTi/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:47:39.915Z level=INFO run=8a8f1174 message="watcher started" path=/tmp/verify-rAsDTi/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:47:39.932Z level=INFO run=8a8f1174 message=event event.id=evt_1e38a639b001uu2F1AphbX3TOb event.created=1794818859931 event.type=provider.updated event.location.directory=/tmp/verify-rAsDTi/u event.location.workspaceID=undefined event.data={} http.span=580 role=server
+timestamp=2026-11-16T08:47:39.939Z level=INFO run=8a8f1174 message=event event.id=evt_1e38a63a30015GajRRemR4RYDK event.created=1794818859939 event.type=model.updated event.location.directory=/tmp/verify-rAsDTi/u event.location.workspaceID=undefined event.data={} http.span=587 role=server
+timestamp=2026-11-16T08:47:39.941Z level=INFO run=8a8f1174 message=event event.id=evt_1e38a63a50012ZzsjSUYIKxmVP event.created=1794818859941 event.type=agent.updated event.location.directory=/tmp/verify-rAsDTi/u event.location.workspaceID=undefined event.data={} http.span=589 role=server
+timestamp=2026-11-16T08:47:39.941Z level=INFO run=8a8f1174 message=event event.id=evt_1e38a63a5002byip8QUxBwq2uE event.created=1794818859941 event.type=command.updated event.location.directory=/tmp/verify-rAsDTi/u event.location.workspaceID=undefined event.data={} http.span=589 role=server
+timestamp=2026-11-16T08:47:40.001Z level=INFO run=8a8f1174 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:47:40.001Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:47:40.001Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:47:40.004Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:40.005Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:47:40.017Z level=INFO run=8a8f1174 message="watcher stopped" path=/etc type=entries http.span=665 role=server
+timestamp=2026-11-16T08:47:40.017Z level=INFO run=8a8f1174 message="watcher stopped" path=/ type=entries http.span=665 role=server
+timestamp=2026-11-16T08:47:40.017Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp type=entries http.span=665 role=server
+timestamp=2026-11-16T08:47:40.017Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi type=entries http.span=665 role=server
+timestamp=2026-11-16T08:47:40.017Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u type=entries http.span=665 role=server
+timestamp=2026-11-16T08:47:40.023Z level=INFO run=8a8f1174 message="watcher stopped" path=/tmp/verify-rAsDTi/u/.config/opencode type=directory http.span=671 role=server

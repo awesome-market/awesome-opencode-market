@@ -1,0 +1,58 @@
+spec: behavior-harness@2.1.3
+apiNames: behavior-harness
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-aMmFNg/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45855
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:24.335Z level=INFO run=c92ae044 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"behavior-harness@2.1.3\"]" role=cli
+timestamp=2026-11-16T12:05:29.929Z level=INFO run=7abf99d9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:30.185Z level=INFO run=7abf99d9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:30.257Z level=INFO run=7abf99d9 message="database schema bootstrap completed" migrations=59 durationMs=72 role=server
+timestamp=2026-11-16T12:05:30.707Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u/.config/opencode type=directory ignores=6 http.span=57 role=server
+timestamp=2026-11-16T12:05:30.711Z level=INFO run=7abf99d9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:05:30.712Z level=INFO run=7abf99d9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:05:30.712Z level=INFO run=7abf99d9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:05:30.712Z level=INFO run=7abf99d9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:05:30.713Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T12:05:30.713Z level=INFO run=7abf99d9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T12:05:30.713Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-16T12:05:30.713Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-16T12:05:30.714Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u type=entries ignores=0 http.span=64 role=server
+timestamp=2026-11-16T12:05:30.714Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-16T12:05:30.737Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u/.config/opencode type=directory backend=inotify ignores=6 http.span=87 role=server
+timestamp=2026-11-16T12:05:30.758Z level=INFO run=7abf99d9 message="location services booted" directory=/tmp/verify-aMmFNg/u workspaceID=undefined durationMs=105 http.span=108 role=server
+timestamp=2026-11-16T12:05:30.761Z level=INFO run=7abf99d9 msg="loading plugin" id=behavior-harness@2.1.3 entrypoint=file:///tmp/verify-aMmFNg/u/cache/opencode/npm/behavior-harness@2.1.3/1794830729709/node_modules/behavior-harness/dist/index.js http.span=111 role=server
+timestamp=2026-11-16T12:05:30.762Z level=WARN run=7abf99d9 message="failed to load plugin" target=behavior-harness@2.1.3 ref=err_a2c88969 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=112 role=server
+timestamp=2026-11-16T12:05:31.855Z level=ERROR run=7abf99d9 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1205 role=server
+timestamp=2026-11-16T12:05:31.925Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:31.926Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:31.930Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:31.930Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:31.991Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:31.992Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:31.993Z level=INFO run=7abf99d9 message="watcher subscribe" path=/tmp/verify-aMmFNg/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:31.993Z level=INFO run=7abf99d9 message="watcher started" path=/tmp/verify-aMmFNg/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:32.064Z level=INFO run=7abf99d9 message=event event.id=evt_1e43f8b200014uBjrJQYWv5G19 event.created=1794830732064 event.type=provider.updated event.location.directory=/tmp/verify-aMmFNg/u event.location.workspaceID=undefined event.data={} http.span=1414 role=server
+timestamp=2026-11-16T12:05:32.115Z level=INFO run=7abf99d9 message=event event.id=evt_1e43f8b52001g6vJ7sAkmRu0gV event.created=1794830732115 event.type=model.updated event.location.directory=/tmp/verify-aMmFNg/u event.location.workspaceID=undefined event.data={} http.span=1465 role=server
+timestamp=2026-11-16T12:05:32.136Z level=INFO run=7abf99d9 message=event event.id=evt_1e43f8b680012P7vsO1gT71KHX event.created=1794830732136 event.type=agent.updated event.location.directory=/tmp/verify-aMmFNg/u event.location.workspaceID=undefined event.data={} http.span=1486 role=server
+timestamp=2026-11-16T12:05:32.136Z level=INFO run=7abf99d9 message=event event.id=evt_1e43f8b68002USukQ0LwbVbZfD event.created=1794830732136 event.type=command.updated event.location.directory=/tmp/verify-aMmFNg/u event.location.workspaceID=undefined event.data={} http.span=1486 role=server
+timestamp=2026-11-16T12:05:32.582Z level=INFO run=7abf99d9 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T12:05:32.582Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T12:05:32.583Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T12:05:32.592Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:32.596Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T12:05:32.614Z level=INFO run=7abf99d9 message="watcher stopped" path=/etc type=entries http.span=1964 role=server
+timestamp=2026-11-16T12:05:32.615Z level=INFO run=7abf99d9 message="watcher stopped" path=/ type=entries http.span=1965 role=server
+timestamp=2026-11-16T12:05:32.615Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp type=entries http.span=1965 role=server
+timestamp=2026-11-16T12:05:32.615Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg type=entries http.span=1965 role=server
+timestamp=2026-11-16T12:05:32.615Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u type=entries http.span=1965 role=server
+timestamp=2026-11-16T12:05:32.615Z level=INFO run=7abf99d9 message="watcher stopped" path=/tmp/verify-aMmFNg/u/.config/opencode type=directory http.span=1965 role=server

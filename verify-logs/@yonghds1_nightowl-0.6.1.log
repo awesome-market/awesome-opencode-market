@@ -1,0 +1,18 @@
+spec: @yonghds1/nightowl@0.6.1
+apiNames: @yonghds1/nightowl, nightowl
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-RTK1f3/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35731
+server password [redacted]
+error: unknown command 'serve'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:07:17.714Z level=INFO run=676501b9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@yonghds1/nightowl@0.6.1\"]" role=cli
+timestamp=2026-11-16T08:07:18.816Z level=INFO run=2c365027 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:07:19.471Z level=INFO run=2c365027 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:07:19.808Z level=INFO run=2c365027 message="database schema bootstrap completed" migrations=59 durationMs=337 role=server

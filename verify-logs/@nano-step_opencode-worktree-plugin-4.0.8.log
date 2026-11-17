@@ -1,0 +1,56 @@
+spec: @nano-step/opencode-worktree-plugin@4.0.8
+apiNames: @nano-step/opencode-worktree-plugin, opencode-worktree-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-kP09Jm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35855
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T10:14:25.324Z level=INFO run=c88e4996 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@nano-step/opencode-worktree-plugin@4.0.8\"]" role=cli
+timestamp=2026-11-16T10:14:27.642Z level=INFO run=4600855c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T10:14:28.129Z level=INFO run=4600855c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T10:14:28.171Z level=INFO run=4600855c message="database schema bootstrap completed" migrations=59 durationMs=42 role=server
+timestamp=2026-11-16T10:14:28.771Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u/.config/opencode type=directory ignores=6 http.span=79 role=server
+timestamp=2026-11-16T10:14:28.775Z level=INFO run=4600855c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=83 role=server
+timestamp=2026-11-16T10:14:28.777Z level=INFO run=4600855c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=85 role=server
+timestamp=2026-11-16T10:14:28.778Z level=INFO run=4600855c message="watcher subscribe" path=/ type=entries ignores=0 http.span=86 role=server
+timestamp=2026-11-16T10:14:28.778Z level=INFO run=4600855c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=86 role=server
+timestamp=2026-11-16T10:14:28.779Z level=INFO run=4600855c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=87 role=server
+timestamp=2026-11-16T10:14:28.779Z level=INFO run=4600855c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=87 role=server
+timestamp=2026-11-16T10:14:28.780Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm type=entries ignores=0 http.span=88 role=server
+timestamp=2026-11-16T10:14:28.780Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm type=entries backend=node ignores=0 http.span=88 role=server
+timestamp=2026-11-16T10:14:28.781Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u type=entries ignores=0 http.span=89 role=server
+timestamp=2026-11-16T10:14:28.781Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u type=entries backend=node ignores=0 http.span=89 role=server
+timestamp=2026-11-16T10:14:28.814Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=122 role=server
+timestamp=2026-11-16T10:14:28.847Z level=INFO run=4600855c msg="loading plugin" id=@nano-step/opencode-worktree-plugin@4.0.8 entrypoint=file:///tmp/verify-kP09Jm/u/cache/opencode/npm/@nano-step/opencode-worktree-plugin@4.0.8/1794824067226/node_modules/@nano-step/opencode-worktree-plugin/plugins/worktree-plugin.js http.span=155 role=server
+timestamp=2026-11-16T10:14:28.852Z level=WARN run=4600855c message="failed to load plugin" target=@nano-step/opencode-worktree-plugin@4.0.8 ref=err_7697e423 cause="Cause([Die(ResolveMessage: Cannot find package '@opencode-ai/plugin' imported from /tmp/verify-kP09Jm/u/cache/opencode/npm/@nano-step/opencode-worktree-plugin@4.0.8/1794824067226/node_modules/@nano-step/opencode-worktree-plugin/plugins/worktree-plugin.js)])" http.span=160 role=server
+timestamp=2026-11-16T10:14:28.877Z level=INFO run=4600855c message="location services booted" directory=/tmp/verify-kP09Jm/u workspaceID=undefined durationMs=181 http.span=185 role=server
+timestamp=2026-11-16T10:14:30.557Z level=ERROR run=4600855c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1865 role=server
+timestamp=2026-11-16T10:14:30.649Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:14:30.650Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:30.650Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T10:14:30.656Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:30.720Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T10:14:30.720Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:30.725Z level=INFO run=4600855c message="watcher subscribe" path=/tmp/verify-kP09Jm/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T10:14:30.726Z level=INFO run=4600855c message="watcher started" path=/tmp/verify-kP09Jm/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T10:14:30.767Z level=INFO run=4600855c message=event event.id=evt_1e3d9e66f001WxL9XbuPHVDIF9 event.created=1794824070767 event.type=provider.updated event.location.directory=/tmp/verify-kP09Jm/u event.location.workspaceID=undefined event.data={} http.span=2075 role=server
+timestamp=2026-11-16T10:14:30.781Z level=INFO run=4600855c message=event event.id=evt_1e3d9e67d001SjF7liEOHR8B2q event.created=1794824070781 event.type=model.updated event.location.directory=/tmp/verify-kP09Jm/u event.location.workspaceID=undefined event.data={} http.span=2089 role=server
+timestamp=2026-11-16T10:14:30.788Z level=INFO run=4600855c message=event event.id=evt_1e3d9e684001DgYfIcMflY7uoI event.created=1794824070788 event.type=agent.updated event.location.directory=/tmp/verify-kP09Jm/u event.location.workspaceID=undefined event.data={} http.span=2096 role=server
+timestamp=2026-11-16T10:14:30.789Z level=INFO run=4600855c message=event event.id=evt_1e3d9e685001LXw4sP4ic3KQPZ event.created=1794824070789 event.type=command.updated event.location.directory=/tmp/verify-kP09Jm/u event.location.workspaceID=undefined event.data={} http.span=2097 role=server
+timestamp=2026-11-16T10:14:31.240Z level=INFO run=4600855c message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T10:14:31.240Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T10:14:31.240Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T10:14:31.267Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:14:31.269Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T10:14:31.315Z level=INFO run=4600855c message="watcher stopped" path=/etc type=entries http.span=2623 role=server
+timestamp=2026-11-16T10:14:31.316Z level=INFO run=4600855c message="watcher stopped" path=/ type=entries http.span=2624 role=server
+timestamp=2026-11-16T10:14:31.316Z level=INFO run=4600855c message="watcher stopped" path=/tmp type=entries http.span=2624 role=server
+timestamp=2026-11-16T10:14:31.316Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm type=entries http.span=2624 role=server
+timestamp=2026-11-16T10:14:31.316Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u type=entries http.span=2624 role=server
+timestamp=2026-11-16T10:14:31.324Z level=INFO run=4600855c message="watcher stopped" path=/tmp/verify-kP09Jm/u/.config/opencode type=directory http.span=2632 role=server

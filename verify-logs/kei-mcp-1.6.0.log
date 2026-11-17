@@ -1,0 +1,15 @@
+spec: kei-mcp@1.6.0
+apiNames: kei-mcp
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-kWNDvA/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44341
+server password [redacted]
+Error: API key required. Use --api-key or set KEI_API_KEY environment variable.
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:39.532Z level=INFO run=7c8d2033 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"kei-mcp@1.6.0\"]" role=cli

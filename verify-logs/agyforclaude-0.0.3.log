@@ -1,0 +1,42 @@
+spec: agyforclaude@0.0.3
+apiNames: agyforclaude
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-u9j9DW/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37181
+server password [redacted]
+Unknown command: serve
+Usage:
+  agyforclaude <setup|uninstall|status>
+  agyforclaude -p <prompt> [options]
+
+Options:
+  -p, --prompt <string>  The task prompt to send to Antigravity/Gemini (required)
+  -t, --tier <tier>      Model tier: 'flash' (default), 'flash-lo', 'pro'
+  -d, --dir <dir>        Additional workspace directory to include (can be repeated)
+  -y, --yolo             Auto-approve tool permissions (dangerous)
+  -s, --sandbox          Run agy in sandbox mode
+  --timeout <seconds>    Max seconds to wait for agy (default: 300)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:54:00.768Z level=INFO run=e8bf70c9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"agyforclaude@0.0.3\"]" role=cli
+timestamp=2026-11-16T12:54:05.127Z level=INFO run=7cf3efcc message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:54:05.533Z level=INFO run=7cf3efcc message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:54:05.582Z level=INFO run=7cf3efcc message="database schema bootstrap completed" migrations=59 durationMs=49 role=server
+timestamp=2026-11-16T12:54:06.066Z level=INFO run=7cf3efcc message="watcher subscribe" path=/tmp/verify-u9j9DW/u/.config/opencode type=directory ignores=6 http.span=51 role=server
+timestamp=2026-11-16T12:54:06.074Z level=INFO run=7cf3efcc message="watcher subscribe" path=/etc type=entries ignores=0 http.span=59 role=server
+timestamp=2026-11-16T12:54:06.075Z level=INFO run=7cf3efcc message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T12:54:06.075Z level=INFO run=7cf3efcc message="watcher subscribe" path=/ type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-16T12:54:06.075Z level=INFO run=7cf3efcc message="watcher started" path=/ type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-16T12:54:06.076Z level=INFO run=7cf3efcc message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:54:06.076Z level=INFO run=7cf3efcc message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:54:06.076Z level=INFO run=7cf3efcc message="watcher subscribe" path=/tmp/verify-u9j9DW type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:54:06.076Z level=INFO run=7cf3efcc message="watcher started" path=/tmp/verify-u9j9DW type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:54:06.076Z level=INFO run=7cf3efcc message="watcher subscribe" path=/tmp/verify-u9j9DW/u type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-16T12:54:06.077Z level=INFO run=7cf3efcc message="watcher started" path=/tmp/verify-u9j9DW/u type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-16T12:54:06.104Z level=INFO run=7cf3efcc message="watcher started" path=/tmp/verify-u9j9DW/u/.config/opencode type=directory backend=inotify ignores=6 http.span=89 role=server
+timestamp=2026-11-16T12:54:06.120Z level=INFO run=7cf3efcc message="location services booted" directory=/tmp/verify-u9j9DW/u workspaceID=undefined durationMs=104 http.span=105 role=server

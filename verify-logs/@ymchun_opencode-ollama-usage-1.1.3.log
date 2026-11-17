@@ -1,0 +1,55 @@
+spec: @ymchun/opencode-ollama-usage@1.1.3
+apiNames: @ymchun/opencode-ollama-usage, opencode-ollama-usage
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-rqBlbm/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43319
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:52:46.875Z level=INFO run=1778ef33 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@ymchun/opencode-ollama-usage@1.1.3\"]" role=cli
+timestamp=2026-11-16T02:52:53.656Z level=INFO run=645c5b1b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:52:53.808Z level=INFO run=645c5b1b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:52:53.817Z level=INFO run=645c5b1b message="database schema bootstrap completed" migrations=59 durationMs=9 role=server
+timestamp=2026-11-16T02:52:54.131Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u/.config/opencode type=directory ignores=6 http.span=14 role=server
+timestamp=2026-11-16T02:52:54.134Z level=INFO run=645c5b1b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:52:54.134Z level=INFO run=645c5b1b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:52:54.134Z level=INFO run=645c5b1b message="watcher subscribe" path=/ type=entries ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:52:54.134Z level=INFO run=645c5b1b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=17 role=server
+timestamp=2026-11-16T02:52:54.135Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:52:54.135Z level=INFO run=645c5b1b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:52:54.135Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:52:54.135Z level=ERROR run=645c5b1b message="failed to watch directory" path=/tmp/verify-rqBlbm error="Error: EACCES: permission denied, watch '/tmp/verify-rqBlbm'" http.span=18 role=server
+timestamp=2026-11-16T02:52:54.135Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-16T02:52:54.136Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-16T02:52:54.148Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u/.config/opencode type=directory backend=inotify ignores=6 http.span=31 role=server
+timestamp=2026-11-16T02:52:54.162Z level=INFO run=645c5b1b message="location services booted" directory=/tmp/verify-rqBlbm/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T02:52:54.521Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm type=entries ignores=0 http.span=404 role=server
+timestamp=2026-11-16T02:52:54.521Z level=ERROR run=645c5b1b message="failed to watch directory" path=/tmp/verify-rqBlbm error="Error: EACCES: permission denied, watch '/tmp/verify-rqBlbm'" http.span=404 role=server
+timestamp=2026-11-16T02:52:54.522Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:54.522Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:54.522Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:52:54.522Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:54.532Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:52:54.532Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:54.532Z level=INFO run=645c5b1b message="watcher subscribe" path=/tmp/verify-rqBlbm/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:52:54.533Z level=INFO run=645c5b1b message="watcher started" path=/tmp/verify-rqBlbm/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:52:54.547Z level=INFO run=645c5b1b message=event event.id=evt_1e2459993001V8TvwLetEs04US event.created=1794797574547 event.type=provider.updated event.location.directory=/tmp/verify-rqBlbm/u event.location.workspaceID=undefined event.data={} http.span=430 role=server
+timestamp=2026-11-16T02:52:54.553Z level=INFO run=645c5b1b message=event event.id=evt_1e2459999001UabfxGcWA2vZcq event.created=1794797574553 event.type=model.updated event.location.directory=/tmp/verify-rqBlbm/u event.location.workspaceID=undefined event.data={} http.span=436 role=server
+timestamp=2026-11-16T02:52:54.555Z level=INFO run=645c5b1b message=event event.id=evt_1e245999b001QxREvefYnpqCtu event.created=1794797574555 event.type=agent.updated event.location.directory=/tmp/verify-rqBlbm/u event.location.workspaceID=undefined event.data={} http.span=438 role=server
+timestamp=2026-11-16T02:52:54.555Z level=INFO run=645c5b1b message=event event.id=evt_1e245999b0026j91E317hrM6yZ event.created=1794797574555 event.type=command.updated event.location.directory=/tmp/verify-rqBlbm/u event.location.workspaceID=undefined event.data={} http.span=438 role=server
+timestamp=2026-11-16T02:52:54.891Z level=ERROR run=645c5b1b message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=774 role=server
+timestamp=2026-11-16T02:53:14.305Z level=INFO run=645c5b1b message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:53:14.305Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:53:14.305Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:53:14.307Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:14.307Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:14.316Z level=INFO run=645c5b1b message="watcher stopped" path=/etc type=entries http.span=20199 role=server
+timestamp=2026-11-16T02:53:14.316Z level=INFO run=645c5b1b message="watcher stopped" path=/ type=entries http.span=20199 role=server
+timestamp=2026-11-16T02:53:14.316Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp type=entries http.span=20199 role=server
+timestamp=2026-11-16T02:53:14.316Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u type=entries http.span=20199 role=server
+timestamp=2026-11-16T02:53:14.317Z level=INFO run=645c5b1b message="watcher stopped" path=/tmp/verify-rqBlbm/u/.config/opencode type=directory http.span=20200 role=server

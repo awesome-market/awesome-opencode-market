@@ -1,0 +1,56 @@
+spec: @dragonwize/opencode-event-push@0.7.2
+apiNames: @dragonwize/opencode-event-push, opencode-event-push
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-PwuNN5/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43255
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:51:57.740Z level=INFO run=afe26337 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@dragonwize/opencode-event-push@0.7.2\"]" role=cli
+timestamp=2026-11-16T08:52:05.061Z level=INFO run=c820caaf message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:52:05.622Z level=INFO run=c820caaf message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:52:05.674Z level=INFO run=c820caaf message="database schema bootstrap completed" migrations=59 durationMs=52 role=server
+timestamp=2026-11-16T08:52:06.144Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-16T08:52:06.148Z level=INFO run=c820caaf message="watcher subscribe" path=/etc type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:52:06.149Z level=INFO run=c820caaf message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:52:06.149Z level=INFO run=c820caaf message="watcher subscribe" path=/ type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:52:06.149Z level=INFO run=c820caaf message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:52:06.149Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:52:06.150Z level=INFO run=c820caaf message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:52:06.150Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5 type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:52:06.150Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5 type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:52:06.150Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-16T08:52:06.151Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-16T08:52:06.192Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u/.config/opencode type=directory backend=inotify ignores=6 http.span=74 role=server
+timestamp=2026-11-16T08:52:06.224Z level=INFO run=c820caaf message="location services booted" directory=/tmp/verify-PwuNN5/u workspaceID=undefined durationMs=105 http.span=106 role=server
+timestamp=2026-11-16T08:52:06.236Z level=INFO run=c820caaf msg="loading plugin" id=@dragonwize/opencode-event-push@0.7.2 entrypoint=file:///tmp/verify-PwuNN5/u/cache/opencode/npm/@dragonwize/opencode-event-push@0.7.2/1794819124439/node_modules/@dragonwize/opencode-event-push/src/index.ts http.span=118 role=server
+timestamp=2026-11-16T08:52:06.240Z level=WARN run=c820caaf message="failed to load plugin" target=@dragonwize/opencode-event-push@0.7.2 ref=err_c5b26985 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=122 role=server
+timestamp=2026-11-16T08:52:08.234Z level=ERROR run=c820caaf message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2116 role=server
+timestamp=2026-11-16T08:52:08.626Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:08.627Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:08.627Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:52:08.627Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:08.697Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:52:08.697Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:08.699Z level=INFO run=c820caaf message="watcher subscribe" path=/tmp/verify-PwuNN5/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:52:08.700Z level=INFO run=c820caaf message="watcher started" path=/tmp/verify-PwuNN5/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:52:08.804Z level=INFO run=c820caaf message=event event.id=evt_1e38e7de40017WNRRov1cMshKD event.created=1794819128804 event.type=provider.updated event.location.directory=/tmp/verify-PwuNN5/u event.location.workspaceID=undefined event.data={} http.span=2686 role=server
+timestamp=2026-11-16T08:52:08.824Z level=INFO run=c820caaf message=event event.id=evt_1e38e7df8001NEbLXnQ1b8kqjb event.created=1794819128824 event.type=model.updated event.location.directory=/tmp/verify-PwuNN5/u event.location.workspaceID=undefined event.data={} http.span=2706 role=server
+timestamp=2026-11-16T08:52:08.827Z level=INFO run=c820caaf message=event event.id=evt_1e38e7dfb001S7f9zLWIBwqpwg event.created=1794819128827 event.type=agent.updated event.location.directory=/tmp/verify-PwuNN5/u event.location.workspaceID=undefined event.data={} http.span=2709 role=server
+timestamp=2026-11-16T08:52:08.828Z level=INFO run=c820caaf message=event event.id=evt_1e38e7dfc00171atMMxfBKUVzf event.created=1794819128828 event.type=command.updated event.location.directory=/tmp/verify-PwuNN5/u event.location.workspaceID=undefined event.data={} http.span=2710 role=server
+timestamp=2026-11-16T08:52:09.061Z level=INFO run=c820caaf message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:52:09.061Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:52:09.061Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:52:09.072Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:09.072Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:52:09.136Z level=INFO run=c820caaf message="watcher stopped" path=/etc type=entries http.span=3018 role=server
+timestamp=2026-11-16T08:52:09.136Z level=INFO run=c820caaf message="watcher stopped" path=/ type=entries http.span=3018 role=server
+timestamp=2026-11-16T08:52:09.136Z level=INFO run=c820caaf message="watcher stopped" path=/tmp type=entries http.span=3018 role=server
+timestamp=2026-11-16T08:52:09.136Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5 type=entries http.span=3018 role=server
+timestamp=2026-11-16T08:52:09.137Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u type=entries http.span=3019 role=server
+timestamp=2026-11-16T08:52:09.138Z level=INFO run=c820caaf message="watcher stopped" path=/tmp/verify-PwuNN5/u/.config/opencode type=directory http.span=3020 role=server

@@ -1,0 +1,18 @@
+spec: portainer-mcp-server@1.0.0
+apiNames: portainer-mcp-server
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-k8lpaQ/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39243
+server password [redacted]
+Error: PORTAINER_PAT environment variable is required
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:34.200Z level=INFO run=ae652653 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"portainer-mcp-server@1.0.0\"]" role=cli
+timestamp=2026-11-16T09:37:37.199Z level=INFO run=0f3543da message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:37:37.836Z level=INFO run=0f3543da message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:37:38.093Z level=INFO run=0f3543da message="database schema bootstrap completed" migrations=59 durationMs=257 role=server

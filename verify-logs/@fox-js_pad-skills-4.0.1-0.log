@@ -1,0 +1,32 @@
+spec: @fox-js/pad-skills@4.0.1-0
+apiNames: @fox-js/pad-skills, pad-skills
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-OQZjKn/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35241
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T18:46:16.348Z level=INFO run=ceea624f message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@fox-js/pad-skills@4.0.1-0\"]" role=cli
+timestamp=2026-11-16T18:46:17.243Z level=INFO run=6da06e8c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T18:46:17.514Z level=INFO run=6da06e8c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T18:46:17.532Z level=INFO run=6da06e8c message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
+timestamp=2026-11-16T18:46:17.912Z level=INFO run=6da06e8c message="watcher subscribe" path=/tmp/verify-OQZjKn/u/.config/opencode type=directory ignores=6 http.span=37 role=server
+timestamp=2026-11-16T18:46:17.917Z level=INFO run=6da06e8c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T18:46:17.918Z level=INFO run=6da06e8c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-16T18:46:17.920Z level=INFO run=6da06e8c message="watcher subscribe" path=/ type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-16T18:46:17.920Z level=INFO run=6da06e8c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-16T18:46:17.921Z level=INFO run=6da06e8c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-16T18:46:17.922Z level=INFO run=6da06e8c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T18:46:17.922Z level=INFO run=6da06e8c message="watcher subscribe" path=/tmp/verify-OQZjKn type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T18:46:17.922Z level=INFO run=6da06e8c message="watcher started" path=/tmp/verify-OQZjKn type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-16T18:46:17.922Z level=INFO run=6da06e8c message="watcher subscribe" path=/tmp/verify-OQZjKn/u type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-16T18:46:17.923Z level=INFO run=6da06e8c message="watcher started" path=/tmp/verify-OQZjKn/u type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-16T18:46:17.953Z level=INFO run=6da06e8c message="watcher started" path=/tmp/verify-OQZjKn/u/.config/opencode type=directory backend=inotify ignores=6 http.span=78 role=server
+timestamp=2026-11-16T18:46:17.987Z level=INFO run=6da06e8c msg="loading plugin" id=@fox-js/pad-skills@4.0.1-0 entrypoint=file:///tmp/verify-OQZjKn/u/cache/opencode/npm/@fox-js/pad-skills@4.0.1-0/1794854776873/node_modules/@fox-js/pad-skills/foxui-pad/SKILL.md http.span=112 role=server
+timestamp=2026-11-16T18:46:17.990Z level=WARN run=6da06e8c message="failed to load plugin" target=@fox-js/pad-skills@4.0.1-0 ref=err_6d587e3a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=115 role=server
+timestamp=2026-11-16T18:46:18.005Z level=INFO run=6da06e8c message="location services booted" directory=/tmp/verify-OQZjKn/u workspaceID=undefined durationMs=130 http.span=130 role=server

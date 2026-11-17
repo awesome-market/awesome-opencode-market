@@ -1,0 +1,32 @@
+spec: tokenshave@0.7.0
+apiNames: tokenshave
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-PbOEbX/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35637
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:23.446Z level=INFO run=d95219e6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"tokenshave@0.7.0\"]" role=cli
+timestamp=2026-11-16T07:35:24.232Z level=INFO run=b09df64c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:24.551Z level=INFO run=b09df64c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:24.573Z level=INFO run=b09df64c message="database schema bootstrap completed" migrations=59 durationMs=22 role=server
+timestamp=2026-11-16T07:35:24.757Z level=INFO run=b09df64c message="watcher subscribe" path=/tmp/verify-PbOEbX/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-16T07:35:24.760Z level=INFO run=b09df64c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:24.760Z level=INFO run=b09df64c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:24.760Z level=INFO run=b09df64c message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher subscribe" path=/tmp/verify-PbOEbX type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher started" path=/tmp/verify-PbOEbX type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.761Z level=INFO run=b09df64c message="watcher subscribe" path=/tmp/verify-PbOEbX/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-16T07:35:24.762Z level=INFO run=b09df64c message="watcher started" path=/tmp/verify-PbOEbX/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-16T07:35:24.790Z level=INFO run=b09df64c message="watcher started" path=/tmp/verify-PbOEbX/u/.config/opencode type=directory backend=inotify ignores=6 http.span=52 role=server
+timestamp=2026-11-16T07:35:24.804Z level=INFO run=b09df64c message="location services booted" directory=/tmp/verify-PbOEbX/u workspaceID=undefined durationMs=65 http.span=66 role=server
+timestamp=2026-11-16T07:35:24.806Z level=INFO run=b09df64c msg="loading plugin" id=tokenshave@0.7.0 entrypoint=file:///tmp/verify-PbOEbX/u/cache/opencode/npm/tokenshave@0.7.0/1794814523770/node_modules/tokenshave/dist/src/index.js http.span=68 role=server
+timestamp=2026-11-16T07:35:24.810Z level=WARN run=b09df64c message="failed to load plugin" target=tokenshave@0.7.0 ref=err_637f7669 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=72 role=server

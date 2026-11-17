@@ -1,0 +1,32 @@
+spec: opencode-ssh-session@0.3.0
+apiNames: opencode-ssh-session
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-re5U9z/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37567
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:27.061Z level=INFO run=114db2aa message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-ssh-session@0.3.0\"]" role=cli
+timestamp=2026-11-16T12:05:32.235Z level=INFO run=2a9cb51b message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:32.591Z level=INFO run=2a9cb51b message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:32.626Z level=INFO run=2a9cb51b message="database schema bootstrap completed" migrations=59 durationMs=35 role=server
+timestamp=2026-11-16T12:05:33.230Z level=INFO run=2a9cb51b message="watcher subscribe" path=/tmp/verify-re5U9z/u/.config/opencode type=directory ignores=6 http.span=103 role=server
+timestamp=2026-11-16T12:05:33.237Z level=INFO run=2a9cb51b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=110 role=server
+timestamp=2026-11-16T12:05:33.241Z level=INFO run=2a9cb51b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=114 role=server
+timestamp=2026-11-16T12:05:33.241Z level=INFO run=2a9cb51b message="watcher subscribe" path=/ type=entries ignores=0 http.span=114 role=server
+timestamp=2026-11-16T12:05:33.242Z level=INFO run=2a9cb51b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=115 role=server
+timestamp=2026-11-16T12:05:33.242Z level=INFO run=2a9cb51b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=115 role=server
+timestamp=2026-11-16T12:05:33.243Z level=INFO run=2a9cb51b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:33.243Z level=INFO run=2a9cb51b message="watcher subscribe" path=/tmp/verify-re5U9z type=entries ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:33.243Z level=INFO run=2a9cb51b message="watcher started" path=/tmp/verify-re5U9z type=entries backend=node ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:33.243Z level=INFO run=2a9cb51b message="watcher subscribe" path=/tmp/verify-re5U9z/u type=entries ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:33.243Z level=INFO run=2a9cb51b message="watcher started" path=/tmp/verify-re5U9z/u type=entries backend=node ignores=0 http.span=116 role=server
+timestamp=2026-11-16T12:05:33.286Z level=INFO run=2a9cb51b message="watcher started" path=/tmp/verify-re5U9z/u/.config/opencode type=directory backend=inotify ignores=6 http.span=159 role=server
+timestamp=2026-11-16T12:05:33.326Z level=INFO run=2a9cb51b msg="loading plugin" id=opencode-ssh-session@0.3.0 entrypoint=file:///tmp/verify-re5U9z/u/cache/opencode/npm/opencode-ssh-session@0.3.0/1794830731817/node_modules/opencode-ssh-session/dist/index.js http.span=199 role=server
+timestamp=2026-11-16T12:05:33.373Z level=WARN run=2a9cb51b message="failed to load plugin" target=opencode-ssh-session@0.3.0 ref=err_b9bdc0d7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=246 role=server
+timestamp=2026-11-16T12:05:33.402Z level=INFO run=2a9cb51b message="location services booted" directory=/tmp/verify-re5U9z/u workspaceID=undefined durationMs=273 http.span=275 role=server

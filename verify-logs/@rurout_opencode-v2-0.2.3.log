@@ -1,0 +1,33 @@
+spec: @rurout/opencode-v2@0.2.3
+apiNames: @rurout/opencode-v2, opencode-v2
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-00ZgOP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:45133
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T08:31:18.998Z level=INFO run=ba54faf0 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@rurout/opencode-v2@0.2.3\"]" role=cli
+timestamp=2026-11-17T08:31:26.902Z level=INFO run=1e34866e message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T08:31:27.155Z level=INFO run=1e34866e message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T08:31:27.195Z level=INFO run=1e34866e message="database schema bootstrap completed" migrations=59 durationMs=40 role=server
+timestamp=2026-11-17T08:31:27.609Z level=INFO run=1e34866e message="watcher subscribe" path=/tmp/verify-00ZgOP/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-17T08:31:27.613Z level=INFO run=1e34866e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-17T08:31:27.614Z level=INFO run=1e34866e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-17T08:31:27.614Z level=INFO run=1e34866e message="watcher subscribe" path=/ type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-17T08:31:27.615Z level=INFO run=1e34866e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-17T08:31:27.615Z level=INFO run=1e34866e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-17T08:31:27.618Z level=INFO run=1e34866e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-17T08:31:27.618Z level=INFO run=1e34866e message="watcher subscribe" path=/tmp/verify-00ZgOP type=entries ignores=0 http.span=35 role=server
+timestamp=2026-11-17T08:31:27.618Z level=INFO run=1e34866e message="watcher started" path=/tmp/verify-00ZgOP type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-17T08:31:27.619Z level=INFO run=1e34866e message="watcher subscribe" path=/tmp/verify-00ZgOP/u type=entries ignores=0 http.span=36 role=server
+timestamp=2026-11-17T08:31:27.619Z level=INFO run=1e34866e message="watcher started" path=/tmp/verify-00ZgOP/u type=entries backend=node ignores=0 http.span=36 role=server
+timestamp=2026-11-17T08:31:27.658Z level=INFO run=1e34866e message="watcher started" path=/tmp/verify-00ZgOP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=75 role=server
+timestamp=2026-11-17T08:31:27.696Z level=INFO run=1e34866e message="location services booted" directory=/tmp/verify-00ZgOP/u workspaceID=undefined durationMs=111 http.span=113 role=server
+timestamp=2026-11-17T08:31:27.704Z level=INFO run=1e34866e msg="loading plugin" id=@rurout/opencode-v2@0.2.3 entrypoint=file:///tmp/verify-00ZgOP/u/cache/opencode/npm/@rurout/opencode-v2@0.2.3/1794904286626/node_modules/@rurout/opencode-v2/dist/index.js http.span=121 role=server

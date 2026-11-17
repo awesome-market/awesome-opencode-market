@@ -1,0 +1,32 @@
+spec: @oxel40/opencode-model-groups@0.1.0
+apiNames: @oxel40/opencode-model-groups, opencode-model-groups
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-hGRI2m/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:36537
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:13.017Z level=INFO run=7ef6387b message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@oxel40/opencode-model-groups@0.1.0\"]" role=cli
+timestamp=2026-11-16T08:06:13.822Z level=INFO run=7d122e35 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:14.141Z level=INFO run=7d122e35 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:14.155Z level=INFO run=7d122e35 message="database schema bootstrap completed" migrations=59 durationMs=14 role=server
+timestamp=2026-11-16T08:06:14.482Z level=INFO run=7d122e35 message="watcher subscribe" path=/tmp/verify-hGRI2m/u/.config/opencode type=directory ignores=6 http.span=23 role=server
+timestamp=2026-11-16T08:06:14.486Z level=INFO run=7d122e35 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-16T08:06:14.488Z level=INFO run=7d122e35 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:06:14.488Z level=INFO run=7d122e35 message="watcher subscribe" path=/ type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:06:14.488Z level=INFO run=7d122e35 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:06:14.488Z level=INFO run=7d122e35 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-16T08:06:14.489Z level=INFO run=7d122e35 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:06:14.489Z level=INFO run=7d122e35 message="watcher subscribe" path=/tmp/verify-hGRI2m type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:06:14.489Z level=INFO run=7d122e35 message="watcher started" path=/tmp/verify-hGRI2m type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-16T08:06:14.490Z level=INFO run=7d122e35 message="watcher subscribe" path=/tmp/verify-hGRI2m/u type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:14.490Z level=INFO run=7d122e35 message="watcher started" path=/tmp/verify-hGRI2m/u type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-16T08:06:14.532Z level=INFO run=7d122e35 message="watcher started" path=/tmp/verify-hGRI2m/u/.config/opencode type=directory backend=inotify ignores=6 http.span=73 role=server
+timestamp=2026-11-16T08:06:14.556Z level=INFO run=7d122e35 message="location services booted" directory=/tmp/verify-hGRI2m/u workspaceID=undefined durationMs=96 http.span=97 role=server
+timestamp=2026-11-16T08:06:14.561Z level=INFO run=7d122e35 msg="loading plugin" id=@oxel40/opencode-model-groups@0.1.0 entrypoint=file:///tmp/verify-hGRI2m/u/cache/opencode/npm/@oxel40/opencode-model-groups@0.1.0/1794816373405/node_modules/@oxel40/opencode-model-groups/src/server.ts http.span=102 role=server
+timestamp=2026-11-16T08:06:14.563Z level=WARN run=7d122e35 message="failed to load plugin" target=@oxel40/opencode-model-groups@0.1.0 ref=err_5eb4f6f3 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=104 role=server

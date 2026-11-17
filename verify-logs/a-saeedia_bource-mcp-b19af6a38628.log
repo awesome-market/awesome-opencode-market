@@ -1,0 +1,63 @@
+spec: a-saeedia/bource-mcp#b19af6a38628813bebad0c52f4485fdf886d93a0
+apiNames: a-saeedia/bource-mcp, bource-mcp
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-KAUKNO/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41651
+server password [redacted]
+
+[bource-mcp v0.1.0] read-only Iran Bourse bridge ready.
+  market data : cdn.tsetmc.com (public, GET-only, no API key)
+  portal      : 0 saved session(s) (none — run "npm run login" to attach the TSE portal)
+  contract    : READ-ONLY. No write tools exist. Guarded browser blocks every non-GET request.
+  hint        : ask "is the Tehran market open?" or "quote farda" inside opencode.
+
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T08:06:30.881Z level=INFO run=568466d9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"a-saeedia/bource-mcp#b19af6a38628813bebad0c52f4485fdf886d93a0\"]" role=cli
+timestamp=2026-11-16T08:06:38.459Z level=INFO run=8418bf80 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T08:06:38.826Z level=INFO run=8418bf80 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T08:06:38.885Z level=INFO run=8418bf80 message="database schema bootstrap completed" migrations=59 durationMs=59 role=server
+timestamp=2026-11-16T08:06:39.404Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u/.config/opencode type=directory ignores=6 http.span=61 role=server
+timestamp=2026-11-16T08:06:39.409Z level=INFO run=8418bf80 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=66 role=server
+timestamp=2026-11-16T08:06:39.409Z level=INFO run=8418bf80 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=66 role=server
+timestamp=2026-11-16T08:06:39.410Z level=INFO run=8418bf80 message="watcher subscribe" path=/ type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-16T08:06:39.410Z level=INFO run=8418bf80 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-16T08:06:39.410Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-16T08:06:39.411Z level=INFO run=8418bf80 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=68 role=server
+timestamp=2026-11-16T08:06:39.411Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-16T08:06:39.411Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO type=entries backend=node ignores=0 http.span=68 role=server
+timestamp=2026-11-16T08:06:39.411Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-16T08:06:39.412Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-16T08:06:39.465Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u/.config/opencode type=directory backend=inotify ignores=6 http.span=122 role=server
+timestamp=2026-11-16T08:06:39.487Z level=INFO run=8418bf80 message="location services booted" directory=/tmp/verify-KAUKNO/u workspaceID=undefined durationMs=143 http.span=144 role=server
+timestamp=2026-11-16T08:06:39.521Z level=INFO run=8418bf80 msg="loading plugin" id=a-saeedia/bource-mcp#b19af6a38628813bebad0c52f4485fdf886d93a0 entrypoint=file:///tmp/verify-KAUKNO/u/cache/opencode/npm/git-bource-mcp-204e43d27c36/1794816397979/node_modules/bource-mcp/server.js http.span=178 role=server
+timestamp=2026-11-16T08:06:40.882Z level=WARN run=8418bf80 message="failed to load plugin" target=a-saeedia/bource-mcp#b19af6a38628813bebad0c52f4485fdf886d93a0 ref=err_9c8904f0 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=1539 role=server
+timestamp=2026-11-16T08:06:42.597Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:42.597Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:42.598Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T08:06:42.598Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:42.636Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T08:06:42.637Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:42.638Z level=INFO run=8418bf80 message="watcher subscribe" path=/tmp/verify-KAUKNO/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T08:06:42.639Z level=INFO run=8418bf80 message="watcher started" path=/tmp/verify-KAUKNO/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T08:06:42.676Z level=INFO run=8418bf80 message=event event.id=evt_1e364e4f40019213l3R2IlXrtU event.created=1794816402676 event.type=provider.updated event.location.directory=/tmp/verify-KAUKNO/u event.location.workspaceID=undefined event.data={} http.span=3333 role=server
+timestamp=2026-11-16T08:06:42.690Z level=INFO run=8418bf80 message=event event.id=evt_1e364e501001Vo3EyAxb6tmLNs event.created=1794816402689 event.type=model.updated event.location.directory=/tmp/verify-KAUKNO/u event.location.workspaceID=undefined event.data={} http.span=3347 role=server
+timestamp=2026-11-16T08:06:42.694Z level=INFO run=8418bf80 message=event event.id=evt_1e364e506001gonFYlK0q674vn event.created=1794816402694 event.type=agent.updated event.location.directory=/tmp/verify-KAUKNO/u event.location.workspaceID=undefined event.data={} http.span=3351 role=server
+timestamp=2026-11-16T08:06:42.695Z level=INFO run=8418bf80 message=event event.id=evt_1e364e506002Vu0QA9LCeDViX9 event.created=1794816402694 event.type=command.updated event.location.directory=/tmp/verify-KAUKNO/u event.location.workspaceID=undefined event.data={} http.span=3352 role=server
+timestamp=2026-11-16T08:06:42.777Z level=ERROR run=8418bf80 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=3434 role=server
+timestamp=2026-11-16T08:06:43.300Z level=INFO run=8418bf80 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T08:06:43.301Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T08:06:43.301Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T08:06:43.321Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:43.321Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T08:06:43.384Z level=INFO run=8418bf80 message="watcher stopped" path=/etc type=entries http.span=4041 role=server
+timestamp=2026-11-16T08:06:43.384Z level=INFO run=8418bf80 message="watcher stopped" path=/ type=entries http.span=4041 role=server
+timestamp=2026-11-16T08:06:43.385Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp type=entries http.span=4042 role=server
+timestamp=2026-11-16T08:06:43.385Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO type=entries http.span=4042 role=server
+timestamp=2026-11-16T08:06:43.385Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u type=entries http.span=4042 role=server
+timestamp=2026-11-16T08:06:43.390Z level=INFO run=8418bf80 message="watcher stopped" path=/tmp/verify-KAUKNO/u/.config/opencode type=directory http.span=4047 role=server

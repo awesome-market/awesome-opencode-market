@@ -1,0 +1,18 @@
+spec: bmad-plus@0.23.1
+apiNames: bmad-plus
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-VduVg0/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:33853
+server password [redacted]
+error: unknown command 'serve'
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T07:35:22.289Z level=INFO run=f9e97ee7 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"bmad-plus@0.23.1\"]" role=cli
+timestamp=2026-11-16T07:35:23.791Z level=INFO run=cb5af619 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T07:35:24.320Z level=INFO run=cb5af619 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T07:35:24.672Z level=INFO run=cb5af619 message="database schema bootstrap completed" migrations=59 durationMs=351 role=server

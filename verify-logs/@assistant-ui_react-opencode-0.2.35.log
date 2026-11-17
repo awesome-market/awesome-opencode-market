@@ -1,0 +1,57 @@
+spec: @assistant-ui/react-opencode@0.2.35
+apiNames: @assistant-ui/react-opencode, react-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-KFQBQS/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34011
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T02:53:44.284Z level=INFO run=12938df6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@assistant-ui/react-opencode@0.2.35\"]" role=cli
+timestamp=2026-11-16T02:53:51.875Z level=INFO run=fdd537c9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T02:53:52.158Z level=INFO run=fdd537c9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T02:53:52.188Z level=INFO run=fdd537c9 message="database schema bootstrap completed" migrations=59 durationMs=30 role=server
+timestamp=2026-11-16T02:53:52.359Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u/.config/opencode type=directory ignores=6 http.span=33 role=server
+timestamp=2026-11-16T02:53:52.364Z level=INFO run=fdd537c9 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=38 role=server
+timestamp=2026-11-16T02:53:52.365Z level=INFO run=fdd537c9 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T02:53:52.365Z level=INFO run=fdd537c9 message="watcher subscribe" path=/ type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-16T02:53:52.365Z level=INFO run=fdd537c9 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=39 role=server
+timestamp=2026-11-16T02:53:52.366Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T02:53:52.366Z level=INFO run=fdd537c9 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-16T02:53:52.366Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-16T02:53:52.366Z level=ERROR run=fdd537c9 message="failed to watch directory" path=/tmp/verify-KFQBQS error="Error: EACCES: permission denied, watch '/tmp/verify-KFQBQS'" http.span=40 role=server
+timestamp=2026-11-16T02:53:52.368Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-16T02:53:52.368Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-16T02:53:52.396Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u/.config/opencode type=directory backend=inotify ignores=6 http.span=70 role=server
+timestamp=2026-11-16T02:53:52.404Z level=INFO run=fdd537c9 message="location services booted" directory=/tmp/verify-KFQBQS/u workspaceID=undefined durationMs=77 http.span=78 role=server
+timestamp=2026-11-16T02:53:52.420Z level=INFO run=fdd537c9 msg="loading plugin" id=@assistant-ui/react-opencode@0.2.35 entrypoint=file:///tmp/verify-KFQBQS/u/cache/opencode/npm/@assistant-ui/react-opencode@0.2.35/1794797631690/node_modules/@assistant-ui/react-opencode/dist/index.js http.span=94 role=server
+timestamp=2026-11-16T02:53:52.890Z level=WARN run=fdd537c9 message="failed to load plugin" target=@assistant-ui/react-opencode@0.2.35 ref=err_4ee0f77d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=564 role=server
+timestamp=2026-11-16T02:53:53.820Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:53.820Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:53.820Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T02:53:53.821Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:53.824Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS type=entries ignores=0 http.span=1498 role=server
+timestamp=2026-11-16T02:53:53.825Z level=ERROR run=fdd537c9 message="failed to watch directory" path=/tmp/verify-KFQBQS error="Error: EACCES: permission denied, watch '/tmp/verify-KFQBQS'" http.span=1499 role=server
+timestamp=2026-11-16T02:53:53.840Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T02:53:53.840Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:53.841Z level=INFO run=fdd537c9 message="watcher subscribe" path=/tmp/verify-KFQBQS/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T02:53:53.842Z level=INFO run=fdd537c9 message="watcher started" path=/tmp/verify-KFQBQS/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T02:53:53.861Z level=INFO run=fdd537c9 message=event event.id=evt_1e246814400190x0U4QlsFltD8 event.created=1794797633860 event.type=provider.updated event.location.directory=/tmp/verify-KFQBQS/u event.location.workspaceID=undefined event.data={} http.span=1535 role=server
+timestamp=2026-11-16T02:53:53.869Z level=INFO run=fdd537c9 message=event event.id=evt_1e246814c0012XOHzxXu2YDNvB event.created=1794797633868 event.type=model.updated event.location.directory=/tmp/verify-KFQBQS/u event.location.workspaceID=undefined event.data={} http.span=1543 role=server
+timestamp=2026-11-16T02:53:53.870Z level=INFO run=fdd537c9 message=event event.id=evt_1e246814e001KjEdSIs5PGlP05 event.created=1794797633870 event.type=agent.updated event.location.directory=/tmp/verify-KFQBQS/u event.location.workspaceID=undefined event.data={} http.span=1544 role=server
+timestamp=2026-11-16T02:53:53.870Z level=INFO run=fdd537c9 message=event event.id=evt_1e246814e002A9WNtpTkLvqB8f event.created=1794797633870 event.type=command.updated event.location.directory=/tmp/verify-KFQBQS/u event.location.workspaceID=undefined event.data={} http.span=1544 role=server
+timestamp=2026-11-16T02:53:54.020Z level=ERROR run=fdd537c9 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1694 role=server
+timestamp=2026-11-16T02:53:54.493Z level=INFO run=fdd537c9 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T02:53:54.493Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T02:53:54.493Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T02:53:54.497Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:54.497Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T02:53:54.537Z level=INFO run=fdd537c9 message="watcher stopped" path=/etc type=entries http.span=2211 role=server
+timestamp=2026-11-16T02:53:54.537Z level=INFO run=fdd537c9 message="watcher stopped" path=/ type=entries http.span=2211 role=server
+timestamp=2026-11-16T02:53:54.538Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp type=entries http.span=2212 role=server
+timestamp=2026-11-16T02:53:54.538Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u type=entries http.span=2212 role=server
+timestamp=2026-11-16T02:53:54.546Z level=INFO run=fdd537c9 message="watcher stopped" path=/tmp/verify-KFQBQS/u/.config/opencode type=directory http.span=2220 role=server

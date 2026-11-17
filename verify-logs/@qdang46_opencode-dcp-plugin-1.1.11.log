@@ -1,0 +1,44 @@
+spec: @qdang46/opencode-dcp-plugin@1.1.11
+apiNames: @qdang46/opencode-dcp-plugin, opencode-dcp-plugin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-6gwxax/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:41175
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T12:05:21.355Z level=INFO run=491a3e21 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@qdang46/opencode-dcp-plugin@1.1.11\"]" role=cli
+timestamp=2026-11-16T12:05:26.804Z level=INFO run=c5e05a23 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T12:05:27.449Z level=INFO run=c5e05a23 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T12:05:27.654Z level=INFO run=c5e05a23 message="database schema bootstrap completed" migrations=59 durationMs=205 role=server
+timestamp=2026-11-16T12:05:28.013Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u/.config/opencode type=directory ignores=6 http.span=17 role=server
+timestamp=2026-11-16T12:05:28.015Z level=INFO run=c5e05a23 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-16T12:05:28.016Z level=INFO run=c5e05a23 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:28.016Z level=INFO run=c5e05a23 message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:28.016Z level=INFO run=c5e05a23 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.017Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-16T12:05:28.033Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u/.config/opencode type=directory backend=inotify ignores=6 http.span=37 role=server
+timestamp=2026-11-16T12:05:28.041Z level=INFO run=c5e05a23 message="location services booted" directory=/tmp/verify-6gwxax/u workspaceID=undefined durationMs=44 http.span=45 role=server
+timestamp=2026-11-16T12:05:28.048Z level=INFO run=c5e05a23 msg="loading plugin" id=@qdang46/opencode-dcp-plugin@1.1.11 entrypoint=file:///tmp/verify-6gwxax/u/cache/opencode/npm/@qdang46/opencode-dcp-plugin@1.1.11/1794830726544/node_modules/@qdang46/opencode-dcp-plugin/dist/index.js http.span=52 role=server
+timestamp=2026-11-16T12:05:28.603Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:28.603Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:28.603Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T12:05:28.604Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:28.614Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T12:05:28.614Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:28.614Z level=INFO run=c5e05a23 message="watcher subscribe" path=/tmp/verify-6gwxax/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T12:05:28.614Z level=INFO run=c5e05a23 message="watcher started" path=/tmp/verify-6gwxax/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T12:05:28.631Z level=INFO run=c5e05a23 message=event event.id=evt_1e43f7db700159RBM4wSo7WeAA event.created=1794830728631 event.type=provider.updated event.location.directory=/tmp/verify-6gwxax/u event.location.workspaceID=undefined event.data={} http.span=635 role=server
+timestamp=2026-11-16T12:05:28.639Z level=INFO run=c5e05a23 message=event event.id=evt_1e43f7dbf001IIReaSJRagFbvz event.created=1794830728639 event.type=model.updated event.location.directory=/tmp/verify-6gwxax/u event.location.workspaceID=undefined event.data={} http.span=643 role=server
+timestamp=2026-11-16T12:05:28.640Z level=INFO run=c5e05a23 message=event event.id=evt_1e43f7dc0001X8L5hto7C0RwOh event.created=1794830728640 event.type=agent.updated event.location.directory=/tmp/verify-6gwxax/u event.location.workspaceID=undefined event.data={} http.span=644 role=server
+timestamp=2026-11-16T12:05:28.641Z level=INFO run=c5e05a23 message=event event.id=evt_1e43f7dc1001arKBMab9cmoNId event.created=1794830728641 event.type=command.updated event.location.directory=/tmp/verify-6gwxax/u event.location.workspaceID=undefined event.data={} http.span=645 role=server
+timestamp=2026-11-16T12:05:28.673Z level=WARN run=c5e05a23 message="disabled plugin after transform failure" plugin.id=dcp-rust state=command ref=err_af3bffe6 cause="Cause([Die(TypeError: commands.update is not a function. (In 'commands.update(\"dcp-compress\", (command) => {\n          command.template = \"/dcp-compress\";\n        })', 'commands.update' is undefined))])" http.span=677 role=server

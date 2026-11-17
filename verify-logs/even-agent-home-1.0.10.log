@@ -1,0 +1,56 @@
+spec: even-agent-home@1.0.10
+apiNames: even-agent-home
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-j92IAA/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44583
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-16T09:37:56.442Z level=INFO run=b552dd05 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"even-agent-home@1.0.10\"]" role=cli
+timestamp=2026-11-16T09:38:17.002Z level=INFO run=05122c4c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-16T09:38:17.500Z level=INFO run=05122c4c message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-16T09:38:17.705Z level=INFO run=05122c4c message="database schema bootstrap completed" migrations=59 durationMs=205 role=server
+timestamp=2026-11-16T09:38:17.982Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u/.config/opencode type=directory ignores=6 http.span=42 role=server
+timestamp=2026-11-16T09:38:17.991Z level=INFO run=05122c4c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-16T09:38:17.992Z level=INFO run=05122c4c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-16T09:38:17.992Z level=INFO run=05122c4c message="watcher subscribe" path=/ type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-16T09:38:17.993Z level=INFO run=05122c4c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T09:38:17.993Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T09:38:17.993Z level=INFO run=05122c4c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-16T09:38:17.993Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-16T09:38:17.994Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T09:38:17.994Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-16T09:38:17.994Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-16T09:38:18.032Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u/.config/opencode type=directory backend=inotify ignores=6 http.span=92 role=server
+timestamp=2026-11-16T09:38:18.051Z level=INFO run=05122c4c message="location services booted" directory=/tmp/verify-j92IAA/u workspaceID=undefined durationMs=111 http.span=111 role=server
+timestamp=2026-11-16T09:38:18.057Z level=INFO run=05122c4c msg="loading plugin" id=even-agent-home@1.0.10 entrypoint=file:///tmp/verify-j92IAA/u/cache/opencode/npm/even-agent-home@1.0.10/1794821896573/node_modules/even-agent-home/src/index.js http.span=117 role=server
+timestamp=2026-11-16T09:38:18.743Z level=WARN run=05122c4c message="failed to load plugin" target=even-agent-home@1.0.10 ref=err_5a1f2075 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=803 role=server
+timestamp=2026-11-16T09:38:19.816Z level=ERROR run=05122c4c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1876 role=server
+timestamp=2026-11-16T09:38:19.820Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:38:19.820Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:19.821Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-16T09:38:19.821Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:19.852Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-16T09:38:19.853Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:19.855Z level=INFO run=05122c4c message="watcher subscribe" path=/tmp/verify-j92IAA/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-16T09:38:19.856Z level=INFO run=05122c4c message="watcher started" path=/tmp/verify-j92IAA/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-16T09:38:19.892Z level=INFO run=05122c4c message=event event.id=evt_1e3b8c6730012DHnsApJcHmokb event.created=1794821899891 event.type=provider.updated event.location.directory=/tmp/verify-j92IAA/u event.location.workspaceID=undefined event.data={} http.span=1952 role=server
+timestamp=2026-11-16T09:38:19.904Z level=INFO run=05122c4c message=event event.id=evt_1e3b8c680001it2eMqJNiQB2Is event.created=1794821899904 event.type=model.updated event.location.directory=/tmp/verify-j92IAA/u event.location.workspaceID=undefined event.data={} http.span=1964 role=server
+timestamp=2026-11-16T09:38:19.908Z level=INFO run=05122c4c message=event event.id=evt_1e3b8c684001QxIDg3c6pKwsYU event.created=1794821899908 event.type=agent.updated event.location.directory=/tmp/verify-j92IAA/u event.location.workspaceID=undefined event.data={} http.span=1968 role=server
+timestamp=2026-11-16T09:38:19.910Z level=INFO run=05122c4c message=event event.id=evt_1e3b8c684002KFiXeoxsC6H3uO event.created=1794821899910 event.type=command.updated event.location.directory=/tmp/verify-j92IAA/u event.location.workspaceID=undefined event.data={} http.span=1970 role=server
+timestamp=2026-11-16T09:38:20.126Z level=INFO run=05122c4c message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-16T09:38:20.126Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-16T09:38:20.126Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-16T09:38:20.147Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:38:20.147Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-16T09:38:20.168Z level=INFO run=05122c4c message="watcher stopped" path=/etc type=entries http.span=2228 role=server
+timestamp=2026-11-16T09:38:20.168Z level=INFO run=05122c4c message="watcher stopped" path=/ type=entries http.span=2228 role=server
+timestamp=2026-11-16T09:38:20.168Z level=INFO run=05122c4c message="watcher stopped" path=/tmp type=entries http.span=2228 role=server
+timestamp=2026-11-16T09:38:20.168Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA type=entries http.span=2228 role=server
+timestamp=2026-11-16T09:38:20.168Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u type=entries http.span=2228 role=server
+timestamp=2026-11-16T09:38:20.173Z level=INFO run=05122c4c message="watcher stopped" path=/tmp/verify-j92IAA/u/.config/opencode type=directory http.span=2233 role=server
