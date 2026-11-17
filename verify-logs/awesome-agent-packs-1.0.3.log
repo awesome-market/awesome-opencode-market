@@ -1,0 +1,19 @@
+spec: awesome-agent-packs@1.0.3
+apiNames: awesome-agent-packs
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vDHCD4/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34973
+server password [redacted]
+error: unknown command 'serve'
+(Did you mean one of remove, search?)
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-17T20:12:39.848Z level=INFO run=493dc433 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"awesome-agent-packs@1.0.3\"]" role=cli
+timestamp=2026-11-17T20:12:41.008Z level=INFO run=1e27573f message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-17T20:12:41.816Z level=INFO run=1e27573f message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-17T20:12:42.162Z level=INFO run=1e27573f message="database schema bootstrap completed" migrations=59 durationMs=346 role=server
