@@ -801,9 +801,11 @@ export const staleVerifyFail = (
  *  scored ~0.8-0.96 on the prose classifier and FP'd ~7/8 of the concern:l05
  *  queue. With scoreText those blocks now feed rule:path only, so the cited
  *  evidence can no longer fire: re-queue for an honest re-judgment (fresh
- *  verdict supersedes by `at`). Hits on content/manifest/flag-body blocks
- *  stay terminal — those scored real package text and still mean something. */
-const L05_STALE_BLOCK_RE = /L0\.5 命中注入信号（score [\d.]+ ≥ [\d.]+，块 (?:finding|flag):\d+:/
+ *  verdict supersedes by `at`). `prev-findings` joined L05_SKIP_IDS in the
+ *  same fix — verdicts citing it are equally evaporated. Hits on
+ *  content/manifest/flag-body blocks stay terminal — those scored real
+ *  package text and still mean something. */
+const L05_STALE_BLOCK_RE = /L0\.5 命中注入信号（score [\d.]+ ≥ [\d.]+，块 (?:(?:finding|flag):\d+:|prev-findings)/
 export const isStaleL05Concern = (v: AiVerdict | undefined): boolean =>
   v?.verdict === 'concern' && v.source === 'ai' && L05_STALE_BLOCK_RE.test(v.reason ?? '')
 

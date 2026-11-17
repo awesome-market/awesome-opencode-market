@@ -130,6 +130,9 @@ describe('stale L0.5 mechanical concerns re-queue (finding/flag-block evidence e
     v0.reason = `同版本换包（该键曾有人工裁决，re-tag 自动重审）——${v0.reason}`
     expect(unreviewedTargets(idx([entry()]), [v0])).toHaveLength(1)
   })
+  it('hit on prev-findings — block removed from L0.5 input → re-queue', () => {
+    expect(unreviewedTargets(idx([entry()]), [l05('prev-findings')])).toHaveLength(1)
+  })
   it('hit on a content block — real package text, still terminal', () => {
     expect(unreviewedTargets(idx([entry()]), [l05('content:SKILL.md')])).toEqual([])
   })
