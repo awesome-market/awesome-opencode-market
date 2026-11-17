@@ -279,7 +279,10 @@ describe('issueBody', () => {
       src: { kind: 'npm', id: 'pkg' },
     })
     expect(npm).toContain('清单自述：「lints things」')
-    expect(npm).toContain('diff.intrinsic.com/pkg/1.0.0/2.0.0')
+    expect(npm).toContain('https://app.unpkg.com/pkg@1.0.0/files')
+    expect(npm).toContain('https://app.unpkg.com/pkg@2.0.0/files')
+    expect(npm).toContain('npm diff --diff=pkg@1.0.0 --diff=pkg@2.0.0')
+    expect(npm).not.toContain('diff.intrinsic.com')
     const gh = issueBody({
       name: 'o/r', version: 'def5678', verdict: 'concern',
       prevRef: { kind: 'sha', value: 'abc1234' },
@@ -468,7 +471,8 @@ describe('issueBody', () => {
     expect(body).toContain('↳ "prepare" 在 git/tarball 安装时自动执行')
     expect(body).toContain('↳ 仓库 HEAD 在上架钉版后移动')
     // unknown ids render raw, no explainer line — never invent a gloss
-    expect(body).toContain('unknown-rule:x.js')
+    // (the path still linkifies into the rendered file view)
+    expect(body).toContain('unknown-rule:[x.js](https://app.unpkg.com/pkg@1.0.0/files/x.js)')
     expect((body.match(/↳/g) ?? []).length).toBe(2)
   })
   it('flag verdict headline carries the flag explainer', () => {
@@ -1762,8 +1766,8 @@ describe('issue evidence enrichment', () => {
     expect(body).toContain('★42')
     expect(body).toContain('风险文件 TOP')
     expect(body).toContain('代码 2 / 文档类 2')
-    // npm source → unpkg links at the judged version
-    expect(body).toContain('https://unpkg.com/pkg@1.0.0/src/index.js')
+    // npm source → app.unpkg.com rendered file view at the judged version
+    expect(body).toContain('https://app.unpkg.com/pkg@1.0.0/files/src/index.js')
     expect(body).toContain('📄')
     expect(body).toContain('装测日志摘要')
     expect(body).toContain('404 Not Found')
@@ -1795,8 +1799,8 @@ describe('issue evidence enrichment', () => {
     ent.capabilities.findings = ['network-call:package/index.ts — L223: fetch(u)']
     const t = docketTargets(idx([ent]), [v({ verdict: 'concern' })])[0]!
     const body = issueBody(t)
-    expect(body).toContain('https://unpkg.com/pkg@1.0.0/index.ts')
-    expect(body).not.toContain('unpkg.com/pkg@1.0.0/package/index.ts')
+    expect(body).toContain('https://app.unpkg.com/pkg@1.0.0/files/index.ts')
+    expect(body).not.toContain('unpkg.com/pkg@1.0.0/files/package/index.ts')
     expect(body).toContain('`package/index.ts:L223`')
   })
   it('失败速读 unwraps message/cause and explains the signature', () => {

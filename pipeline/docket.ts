@@ -935,7 +935,10 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // "new version" verdict asks the maintainer to diff two tarballs by hand
   if (t.prevRef?.value && t.src) {
     if (t.prevRef.kind === 'version')
-      L.push(`- 更新内容：[${clean(t.prevRef.value, 40)} → ${clean(t.version ?? '?', 40)} 逐文件 diff](https://diff.intrinsic.com/${t.src.id}/${encodeURIComponent(t.prevRef.value)}/${encodeURIComponent(t.version ?? '')})`)
+      // diff.intrinsic.com is dead (NXDOMAIN since ~2026-11) and no hosted
+      // npm-diff service replaced it — two browsable version trees + the
+      // one-command local diff are what actually open on a phone
+      L.push(`- 更新内容：[${clean(t.prevRef.value, 40)} 文件树](https://app.unpkg.com/${t.src.id}@${encodeURIComponent(t.prevRef.value)}/files) → [${clean(t.version ?? '?', 40)} 文件树](https://app.unpkg.com/${t.src.id}@${encodeURIComponent(t.version ?? '')}/files) · 精确 diff：\`npm diff --diff=${t.src.id}@${t.prevRef.value} --diff=${t.src.id}@${t.version ?? ''}\``)
     else if (t.src.kind === 'github')
       L.push(`- 更新内容：[${t.prevRef.value.slice(0, 10)}… → ${(t.version ?? '?').slice(0, 10)}… 变更对比](https://github.com/${t.src.repo ?? t.src.id}/compare/${encodeURIComponent(t.prevRef.value)}...${encodeURIComponent(t.version ?? '')})`)
   }
@@ -950,12 +953,50 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
     L.push(`- 静态扫描：redFlags ${t.redFlags ?? 0} / findings ${t.findings ?? 0}${scanAt}${(t.redFlags ?? 0) + (t.findings ?? 0) === 0 ? '——零命中，**没扫到不等于安全**' : ''}`)
   }
   const detailPage = t.slug && opts.pagesBase && t.sitePage
+  // file links into the judged bytes: github blob@verdictSha (the exact
+  // reviewed commit) or npm app.unpkg.com (rendered code with line
+  // numbers — unpkg.com/<path> serves a raw text wall that is unreadable
+  // on a phone). Shared by the flag list and the hot-file map below.
+  const fileHref = (path: string, line?: number): string | undefined => {
+    if (t.src?.kind === 'github') {
+      const repo = t.src.repo ?? t.src.id
+      const sha = t.verdictSha ?? t.src.version
+      const p = path.split('/').map(encodeURIComponent).join('/')
+      return sha
+        ? `https://github.com/${repo}/blob/${sha}/${p}${line ? `#L${line}` : ''}`
+        : `https://github.com/${repo}/tree/HEAD/${p}`
+    }
+    if (t.src?.kind === 'npm') {
+      // npm tarballs wrap every file under package/ — the finding path
+      // carries that prefix but unpkg serves the prefix-stripped tree,
+      // so /pkg@ver/package/x.ts is a 404 while /pkg@ver/x.ts resolves
+      const rel = path.startsWith('package/') ? path.slice(8) : path
+      const p = rel.split('/').map(encodeURIComponent).join('/')
+      const v = t.version ?? t.src.version
+      return v ? `https://app.unpkg.com/${t.src.id}@${v}/files/${p}` : `https://app.unpkg.com/${t.src.id}/files/${p}`
+    }
+    return undefined
+  }
+  // rule:path — L<n>: excerpt → make the path a tap-target to the rendered
+  // file; raw text walls made "spot-check the flagged line" impossible on
+  // mobile (the whole point of the flag list)
+  const FLAG_LINK_RE = /^[a-z][a-z0-9-]*:((?:package\/)?\S+?\.\w+) — L(\d+)/
+  const linkify = (f: string): string => {
+    const m = FLAG_LINK_RE.exec(f)
+    const p = m?.[1]
+    if (!m || !p) return clean(f, 300)
+    const href = fileHref(p, +m[2]!)
+    if (!href) return clean(f, 300)
+    const body = clean(f, 300)
+    const i = body.indexOf(p)
+    return i < 0 ? body : `${body.slice(0, i)}[${p}](${href})${body.slice(i + p.length)}`
+  }
   // the flags ARE the case file for a flagged target — show the whole list
   // (bounded for tracker sanity), not a 4-item excerpt + a truncated copy
   // embedded twice inside the bilingual reason text
   if (t.redFlagList?.length) {
     const item = (f: string) => {
-      L.push(`  - ${clean(f, 300)}`)
+      L.push(`  - ${linkify(f)}`)
       // `sec:repo-moved-since-release:<sha>` alone tells a maintainer
       // nothing — the explainer carries "为什么报警 + 去核实什么"
       const ex = explainFlag(f)
@@ -998,30 +1039,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   }
   // 风险文件地图 — findings grouped by path answers "WHERE is the risk",
   // which 8 flat excerpt lines can't. Each file links into the judged
-  // bytes: github blob@verdictSha (the exact reviewed commit) or npm
-  // unpkg@version — tap on mobile, no download, no index.json spelunking.
+  // bytes via the shared fileHref above.
   // 📄 marks doc-like paths: the usual FP source, still worth a glance.
   if (t.hotFiles?.length) {
-    const fileHref = (path: string, line?: number): string | undefined => {
-      if (t.src?.kind === 'github') {
-        const repo = t.src.repo ?? t.src.id
-        const sha = t.verdictSha ?? t.src.version
-        const p = path.split('/').map(encodeURIComponent).join('/')
-        return sha
-          ? `https://github.com/${repo}/blob/${sha}/${p}${line ? `#L${line}` : ''}`
-          : `https://github.com/${repo}/tree/HEAD/${p}`
-      }
-      if (t.src?.kind === 'npm') {
-        // npm tarballs wrap every file under package/ — the finding path
-        // carries that prefix but unpkg serves the prefix-stripped tree,
-        // so /pkg@ver/package/x.ts is a 404 while /pkg@ver/x.ts resolves
-        const rel = path.startsWith('package/') ? path.slice(8) : path
-        const p = rel.split('/').map(encodeURIComponent).join('/')
-        const v = t.version ?? t.src.version
-        return v ? `https://unpkg.com/${t.src.id}@${v}/${p}` : `https://unpkg.com/${t.src.id}/${p}`
-      }
-      return undefined
-    }
     const codeN = t.hotFiles.filter(f => !f.doc).length
     L.push(`- 风险文件 TOP${t.hotFiles.length >= 10 ? '+' : ''}（代码 ${codeN} / 文档类 ${t.hotFiles.length - codeN}` +
       `${(t.docFindings ?? 0) > 0 ? `；全部 findings 中文档路径 ${t.docFindings} 条` : ''}）：`)
