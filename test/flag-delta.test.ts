@@ -226,9 +226,11 @@ describe('flag-delta main', () => {
       compareFn: async () => null,   // would fail anyway — proves selection skipped 'done'
       judge: async () => { calls++; return { verdict: 'pass', reasonZh: '', reasonEn: '' } },
     })
-    // 'done' (ai!=null) suppressed; 'pending' (ai:null) re-queued → compareFn null → no spool write, no judge call
+    // 'done' (ai!=null) suppressed; 'pending' (ai:null) re-queued → compareFn null →
+    // attempt record written (failure is countable now — silent skips starved the queue)
     expect(calls).toBe(0)
-    expect(existsSync(s.spool) ? readFileSync(s.spool, 'utf8') : '').toBe('')
+    const spooled = existsSync(s.spool) ? readFileSync(s.spool, 'utf8') : ''
+    expect(spooled).toContain('compare-fetch-failed')
   })
   it('excludes pending entries, non-github sources, and sha-matched pins', async () => {
     const s = setup([

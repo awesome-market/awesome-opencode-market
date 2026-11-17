@@ -87,6 +87,19 @@ export function latestAssessments(list: FlagAssessment[]): Map<string, FlagAsses
 
 const MOVED_FLAG_RE = /^sec:repo-moved-since-release:/
 
+export const ASSESS_RETRY_BUDGET = 5
+/** keys whose compare fetch exhausted the budget — dead for queue purposes
+ *  (the docket gate counts them covered; the row renders an honest marker) */
+export function deadAssessmentKeys(list: FlagAssessment[]): Set<string> {
+  const n = new Map<string, number>()
+  for (const a of list) {
+    if (a.ai !== null) continue
+    const k = `${a.name.toLowerCase()}\0${a.flag}`
+    n.set(k, (n.get(k) ?? 0) + 1)
+  }
+  return new Set([...n].filter(([, c]) => c >= ASSESS_RETRY_BUDGET).map(([k]) => k))
+}
+
 export interface JudgeResp { verdict: 'pass' | 'concern'; reasonZh: string; reasonEn: string }
 export type JudgeFn = (material: { summary: string; commits: string; patches: string }, think: boolean) => Promise<JudgeResp>
 
@@ -243,7 +256,15 @@ export async function main(
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const human = latestHumanVerdicts(loadVerdicts(verdictsPath))
   const tomb = tombEpochs(idx.removed)
-  const priorAssess = latestAssessments(loadAssessments(assessPath))
+  const assessAll = loadAssessments(assessPath)
+  const priorAssess = latestAssessments(assessAll)
+  const deadAssess = deadAssessmentKeys(assessAll)
+  const assessAttempts = new Map<string, number>()
+  for (const a of assessAll) {
+    if (a.ai !== null) continue
+    const k = `${a.name.toLowerCase()}\0${a.flag}`
+    assessAttempts.set(k, (assessAttempts.get(k) ?? 0) + 1)
+  }
   // ai:null assessments are evidence-but-not-verdict: they stay OUT of the
   // assessed set so the next run retries the judge — each retry appends a
   // fresh line and latest-by-at wins downstream.
@@ -273,7 +294,7 @@ export async function main(
     if (!hv?.sha || hv.sha === e.source.version) continue
     for (const flag of flags) {
       const k = `${e.name.toLowerCase()}\0${flag}`
-      if (assessed.has(k)) continue
+      if (assessed.has(k) || deadAssess.has(k)) continue
       works.push({ e, flag, repo: e.source.repo ?? e.name, oldSha: hv.sha, newSha: e.source.version })
     }
   }
@@ -283,7 +304,32 @@ export async function main(
   let wrote = 0
   for (const [i, w] of queue.entries()) {
     const cmp = await compareFn(w.repo, w.oldSha, w.newSha)
-    if (!cmp) { console.log(`[flag-delta] ${w.e.name} compare fetch failed — retry next run`); continue }
+    if (!cmp) {
+      // record the attempt — invisible failures retried forever before and
+      // starved the queue exactly like the flag-context dead-key bug did
+      const k = `${w.e.name.toLowerCase()}\0${w.flag}`
+      const priorN = assessAttempts.get(k) ?? 0
+      let ai: FlagAssessment['ai'] = null
+      let aiNote: string | undefined = 'compare-fetch-failed'
+      if (judge && priorN >= ASSESS_RETRY_BUDGET - 1) {
+        try {
+          ai = await judge({ summary: `${w.e.name} — ${w.e.description?.en ?? ''}\nFlag: ${w.flag}\n${w.repo} ${w.oldSha}→${w.newSha}`, commits: '', patches: '[compare unavailable — retries exhausted; judging flag + metadata alone]' }, true)
+          aiNote = undefined
+        } catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
+      }
+      const a: FlagAssessment = {
+        name: w.e.name, flag: w.flag, repo: w.repo, oldSha: w.oldSha, newSha: w.newSha,
+        at: new Date().toISOString(), aheadBy: 0, filesChanged: 0, commitsTotal: 0,
+        additions: 0, deletions: 0, commits: [], files: [], riskyFiles: [],
+        trivial: false, truncated: false, ai, ...(aiNote ? { aiNote } : {}),
+      }
+      const line = JSON.stringify(a)
+      if (dry) console.log(line)
+      else if (spoolPath) appendFileSync(spoolPath, line + '\n')
+      wrote++
+      console.log(`[flag-delta] ${w.e.name} ${w.flag.slice(0, 44)} → ${ai ? ai.verdict : aiNote} [${i + 1}/${queue.length}]`)
+      continue
+    }
     const cls = classifyDelta(cmp.files)
     const mat = judgeMaterial(w.repo, w, cmp, cls)
     let ai: FlagAssessment['ai'] = null

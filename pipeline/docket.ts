@@ -41,7 +41,7 @@ import { isMain } from './main-guard.ts'
 import { fetchCompare, classifyDelta, isRiskyDeltaPath, type DeltaCompare } from './delta.ts'
 import { explainFlag } from './scan/flagExplain.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
-import { loadAssessments, latestAssessments, type FlagAssessment } from './ai/flag-delta.ts'
+import { loadAssessments, latestAssessments, deadAssessmentKeys, type FlagAssessment } from './ai/flag-delta.ts'
 import { loadFlagContexts, latestFlagContexts, deadContextKeys, SCAN_FLAG_RE, FLAGS_PER_ENTRY, FINDINGS_PER_ENTRY, type FlagContext } from './ai/flag-context.ts'
 
 export interface DocketTarget {
@@ -589,6 +589,7 @@ export interface IssueBodyOpts {
   // keys that exhausted every retry (deadContextKeys) — render an explicit
   // "unjudged" marker so a bare row never masquerades as "not yet pre-read"
   deadCtx?: Set<string> | null
+  deadDelta?: Set<string> | null
   /** a decision label (verdict:pass/concern) is stuck on the issue but no
    *  human verdict landed in the jsonl — the write-back job failed; the
    *  label event won't re-fire, so say so on the body instead of letting
@@ -616,6 +617,12 @@ const prereadKeys = (t: DocketTarget): string[] => {
   const hot = (t.hotFiles ?? []).flatMap(h => h.findings ?? [])
   return [...scan, ...hot].slice(0, FLAGS_PER_ENTRY + FINDINGS_PER_ENTRY)
 }
+/** sec:repo-moved flags are pre-read by flag-DELTA, not flag-context — a
+ *  gate that only watches context keys lets identity issues open bare
+ *  (exactly the #6541 complaint). Key shape here is name\0flag. */
+const prereadDeltaKeys = (t: DocketTarget): string[] =>
+  (t.redFlagList ?? []).filter(f => f.startsWith('sec:repo-moved-since-release:'))
+    .map(f => `${t.name.toLowerCase()}\0${f}`)
 
 export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   const L: string[] = [`## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '']
@@ -1035,6 +1042,8 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const fc = opts.flagContexts?.get(fkey)
       if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 240)}`)
       else if (opts.deadCtx?.has(fkey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
+      else if (opts.deadDelta?.has(`${t.name.toLowerCase()}\0${f}`))
+        L.push('    ↳ AI 差异初筛不可用——多次拉取对比失败，请人工看原文')
       else if (SCAN_FLAG_RE.test(f) && !preKeys.has(f) && opts.flagContexts)
         L.push(`    ↳ 超出 AI 预读上限（${FLAGS_PER_ENTRY} 条/包）——未判，请人工看原文`)
     }
@@ -1207,6 +1216,7 @@ export async function main(
   const ctxList = ctxPath ? loadFlagContexts(ctxPath) : []
   const flagContexts = ctxPath ? latestFlagContexts(ctxList) : undefined
   const deadCtx = deadContextKeys(ctxList)
+  const deadDelta = assessPath ? deadAssessmentKeys(loadAssessments(assessPath)) : new Set<string>()
   // the pre-read pipeline is considered ALIVE while any context line is
   // <3h old — a drained queue can't produce uncovered keys, so a stale file
   // only ever coincides with a dead daemon (fail-visible: open anyway).
@@ -1220,7 +1230,9 @@ export async function main(
   const prereadUncovered = (t: DocketTarget): number => {
     if (!prereadAlive) return 0
     const pfx = `${t.name.toLowerCase()}\0${t.version ?? ''}\0`
-    return prereadKeys(t).filter(f => !flagContexts!.get(pfx + f)?.ai && !deadCtx.has(pfx + f)).length
+    const ctxN = prereadKeys(t).filter(f => !flagContexts!.get(pfx + f)?.ai && !deadCtx.has(pfx + f)).length
+    const delN = prereadDeltaKeys(t).filter(k => !assessments?.get(k)?.ai && !deadDelta.has(k)).length
+    return ctxN + delN
   }
   // closeReason needs the raw maps too — claiming "verdict 已决议" without
   // checking the key is how a version-bumped/clock-reset issue used to close
@@ -1452,7 +1464,7 @@ export async function main(
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
         ...(cl ? ['--label', cl] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
-        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx })]
+        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx, deadDelta })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -1488,7 +1500,7 @@ export async function main(
       .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
       .sort()
     const stuck = stuckList.length ? stuckList.join('`, `') : null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx, deadDelta })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()
