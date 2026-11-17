@@ -1005,7 +1005,8 @@ export function installPlan(e: MarketEntry): InstallPlan {
  *  scan. */
 const GIT_SHA_RE = /^[0-9a-f]{7,64}$/
 export function gitPinRef(version: string | null | undefined): string {
-  if (version == null || version === '') return 'HEAD'
+  // fail closed: a missing pin must not silently install unreviewed HEAD
+  if (version == null || version === '') throw new Error('catalog entry has no source pin')
   if (!GIT_SHA_RE.test(version)) throw new Error(`invalid source pin in catalog: ${version.slice(0, 40)}`)
   return version
 }

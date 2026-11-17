@@ -275,14 +275,14 @@ const RELEASABLE = new Set(['verified', 'skipped'])
  *  unscanned slots stays ignored, sha pinning is unchanged, verification
  *  must be releasable). */
 export const GRANDFATHER_AGE_MS = 30 * 24 * 60 * 60 * 1000
-export const GRANDFATHER_MIN_STARS = 10
 export const grandfathered = (
-  e: { createdAt?: string | null | undefined; metrics?: { stars?: number | null | undefined } | null | undefined },
+  e: { createdAt?: string | null | undefined },
   now = Date.now(),
 ): boolean => {
+  // stars are a buyable signal — a grandfather criterion an attacker can
+  // purchase for dollars isn't a maturity signal, it's a fast lane
   const t = Date.parse(e.createdAt ?? '')
   return Number.isFinite(t) && t <= now - GRANDFATHER_AGE_MS
-    && (e.metrics?.stars ?? 0) >= GRANDFATHER_MIN_STARS
 }
 
 /** Full-run fast maturity (ops policy): a pass on a package publicly live ≥
