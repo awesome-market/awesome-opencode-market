@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { docketTargets, issueTitle, issueBody } from '../pipeline/docket.ts'
 import type { CatalogIndex, PluginEntry, AiVerdict } from '../src/schema.ts'
+import type { FlagContext } from '../pipeline/ai/flag-context.ts'
 
 const e = (over: Partial<PluginEntry> = {}): PluginEntry => ({
   name: 'pkg', slug: 'o/pkg', aliases: [], type: 'plugin', discoveredVia: ['npm-keyword'],
@@ -509,6 +510,35 @@ describe('issueBody', () => {
     // alive-but-uncovered keys keep the bare row (gate defers creation anyway)
     const pending = issueBody(t[0]!, { flagContexts, deadCtx: new Set() })
     expect(pending).not.toContain('AI 初筛不可用')
+  })
+  it('scan-excerpt rows carry the same 3-state pre-read as flag rows', () => {
+    const F = 'network-call:src/x.js — L9: fetch("https://a.b")'
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [F], redFlags: [] },
+    })]), [v({ verdict: 'concern' })])
+    expect(t[0]!.scanPreview).toContain(F)
+    const key = `${t[0]!.name.toLowerCase()}\0${t[0]!.version ?? ''}\0${F}`
+    const mk = (ai: FlagContext['ai'], aiNote?: string): FlagContext => ({
+      name: t[0]!.name, version: t[0]!.version, flag: F, rule: 'network-call',
+      path: 'src/x.js', line: 9, at: '2026-01-01T00:00:00Z', ai, ...(aiNote ? { aiNote } : {}),
+    })
+    const judged = issueBody(t[0]!, { flagContexts: new Map([[key, mk({ verdict: 'pass' as const, reasonZh: '本地回环探测', reasonEn: 'x' })]]) })
+    expect(judged).toContain('↳ AI 初筛：倾向良性——本地回环探测')
+    const dead = issueBody(t[0]!, { flagContexts: new Map([[key, mk(null, 'context-fetch-failed')]]), deadCtx: new Set([key]) })
+    expect(dead).toContain('↳ AI 初筛不可用——多次判定失败')
+    // a finding inside the preread set but still pending stays bare (the
+    // gate defers issue creation) — the overflow marker is only for keys
+    // the queue will never reach
+    const pending = issueBody(t[0]!, { flagContexts: new Map(), deadCtx: new Set() })
+    expect(pending).not.toContain('AI 初筛')
+  })
+  it('excerpt rows past the preread cap get the overflow marker', () => {
+    const findings = Array.from({ length: 16 }, (_, i) => `network-call:src/f${i}.js — L${i + 1}: fetch("https://a.b/${i}")`)
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings, redFlags: [] },
+    })]), [v({ verdict: 'concern' })])
+    const body = issueBody(t[0]!, { flagContexts: new Map(), deadCtx: new Set() })
+    expect(body).toContain('↳ 超出 AI 预读上限')
   })
   it('风险文件 rows aggregate per-finding pre-reads — any concern wins', () => {
     const F_NET = 'network-call:src/index.js — L10: fetch("https://evil.example")'
