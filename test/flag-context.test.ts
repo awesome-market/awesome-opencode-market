@@ -382,3 +382,16 @@ describe('retry budget — permanently-failing keys die instead of starving the 
     expect(loadFlagContexts(s2.spool)[0]!.ai?.verdict).toBe('pass')
   })
 })
+
+it('github-source approved entry keys by candidateVer (docket lookup key), not the source sha', async () => {
+  // boxd-shaped: approved, no pendingUpdate → docket target version is null;
+  // the OLD latestVersion??source.version key wrote contexts the docket
+  // could never look up (orphaned pre-reads, silently invisible)
+  const gh = entry({ name: 'o/r', slug: 'o/r', latestVersion: null, approval: 'approved',
+    source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'deadbeef1234' },
+    capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG] } })
+  const s = setup([gh])
+  await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: async () => FILE, judge: okJudge })
+  const out = loadFlagContexts(s.spool)
+  expect(out[0]!.version).toBeNull()
+})

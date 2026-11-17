@@ -17,7 +17,7 @@ import { readFileSync, appendFileSync, existsSync } from 'node:fs'
 import { exit, env } from 'node:process'
 import { isMain } from '../main-guard.ts'
 import { CatalogIndex } from '../../src/schema.ts'
-import { latestHumanVerdicts, loadVerdicts, vkey } from '../verdicts.ts'
+import { latestHumanVerdicts, loadVerdicts, vkey, candidateVer } from '../verdicts.ts'
 import { omlxJudge, devinJudge, type JudgeFn, type JudgeResp } from './flag-delta.ts'
 
 export interface FlagContext {
@@ -142,7 +142,7 @@ function flaggedEntries(idx: CatalogIndex, verdictsPath: string): Plugin[] {
   return idx.plugins.filter(e => {
     if (!e.capabilities.redFlags.some(f => SCAN_FLAG_RE.test(f)) &&
         !e.capabilities.findings.some(f => SCAN_FLAG_RE.test(f))) return false
-    const v = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
+    const v = candidateVer(e) ?? null
     return human.get(vkey(e.name, v))?.verdict !== 'pass'
   })
 }
@@ -184,7 +184,11 @@ export async function main(
 
   const works: { e: Plugin; flag: string; rule: string; path: string; line: number; ver: string | null }[] = []
   for (const e of flaggedEntries(idx, verdictsPath!)) {
-    const ver = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
+    // the key version is candidateVer — the docket looks contexts up by
+    // target version (issue title ver), which is pendingUpdate?.version for
+    // approved entries and latestVersion only for pending ones. Fetch URLs
+    // keep their own content-version rule inside contextUrl.
+    const ver = candidateVer(e) ?? null
     // flags first (harder decisions), then the findings behind the rendered
     // 风险文件 rows — same fetch-window + judge, one context per finding
     const candidates = [
