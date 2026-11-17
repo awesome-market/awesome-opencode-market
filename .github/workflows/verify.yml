@@ -498,3 +498,27 @@ jobs:
               --body "Automated alert: the verify workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               --label "pipeline-alert"
           fi
+
+  # self-heal: a green run retires the open alert — transient failures must
+  # not leave pipeline-alert issues open forever (alerts were write-only)
+  alert-resolve:
+    needs: [plan, verify, merge]
+    if: '!failure() && !cancelled()'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: { issues: write }
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
+      - name: resolve failure alert
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          N=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "verify workflow failed in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$N" ]; then
+            gh issue comment "$N" -R "$GH_REPO" --body "自愈：run ${GITHUB_RUN_ID} 成功——告警条件已消失，自动关闭。"
+            gh issue close "$N" -R "$GH_REPO" && echo "alert-resolve: closed #$N"
+          fi

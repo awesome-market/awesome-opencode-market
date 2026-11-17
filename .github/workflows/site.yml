@@ -190,3 +190,31 @@ jobs:
               --body "Automated alert: the site deploy workflow failed."$'\n\n'"Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
               --label "pipeline-alert"
           fi
+
+  # self-heal: a green run retires the open alert. Also resolves
+  # "site dispatch failed" — this workflow ONLY runs on dispatch
+  # (workflow_dispatch/workflow_call), so reaching a green run at all
+  # proves the dispatch path works again.
+  alert-resolve:
+    needs: [site]
+    if: '!failure() && !cancelled()'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: { issues: write }
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: block
+          allowed-endpoints: api.github.com:443
+      - name: resolve failure alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for T in "site workflow failed" "site dispatch failed"; do
+            N=$(gh issue list -R "$GH_REPO" --label pipeline-alert --state open --search "$T in:title" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+            if [ -n "$N" ]; then
+              gh issue comment "$N" -R "$GH_REPO" --body "自愈：run ${GITHUB_RUN_ID} 成功——告警条件已消失，自动关闭。"
+              gh issue close "$N" -R "$GH_REPO" && echo "alert-resolve: closed #$N ($T)"
+            fi
+          done
