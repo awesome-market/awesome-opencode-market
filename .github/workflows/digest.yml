@@ -6,7 +6,16 @@ on:
   # run so freshly matured verdicts release the same night. Moving this off the
   # maintainer's local launchd: the job is pure data aggregation (no LLM), so a
   # personal laptop being off must not freeze the whole release chain.
-  schedule: [{ cron: '15 21 * * *' }]
+  # The hourly tick runs ONLY the watchdog (digest job is gated on the daily
+  # cron below): rendering hourly would slide `day` forward inside the same
+  # objection window and shorten it (announced 23:55 → mature on the 00:50
+  # render). GitHub's scheduler demonstrably drops a single workflow's crons
+  # for hours at a stretch (2026-11-17: catalog missed ~9 half-hour slots
+  # while other workflows fired) — a daily-evaluated watchdog can't catch a
+  # stall until it's a day+ old.
+  schedule:
+    - { cron: '15 21 * * *' }
+    - { cron: '50 * * * *' }
   workflow_dispatch: {}
   workflow_call: {}   # reusable entry for full-run.yml
 permissions: {}
@@ -15,7 +24,10 @@ jobs:
     # scope guard: a fork's schedule would fail on the missing catalog branch
     # and then alert-spam the fork's tracker. Manual dispatch stays open.
     # Whitelist = the known data planes (org prod + terry2010 current prod).
-    if: github.event_name != 'schedule' || contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner)
+    # Schedule gate: render ONLY on the daily tick — the hourly cron is the
+    # watchdog's; an hourly render slides `day` forward and shrinks the
+    # announce→mature objection window it's the anchor for.
+    if: github.event_name != 'schedule' || (contains(fromJSON('["awesome-market","terry2010"]'), github.repository_owner) && github.event.schedule == '15 21 * * *')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency: catalog-branch        # same writer lock as catalog/verify/ingest (I-4)
@@ -280,8 +292,11 @@ jobs:
             REASONS="${REASONS}${REASONS:+$'\n\n'}ai-verdicts.jsonl 中从未出现 ai-diagnose: 提交，但已有 ${PENDING} 个目标待审——本地诊断 worker 疑似从未接线（或提交前缀漂移），投稿将一直 pending。检查本机 launchd 配置。"
             LEGS="${LEGS}5"
           fi
-          if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 36 ]; then
-            REASONS="${REASONS}${REASONS:+$'\n\n'}catalog 分支 ${IDX_AGE_H}h 无 catalog: 发布提交——catalog.yml 疑似停摆（generate/publish 连续失败或未跑），digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
+          # 4h = 8 consecutive missed half-hour slots — catalog publishes on
+          # EVERY run (generatedAt=now keeps the staged diff dirty), so a gap
+          # this long is scheduler-drop or repeated failure, never quiet time
+          if [ "${LAST_IDX:-0}" -gt 0 ] && [ "${IDX_AGE_H:-0}" -gt 4 ]; then
+            REASONS="${REASONS}${REASONS:+$'\n\n'}catalog 分支 ${IDX_AGE_H}h 无 catalog: 发布提交——catalog.yml 疑似停摆（generate/publish 连续失败或 cron 被调度器丢弃），digest 正在陈旧数据上渲染。检查 Actions 里 catalog workflow 最近 run。"
             LEGS="${LEGS}2"
           fi
           if [ "${LAST_DS:-0}" -gt 0 ] && [ "${DS_AGE_H:-0}" -gt 36 ]; then
