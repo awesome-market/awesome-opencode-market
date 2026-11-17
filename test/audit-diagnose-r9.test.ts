@@ -142,6 +142,33 @@ describe('stale L0.5 mechanical concerns re-queue (finding/flag-block evidence e
   })
 })
 
+describe('stale blind-evidence concerns re-queue when scan evidence postdates the verdict', () => {
+  const blind = v({ verdict: 'concern', source: 'ai',
+    reason: '包内容未能提取（133MB超出上限）且未做任何静态扫描，无法核实其实际行为',
+    at: '2026-01-02T00:00:00Z' })
+  const scanned = (scannedAt: string) => entry({
+    capabilities: { scannedAt, findings: [], redFlags: [] } as PluginEntry['capabilities'] })
+  it('scan landed after the verdict → the "cannot judge" basis evaporated → re-queue', () => {
+    expect(unreviewedTargets(idx([scanned('2026-01-03T00:00:00Z')]), [blind])).toHaveLength(1)
+  })
+  it('scan predates the verdict — judged on the same absence → stays decided', () => {
+    expect(unreviewedTargets(idx([scanned('2026-01-01T00:00:00Z')]), [blind])).toEqual([])
+  })
+  it('still unscanned — blind judgment remains honestly true → stays', () => {
+    expect(unreviewedTargets(idx([entry({
+      capabilities: { scannedAt: null, findings: [], redFlags: [] } as PluginEntry['capabilities'] })]), [blind])).toEqual([])
+  })
+  it('non-blind concerns never re-queue on rescan churn', () => {
+    const real = v({ verdict: 'concern', source: 'ai', reason: '红旗在案，AI 判 concern：postinstall 可疑',
+      at: '2026-01-02T00:00:00Z' })
+    expect(unreviewedTargets(idx([scanned('2026-01-05T00:00:00Z')]), [real])).toEqual([])
+  })
+  it('human blind-shaped verdict untouched — source:ai only', () => {
+    const h = { ...blind, source: 'human' as const }
+    expect(unreviewedTargets(idx([scanned('2026-01-03T00:00:00Z')]), [h])).toEqual([])
+  })
+})
+
 describe('audit#4 r9 — github-kind entries review at the pinned commit', () => {
   const gh = entry({
     name: 'Owner/Repo', slug: 'owner/repo',

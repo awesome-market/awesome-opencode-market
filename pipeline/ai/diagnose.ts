@@ -807,6 +807,22 @@ const L05_STALE_BLOCK_RE = /L0\.5 命中注入信号（score [\d.]+ ≥ [\d.]+�
 export const isStaleL05Concern = (v: AiVerdict | undefined): boolean =>
   v?.verdict === 'concern' && v.source === 'ai' && L05_STALE_BLOCK_RE.test(v.reason ?? '')
 
+/** Blind-evidence concerns — the reason asserts ABSENCE of material (never
+ *  scanned / tarball unextractable / oversized) rather than a judgment of
+ *  what the package does. When the slot carries scan evidence NEWER than
+ *  the verdict (rescan landed, extraction succeeded) the "can't judge"
+ *  basis evaporated: re-queue so the model rules on real material. A slot
+ *  that stays unreviewable re-concerns cheaply on the same honest basis —
+ *  scannedAt === null (never scanned) parses NaN and stays put. */
+const BLIND_CONCERN_RE = /未扫描|未能核对|无法提取|未做任何|无任何扫描|无任何.{0,4}证据|超出上限|盲审|无法通过文本审查|无法核实/
+export const staleBlindConcern = (
+  v: AiVerdict | undefined,
+  caps: { scannedAt: string | null } | undefined,
+): boolean =>
+  v?.verdict === 'concern' && v.source === 'ai' && BLIND_CONCERN_RE.test(v.reason ?? '')
+  && !!caps?.scannedAt && !!v?.at
+  && Date.parse(caps.scannedAt) > Date.parse(v.at)
+
 /** Mirror of plan.ts's verifyPartsOf membership check (can't import plan —
  *  plan already imports this module). True when the candidate slot still
  *  carries an installable plugin/skill payload verify could measure; a slot
@@ -875,12 +891,12 @@ export function unreviewedTargets(
     // slots are NOT re-queued — no re-review conjures a scan; those stay
     // human-only by design. Human-covered keys are untouched: the gate
     // releases under the human's authority already.
-    const flags = (candidateSlot(e) ?? e).capabilities.redFlags
+    const slotCaps = (candidateSlot(e) ?? e).capabilities
     const flagBlockedPass =
       gov?.verdict === 'pass' && gov.source === 'ai' && !gov.flagsReviewed
-      && flags.length > 0
+      && slotCaps.redFlags.length > 0
       && !humanPassCovers(human, e.name, ver, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov)) return false
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov) && !staleBlindConcern(gov, slotCaps)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
