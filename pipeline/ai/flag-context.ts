@@ -17,7 +17,7 @@ import { readFileSync, appendFileSync, existsSync } from 'node:fs'
 import { exit, env } from 'node:process'
 import { isMain } from '../main-guard.ts'
 import { CatalogIndex } from '../../src/schema.ts'
-import { latestHumanVerdicts, loadVerdicts, vkey } from '../verdicts.ts'
+import { latestHumanVerdicts, loadVerdicts, vkey, candidateVer } from '../verdicts.ts'
 import { omlxJudge, devinJudge, type JudgeFn, type JudgeResp } from './flag-delta.ts'
 
 export interface FlagContext {
@@ -31,8 +31,9 @@ export interface FlagContext {
   line: number
   at: string
   ai: JudgeResp | null
-  /** why ai is null — context-fetch/judge-unavailable retry next run
-   *  (ai:null lines do NOT count as assessed, same model as flag-delta) */
+  /** why ai is null — transient failures retry next run (bounded, see
+   *  RETRY_BUDGET); deterministic absences (oversize file, no source URL)
+   *  judge the flag's embedded excerpt instead of retrying forever */
   aiNote?: string
 }
 
@@ -70,6 +71,7 @@ const CTX_FILE_CAP = 256_000  // minified megabundles → judge can't read anywa
 const CTX_CHAR_CAP = 4_000    // window sent to the judge
 const FLAGS_PER_ENTRY = 12    // an issue renders ≤20 flags; top 12 pre-read
 const FINDINGS_PER_ENTRY = 15 // docket's 风险文件 TOP+ renders ≤10 files — the findings behind them get the same pre-read
+const RETRY_BUDGET = 5        // transient-failure retries before a key is dead
 
 /** the findings behind the docket's 风险文件 TOP+ list — same aggregation:
  *  group scan-format findings by path (excluding ones already red-flagged,
@@ -140,7 +142,7 @@ function flaggedEntries(idx: CatalogIndex, verdictsPath: string): Plugin[] {
   return idx.plugins.filter(e => {
     if (!e.capabilities.redFlags.some(f => SCAN_FLAG_RE.test(f)) &&
         !e.capabilities.findings.some(f => SCAN_FLAG_RE.test(f))) return false
-    const v = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
+    const v = candidateVer(e) ?? null
     return human.get(vkey(e.name, v))?.verdict !== 'pass'
   })
 }
@@ -151,8 +153,26 @@ export async function main(
 ): Promise<void> {
   const { idxPath, verdictsPath, contextsPath, spoolPath, dry, limit } = parseArgs(args)
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath!, 'utf8')))
-  const prior = latestFlagContexts(loadFlagContexts(contextsPath))
+  const all = loadFlagContexts(contextsPath)
+  const prior = latestFlagContexts(all)
   const judged = new Set([...prior.entries()].filter(([, a]) => a.ai !== null).map(([k]) => k))
+  // retry budget on TRANSIENT failures — a permanently-failing key
+  // (unfetchable deleted package, judge poison) used to stay pending
+  // forever, and alphabetically-early dead keys ate every cycle's whole
+  // limit so the queue behind them never moved. judge-unavailable stays
+  // unbounded: a down judge is the environment's fault, not the entry's.
+  const attempts = new Map<string, number>()
+  for (const a of all) {
+    if (a.ai !== null) continue
+    const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
+    attempts.set(k, (attempts.get(k) ?? 0) + 1)
+  }
+  const dead = new Set(
+    [...prior.entries()]
+      .filter(([k, a]) => a.ai === null && a.aiNote !== 'judge-unavailable'
+        && (a.aiNote === 'context-fetch-failed' || a.aiNote?.startsWith('judge-error'))
+        && (attempts.get(k) ?? 0) >= RETRY_BUDGET)
+      .map(([k]) => k))
   const judge: JudgeFn | null = deps.judge ?? (
     env.AI_BACKEND === 'devin'
       ? devinJudge(env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)
@@ -164,7 +184,11 @@ export async function main(
 
   const works: { e: Plugin; flag: string; rule: string; path: string; line: number; ver: string | null }[] = []
   for (const e of flaggedEntries(idx, verdictsPath!)) {
-    const ver = e.latestVersion ?? (e.source.kind === 'github' ? e.source.version ?? null : null)
+    // the key version is candidateVer — the docket looks contexts up by
+    // target version (issue title ver), which is pendingUpdate?.version for
+    // approved entries and latestVersion only for pending ones. Fetch URLs
+    // keep their own content-version rule inside contextUrl.
+    const ver = candidateVer(e) ?? null
     // flags first (harder decisions), then the findings behind the rendered
     // 风险文件 rows — same fetch-window + judge, one context per finding
     const candidates = [
@@ -175,7 +199,8 @@ export async function main(
       const m = SCAN_FLAG_RE.exec(flag)
       if (!m) continue
       if (works.filter(w => w.e === e).length >= cap) break
-      if (judged.has(`${e.name.toLowerCase()}\0${ver ?? ''}\0${flag}`)) continue
+      const k = `${e.name.toLowerCase()}\0${ver ?? ''}\0${flag}`
+      if (judged.has(k) || dead.has(k)) continue
       works.push({ e, flag, rule: m[1]!, path: m[2]!, line: +m[3]!, ver })
     }
     if (works.length >= limit) break
@@ -194,18 +219,24 @@ export async function main(
     const text = url ? await fileText(url) : null
     let ai: JudgeResp | null = null
     let aiNote: string | undefined
-    if (!text) aiNote = url ? 'context-fetch-failed' : 'no-source-url'
-    else if (text === 'TOO-LARGE') aiNote = 'context-too-large'
-    else if (!judge) aiNote = 'judge-unavailable'
-    else {
+    let window: string | null = null
+    if (text && text !== 'TOO-LARGE') {
       const lines = text.split('\n')
       const lo = Math.max(0, w.line - 1 - CTX_LINES), hi = Math.min(lines.length, w.line + CTX_LINES)
-      let window = lines.slice(lo, hi).map((l, j) => `L${lo + j + 1}: ${l}`).join('\n')
+      window = lines.slice(lo, hi).map((l, j) => `L${lo + j + 1}: ${l}`).join('\n')
       if (window.length > CTX_CHAR_CAP) {
         // a mega-line would eat the whole window — crop around the hit
         const hit = `L${w.line}: ${lines[w.line - 1] ?? ''}`
         window = `${window.slice(0, CTX_CHAR_CAP - 400)}\n...\n${hit}`.slice(0, CTX_CHAR_CAP)
       }
+    }
+    if (!text && url) aiNote = 'context-fetch-failed'   // transient — retry within budget
+    else if (!judge) aiNote = 'judge-unavailable'
+    else {
+      // deterministic absence (megabundle, no fetchable source): the flag
+      // string itself still carries the scanner's matched excerpt — judge
+      // that honestly-labelled instead of retrying a fetch that can't win
+      window ??= `[file context unavailable — ${text === 'TOO-LARGE' ? `file exceeds ${CTX_FILE_CAP / 1_024}KB` : 'no fetchable source'}; judging the flagged excerpt alone]\n${w.flag}`
       const summary = `${w.e.name}@${w.ver ?? '?'} — ${w.e.description?.en ?? '(no description)'}\nRule: ${w.rule}\nFlagged: ${w.path}:${w.line}`
       try { ai = await judge({ summary, commits: '', patches: window }, true) }
       catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
