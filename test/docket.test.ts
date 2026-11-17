@@ -1867,6 +1867,24 @@ describe('concern-class labels', () => {
     expect(close).toContain('issue close -R o/r 9')
     expect(comment).toContain('装测日报')
   })
+  it('ai:pass + verify:failed 不再开单——进装测日报', async () => {
+    const calls = await runMain([v({ verdict: 'pass' })], [], {
+      entry: e({ verification: { status: 'failed' } }),
+    })
+    const create = calls.filter(c => c.includes('create')).map(c => c.join(' ')).join('\n')
+    expect(create).toBe('')
+  })
+  it('存量 ai:pass+failed issue 关单并入日报', async () => {
+    const calls = await runMain([v({ verdict: 'pass' })], [{
+      number: 9, title: '[review] pkg@1.0.0',
+      labels: [{ name: 'review:pending' }, { name: 'ai:pass' }],
+      body: 'x',
+    }], { entry: e({ verification: { status: 'failed' } }) })
+    const close = calls.filter(c => c.includes('close')).map(c => c.join(' ')).join('\n')
+    const comment = calls.filter(c => c.includes('comment')).map(c => c.join(' ')).join('\n')
+    expect(close).toContain('issue close -R o/r 9')
+    expect(comment).toContain('装测日报')
+  })
   it('create: L0.5 命中 → concern:l05', async () => {
     const calls = await runMain([concernV('L0.5 命中注入信号（score 0.9 ≥ 0.662，块 x）；LLM 判 concern：y')])
     const create = calls.filter(c => c.includes('create')).map(c => c.join(' ')).join('\n')

@@ -1145,7 +1145,14 @@ export async function main(
   // they're filtered OUT of wanted so existing concern:verify issues fall
   // into the close pass with a pointer instead of lingering.
   const isMech = (t: DocketTarget) => t.verdict === 'concern' && (t.reason ?? '').startsWith('装测失败')
-  const issued = targets.filter(t => !isMech(t))
+  // ai:pass + verify:failed — the verdict is fine but the bytes don't
+  // install, so the issue can never release and carries no decision.
+  // Same日报 surface as mechanical concerns;翻案靠重测/上游修复.
+  const isDeadPass = (t: DocketTarget) => t.verdict === 'pass' && t.verification === 'failed'
+  const issued = targets.filter(t => !isMech(t) && !isDeadPass(t))
+  // keyed name\0ver (the aggregated-key pattern) so a same-name flag or
+  // version-less issue title doesn't inherit the dead-pass close reason
+  const skippedDeadPass = new Set(targets.filter(isDeadPass).map(t => `${t.name.toLowerCase()}\0${t.version ?? ''}`))
   // last-write-wins per title: targets arrive in rank order pass→none→
   // concern→flag, so on a same-title collision (reachable when an approved
   // entry's pendingUpdate.version === latestVersion — flag target and held
@@ -1454,6 +1461,10 @@ export async function main(
       return '机械装测失败并入装测日报：docs/reports/verify-fail.md + 日报 issue（翻案靠重测或人工 verdict）'
     const e = t ? byName.get(t.name.toLowerCase()) : undefined
     if (!t || !e) return '该版本/条目已不在 catalog 索引中'
+    // ai:pass + verify:failed — 判词没问题但装不上，issue 永远不可能是
+    // 放行闸；与机械装测失败同一日报面，翻案靠重测/上游修复/人工 verdict
+    if (skippedDeadPass.has(`${t.name.toLowerCase()}\0${t.ver ?? ''}`))
+      return 'AI 判词已过但装不上——并入装测日报（docs/reports/verify-fail.md + 日报 issue）——翻案靠重测、上游修复或人工 verdict'
     // "verdict 已决议" must be TRUE — read the ISSUE's own key, so a
     // candidate-key move (npm bump, ruleset rescan refreshing the hold
     // clock) that dropped the target with zero verdicts never gets a

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { computeDaily, dailyBody, monthlyBody, yearlyBody, loadState, shiftDate, emptyState, verifyFailRows, verifyFailBody, verifyFailIssueBody, type ReportState, type DailySnap } from '../pipeline/reports.ts'
+import { computeDaily, dailyBody, monthlyBody, yearlyBody, loadState, shiftDate, emptyState, verifyFailRows, deadPassRows, verifyFailBody, verifyFailIssueBody, type ReportState, type DailySnap } from '../pipeline/reports.ts'
 import { main } from '../pipeline/reports.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 import type { DocketTarget } from '../pipeline/docket.ts'
@@ -324,6 +324,25 @@ describe('verify-fail 日报', () => {
     expect(rows.map(r => r.stage)).toEqual(['install', 'load'])        // sorted by stage then name
     expect(rows[0]!.name).toBe('b')
     expect(rows[1]!.summary).toContain('插件模块无法被宿主加载')
+  })
+
+  it('deadPassRows：只收 ai:pass+failed，与装测失败 concern 互不混淆', () => {
+    const rows = deadPassRows([
+      { ...t('a', '1.0', 'pass'), verification: 'failed' },
+      { ...t('b', '2.0', 'pass'), verification: 'verified' },           // 真通过 → out
+      { ...t('c', '1.0', 'concern', '装测失败（verify load 级）：x'), verification: 'failed' }, // 机械 concern → out
+      t('d', '1.0', 'pass'),                                            // 未测 → out
+    ])
+    expect(rows).toEqual([{ name: 'a', version: '1.0' }])
+  })
+
+  it('verifyFailBody 第二区列死单，issue body 计数同步', () => {
+    const body = verifyFailBody([{ name: 'a', version: '1.0', stage: 'load', summary: 'x' }],
+      '2026-11-16', 'o/r', [{ name: 'dp1', version: '3.0' }, { name: 'dp2', version: null }])
+    expect(body).toContain('AI 判过但装不上：**2**')
+    expect(body).toContain('| dp1 | 3.0 |')
+    const issue = verifyFailIssueBody([], '2026-11-16', 'o/r', [{ name: 'dp1', version: '3.0' }])
+    expect(issue).toContain('**1 个 AI 判过但装不上**')
   })
 
   it('verifyFailBody：阶段计数 + 明细表 + 非安全判定声明', () => {

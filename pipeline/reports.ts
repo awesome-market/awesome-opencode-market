@@ -237,6 +237,18 @@ export interface VerifyFailRow {
   summary: string    // reason tail after the stage header
 }
 
+/** ai:pass + verify:failed — the verdict is fine but the bytes don't
+ *  install, so the entry can never release. Same机械 dead state as the
+ *  concern verdicts above: docket no longer issues on these, they live
+ *  here as a second population until re-verify or an upstream fix. */
+export interface DeadPassRow { name: string; version: string | null }
+export function deadPassRows(targets: DocketTarget[]): DeadPassRow[] {
+  return targets
+    .filter(t => t.verdict === 'pass' && t.verification === 'failed')
+    .map(t => ({ name: t.name, version: t.version ?? null }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /** 装测失败（verify load 级）：<说明> — the parenthesized stage is the only
  *  stable structure in a free-text reason; unparseable rows bucket 'other' */
 const VF_STAGE = /装测失败（verify (\S+) 级）：([\s\S]*)/
@@ -254,13 +266,14 @@ export function verifyFailRows(targets: DocketTarget[]): VerifyFailRow[] {
     .sort((a, b) => a.stage.localeCompare(b.stage) || a.name.localeCompare(b.name))
 }
 
-export function verifyFailBody(rows: VerifyFailRow[], date: string, repo?: string): string {
+export function verifyFailBody(rows: VerifyFailRow[], date: string, repo?: string, deadPass: DeadPassRow[] = []): string {
   const byStage = new Map<string, number>()
   for (const r of rows) byStage.set(r.stage, (byStage.get(r.stage) ?? 0) + 1)
   const stageLine = [...byStage.entries()].sort((a, b) => b[1] - a[1])
     .map(([s, n]) => `**${s}** ${n}`).join(' · ') || '无'
   const tableRows = rows.map(r =>
     `| ${r.name} | ${r.version ?? '—'} | ${r.stage} | ${r.summary.replace(/\|/g, '\\|')} |`).join('\n')
+  const dpRows = deadPass.map(r => `| ${r.name} | ${r.version ?? '—'} |`).join('\n')
   return `# 装测失败日报 — ${date}
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
@@ -269,20 +282,26 @@ export function verifyFailBody(rows: VerifyFailRow[], date: string, repo?: strin
 ## 汇总
 - 当前装测失败条目：**${rows.length}**
 - 按阶段：${stageLine}
+- AI 判过但装不上：**${deadPass.length}**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
 |---|---|---|---|
 ${tableRows || '| _暂无_ | | | |'}
 
-> 数据源：catalog 分支 index.json + ai-verdicts.jsonl（governing concern 判词 reason 以 装测失败 开头的目标）。
-${repo ? `> 对应历史 issue：closed issues label:concern:verify → https://github.com/${repo}/issues?q=is%3Aissue+label%3Aconcern%3Averify` : ''}
+## AI 判过但装不上
+| 包 | 版本 |
+|---|---|
+${dpRows || '| _暂无_ | |'}
+
+> 数据源：catalog 分支 index.json + ai-verdicts.jsonl（governing concern 判词 reason 以 装测失败 开头的目标；另含 ai:pass + verify:failed 目标）。
+${repo ? `> 对应历史 issue：closed issues label:concern:verify / label:ai:pass → https://github.com/${repo}/issues?q=is%3Aissue+label%3Aconcern%3Averify` : ''}
 `
 }
 
 /** standing-issue body — the summary half of verifyFailBody, kept under the
  *  issue-size comfort bound; the full table lives in the markdown file */
-export function verifyFailIssueBody(rows: VerifyFailRow[], date: string, repo?: string): string {
+export function verifyFailIssueBody(rows: VerifyFailRow[], date: string, repo?: string, deadPass: DeadPassRow[] = []): string {
   const byStage = new Map<string, number>()
   for (const r of rows) byStage.set(r.stage, (byStage.get(r.stage) ?? 0) + 1)
   const stageLine = [...byStage.entries()].sort((a, b) => b[1] - a[1])
@@ -292,6 +311,7 @@ export function verifyFailIssueBody(rows: VerifyFailRow[], date: string, repo?: 
   return `机械装测测量结果日报（${date} 更新）——逐条 issue 已停用，全表见 ${doc ?? 'docs/reports/verify-fail.md'}
 
 **当前 ${rows.length} 个装测失败条目** · ${stageLine}
+**${deadPass.length} 个 AI 判过但装不上**（判词有效、字节装不上——不再逐条开单，翻案靠重测/上游修复）
 
 这些条目是 verify 实测"装不上/加载失败"的测量回声，不是安全判定：重测翻 verified 或人工 verdict 后自动离开日报。历史 issue 见 label:concern:verify（已关闭）。
 
@@ -340,12 +360,14 @@ export async function main(
   // 装测失败日报 — same verdict-driven population as docket's old per-issue
   // mechanical concerns; without verdict inputs the report says 0 rather than
   // guessing from verification.status (failed-but-unjudged is not the queue)
-  const vfRows = review ? verifyFailRows(docketTargets(idx, review.verdicts, review.digest)) : []
+  const vfTargets = review ? docketTargets(idx, review.verdicts, review.digest) : []
+  const vfRows = review ? verifyFailRows(vfTargets) : []
+  const dpRows = review ? deadPassRows(vfTargets) : []
 
   const writes: [string, string][] = [
     [join(outDir, 'daily', `${date}.md`), dailyBody(snap, state, repo)],
-    [join(outDir, 'verify-fail.md'), verifyFailBody(vfRows, date, repo)],
-    [join(outDir, 'verify-fail-issue.md'), verifyFailIssueBody(vfRows, date, repo)],
+    [join(outDir, 'verify-fail.md'), verifyFailBody(vfRows, date, repo, dpRows)],
+    [join(outDir, 'verify-fail-issue.md'), verifyFailIssueBody(vfRows, date, repo, dpRows)],
     // weekly view = trailing 7d already inside daily body; month/year files
     // are (re)generated whenever their period is touched so a backfill run
     // repairs them too
