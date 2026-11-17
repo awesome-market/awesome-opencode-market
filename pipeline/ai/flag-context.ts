@@ -182,6 +182,13 @@ export async function main(
   // limit so the queue behind them never moved. judge-unavailable stays
   // unbounded: a down judge is the environment's fault, not the entry's.
   const dead = deadContextKeys(all)
+  // per-key attempt counts — drives the last-chance excerpt fallback below
+  const attempts = new Map<string, number>()
+  for (const a of all) {
+    if (a.ai !== null) continue
+    const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
+    attempts.set(k, (attempts.get(k) ?? 0) + 1)
+  }
   const judge: JudgeFn | null = deps.judge ?? (
     env.AI_BACKEND === 'devin'
       ? devinJudge(env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)
@@ -228,8 +235,13 @@ export async function main(
     const text = url ? await fileText(url) : null
     let ai: JudgeResp | null = null
     let aiNote: string | undefined
+    const k = `${w.e.name.toLowerCase()}\0${w.ver ?? ''}\0${w.flag}`
+    const priorN = attempts.get(k) ?? 0
+    // last budget attempt degrades to excerpt-only judging — a flag whose
+    // context can never be fetched still owes the reviewer a verdict
+    const lastChance = priorN >= RETRY_BUDGET - 1
     let window: string | null = null
-    if (text && text !== 'TOO-LARGE') {
+    if (text && text !== 'TOO-LARGE' && !lastChance) {
       const lines = text.split('\n')
       const lo = Math.max(0, w.line - 1 - CTX_LINES), hi = Math.min(lines.length, w.line + CTX_LINES)
       window = lines.slice(lo, hi).map((l, j) => `L${lo + j + 1}: ${l}`).join('\n')
@@ -239,13 +251,13 @@ export async function main(
         window = `${window.slice(0, CTX_CHAR_CAP - 400)}\n...\n${hit}`.slice(0, CTX_CHAR_CAP)
       }
     }
-    if (!text && url) aiNote = 'context-fetch-failed'   // transient — retry within budget
+    if (!text && url && !lastChance) aiNote = 'context-fetch-failed'   // transient — retry within budget
     else if (!judge) aiNote = 'judge-unavailable'
     else {
-      // deterministic absence (megabundle, no fetchable source): the flag
-      // string itself still carries the scanner's matched excerpt — judge
-      // that honestly-labelled instead of retrying a fetch that can't win
-      window ??= `[file context unavailable — ${text === 'TOO-LARGE' ? `file exceeds ${CTX_FILE_CAP / 1_024}KB` : 'no fetchable source'}; judging the flagged excerpt alone]\n${w.flag}`
+      // deterministic absence (megabundle, no fetchable source) or final
+      // retry: the flag string itself still carries the scanner's matched
+      // excerpt — judge that honestly-labelled instead of dying silent
+      window ??= `[file context unavailable — ${text === 'TOO-LARGE' ? `file exceeds ${CTX_FILE_CAP / 1_024}KB` : text ? 'retries exhausted' : 'no fetchable source'}; judging the flagged excerpt alone]\n${w.flag}`
       const summary = `${w.e.name}@${w.ver ?? '?'} — ${w.e.description?.en ?? '(no description)'}\nRule: ${w.rule}\nFlagged: ${w.path}:${w.line}`
       try { ai = await judge({ summary, commits: '', patches: window }, true) }
       catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
