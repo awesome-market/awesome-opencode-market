@@ -87,6 +87,25 @@ describe('audit#4 — reviewMaterial describes the candidate, not the hold', () 
   })
 })
 
+describe('L0.5 scoreText — finding/flag blocks score rule:path, not the matched line', () => {
+  it('finding/flag blocks keep full text for the LLM but score the head only', () => {
+    const m = reviewMaterial(e({ approval: 'approved', latestVersion: '1.0.0',
+      capabilities: caps(['network-call:scripts/install.sh — L5: # bash <(curl -fsSL x)'],
+        ['lifecycle-script:package.json — L9: "postinstall": "x"']) }))
+    const fb = m.find(b => b.id.startsWith('finding:'))!
+    const flag = m.find(b => b.id.startsWith('flag:'))!
+    expect(fb.text).toContain(' — L5:')
+    expect(fb.scoreText).toBe('network-call:scripts/install.sh')
+    expect(flag.scoreText).toBe('lifecycle-script:package.json')
+  })
+  it('sec:* flags carry no line suffix — scoreText stays the whole flag', () => {
+    const m = reviewMaterial(e({ approval: 'approved', latestVersion: '1.0.0',
+      capabilities: caps([], ['sec:repo-mismatch:evil-name']) }))
+    const flag = m.find(b => b.id.startsWith('flag:'))!
+    expect(flag.scoreText).toBe('sec:repo-mismatch:evil-name')
+  })
+})
+
 describe('audit#4 — no verify-wait: unverified candidates review immediately', () => {
   it('pending+pu: entry unverified+fresh is a target — verify lands in parallel', () => {
     const fresh = new Date().toISOString()

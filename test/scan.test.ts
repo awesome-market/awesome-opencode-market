@@ -189,6 +189,21 @@ describe('scan/rules', () => {
     expect(lip.test('package/src/config.json', '{"endpoint":"45.33.32.156"}')).toBeTruthy()
   })
 
+  it('r13: child-process — .exec( is RegExp.prototype.exec, not a spawn', () => {
+    const cp = RULES.find(r => r.id === 'child-process')!
+    // the concern:l05 FP shapes sampled from live issues
+    expect(cp.test('package/src/x.ts', 'const m = DCI_RE.exec(v)')).toBeNull()
+    expect(cp.test('package/src/x.ts', 'const w = /^\\s*\\S+/.exec(text)?.[0]')).toBeNull()
+    expect(cp.test('package/src/x.ts', 'const m = /^([a-f0-9]{64})$/.exec(line)')).toBeNull()
+    // aliased receiver without a child_process literal — documented tradeoff
+    expect(cp.test('package/src/x.ts', 'proc.exec("ls")')).toBeNull()
+    // real spawn surface unchanged
+    expect(cp.test('package/src/x.ts', 'exec("ls -la", cb)')).toBeTruthy()
+    expect(cp.test('package/src/x.ts', 'spawn("bash", args)')).toBeTruthy()
+    expect(cp.test('package/src/x.ts', 'execSync("id")')).toBeTruthy()
+    expect(cp.test('package/src/x.ts', 'require("child_process").exec("id")')).toBeTruthy()
+  })
+
   it('r9 demotions: .ssh boundary, deny tables, eval names/codegen, hex data', () => {
     const cred = RULES.find(r => r.id === 'credential-read')!
     // product's own file named like the credential dir — not the dir itself

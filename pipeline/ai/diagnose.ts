@@ -102,7 +102,7 @@ async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): P
   return out
 }
 
-export interface Material { id: string; text: string }
+export interface Material { id: string; text: string; scoreText?: string }
 
 /** CI-built review-material bundle staged on the catalog branch at
  *  material/<name-with-%2F>@<ver>.json — the heavy tarball download/extract
@@ -198,8 +198,15 @@ export function reviewMaterial(e: CatalogIndex['plugins'][number]): Material[] {
   // finding/flag ids carry an index + short prefix, not the full text — the
   // id is printed verbatim as the block header, so a 4KB finding used to be
   // paid for twice (header + body) and starved the 32KB prompt budget
-  caps.findings.forEach((f, i) => m.push({ id: `finding:${i}:${f.slice(0, 80)}`, text: f }))
-  caps.redFlags.forEach((f, i) => m.push({ id: `flag:${i}:${f.slice(0, 80)}`, text: f }))
+  // L0.5 sees rule:path only (scoreText): the ` — L<n>:` tail is a
+  // command-shaped excerpt BY CONSTRUCTION (the rule matched a suspicious
+  // pattern), so it sits miles off the prose classifier's distribution —
+  // `curl | bash` install hints and `/re/.exec(` regex calls scored as
+  // "injection" at ~0.8-0.96 and FP'd the queue. The rule+path half still
+  // carries the package-authored filename, which IS prose-scored surface.
+  const scoreHead = (f: string) => f.replace(/ — L\d+:.*$/s, '')
+  caps.findings.forEach((f, i) => m.push({ id: `finding:${i}:${f.slice(0, 80)}`, text: f, scoreText: scoreHead(f) }))
+  caps.redFlags.forEach((f, i) => m.push({ id: `flag:${i}:${f.slice(0, 80)}`, text: f, scoreText: scoreHead(f) }))
   if (slot) {
     m.push({ id: 'pending', text: `candidate v${slot.version}` })
     // prev-version delta context (§6): what the displayed version already trips
@@ -789,6 +796,17 @@ export const staleVerifyFail = (
   isVerifyFailConcern(v) && !!vf?.verifiedAt && !!v?.at
   && Date.parse(vf.verifiedAt) > Date.parse(v.at)
 
+/** An L0.5 mechanical concern minted on a finding/flag block's MATCHED LINE
+ *  — command-shaped scan excerpts (`curl | bash` hints, `.exec(` regex calls)
+ *  scored ~0.8-0.96 on the prose classifier and FP'd ~7/8 of the concern:l05
+ *  queue. With scoreText those blocks now feed rule:path only, so the cited
+ *  evidence can no longer fire: re-queue for an honest re-judgment (fresh
+ *  verdict supersedes by `at`). Hits on content/manifest/flag-body blocks
+ *  stay terminal — those scored real package text and still mean something. */
+const L05_STALE_BLOCK_RE = /L0\.5 命中注入信号（score [\d.]+ ≥ [\d.]+，块 (?:finding|flag):\d+:/
+export const isStaleL05Concern = (v: AiVerdict | undefined): boolean =>
+  v?.verdict === 'concern' && v.source === 'ai' && L05_STALE_BLOCK_RE.test(v.reason ?? '')
+
 /** Mirror of plan.ts's verifyPartsOf membership check (can't import plan —
  *  plan already imports this module). True when the candidate slot still
  *  carries an installable plugin/skill payload verify could measure; a slot
@@ -862,7 +880,7 @@ export function unreviewedTargets(
       gov?.verdict === 'pass' && gov.source === 'ai' && !gov.flagsReviewed
       && flags.length > 0
       && !humanPassCovers(human, e.name, ver, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass) return false
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
@@ -1263,7 +1281,10 @@ export async function main(
   // 'pending' ('candidate vX.Y') and 'content-coverage' (our own generated
   // coverage note) are machine prose like meta/verify/scan — scoring them
   // can only FP into a mechanical concern on text the package never wrote
-  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest', 'content-error'])
+  // 'prev-findings' is our own generated join of prior-version finding
+  // lines — same off-distribution machine context as 'scan'/'pending';
+  // the current version's findings are scored via their own blocks already
+  const L05_SKIP_IDS = new Set(['meta', 'verify', 'scan', 'pending', 'content-coverage', 'binary-manifest', 'content-error', 'prev-findings'])
   const reviewWorks = works.filter(w => !w.twin && !mechTerminal(w))
   const l05Top = new Map<Work, { score: number; block: string }>()
   let l05State = reviewWorks.length ? 'ok' : 'skipped'
@@ -1274,7 +1295,7 @@ export async function main(
         { id: L05_CANARY_HOSTILE.id, text: L05_CANARY_HOSTILE.text },
         ...reviewWorks.flatMap(w =>
           w.material.filter(m => !L05_SKIP_IDS.has(m.id))
-            .map(m => ({ id: `${w.e.name}\0${m.id}`, text: m.text })))])
+            .map(m => ({ id: `${w.e.name}\0${m.id}`, text: m.scoreText ?? m.text })))])
       const cBenign = scores.get(L05_CANARY_BENIGN.id), cHostile = scores.get(L05_CANARY_HOSTILE.id)
       if (cBenign === undefined || cHostile === undefined || cBenign >= L05_THRESHOLD || cHostile < L05_THRESHOLD) {
         l05State = 'untrusted'
