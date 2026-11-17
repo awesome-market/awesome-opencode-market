@@ -979,12 +979,12 @@ describe('audit-round-3 fixes', () => {
     expect(resolveIndexUrl({ indexUrl: 'http://localhost:8123/index.json' })).toBe('http://localhost:8123/index.json')
     expect(resolveIndexUrl({ indexUrl: 'http://insecure.example.com/i.json' })).toBe(DEFAULT_INDEX_URL)
   })
-  it('gitPinRef: hex pins pass, missing → HEAD, malformed fails closed', async () => {
+  it('gitPinRef: hex pins pass, missing fails closed, malformed fails closed', async () => {
     const { gitPinRef } = await import('../src/catalog.ts')
     expect(gitPinRef('0123456789abcdef0123456789abcdef01234567')).toBe('0123456789abcdef0123456789abcdef01234567')
-    expect(gitPinRef(null)).toBe('HEAD')
-    expect(gitPinRef(undefined)).toBe('HEAD')
-    expect(gitPinRef('')).toBe('HEAD')
+    expect(() => gitPinRef(null)).toThrow('no source pin')
+    expect(() => gitPinRef(undefined)).toThrow('no source pin')
+    expect(() => gitPinRef('')).toThrow('no source pin')
     for (const bad of ['main', 'v1.2.3', 'HEAD', '0123\n4567', 'zzzz'])
       expect(() => gitPinRef(bad)).toThrow('invalid source pin')
   })
@@ -1157,7 +1157,7 @@ describe('audit10 client hardening', () => {
   it('writeSkill: a duplicate call for the same entry → installRunning; cancel aborts the pending claim', async () => {
     const name = 'a10-skill-pkg'
     const IDX = { version: '1', generatedAt: 't', categories: {}, removed: [],
-      plugins: [{ name, slug: name, type: 'skill', contains: ['skill'], approval: 'approved', latestVersion: '2.0.0' }] }
+      plugins: [{ name, slug: name, type: 'skill', contains: ['skill'], approval: 'approved', latestVersion: '2.0.0', source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc1234' } }] }
     const env = envOf()
     const prevIdx = env.OPENCODE_MARKET_INDEX; env.OPENCODE_MARKET_INDEX = 'https://a10.example/index.json'
     const realFetch = globalThis.fetch

@@ -557,29 +557,29 @@ describe('L-3: pass predating disappearance does not govern a re-entered entry',
   })
 })
 
-// ————— grandfathered release: old + starred packages skip the objection window —————
-describe('grandfathered release (≥30d public + ≥10★)', () => {
+// ————— no grandfather fast-track: objection window applies to every AI pass —————
+describe('grandfather fast-track removed (age+stars are manufacturable)', () => {
   const stars = (n: number | null) => ({ stars: n, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: 'x' })
   const pending = (over: Partial<PluginEntry> = {}) => mkEntry('p', { approval: 'pending', ...over })
   const pass = () => mkVerdict('p', '1.0.0', 'pass', BEFORE)
 
-  it('old + starred pending entry releases with NO digest at all', () => {
+  it('old + starred pending entry still WAITS — no digest, no release', () => {
     const e = pending({ metrics: stars(48) })
     const r = applyMatureVerdicts(mkIndex([e]), [pass()], null)
-    expect(r.index.plugins[0]!.approval).toBe('approved')
-    expect(r.releases).toEqual(['p@1.0.0'])
+    expect(r.index.plugins[0]!.approval).toBe('pending')
+    expect(r.releases).toEqual([])
   })
-  it('old + starred releases even when just announced today (window waived)', () => {
+  it('old + starred announced today still waits for the window to elapse', () => {
     const e = pending({ metrics: stars(48) })
     const v = pass()
     const r = applyMatureVerdicts(mkIndex([e]), [v], digestStateOf(DIGEST, [v], [akey(v)]))
-    expect(r.index.plugins[0]!.approval).toBe('approved')
+    expect(r.index.plugins[0]!.approval).toBe('pending')
   })
   it('fresh package (<30d) still waits for announcement', () => {
     const e = pending({ createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), metrics: stars(48) })
     expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
   })
-  it('old package with <10 stars still waits', () => {
+  it('stars are irrelevant — old + <10★ waits like everything else', () => {
     const e = pending({ metrics: stars(9) })
     expect(applyMatureVerdicts(mkIndex([e]), [pass()], null).index.plugins[0]!.approval).toBe('pending')
   })
@@ -600,19 +600,19 @@ describe('grandfathered release (≥30d public + ≥10★)', () => {
     expect(r.index.plugins[0]!.latestVersion).toBe('1.0.0')
     expect(r.index.plugins[0]!.pendingUpdate?.version).toBe('1.1.0')
   })
-  it('github-kind old + starred pending releases without announcement', () => {
+  it('github-kind old + starred pending still waits without announcement', () => {
     const e = pending({
       source: { kind: 'github', id: 'o/r', repo: 'o/r', version: 'abc123' },
       latestVersion: null, metrics: stars(48),
     })
     const v = mkVerdict('p', null, 'pass', BEFORE)
-    expect(applyMatureVerdicts(mkIndex([e]), [v], null).index.plugins[0]!.approval).toBe('approved')
+    expect(applyMatureVerdicts(mkIndex([e]), [v], null).index.plugins[0]!.approval).toBe('pending')
   })
-  it('explainEntry reports the exempted release, not 未成熟', () => {
+  it('explainEntry reports the wait — no exemption text', () => {
     const s = explainEntry(
       mkEntry('p', { approval: 'pending', metrics: stars(48) }), [pass()], null)
-    expect(s[0]!.outcome).toBe('release')
-    expect(s[0]!.why).toContain('老插件免公示')
+    expect(s[0]!.outcome).toBe('wait')
+    expect(s[0]!.why).toContain('未成熟')
   })
 })
 

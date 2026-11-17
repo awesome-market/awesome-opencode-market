@@ -275,15 +275,10 @@ const RELEASABLE = new Set(['verified', 'skipped'])
  *  unscanned slots stays ignored, sha pinning is unchanged, verification
  *  must be releasable). */
 export const GRANDFATHER_AGE_MS = 30 * 24 * 60 * 60 * 1000
-export const GRANDFATHER_MIN_STARS = 10
-export const grandfathered = (
-  e: { createdAt?: string | null | undefined; metrics?: { stars?: number | null | undefined } | null | undefined },
-  now = Date.now(),
-): boolean => {
-  const t = Date.parse(e.createdAt ?? '')
-  return Number.isFinite(t) && t <= now - GRANDFATHER_AGE_MS
-    && (e.metrics?.stars ?? 0) >= GRANDFATHER_MIN_STARS
-}
+// no grandfathered-release path: the objection window applies to every
+// AI pass — age+stars are signals an attacker can manufacture (aged
+// packages exist; stars are purchasable), so a maturity fast-track built
+// on them is a fast lane, not a maturity signal
 
 /** Full-run fast maturity (ops policy): a pass on a package publicly live ≥
  *  `ms` releases in the same run it is announced — the objection window
@@ -429,7 +424,7 @@ export function applyMatureVerdicts(
           // that stale rationale
           if (e.approvalReason && e.approvalReason !== 'awaiting-review')
             e = { ...e, approvalReason: 'awaiting-review' }
-          if ((mature(v) || grandfathered(e)
+          if ((mature(v)
             || (opts.fastMatureAgeMs !== undefined && announced.has(akey(v)) && establishedAge(e, opts.fastMatureAgeMs)
               // a changed maintainer roster is the account-hijack shape the
               // window exists for — sec:maintainer-changed keeps the wait
@@ -601,9 +596,7 @@ export function explainEntry(
   ): SlotExplain => {
     const { v, packageBrake } = verdictFor(version)
     const raw = latest.get(vkey(e.name, version))
-    // applyMatureVerdicts releases a pass on an old + starred DISPLAYED slot
-    // without the objection window — the held-update slot never qualifies
-    const gf = slot === 'displayed' && grandfathered(e)
+    const gf = false
     // a standing human pass covers the ai-pass-on-flagged ignore — the gate
     // releases under the human's authority, so '被拦截' would lie
     const humanCover = v?.verdict === 'pass' && v.source === 'ai'
@@ -654,7 +647,7 @@ export function explainEntry(
     if (!gf && dayAnnounced.has(akey(v!))) return { ...base, outcome: 'wait', why: `${pre}pass 已进最新日报 — 异议窗开放中，下期日报后成熟` }
     if (!RELEASABLE.has(verification)) return { ...base, outcome: 'wait', why: `${pre}verification=${verification} 不可放行` }
     return { ...base, outcome: 'release',
-      why: `${pre}pass ${gf && (!base.announced || dayAnnounced.has(akey(v!))) ? '老插件免公示（上架≥30天+≥10★）' : '成熟'} + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
+      why: `${pre}pass 成熟 + 可放行 → 生效${humanCover ? '（人工 pass 覆盖旗标/未扫描豁免）' : ''}` }
   }
   const displayed = slotOf('displayed', e.latestVersion, e.capabilities.redFlags.length,
     e.capabilities.scannedAt === null, e.verification.status,

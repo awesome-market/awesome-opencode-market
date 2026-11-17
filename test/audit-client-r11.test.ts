@@ -92,10 +92,10 @@ describe('gitPinRef — the github skill byte anchor', () => {
     expect(gitPinRef('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2')).toBe('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2')
     expect(gitPinRef('a1b2c3d')).toBe('a1b2c3d')   // short sha pins too
   })
-  it('absent pin falls back to HEAD — documented legacy behavior', () => {
-    expect(gitPinRef(null)).toBe('HEAD')
-    expect(gitPinRef('')).toBe('HEAD')
-    expect(gitPinRef(undefined)).toBe('HEAD')
+  it('absent pin fails closed — unreviewed HEAD must never install', () => {
+    expect(() => gitPinRef(null)).toThrow('no source pin')
+    expect(() => gitPinRef('')).toThrow('no source pin')
+    expect(() => gitPinRef(undefined)).toThrow('no source pin')
   })
   it('a MALFORMED pin is corruption — a branch name must not slide past the scan', () => {
     expect(() => gitPinRef('main')).toThrow('invalid source pin')

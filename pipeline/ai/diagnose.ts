@@ -249,6 +249,7 @@ export function reviewMaterial(e: CatalogIndex['plugins'][number]): Material[] {
 const CONTENT_MEMBER_CAP = 384        // files collected per package (memory bound, not a review bound)
 const CONTENT_HEAD_CAP = 16 * 1024    // per-file head kept for files larger than WHOLE_CAP
 const CONTENT_TAIL_CAP = 8 * 1024     // per-file tail kept alongside the head
+const CONTENT_MID_CAP = 8 * 1024      // middle slice — head+tail alone left a blind span for injection payloads
 const CONTENT_WHOLE_CAP = 32 * 1024   // files at or under this size are stored whole
 const CONTENT_TOTAL_CAP = 384 * 1024  // total content chars kept per candidate, rank-order fill
 /** transport cap ≠ review-surface cap: plugin packages legitimately ship
@@ -363,6 +364,9 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
           let headN = 0
           const tail: Buffer[] = []
           let tailN = 0
+          const mid: Buffer[] = []
+          let pos = 0
+          const midLo = Math.max(0, Math.floor((entry.size - CONTENT_MID_CAP) / 2))
           entry.on('data', (c: Buffer) => {
             if (whole) {
               if (headN < CONTENT_WHOLE_CAP) {
@@ -370,6 +374,13 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
                 head.push(push); headN += push.length
               }
             } else {
+              // a payload parked mid-file was invisible to both the L0.5
+              // screen and the judge — keep a slice from the blind span
+              if (pos < midLo + CONTENT_MID_CAP && pos + c.length > midLo) {
+                const a = Math.max(0, midLo - pos)
+                mid.push(c.subarray(a, Math.min(c.length, midLo + CONTENT_MID_CAP - pos)))
+              }
+              pos += c.length
               if (headN < CONTENT_HEAD_CAP) {
                 const push = c.subarray(0, CONTENT_HEAD_CAP - headN)
                 head.push(push); headN += push.length
@@ -390,8 +401,9 @@ export async function contentMaterial(name: string, ver: string, tarballUrl: str
               else dropped++
               return
             }
+            const midText = Buffer.concat(mid).toString('utf8')
             const tailText = Buffer.concat(tail).toString('utf8')
-            const t = `${headText}\n…[文件过长——仅保留首 ${CONTENT_HEAD_CAP / 1024}KB 与末 ${CONTENT_TAIL_CAP / 1024}KB]…\n${tailText}`
+            const t = `${headText}\n…[文件过长——中段 ${CONTENT_MID_CAP / 1024}KB 抽样]…\n${midText}\n…[仅保留首 ${CONTENT_HEAD_CAP / 1024}KB/中段 ${CONTENT_MID_CAP / 1024}KB/末 ${CONTENT_TAIL_CAP / 1024}KB]…\n${tailText}`
             if (!t.includes('\0')) picked.set(tarRel(entry.path), t)
             else dropped++
           })
