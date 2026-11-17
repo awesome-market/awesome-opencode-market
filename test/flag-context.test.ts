@@ -364,15 +364,22 @@ describe('retry budget — permanently-failing keys die instead of starving the 
     expect(out[0]!.flag).toBe(FLAG_LIVE)   // dead key skipped, queue advanced
   })
 
-  it('under-budget fetch-failed still retries; judge-unavailable never dies', async () => {
+  it('under-budget fetch-failed still retries; final attempt excerpt-judges; judge-unavailable never dies', async () => {
     const e = entry({ name: 'a', slug: 'a',
       capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_DEAD] } })
-    const s = setup([e], [], Array.from({ length: 4 }, (_, i) =>
+    // 3 prior failures → attempt 4 is still a retry (budget 5)
+    const s = setup([e], [], Array.from({ length: 3 }, (_, i) =>
       nullLine('a', FLAG_DEAD, 'context-fetch-failed', `2026-01-0${i + 1}T00:00:00Z`)))
     await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: async () => null, judge: okJudge })
     const out = loadFlagContexts(s.spool)
     expect(out).toHaveLength(1)
-    expect(out[0]!.aiNote).toBe('context-fetch-failed')   // attempt 5 written — next run it's dead
+    expect(out[0]!.aiNote).toBe('context-fetch-failed')
+    // 4 prior failures → last chance: judge the flag's embedded excerpt — a
+    // permanently-unfetchable flag still owes a verdict, not a silent death
+    const s3 = setup([e], [], Array.from({ length: 4 }, (_, i) =>
+      nullLine('a', FLAG_DEAD, 'context-fetch-failed', `2026-01-0${i + 1}T00:00:00Z`)))
+    await flagCtxMain([...args(s3), '--limit', '5'], { fetchFn: async () => null, judge: okJudge })
+    expect(loadFlagContexts(s3.spool)[0]!.ai?.verdict).toBe('pass')
     // judge-unavailable is the environment's fault — never terminal
     const s2 = setup([entry({ name: 'b', slug: 'b',
       capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG_LIVE] } })], [],
