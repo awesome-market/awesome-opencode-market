@@ -609,6 +609,14 @@ const VERI_ZH: Record<string, string> = {
  *  issues and only edits when it actually differs, so verify-status changes,
  *  verdict flips, maturity transitions and stuck-label states propagate
  *  instead of leaving creation-time text stale. */
+/** flags + findings a package's AI pre-read covers — the set issueBody
+ * uses to mark overflow rows and the create-gate uses to hold issues back */
+const prereadKeys = (t: DocketTarget): string[] => {
+  const scan = (t.redFlagList ?? []).filter(f => SCAN_FLAG_RE.test(f)).slice(0, FLAGS_PER_ENTRY)
+  const hot = (t.hotFiles ?? []).flatMap(h => h.findings ?? [])
+  return [...scan, ...hot].slice(0, FLAGS_PER_ENTRY + FINDINGS_PER_ENTRY)
+}
+
 export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   const L: string[] = [`## 审核单 ${t.name}${t.version ? `@${t.version}` : ''}`, '']
   /** set by the flag branch's compare block — how many flagged FILES the
@@ -1013,6 +1021,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   // (bounded for tracker sanity), not a 4-item excerpt + a truncated copy
   // embedded twice inside the bilingual reason text
   if (t.redFlagList?.length) {
+    const preKeys = new Set(prereadKeys(t))
     const item = (f: string) => {
       L.push(`  - ${linkify(f)}`)
       // `sec:repo-moved-since-release:<sha>` alone tells a maintainer
@@ -1026,6 +1035,8 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const fc = opts.flagContexts?.get(fkey)
       if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 240)}`)
       else if (opts.deadCtx?.has(fkey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
+      else if (SCAN_FLAG_RE.test(f) && !preKeys.has(f) && opts.flagContexts)
+        L.push(`    ↳ 超出 AI 预读上限（${FLAGS_PER_ENTRY} 条/包）——未判，请人工看原文`)
     }
     // two provenances share one list: sec:* identity signals (the trigger)
     // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
@@ -1060,7 +1071,13 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
   }
   if (t.scanPreview?.length) {
     L.push(`- 扫描摘录（前几条，完整清单见${detailPage ? '详情页' : 'index.json'}）：`)
-    for (const s of t.scanPreview) L.push(`  - ${clean(s, 160)}`)
+    for (const s of t.scanPreview) {
+      // same rule:path — L<n> shape as flag rows → same pinned deep link;
+      // a phone reader taps the path instead of hunting the file tree
+      const m = SCAN_FLAG_RE.exec(s)
+      const href = m ? fileHref(m[2]!, +m[3]!) : null
+      L.push(`  - ${href ? clean(s, 160).replace(`${m![2]}`, `[${m![2]}](${href})`) : clean(s, 160)}`)
+    }
   }
   // 风险文件地图 — findings grouped by path answers "WHERE is the risk",
   // which 8 flat excerpt lines can't. Each file links into the judged
@@ -1198,11 +1215,6 @@ export async function main(
   /** scan-format flag+finding keys this target's issue would look up —
    *  mirrors flag-context's per-entry candidate caps so the gate never
    *  waits on keys that will never be judged. */
-  const prereadKeys = (t: DocketTarget): string[] => {
-    const scan = (t.redFlagList ?? []).filter(f => SCAN_FLAG_RE.test(f)).slice(0, FLAGS_PER_ENTRY)
-    const hot = (t.hotFiles ?? []).flatMap(h => h.findings ?? [])
-    return [...scan, ...hot].slice(0, FLAGS_PER_ENTRY + FINDINGS_PER_ENTRY)
-  }
   /** keys without a verdict yet that aren't permanently dead — the reason
    *  to hold an issue back until its pre-reads land (or give up waiting) */
   const prereadUncovered = (t: DocketTarget): number => {
