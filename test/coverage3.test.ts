@@ -134,3 +134,21 @@ describe('installMarketProxy', () => {
     delete process.env.MARKET_PROXY
   })
 })
+
+describe('LocalBypass — loopback/LAN never enters the tunnel', () => {
+  it('isDirectOrigin — loopback + RFC1918 direct, remote proxied', async () => {
+    const { isDirectOrigin } = await import('../pipeline/net.ts')
+    for (const o of ['http://127.0.0.1:8001', 'http://localhost:8001/v1', 'https://192.168.1.5:9', 'https://10.0.0.2', 'http://172.16.0.1'])
+      expect(isDirectOrigin(o)).toBe(true)
+    for (const o of ['https://raw.githubusercontent.com', 'https://172.32.0.1', 'https://unpkg.com'])
+      expect(isDirectOrigin(o)).toBe(false)
+  })
+  it('remote origins land on the proxy dispatcher', async () => {
+    const { LocalBypass } = await import('../pipeline/net.ts')
+    const calls: string[] = []
+    const fake = { dispatch: (o: { origin: unknown }) => { calls.push(String(o.origin)); return true } }
+    const d = new LocalBypass(fake as never)
+    d.dispatch({ origin: 'https://raw.githubusercontent.com', path: '/', method: 'GET' } as never, {} as never)
+    expect(calls).toEqual(['https://raw.githubusercontent.com'])
+  })
+})
