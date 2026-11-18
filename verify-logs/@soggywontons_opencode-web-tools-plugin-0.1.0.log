@@ -3,30 +3,34 @@ apiNames: @soggywontons/opencode-web-tools-plugin, opencode-web-tools-plugin
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-FAARW1/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-Awdz74/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:33639
+server listening on http://127.0.0.1:39179
 server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+  0.0s  layer @opencode/Config releasing
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T11:36:51.523Z level=INFO run=45ba6138 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@soggywontons/opencode-web-tools-plugin@0.1.0\"]" role=cli
-timestamp=2026-11-18T11:36:56.389Z level=INFO run=f92a57ef message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T11:36:56.722Z level=INFO run=f92a57ef message="database schema bootstrap started" migrations=62 role=server
-timestamp=2026-11-18T11:36:56.735Z level=INFO run=f92a57ef message="database schema bootstrap completed" migrations=62 durationMs=13 role=server
-timestamp=2026-11-18T11:36:57.064Z level=INFO run=f92a57ef message="watcher subscribe" path=/tmp/verify-FAARW1/u/.config/opencode type=directory ignores=6 http.span=23 role=server
-timestamp=2026-11-18T11:36:57.068Z level=INFO run=f92a57ef message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
-timestamp=2026-11-18T11:36:57.069Z level=INFO run=f92a57ef message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T11:36:57.069Z level=INFO run=f92a57ef message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-18T11:36:57.069Z level=INFO run=f92a57ef message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T11:36:57.070Z level=INFO run=f92a57ef message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
-timestamp=2026-11-18T11:36:57.072Z level=INFO run=f92a57ef message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
-timestamp=2026-11-18T11:36:57.072Z level=INFO run=f92a57ef message="watcher subscribe" path=/tmp/verify-FAARW1 type=entries ignores=0 http.span=31 role=server
-timestamp=2026-11-18T11:36:57.073Z level=INFO run=f92a57ef message="watcher started" path=/tmp/verify-FAARW1 type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-18T11:36:57.073Z level=INFO run=f92a57ef message="watcher subscribe" path=/tmp/verify-FAARW1/u type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-18T11:36:57.073Z level=INFO run=f92a57ef message="watcher started" path=/tmp/verify-FAARW1/u type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-18T11:36:57.103Z level=INFO run=f92a57ef message="watcher started" path=/tmp/verify-FAARW1/u/.config/opencode type=directory backend=inotify ignores=6 http.span=62 role=server
-timestamp=2026-11-18T11:36:57.113Z level=INFO run=f92a57ef message="location services booted" directory=/tmp/verify-FAARW1/u workspaceID=undefined durationMs=70 http.span=72 role=server
-timestamp=2026-11-18T11:36:57.120Z level=INFO run=f92a57ef msg="loading plugin" id=@soggywontons/opencode-web-tools-plugin@0.1.0 entrypoint=file:///tmp/verify-FAARW1/u/cache/opencode/npm/@soggywontons/opencode-web-tools-plugin@0.1.0/1795001816067/node_modules/@soggywontons/opencode-web-tools-plugin/plugin.js http.span=79 role=server
-timestamp=2026-11-18T11:36:57.155Z level=WARN run=f92a57ef message="failed to load plugin" target=@soggywontons/opencode-web-tools-plugin@0.1.0 ref=err_f0ed5b1d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=114 role=server
+timestamp=2026-11-18T11:40:44.284Z level=INFO run=a8ef2329 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@soggywontons/opencode-web-tools-plugin@0.1.0\"]" role=cli
+timestamp=2026-11-18T11:40:48.052Z level=INFO run=87e34118 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:40:48.196Z level=INFO run=87e34118 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:40:48.205Z level=INFO run=87e34118 message="database schema bootstrap completed" migrations=62 durationMs=9 role=server
+timestamp=2026-11-18T11:40:48.548Z level=INFO run=87e34118 message="watcher subscribe" path=/tmp/verify-Awdz74/u/.config/opencode type=directory ignores=6 http.span=27 role=server
+timestamp=2026-11-18T11:40:48.551Z level=INFO run=87e34118 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-18T11:40:48.552Z level=INFO run=87e34118 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:40:48.552Z level=INFO run=87e34118 message="watcher subscribe" path=/ type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:40:48.552Z level=INFO run=87e34118 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:40:48.553Z level=INFO run=87e34118 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:40:48.553Z level=INFO run=87e34118 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:40:48.553Z level=INFO run=87e34118 message="watcher subscribe" path=/tmp/verify-Awdz74 type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:40:48.553Z level=INFO run=87e34118 message="watcher started" path=/tmp/verify-Awdz74 type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:40:48.554Z level=INFO run=87e34118 message="watcher subscribe" path=/tmp/verify-Awdz74/u type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:40:48.554Z level=INFO run=87e34118 message="watcher started" path=/tmp/verify-Awdz74/u type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:40:48.578Z level=INFO run=87e34118 message="watcher started" path=/tmp/verify-Awdz74/u/.config/opencode type=directory backend=inotify ignores=6 http.span=57 role=server
+timestamp=2026-11-18T11:40:48.593Z level=INFO run=87e34118 message="location services booted" directory=/tmp/verify-Awdz74/u workspaceID=undefined durationMs=72 http.span=72 role=server
+timestamp=2026-11-18T11:40:48.596Z level=INFO run=87e34118 msg="loading plugin" id=@soggywontons/opencode-web-tools-plugin@0.1.0 entrypoint=file:///tmp/verify-Awdz74/u/cache/opencode/npm/@soggywontons/opencode-web-tools-plugin@0.1.0/1795002047864/node_modules/@soggywontons/opencode-web-tools-plugin/plugin.js http.span=75 role=server
+timestamp=2026-11-18T11:40:48.633Z level=WARN run=87e34118 message="failed to load plugin" target=@soggywontons/opencode-web-tools-plugin@0.1.0 ref=err_f478236f cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=112 role=server
