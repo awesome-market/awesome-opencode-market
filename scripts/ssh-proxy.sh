@@ -46,21 +46,29 @@ trap cleanup EXIT
 alive() { nc -z 127.0.0.1 "$PORT" 2>/dev/null; }
 
 echo "starting socks5://127.0.0.1:$PORT — export MARKET_PROXY=socks5://127.0.0.1:$PORT"
+EVER_UP=0
 while [ "$QUIT" = 0 ]; do
+  : >"$ADIR/ssh.err"
   ssh -N -D "127.0.0.1:$PORT" \
       -o ExitOnForwardFailure=yes \
       -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
       -o ConnectTimeout=10 \
       -o StrictHostKeyChecking=accept-new \
       -o NumberOfPasswordPrompts=1 \
-      "$SSH_HOST" &
+      "$SSH_HOST" 2>"$ADIR/ssh.err" &
   SSHPID=$!
   for _ in $(seq 1 20); do alive && break; sleep 0.5; done
   if alive; then
+    EVER_UP=1
     echo "[$(date +%H:%M:%S)] proxy UP → socks5://127.0.0.1:$PORT"
   fi
   wait "$SSHPID" 2>/dev/null
   [ "$QUIT" = 1 ] && break
+  if [ "$EVER_UP" = 0 ]; then
+    echo "[$(date +%H:%M:%S)] first connect failed — not retrying:"
+    grep -v '^$' "$ADIR/ssh.err" | head -3 | sed 's/^/  /'
+    break
+  fi
   echo "[$(date +%H:%M:%S)] ssh exited — reconnecting in 3s…"
   sleep 3
 done
