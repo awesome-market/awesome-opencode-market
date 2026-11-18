@@ -33,16 +33,20 @@ chmod 700 "$ADIR/askpass.sh"
 export SSH_ASKPASS="$ADIR/askpass.sh" SSH_ASKPASS_REQUIRE=force DISPLAY=none SSH_PASS
 
 SSHPID=""
+QUIT=0
 cleanup() {
   [ -n "$SSHPID" ] && kill "$SSHPID" 2>/dev/null
   rm -rf "$ADIR"
 }
-trap cleanup EXIT INT TERM
+on_signal() { QUIT=1; [ -n "$SSHPID" ] && kill "$SSHPID" 2>/dev/null; }
+trap on_signal INT TERM   # INT must NOT run cleanup directly — the old trap
+                          # killed ssh then let the supervise loop respawn it
+trap cleanup EXIT
 
 alive() { nc -z 127.0.0.1 "$PORT" 2>/dev/null; }
 
 echo "starting socks5://127.0.0.1:$PORT — export MARKET_PROXY=socks5://127.0.0.1:$PORT"
-while true; do
+while [ "$QUIT" = 0 ]; do
   ssh -N -D "127.0.0.1:$PORT" \
       -o ExitOnForwardFailure=yes \
       -o ServerAliveInterval=15 -o ServerAliveCountMax=2 \
@@ -56,6 +60,8 @@ while true; do
     echo "[$(date +%H:%M:%S)] proxy UP → socks5://127.0.0.1:$PORT"
   fi
   wait "$SSHPID" 2>/dev/null
+  [ "$QUIT" = 1 ] && break
   echo "[$(date +%H:%M:%S)] ssh exited — reconnecting in 3s…"
   sleep 3
 done
+echo "[$(date +%H:%M:%S)] bye"
