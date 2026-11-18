@@ -3,58 +3,30 @@ apiNames: magpie-ima-auth
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-vTlaS2/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-aLvqor/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:37483
+server listening on http://127.0.0.1:33011
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T10:46:25.820Z level=INFO run=f93ae4ee message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-ima-auth@0.3.0\"]" role=cli
-timestamp=2026-11-18T10:46:26.664Z level=INFO run=e106671e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T10:46:27.109Z level=INFO run=e106671e message="database schema bootstrap started" migrations=62 role=server
-timestamp=2026-11-18T10:46:27.288Z level=INFO run=e106671e message="database schema bootstrap completed" migrations=62 durationMs=179 role=server
-timestamp=2026-11-18T10:46:27.561Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/.config/opencode type=directory ignores=6 http.span=23 role=server
-timestamp=2026-11-18T10:46:27.564Z level=INFO run=e106671e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=26 role=server
-timestamp=2026-11-18T10:46:27.565Z level=INFO run=e106671e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=27 role=server
-timestamp=2026-11-18T10:46:27.565Z level=INFO run=e106671e message="watcher subscribe" path=/ type=entries ignores=0 http.span=27 role=server
-timestamp=2026-11-18T10:46:27.566Z level=INFO run=e106671e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:27.566Z level=INFO run=e106671e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:27.566Z level=INFO run=e106671e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:27.566Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2 type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:27.567Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2 type=entries backend=node ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:27.567Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u type=entries ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:27.567Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u type=entries backend=node ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:27.588Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/.config/opencode type=directory backend=inotify ignores=6 http.span=50 role=server
-timestamp=2026-11-18T10:46:27.604Z level=INFO run=e106671e message="location services booted" directory=/tmp/verify-vTlaS2/u workspaceID=undefined durationMs=66 http.span=66 role=server
-timestamp=2026-11-18T10:46:27.608Z level=INFO run=e106671e msg="loading plugin" id=magpie-ima-auth@0.3.0 entrypoint=file:///tmp/verify-vTlaS2/u/cache/opencode/npm/magpie-ima-auth@0.3.0/1794998786134/node_modules/magpie-ima-auth/index.mjs http.span=70 role=server
-timestamp=2026-11-18T10:46:27.619Z level=WARN run=e106671e message="failed to load plugin" target=magpie-ima-auth@0.3.0 ref=err_f83ea69d cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=81 role=server
-timestamp=2026-11-18T10:46:28.529Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T10:46:28.529Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:28.530Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/.claude/CLAUDE.md type=file ignores=0
-timestamp=2026-11-18T10:46:28.534Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T10:46:28.535Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:28.535Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/CLAUDE.md type=file ignores=0
-timestamp=2026-11-18T10:46:28.543Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/CLAUDE.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:28.620Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-18T10:46:28.620Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:28.629Z level=INFO run=e106671e message="watcher subscribe" path=/tmp/verify-vTlaS2/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-18T10:46:28.630Z level=INFO run=e106671e message="watcher started" path=/tmp/verify-vTlaS2/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:28.719Z level=INFO run=e106671e message=event event.id=evt_1ee43e26f001TU70rNs0ZUoVu9 event.created=1794998788719 event.type=provider.updated event.location.directory=/tmp/verify-vTlaS2/u event.location.workspaceID=undefined event.data={} http.span=1181 role=server
-timestamp=2026-11-18T10:46:28.763Z level=INFO run=e106671e message=event event.id=evt_1ee43e29b0014pKX54bKmCvwTB event.created=1794998788763 event.type=model.updated event.location.directory=/tmp/verify-vTlaS2/u event.location.workspaceID=undefined event.data={} http.span=1225 role=server
-timestamp=2026-11-18T10:46:28.778Z level=INFO run=e106671e message=event event.id=evt_1ee43e2a9001XgLeX7USP82k6j event.created=1794998788777 event.type=agent.updated event.location.directory=/tmp/verify-vTlaS2/u event.location.workspaceID=undefined event.data={} http.span=1240 role=server
-timestamp=2026-11-18T10:46:28.778Z level=INFO run=e106671e message=event event.id=evt_1ee43e2aa001SXVu9EVaf96TQ2 event.created=1794998788778 event.type=command.updated event.location.directory=/tmp/verify-vTlaS2/u event.location.workspaceID=undefined event.data={} http.span=1240 role=server
-timestamp=2026-11-18T10:46:28.917Z level=ERROR run=e106671e message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1379 role=server
-timestamp=2026-11-18T10:46:28.958Z level=INFO run=e106671e message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-18T10:46:28.958Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-18T10:46:28.958Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-18T10:46:28.964Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/CLAUDE.md type=file role=server
-timestamp=2026-11-18T10:46:28.965Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/AGENTS.md type=file role=server
-timestamp=2026-11-18T10:46:28.965Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/etc type=entries http.span=1454 role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/ type=entries http.span=1454 role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/tmp type=entries http.span=1454 role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2 type=entries http.span=1454 role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u type=entries http.span=1454 role=server
-timestamp=2026-11-18T10:46:28.992Z level=INFO run=e106671e message="watcher stopped" path=/tmp/verify-vTlaS2/u/.config/opencode type=directory http.span=1454 role=server
+timestamp=2026-11-18T10:47:59.860Z level=INFO run=30691fc8 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-ima-auth@0.3.0\"]" role=cli
+timestamp=2026-11-18T10:48:00.483Z level=INFO run=122a7631 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:48:00.848Z level=INFO run=122a7631 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:48:00.920Z level=INFO run=122a7631 message="database schema bootstrap completed" migrations=62 durationMs=72 role=server
+timestamp=2026-11-18T10:48:01.134Z level=INFO run=122a7631 message="watcher subscribe" path=/tmp/verify-aLvqor/u/.config/opencode type=directory ignores=6 http.span=25 role=server
+timestamp=2026-11-18T10:48:01.138Z level=INFO run=122a7631 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T10:48:01.139Z level=INFO run=122a7631 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-18T10:48:01.139Z level=INFO run=122a7631 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-18T10:48:01.140Z level=INFO run=122a7631 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T10:48:01.141Z level=INFO run=122a7631 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T10:48:01.141Z level=INFO run=122a7631 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T10:48:01.141Z level=INFO run=122a7631 message="watcher subscribe" path=/tmp/verify-aLvqor type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T10:48:01.141Z level=INFO run=122a7631 message="watcher started" path=/tmp/verify-aLvqor type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T10:48:01.142Z level=INFO run=122a7631 message="watcher subscribe" path=/tmp/verify-aLvqor/u type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-18T10:48:01.142Z level=INFO run=122a7631 message="watcher started" path=/tmp/verify-aLvqor/u type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-18T10:48:01.162Z level=INFO run=122a7631 message="watcher started" path=/tmp/verify-aLvqor/u/.config/opencode type=directory backend=inotify ignores=6 http.span=53 role=server
+timestamp=2026-11-18T10:48:01.180Z level=INFO run=122a7631 message="location services booted" directory=/tmp/verify-aLvqor/u workspaceID=undefined durationMs=71 http.span=71 role=server
+timestamp=2026-11-18T10:48:01.185Z level=INFO run=122a7631 msg="loading plugin" id=magpie-ima-auth@0.3.0 entrypoint=file:///tmp/verify-aLvqor/u/cache/opencode/npm/magpie-ima-auth@0.3.0/1794998880070/node_modules/magpie-ima-auth/index.mjs http.span=76 role=server
+timestamp=2026-11-18T10:48:01.189Z level=WARN run=122a7631 message="failed to load plugin" target=magpie-ima-auth@0.3.0 ref=err_6d13c8fa cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=80 role=server

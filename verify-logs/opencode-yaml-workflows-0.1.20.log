@@ -3,30 +3,32 @@ apiNames: opencode-yaml-workflows
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-317gVd/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-eRw2Y8/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:33797
+server listening on http://127.0.0.1:36289
 server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T10:46:35.534Z level=INFO run=6491ca32 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-yaml-workflows@0.1.20\"]" role=cli
-timestamp=2026-11-18T10:46:39.961Z level=INFO run=0225de5c message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T10:46:40.207Z level=INFO run=0225de5c message="database schema bootstrap started" migrations=62 role=server
-timestamp=2026-11-18T10:46:40.224Z level=INFO run=0225de5c message="database schema bootstrap completed" migrations=62 durationMs=17 role=server
-timestamp=2026-11-18T10:46:40.408Z level=INFO run=0225de5c message="watcher subscribe" path=/tmp/verify-317gVd/u/.config/opencode type=directory ignores=6 http.span=24 role=server
-timestamp=2026-11-18T10:46:40.411Z level=INFO run=0225de5c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
-timestamp=2026-11-18T10:46:40.412Z level=INFO run=0225de5c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:40.412Z level=INFO run=0225de5c message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:40.412Z level=INFO run=0225de5c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:40.412Z level=INFO run=0225de5c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:40.412Z level=INFO run=0225de5c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=28 role=server
-timestamp=2026-11-18T10:46:40.413Z level=INFO run=0225de5c message="watcher subscribe" path=/tmp/verify-317gVd type=entries ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:40.413Z level=INFO run=0225de5c message="watcher started" path=/tmp/verify-317gVd type=entries backend=node ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:40.413Z level=INFO run=0225de5c message="watcher subscribe" path=/tmp/verify-317gVd/u type=entries ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:40.413Z level=INFO run=0225de5c message="watcher started" path=/tmp/verify-317gVd/u type=entries backend=node ignores=0 http.span=29 role=server
-timestamp=2026-11-18T10:46:40.432Z level=INFO run=0225de5c message="watcher started" path=/tmp/verify-317gVd/u/.config/opencode type=directory backend=inotify ignores=6 http.span=48 role=server
-timestamp=2026-11-18T10:46:40.442Z level=INFO run=0225de5c message="location services booted" directory=/tmp/verify-317gVd/u workspaceID=undefined durationMs=56 http.span=58 role=server
-timestamp=2026-11-18T10:46:40.452Z level=INFO run=0225de5c msg="loading plugin" id=opencode-yaml-workflows@0.1.20 entrypoint=file:///tmp/verify-317gVd/u/cache/opencode/npm/opencode-yaml-workflows@0.1.20/1794998799717/node_modules/opencode-yaml-workflows/dist/index.js http.span=68 role=server
-timestamp=2026-11-18T10:46:40.514Z level=WARN run=0225de5c message="failed to load plugin" target=opencode-yaml-workflows@0.1.20 ref=err_f7d0be6c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=130 role=server
+timestamp=2026-11-18T10:48:45.173Z level=INFO run=94bed5a5 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-yaml-workflows@0.1.20\"]" role=cli
+timestamp=2026-11-18T10:48:48.194Z level=INFO run=e120895e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:48:48.343Z level=INFO run=e120895e message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:48:48.357Z level=INFO run=e120895e message="database schema bootstrap completed" migrations=62 durationMs=14 role=server
+timestamp=2026-11-18T10:48:48.674Z level=INFO run=e120895e message="watcher subscribe" path=/tmp/verify-eRw2Y8/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-18T10:48:48.677Z level=INFO run=e120895e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:48:48.677Z level=INFO run=e120895e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:48:48.677Z level=INFO run=e120895e message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:48:48.678Z level=INFO run=e120895e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:48:48.678Z level=INFO run=e120895e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:48:48.678Z level=INFO run=e120895e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:48:48.678Z level=INFO run=e120895e message="watcher subscribe" path=/tmp/verify-eRw2Y8 type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:48:48.679Z level=INFO run=e120895e message="watcher started" path=/tmp/verify-eRw2Y8 type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:48:48.679Z level=INFO run=e120895e message="watcher subscribe" path=/tmp/verify-eRw2Y8/u type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:48:48.679Z level=INFO run=e120895e message="watcher started" path=/tmp/verify-eRw2Y8/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:48:48.696Z level=INFO run=e120895e message="watcher started" path=/tmp/verify-eRw2Y8/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-18T10:48:48.710Z level=INFO run=e120895e msg="loading plugin" id=opencode-yaml-workflows@0.1.20 entrypoint=file:///tmp/verify-eRw2Y8/u/cache/opencode/npm/opencode-yaml-workflows@0.1.20/1794998928054/node_modules/opencode-yaml-workflows/dist/index.js http.span=55 role=server
+timestamp=2026-11-18T10:48:48.844Z level=WARN run=e120895e message="failed to load plugin" target=opencode-yaml-workflows@0.1.20 ref=err_dc34b81e cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=189 role=server
+timestamp=2026-11-18T10:48:48.854Z level=INFO run=e120895e message="location services booted" directory=/tmp/verify-eRw2Y8/u workspaceID=undefined durationMs=198 http.span=199 role=server

@@ -3,45 +3,30 @@ apiNames: opencode-sound-alert
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-5bB9vx/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-ba05fE/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:43343
+server listening on http://127.0.0.1:39691
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T10:46:27.168Z level=INFO run=501faf53 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-sound-alert@1.0.0\"]" role=cli
-timestamp=2026-11-18T10:46:31.841Z level=INFO run=a08d009e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T10:46:32.033Z level=INFO run=a08d009e message="database schema bootstrap started" migrations=62 role=server
-timestamp=2026-11-18T10:46:32.042Z level=INFO run=a08d009e message="database schema bootstrap completed" migrations=62 durationMs=9 role=server
-timestamp=2026-11-18T10:46:32.298Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/.config/opencode type=directory ignores=6 http.span=21 role=server
-timestamp=2026-11-18T10:46:32.301Z level=INFO run=a08d009e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=24 role=server
-timestamp=2026-11-18T10:46:32.301Z level=INFO run=a08d009e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
-timestamp=2026-11-18T10:46:32.301Z level=INFO run=a08d009e message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.302Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-18T10:46:32.315Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/.config/opencode type=directory backend=inotify ignores=6 http.span=38 role=server
-timestamp=2026-11-18T10:46:32.325Z level=INFO run=a08d009e message="location services booted" directory=/tmp/verify-5bB9vx/u workspaceID=undefined durationMs=48 http.span=48 role=server
-timestamp=2026-11-18T10:46:32.329Z level=INFO run=a08d009e msg="loading plugin" id=opencode-sound-alert@1.0.0 entrypoint=file:///tmp/verify-5bB9vx/u/cache/opencode/npm/opencode-sound-alert@1.0.0/1794998791554/node_modules/opencode-sound-alert/src/index.ts http.span=52 role=server
-timestamp=2026-11-18T10:46:32.330Z level=WARN run=a08d009e message="failed to load plugin" target=opencode-sound-alert@1.0.0 ref=err_5ba9d5de cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=53 role=server
-timestamp=2026-11-18T10:46:32.777Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T10:46:32.777Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:32.778Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/.claude/CLAUDE.md type=file ignores=0
-timestamp=2026-11-18T10:46:32.778Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T10:46:32.778Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:32.778Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/CLAUDE.md type=file ignores=0
-timestamp=2026-11-18T10:46:32.778Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/CLAUDE.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:32.793Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-18T10:46:32.794Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:32.795Z level=INFO run=a08d009e message="watcher subscribe" path=/tmp/verify-5bB9vx/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-18T10:46:32.795Z level=INFO run=a08d009e message="watcher started" path=/tmp/verify-5bB9vx/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T10:46:32.813Z level=INFO run=a08d009e message=event event.id=evt_1ee43f26d001XDC4FhOcf31xw9 event.created=1794998792813 event.type=provider.updated event.location.directory=/tmp/verify-5bB9vx/u event.location.workspaceID=undefined event.data={} http.span=536 role=server
-timestamp=2026-11-18T10:46:32.819Z level=INFO run=a08d009e message=event event.id=evt_1ee43f2730017YcC1DdXVBuv39 event.created=1794998792819 event.type=model.updated event.location.directory=/tmp/verify-5bB9vx/u event.location.workspaceID=undefined event.data={} http.span=542 role=server
-timestamp=2026-11-18T10:46:32.821Z level=INFO run=a08d009e message=event event.id=evt_1ee43f275001BdCz1MaIEwSst7 event.created=1794998792821 event.type=agent.updated event.location.directory=/tmp/verify-5bB9vx/u event.location.workspaceID=undefined event.data={} http.span=544 role=server
-timestamp=2026-11-18T10:46:32.822Z level=INFO run=a08d009e message=event event.id=evt_1ee43f276001dtct6X8IUE8TD0 event.created=1794998792822 event.type=command.updated event.location.directory=/tmp/verify-5bB9vx/u event.location.workspaceID=undefined event.data={} http.span=545 role=server
+timestamp=2026-11-18T10:48:13.201Z level=INFO run=fa19962e message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-sound-alert@1.0.0\"]" role=cli
+timestamp=2026-11-18T10:48:18.152Z level=INFO run=f030d775 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:48:18.443Z level=INFO run=f030d775 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:48:18.473Z level=INFO run=f030d775 message="database schema bootstrap completed" migrations=62 durationMs=30 role=server
+timestamp=2026-11-18T10:48:18.846Z level=INFO run=f030d775 message="watcher subscribe" path=/tmp/verify-ba05fE/u/.config/opencode type=directory ignores=6 http.span=24 role=server
+timestamp=2026-11-18T10:48:18.849Z level=INFO run=f030d775 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-18T10:48:18.850Z level=INFO run=f030d775 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-18T10:48:18.850Z level=INFO run=f030d775 message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-18T10:48:18.850Z level=INFO run=f030d775 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-18T10:48:18.851Z level=INFO run=f030d775 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T10:48:18.851Z level=INFO run=f030d775 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-18T10:48:18.851Z level=INFO run=f030d775 message="watcher subscribe" path=/tmp/verify-ba05fE type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T10:48:18.851Z level=INFO run=f030d775 message="watcher started" path=/tmp/verify-ba05fE type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-18T10:48:18.852Z level=INFO run=f030d775 message="watcher subscribe" path=/tmp/verify-ba05fE/u type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-18T10:48:18.852Z level=INFO run=f030d775 message="watcher started" path=/tmp/verify-ba05fE/u type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-18T10:48:18.870Z level=INFO run=f030d775 message="watcher started" path=/tmp/verify-ba05fE/u/.config/opencode type=directory backend=inotify ignores=6 http.span=48 role=server
+timestamp=2026-11-18T10:48:18.890Z level=INFO run=f030d775 message="location services booted" directory=/tmp/verify-ba05fE/u workspaceID=undefined durationMs=67 http.span=68 role=server
+timestamp=2026-11-18T10:48:18.893Z level=INFO run=f030d775 msg="loading plugin" id=opencode-sound-alert@1.0.0 entrypoint=file:///tmp/verify-ba05fE/u/cache/opencode/npm/opencode-sound-alert@1.0.0/1794998897909/node_modules/opencode-sound-alert/src/index.ts http.span=71 role=server
+timestamp=2026-11-18T10:48:18.894Z level=WARN run=f030d775 message="failed to load plugin" target=opencode-sound-alert@1.0.0 ref=err_56daaca7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=72 role=server

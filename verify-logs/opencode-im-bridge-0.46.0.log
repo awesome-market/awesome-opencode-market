@@ -3,14 +3,14 @@ apiNames: opencode-im-bridge
 verdict: plugin absent from /api/plugin after the load window
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-HnLak7/u"},"data":[]}
+{"location":{"directory":"/tmp/verify-cz6lVh/u"},"data":[]}
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:42085
+server listening on http://127.0.0.1:39895
 server password [redacted]
-2026-11-18T10:46:53.727Z INFO  [opencode-im] @@@@@ opencode-im starting PRECISE VERSION @@@@@
-2026-11-18T10:46:53.727Z INFO  [opencode-im] Phase 1: Loading config...
-2026-11-18T10:46:53.729Z ERROR [opencode-im] Fatal error: 34 |         return {
+2026-11-18T10:49:34.533Z INFO  [opencode-im] @@@@@ opencode-im starting PRECISE VERSION @@@@@
+2026-11-18T10:49:34.533Z INFO  [opencode-im] Phase 1: Loading config...
+2026-11-18T10:49:34.535Z ERROR [opencode-im] Fatal error: 34 |         return {
 35 |             success: false,
 36 |             get error() {
 37 |                 if (this._error)
@@ -30,12 +30,27 @@ ZodError: [
   addIssue: [Function],
  addIssues: [Function],
 
-      at error (/tmp/verify-HnLak7/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998812084/node_modules/zod/v3/types.js:39:31)
-      at parse (/tmp/verify-HnLak7/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998812084/node_modules/zod/v3/types.js:114:15)
-      at loadConfig (/tmp/verify-HnLak7/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998812084/node_modules/opencode-im-bridge/dist/utils/config.js:216:28)
-      at main (/tmp/verify-HnLak7/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998812084/node_modules/opencode-im-bridge/dist/index.js:86:26)
+      at error (/tmp/verify-cz6lVh/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998972495/node_modules/zod/v3/types.js:39:31)
+      at parse (/tmp/verify-cz6lVh/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998972495/node_modules/zod/v3/types.js:114:15)
+      at loadConfig (/tmp/verify-cz6lVh/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998972495/node_modules/opencode-im-bridge/dist/utils/config.js:216:28)
+      at main (/tmp/verify-cz6lVh/u/cache/opencode/npm/opencode-im-bridge@0.46.0/1794998972495/node_modules/opencode-im-bridge/dist/index.js:86:26)
 
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T10:46:46.532Z level=INFO run=e0fbff5d message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-im-bridge@0.46.0\"]" role=cli
+timestamp=2026-11-18T10:49:23.130Z level=INFO run=f4374574 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-im-bridge@0.46.0\"]" role=cli
+timestamp=2026-11-18T10:49:32.855Z level=INFO run=718e6f83 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:49:33.330Z level=INFO run=718e6f83 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:49:33.371Z level=INFO run=718e6f83 message="database schema bootstrap completed" migrations=62 durationMs=41 role=server
+timestamp=2026-11-18T10:49:33.835Z level=INFO run=718e6f83 message="watcher subscribe" path=/tmp/verify-cz6lVh/u/.config/opencode type=directory ignores=6 http.span=58 role=server
+timestamp=2026-11-18T10:49:33.845Z level=INFO run=718e6f83 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=68 role=server
+timestamp=2026-11-18T10:49:33.846Z level=INFO run=718e6f83 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=69 role=server
+timestamp=2026-11-18T10:49:33.847Z level=INFO run=718e6f83 message="watcher subscribe" path=/ type=entries ignores=0 http.span=70 role=server
+timestamp=2026-11-18T10:49:33.849Z level=INFO run=718e6f83 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=72 role=server
+timestamp=2026-11-18T10:49:33.851Z level=INFO run=718e6f83 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-18T10:49:33.851Z level=INFO run=718e6f83 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-18T10:49:33.851Z level=INFO run=718e6f83 message="watcher subscribe" path=/tmp/verify-cz6lVh type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-18T10:49:33.852Z level=INFO run=718e6f83 message="watcher started" path=/tmp/verify-cz6lVh type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-18T10:49:33.852Z level=INFO run=718e6f83 message="watcher subscribe" path=/tmp/verify-cz6lVh/u type=entries ignores=0 http.span=75 role=server
+timestamp=2026-11-18T10:49:33.852Z level=INFO run=718e6f83 message="watcher started" path=/tmp/verify-cz6lVh/u type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-18T10:49:33.891Z level=INFO run=718e6f83 message="watcher started" path=/tmp/verify-cz6lVh/u/.config/opencode type=directory backend=inotify ignores=6 http.span=114 role=server
