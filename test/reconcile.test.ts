@@ -45,12 +45,13 @@ const judge = (verdict: 'pass' | 'concern') => async () => ({ verdict, reasonZh:
 
 describe('reconcile — concern vs all-pass flag evidence', () => {
   it('overturns to pass when the judge rules the evidence covers it — flagsReviewed set', async () => {
-    const s = setup([entry()], [V('concern')], [C()])
+    const s = setup([entry()], [{ ...V('concern'), sha: 'sha512-abc' }], [{ ...C(), call: { line: 7, text: 'fetch(cfg.endpoint)' } }])
     await main(args(s), { judge: judge('pass') })
     const out = readFileSync(s.spool, 'utf8').trim().split('\n').map(l => JSON.parse(l))
     expect(out).toHaveLength(1)
     expect(out[0]!.verdict).toBe('pass')
     expect(out[0]!.flagsReviewed).toBe(true)
+    expect(out[0]!.sha).toBe('sha512-abc')
     expect(out[0]!.reason).toMatch(/^对账：/)
   })
   it('upheld concern still writes a 对账-prefixed record so the slot stops re-queueing', async () => {
