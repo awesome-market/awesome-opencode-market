@@ -1,0 +1,74 @@
+name: status
+# 进展速览：手动触发一次，把"流水线现在什么状态"渲到 run 的 Summary 页
+# ——issue 分桶、判词计数、预读覆盖、最近 catalog 提交、在跑工作流。
+# 手机上打开该 run 页即得全貌，不用查命令行。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  actions: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: catalog, path: catalog }
+      - name: progress report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          S=$GITHUB_STEP_SUMMARY
+          echo "## 📊 流水线进展 $(date -u +%F\ %T\ UTC)" >> $S
+
+          echo "### Issue 分桶（open）" >> $S
+          gh issue list --state open --limit 700 --json labels \
+            | python3 -c "
+          import json,sys,collections
+          c=collections.Counter()
+          for i in json.load(sys.stdin):
+              for l in i['labels']: c[l['name']]+=1
+          order=['ai:concern','ai:pass','concern:flags','concern:llm','concern:l05','review:pending','pipeline-alert','report:verify-fail']
+          for l in order:
+              if c.get(l): print(f'| {l} | {c[l]} |')
+          print(f'| **open 合计** | **{sum(c.values())}** |')
+          " | sort -t'|' -k3 -rn > /tmp/labels.txt
+          echo '| 标签 | 数 |' >> $S; echo '|---|---|' >> $S
+          cat /tmp/labels.txt >> $S
+
+          echo "### 判词计数（ai-verdicts.jsonl 累计行）" >> $S
+          python3 - <<'PY' >> $S
+          import json,collections
+          vs=[json.loads(l) for l in open('catalog/ai-verdicts.jsonl') if l.strip()]
+          c=collections.Counter((v.get('source','?'),v.get('verdict','?')) for v in vs)
+          print('| 来源 | 判词 | 条数 |'); print('|---|---|---|')
+          for (s,v),n in sorted(c.items()): print(f'| {s} | {v} | {n} |')
+          fr=sum(1 for v in vs if v.get('flagsReviewed')); rec=sum(1 for v in vs if (v.get('reason') or '').startswith('对账'))
+          print(f'| — | flagsReviewed=真（红旗槽放行权） | {fr} |')
+          print(f'| — | 对账班产出 | {rec} |')
+          PY
+
+          echo "### 行级预读（flag-contexts.jsonl）" >> $S
+          python3 - <<'PY' >> $S
+          import json
+          cs=[json.loads(l) for l in open('catalog/flag-contexts.jsonl') if l.strip()]
+          j=sum(1 for c in cs if c.get('ai')); call=sum(1 for c in cs if c.get('call'))
+          print('| 项 | 数 |'); print('|---|---|')
+          print(f'| 预读记录 | {len(cs)} |'); print(f'| 已出判词 | {j} |')
+          print(f'| 失败/重试中 | {len(cs)-j} |'); print(f'| 带实际调用行 | {call} |')
+          PY
+
+          echo "### 最近 catalog 提交" >> $S
+          echo '```' >> $S
+          git -C catalog log --oneline -8 >> $S
+          echo '```' >> $S
+
+          echo "### 在跑/最近工作流" >> $S
+          echo '```' >> $S
+          gh run list --limit 8 >> $S
+          echo '```' >> $S
+          cat $S
