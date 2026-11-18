@@ -1,20 +1,20 @@
 #!/bin/bash
 # SSH SOCKS5 proxy with auto-reconnect.
-#   scripts/ssh-proxy.sh [ip] [username]
+#   scripts/ssh-proxy.sh [ip] [username] [port]
 #
-# ip / username are optional — anything not given on the command line is
-# asked for interactively, one prompt at a time. The password is ALWAYS
+# ip / username / port are optional — ip and username not given on the
+# command line are asked for interactively, one prompt at a time; port
+# defaults to 1080. The password is ALWAYS
 # asked interactively and lives only in this process's environment (the
 # askpass helper on disk holds a variable reference, not the secret).
 #
-# Local listen port defaults to 1080 — override with PORT=<n>.
+
 # Point the pipeline at it with:
 #   export MARKET_PROXY=socks5://127.0.0.1:<port>
 set -u
-PORT="${PORT:-1080}"
-
 IP="${1:-}"
 USER="${2:-}"
+PORT="${3:-1080}"
 [ -n "$IP" ] || read -rp "ssh ip: " IP
 [ -n "$USER" ] || read -rp "ssh username: " USER
 [ -n "$IP" ] && [ -n "$USER" ] || { echo "ip and username are required"; exit 1; }
