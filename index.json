@@ -15808,7 +15808,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.752 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-cloudflare-workers-ai-auth）；LLM 判 pass：代码仅向 models.dev 和 api.cloudflare.com 发起请求，凭据未见外泄，描述与实际功能一致，唯一的 repo-mismatch 已被 README 说明为对上游 magpie-community 插件的 fork。"
+      "approvalReason": "L0.5 命中注入信号（score 0.752 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-cloudflare-workers-ai-auth）；LLM 判 concern：扫描发现包名与声明仓库存在不一致（@jianmu-plugins 与 @magpie-community）且代码含网络请求，建议核实来源后再发布。"
     },
     {
       "name": "@jianmu-plugins/opencode-commandcode-auth",
@@ -15877,7 +15877,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.664 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-commandcode-auth）；LLM 判 pass：插件仅将用户自有 API 密钥发往其所属服务 api.commandcode.ai 进行正常代理请求，未见向第三方域名泄露凭据或注入恶意代码，repo-mismatch 仅是作用域前缀差异。"
+      "approvalReason": "L0.5 命中注入信号（score 0.664 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-commandcode-auth）；LLM 判 concern：包名与仓库命名空间不一致（repo-mismatch），且插件会将 API 密钥作为 Bearer 发送到自定义 BASE 端点，目标域名无法从材料中验证。"
     },
     {
       "name": "@jianmu-plugins/opencode-copilot-auth",
@@ -145387,7 +145387,7 @@
         "engines": "node ^24.11.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install codesensehq/codesense#03813ac397e84effda28679653a0c12ae830ba99: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install codesensehq/codesense#7cc7193794aeb1a8624157a86f2164a8fd8be2fb: git dep preparation failed"
     },
     {
       "name": "opencode-guildhall",
@@ -168673,12 +168673,12 @@
           "status": "failed",
           "level": "install",
           "opencodeVersion": "2.3.0",
-          "verifiedAt": "2026-11-18T07:20:48.463Z",
-          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44257997601/job/134644534414",
+          "verifiedAt": "2026-11-18T07:27:48.127Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44258905506/job/134647409900",
           "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/rsshub-1.0.0-master.711b60a.log",
           "logExcerpt": "NpmInstallFailedError: Failed to install rsshub@1.0.0-master.711b60a: An unknown git error occurred\nfatal: failed to stat '/home/runner/work/awesome-opencode-market/awesome-opencode-market': Permission denied\n    at catch (/$bunfs/root/chunk-n73hzg4d.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-n73hzg4d.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-xz7fzbec.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-n73hzg4d.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-zw8xxtvj.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-xz7fzbec.js:2:1220) {\n  [cause]: Error: An unknown git error occurred\n      at Kn (/$bunfs/root/chunk-4wczprss.js:8:9340)\n      at <anonymous> (/$bunfs/root/chunk-4wczprss.js:8:10904)\n      at processTicksAndRejections (native:7:39)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
           "integrity": "sha512-X8+NjmM4WtgoGQANNyU9JhJrB8oidajPrjFn7/3P536ECNo5Ey2UPi4ShBpNa4Rh0R6iWOhDRSbnpG851deE/w==",
-          "retries": 1,
+          "retries": 2,
           "harnessGen": 2
         },
         "features": [
@@ -212903,12 +212903,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.0",
-        "verifiedAt": "2026-11-18T07:20:47.170Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44257997601/job/134644534414",
+        "verifiedAt": "2026-11-18T07:27:46.726Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44258905506/job/134647409900",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-token-spend-bar-1.0.3.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install opencode-token-spend-bar@1.0.3: unable to resolve dependency tree\n    at catch (/$bunfs/root/chunk-n73hzg4d.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-n73hzg4d.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-xz7fzbec.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-n73hzg4d.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-zw8xxtvj.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-xz7fzbec.js:2:1220) {\n  [cause]: Error: unable to resolve dependency tree\n      at #E (/$bunfs/root/chunk-kkhkt5w4.js:107:6794)\n      at #j (/$bunfs/root/chunk-kkhkt5w4.js:107:6727)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "sha512-qnsRTaZRae0907s24ZJOYnyusj4V+C1alwwU7mTeMK+4XzV4byrPDQL2nOB22C/9ygX2tnoZhNG8GFxut5U97Q==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -214530,12 +214530,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.0",
-        "verifiedAt": "2026-11-18T07:20:47.158Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44257997601/job/134644534414",
+        "verifiedAt": "2026-11-18T07:27:46.608Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44258905506/job/134647409900",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/magpie-gateway-admin-1.0.0.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:20:48.799Z level=WARN run=aea07c6d message=\"failed to load plugin\" target=magpie-gateway-admin@1.0.0 ref=err_db233187 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=76 role=server\n--- stream tail ---\neway-admin@1.0.0 ref=err_db233187 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=76 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:27:48.702Z level=WARN run=948fe54b message=\"failed to load plugin\" target=magpie-gateway-admin@1.0.0 ref=err_240ca9ac cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=108 role=server\n--- stream tail ---\n07:27:49.872Z level=INFO run=948fe54b message=\"watcher stopped\" path=/tmp/verify-jgz9ht/u type=entries http.span=1278 role=server\ntimestamp=2026-11-18T07:27:49.872Z level=INFO run=948fe54b message=\"watcher stopped\" path=/tmp/verify-jgz9ht/u/.config/opencode type=directory http.span=1278 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-bFN99W+TzAcA88lWOIs7vybinfaAdcH1N2uN5IBkGZTsIQKCsqtq0jdO1GH3ZIibko4kmeeXg7S5hgZQAhj+HA==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -377114,12 +377114,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.0",
-        "verifiedAt": "2026-11-18T07:20:58.459Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44257997601/job/134644534414",
+        "verifiedAt": "2026-11-18T07:27:46.649Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44258905506/job/134647409900",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-model-routers-0.2.11.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:21:03.307Z level=WARN run=6089d74f message=\"failed to load plugin\" target=opencode-model-routers@0.2.11 ref=err_09952a86 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=110 role=server\n--- stream tail ---\n07:21:05.153Z level=INFO run=6089d74f message=\"watcher stopped\" path=/tmp/verify-G8k2os/u type=entries http.span=1956 role=server\ntimestamp=2026-11-18T07:21:05.155Z level=INFO run=6089d74f message=\"watcher stopped\" path=/tmp/verify-G8k2os/u/.config/opencode type=directory http.span=1958 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:27:52.041Z level=WARN run=d4dc0ee9 message=\"failed to load plugin\" target=opencode-model-routers@0.2.11 ref=err_075489f7 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=52 role=server\n--- stream tail ---\n8T07:27:52.636Z level=INFO run=d4dc0ee9 message=\"watcher stopped\" path=/tmp/verify-igCbpp/u type=entries http.span=647 role=server\ntimestamp=2026-11-18T07:27:52.643Z level=INFO run=d4dc0ee9 message=\"watcher stopped\" path=/tmp/verify-igCbpp/u/.config/opencode type=directory http.span=654 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-O7xeuzwqDUf+C2aSbkbTgXNnjTjAHAwr6oAF23dan6sTPpmN07H47kBCkN8j3pNEqai7qtMSMLRY83zNHacmIg==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -446351,7 +446351,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install sblattj/agentic-coding-harness#a26bf33bee3d1d4e6b79d7539eee1ee43e1d50c3: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install sblattj/agentic-coding-harness#007b755c82e6b17f81c19d647928ce64f61952a4: git dep preparation failed"
     },
     {
       "name": "opencode-goal-pro-max-complete-plugin",
@@ -503208,7 +503208,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Verbiflow/mako#31109825e2b537cb4712eb50887528440a5acf2a: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Verbiflow/mako#6bcb86515444d93a783f28fbc07875d231c2d348: git dep preparation failed"
     },
     {
       "name": "vercel-labs/durable-harness",
@@ -518258,7 +518258,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：包存在postinstall生命周期脚本自动执行lib/installer.js，并在SKILL.md中使用eval(atob(...))混淆编码模式，叠加网络请求与子进程调用，存在潜在的恶意代码执行风险。"
     },
     {
       "name": "openchoreographer",
