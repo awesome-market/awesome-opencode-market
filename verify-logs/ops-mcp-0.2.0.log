@@ -3,32 +3,57 @@ apiNames: ops-mcp
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-eaoq4v/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-BDJpRG/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:33907
+server listening on http://127.0.0.1:37681
 server password [redacted]
-received SIGTERM again during shutdown; exiting. Still pending:
-  nothing tracked; the stuck finalizer is outside any LayerNode layer
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T09:37:56.679Z level=INFO run=b42af336 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"ops-mcp@0.2.0\"]" role=cli
-timestamp=2026-11-16T09:38:00.175Z level=INFO run=771aeaf5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T09:38:00.629Z level=INFO run=771aeaf5 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T09:38:00.842Z level=INFO run=771aeaf5 message="database schema bootstrap completed" migrations=59 durationMs=213 role=server
-timestamp=2026-11-16T09:38:01.094Z level=INFO run=771aeaf5 message="watcher subscribe" path=/tmp/verify-eaoq4v/u/.config/opencode type=directory ignores=6 http.span=44 role=server
-timestamp=2026-11-16T09:38:01.098Z level=INFO run=771aeaf5 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=48 role=server
-timestamp=2026-11-16T09:38:01.098Z level=INFO run=771aeaf5 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=48 role=server
-timestamp=2026-11-16T09:38:01.099Z level=INFO run=771aeaf5 message="watcher subscribe" path=/ type=entries ignores=0 http.span=49 role=server
-timestamp=2026-11-16T09:38:01.099Z level=INFO run=771aeaf5 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=49 role=server
-timestamp=2026-11-16T09:38:01.099Z level=INFO run=771aeaf5 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=49 role=server
-timestamp=2026-11-16T09:38:01.099Z level=INFO run=771aeaf5 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=49 role=server
-timestamp=2026-11-16T09:38:01.099Z level=INFO run=771aeaf5 message="watcher subscribe" path=/tmp/verify-eaoq4v type=entries ignores=0 http.span=49 role=server
-timestamp=2026-11-16T09:38:01.100Z level=INFO run=771aeaf5 message="watcher started" path=/tmp/verify-eaoq4v type=entries backend=node ignores=0 http.span=50 role=server
-timestamp=2026-11-16T09:38:01.100Z level=INFO run=771aeaf5 message="watcher subscribe" path=/tmp/verify-eaoq4v/u type=entries ignores=0 http.span=50 role=server
-timestamp=2026-11-16T09:38:01.100Z level=INFO run=771aeaf5 message="watcher started" path=/tmp/verify-eaoq4v/u type=entries backend=node ignores=0 http.span=50 role=server
-timestamp=2026-11-16T09:38:01.117Z level=INFO run=771aeaf5 message="watcher started" path=/tmp/verify-eaoq4v/u/.config/opencode type=directory backend=inotify ignores=6 http.span=67 role=server
-timestamp=2026-11-16T09:38:01.129Z level=INFO run=771aeaf5 message="location services booted" directory=/tmp/verify-eaoq4v/u workspaceID=undefined durationMs=78 http.span=79 role=server
-timestamp=2026-11-16T09:38:01.135Z level=INFO run=771aeaf5 msg="loading plugin" id=ops-mcp@0.2.0 entrypoint=file:///tmp/verify-eaoq4v/u/cache/opencode/npm/ops-mcp@0.2.0/1794821879845/node_modules/ops-mcp/dist/index.js http.span=85 role=server
-timestamp=2026-11-16T09:38:01.292Z level=WARN run=771aeaf5 message="failed to load plugin" target=ops-mcp@0.2.0 ref=err_a8ce3650 cause="Cause([Die(Error: 未找到配置文件，查找位置：\n  /tmp/verify-eaoq4v/u/ops.config.json\n  /tmp/verify-eaoq4v/u/.ops-mcp/config.json\n请复制 ops.config.example.json 为 ~/.ops-mcp/config.json 并填写服务器信息。)])" http.span=242 role=server
+timestamp=2026-11-18T11:12:49.584Z level=INFO run=b59b49a1 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"ops-mcp@0.2.0\"]" role=cli
+timestamp=2026-11-18T11:12:53.489Z level=INFO run=b83c0956 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:12:53.779Z level=INFO run=b83c0956 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:12:53.828Z level=INFO run=b83c0956 message="database schema bootstrap completed" migrations=62 durationMs=49 role=server
+timestamp=2026-11-18T11:12:54.202Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/.config/opencode type=directory ignores=6 http.span=24 role=server
+timestamp=2026-11-18T11:12:54.205Z level=INFO run=b83c0956 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-18T11:12:54.206Z level=INFO run=b83c0956 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-18T11:12:54.206Z level=INFO run=b83c0956 message="watcher subscribe" path=/ type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-18T11:12:54.206Z level=INFO run=b83c0956 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-18T11:12:54.206Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-18T11:12:54.207Z level=INFO run=b83c0956 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:54.207Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:54.207Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:54.207Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:54.207Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:54.225Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/.config/opencode type=directory backend=inotify ignores=6 http.span=47 role=server
+timestamp=2026-11-18T11:12:54.245Z level=INFO run=b83c0956 msg="loading plugin" id=ops-mcp@0.2.0 entrypoint=file:///tmp/verify-BDJpRG/u/cache/opencode/npm/ops-mcp@0.2.0/1795000373197/node_modules/ops-mcp/dist/index.js http.span=67 role=server
+timestamp=2026-11-18T11:12:54.454Z level=WARN run=b83c0956 message="failed to load plugin" target=ops-mcp@0.2.0 ref=err_71e0157f cause="Cause([Die(Error: 未找到配置文件，查找位置：\n  /tmp/verify-BDJpRG/u/ops.config.json\n  /tmp/verify-BDJpRG/u/.ops-mcp/config.json\n请复制 ops.config.example.json 为 ~/.ops-mcp/config.json 并填写服务器信息。)])" http.span=276 role=server
+timestamp=2026-11-18T11:12:54.472Z level=INFO run=b83c0956 message="location services booted" directory=/tmp/verify-BDJpRG/u workspaceID=undefined durationMs=293 http.span=294 role=server
+timestamp=2026-11-18T11:12:56.195Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:56.196Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:56.196Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:56.196Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:56.196Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:56.196Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:56.197Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:56.215Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:12:56.216Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:56.218Z level=INFO run=b83c0956 message="watcher subscribe" path=/tmp/verify-BDJpRG/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:12:56.218Z level=INFO run=b83c0956 message="watcher started" path=/tmp/verify-BDJpRG/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:56.247Z level=INFO run=b83c0956 message=event event.id=evt_1ee5c1bb7001UIHfmCM5H0PCnL event.created=1795000376247 event.type=provider.updated event.location.directory=/tmp/verify-BDJpRG/u event.location.workspaceID=undefined event.data={} http.span=2069 role=server
+timestamp=2026-11-18T11:12:56.256Z level=INFO run=b83c0956 message=event event.id=evt_1ee5c1bc0001JwM9a3ggVkx62m event.created=1795000376256 event.type=model.updated event.location.directory=/tmp/verify-BDJpRG/u event.location.workspaceID=undefined event.data={} http.span=2078 role=server
+timestamp=2026-11-18T11:12:56.259Z level=INFO run=b83c0956 message=event event.id=evt_1ee5c1bc3001mCLTphaA8zYs5S event.created=1795000376259 event.type=agent.updated event.location.directory=/tmp/verify-BDJpRG/u event.location.workspaceID=undefined event.data={} http.span=2081 role=server
+timestamp=2026-11-18T11:12:56.259Z level=INFO run=b83c0956 message=event event.id=evt_1ee5c1bc3002bkLJIM16MuipN1 event.created=1795000376259 event.type=command.updated event.location.directory=/tmp/verify-BDJpRG/u event.location.workspaceID=undefined event.data={} http.span=2081 role=server
+timestamp=2026-11-18T11:12:56.570Z level=INFO run=b83c0956 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:12:56.570Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:12:56.570Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:12:56.573Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:12:56.573Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:12:56.573Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/etc type=entries http.span=2409 role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/ type=entries http.span=2409 role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp type=entries http.span=2409 role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG type=entries http.span=2409 role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u type=entries http.span=2409 role=server
+timestamp=2026-11-18T11:12:56.587Z level=INFO run=b83c0956 message="watcher stopped" path=/tmp/verify-BDJpRG/u/.config/opencode type=directory http.span=2409 role=server

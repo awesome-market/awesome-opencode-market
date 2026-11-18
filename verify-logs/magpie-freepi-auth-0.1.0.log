@@ -1,0 +1,47 @@
+spec: magpie-freepi-auth@0.1.0
+apiNames: magpie-freepi-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-AcicAN/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34339
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:12:28.993Z level=INFO run=e2c1ce1c message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-freepi-auth@0.1.0\"]" role=cli
+timestamp=2026-11-18T11:12:29.463Z level=INFO run=e2370b0b message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:12:30.088Z level=INFO run=e2370b0b message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:12:30.428Z level=INFO run=e2370b0b message="database schema bootstrap completed" migrations=62 durationMs=340 role=server
+timestamp=2026-11-18T11:12:30.665Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-18T11:12:30.668Z level=INFO run=e2370b0b message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T11:12:30.669Z level=INFO run=e2370b0b message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T11:12:30.669Z level=INFO run=e2370b0b message="watcher subscribe" path=/ type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T11:12:30.669Z level=INFO run=e2370b0b message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.670Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T11:12:30.695Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-18T11:12:30.711Z level=INFO run=e2370b0b message="location services booted" directory=/tmp/verify-AcicAN/u workspaceID=undefined durationMs=64 http.span=65 role=server
+timestamp=2026-11-18T11:12:30.716Z level=INFO run=e2370b0b msg="loading plugin" id=magpie-freepi-auth@0.1.0 entrypoint=file:///tmp/verify-AcicAN/u/cache/opencode/npm/magpie-freepi-auth@0.1.0/1795000349226/node_modules/magpie-freepi-auth/index.mjs http.span=70 role=server
+timestamp=2026-11-18T11:12:30.723Z level=WARN run=e2370b0b message="failed to load plugin" target=magpie-freepi-auth@0.1.0 ref=err_d5947d96 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=77 role=server
+timestamp=2026-11-18T11:12:31.315Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:31.315Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:31.315Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:31.316Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:31.316Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:31.316Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:31.316Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:31.346Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:12:31.346Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:31.348Z level=INFO run=e2370b0b message="watcher subscribe" path=/tmp/verify-AcicAN/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:12:31.351Z level=INFO run=e2370b0b message="watcher started" path=/tmp/verify-AcicAN/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:31.377Z level=INFO run=e2370b0b message=event event.id=evt_1ee5bba910014f8uQ6IGzOwssj event.created=1795000351377 event.type=provider.updated event.location.directory=/tmp/verify-AcicAN/u event.location.workspaceID=undefined event.data={} http.span=731 role=server
+timestamp=2026-11-18T11:12:31.386Z level=INFO run=e2370b0b message=event event.id=evt_1ee5bba9a001hUaR6rQV54CnZp event.created=1795000351386 event.type=model.updated event.location.directory=/tmp/verify-AcicAN/u event.location.workspaceID=undefined event.data={} http.span=740 role=server
+timestamp=2026-11-18T11:12:31.388Z level=INFO run=e2370b0b message=event event.id=evt_1ee5bba9c001vB69OMtr1qCUVd event.created=1795000351388 event.type=agent.updated event.location.directory=/tmp/verify-AcicAN/u event.location.workspaceID=undefined event.data={} http.span=742 role=server
+timestamp=2026-11-18T11:12:31.389Z level=INFO run=e2370b0b message=event event.id=evt_1ee5bba9d001l3m34bshZ6MoHa event.created=1795000351389 event.type=command.updated event.location.directory=/tmp/verify-AcicAN/u event.location.workspaceID=undefined event.data={} http.span=743 role=server

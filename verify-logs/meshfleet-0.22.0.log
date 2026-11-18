@@ -1,0 +1,61 @@
+spec: meshfleet@0.22.0
+apiNames: meshfleet
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-aW4VjQ/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43881
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:12:40.261Z level=INFO run=cc69d020 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"meshfleet@0.22.0\"]" role=cli
+timestamp=2026-11-18T11:12:44.548Z level=INFO run=c3a34b3e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:12:44.788Z level=INFO run=c3a34b3e message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:12:44.802Z level=INFO run=c3a34b3e message="database schema bootstrap completed" migrations=62 durationMs=14 role=server
+timestamp=2026-11-18T11:12:44.990Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-18T11:12:44.993Z level=INFO run=c3a34b3e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:12:44.994Z level=INFO run=c3a34b3e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-18T11:12:44.994Z level=INFO run=c3a34b3e message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.995Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:12:44.996Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:12:45.017Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/.config/opencode type=directory backend=inotify ignores=6 http.span=53 role=server
+timestamp=2026-11-18T11:12:45.030Z level=INFO run=c3a34b3e message="location services booted" directory=/tmp/verify-aW4VjQ/u workspaceID=undefined durationMs=65 http.span=66 role=server
+timestamp=2026-11-18T11:12:45.040Z level=INFO run=c3a34b3e msg="loading plugin" id=meshfleet@0.22.0 entrypoint=file:///tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/meshfleet/dist/index.js http.span=76 role=server
+timestamp=2026-11-18T11:12:45.280Z level=WARN run=c3a34b3e message="failed to load plugin" target=meshfleet@0.22.0 ref=err_5d79de38 cause="Cause([Die(Error: Could not locate the bindings file. Tried:\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/build/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/build/Debug/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/build/Release/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/out/Debug/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/Debug/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/out/Release/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/Release/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/build/default/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/compiled/26.3.0/linux/x64/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/addon-build/release/install-root/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/addon-build/debug/install-root/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/addon-build/default/install-root/better_sqlite3.node\n → /tmp/verify-aW4VjQ/u/cache/opencode/npm/meshfleet@0.22.0/1795000364295/node_modules/better-sqlite3/lib/binding/node-v147-linux-x64/better_sqlite3.node)])" http.span=316 role=server
+timestamp=2026-11-18T11:12:47.432Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:47.433Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:47.433Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:47.434Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:12:47.434Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:47.434Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:12:47.435Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:47.455Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:12:47.455Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:47.457Z level=INFO run=c3a34b3e message="watcher subscribe" path=/tmp/verify-aW4VjQ/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:12:47.458Z level=INFO run=c3a34b3e message="watcher started" path=/tmp/verify-aW4VjQ/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:12:47.492Z level=INFO run=c3a34b3e message=event event.id=evt_1ee5bf984001wUuWDBaVY6vrTL event.created=1795000367492 event.type=provider.updated event.location.directory=/tmp/verify-aW4VjQ/u event.location.workspaceID=undefined event.data={} http.span=2528 role=server
+timestamp=2026-11-18T11:12:47.503Z level=INFO run=c3a34b3e message=event event.id=evt_1ee5bf98f001MiQ3pUDwlKvrPG event.created=1795000367503 event.type=model.updated event.location.directory=/tmp/verify-aW4VjQ/u event.location.workspaceID=undefined event.data={} http.span=2539 role=server
+timestamp=2026-11-18T11:12:47.506Z level=INFO run=c3a34b3e message=event event.id=evt_1ee5bf9920017ZIZlbebCYJMMT event.created=1795000367506 event.type=agent.updated event.location.directory=/tmp/verify-aW4VjQ/u event.location.workspaceID=undefined event.data={} http.span=2542 role=server
+timestamp=2026-11-18T11:12:47.507Z level=INFO run=c3a34b3e message=event event.id=evt_1ee5bf993001PcwfCLM7qupPj0 event.created=1795000367507 event.type=command.updated event.location.directory=/tmp/verify-aW4VjQ/u event.location.workspaceID=undefined event.data={} http.span=2543 role=server
+timestamp=2026-11-18T11:12:47.961Z level=INFO run=c3a34b3e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:12:47.962Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:12:47.962Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:12:47.967Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:12:47.967Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:12:47.968Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:12:47.981Z level=INFO run=c3a34b3e message="watcher stopped" path=/etc type=entries http.span=3017 role=server
+timestamp=2026-11-18T11:12:47.981Z level=INFO run=c3a34b3e message="watcher stopped" path=/ type=entries http.span=3017 role=server
+timestamp=2026-11-18T11:12:47.982Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp type=entries http.span=3018 role=server
+timestamp=2026-11-18T11:12:47.982Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ type=entries http.span=3018 role=server
+timestamp=2026-11-18T11:12:47.982Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u type=entries http.span=3018 role=server
+timestamp=2026-11-18T11:12:47.985Z level=INFO run=c3a34b3e message="watcher stopped" path=/tmp/verify-aW4VjQ/u/.config/opencode type=directory http.span=3021 role=server
