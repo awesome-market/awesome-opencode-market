@@ -40,16 +40,23 @@ jobs:
           echo '| 标签 | 数 |' >> $S; echo '|---|---|' >> $S
           cat /tmp/labels.txt >> $S
 
-          echo "### 判词计数（ai-verdicts.jsonl 累计行）" >> $S
+          echo "### 判词（每槽位只取最新一条）" >> $S
           python3 - <<'PY' >> $S
           import json,collections
           vs=[json.loads(l) for l in open('catalog/ai-verdicts.jsonl') if l.strip()]
-          c=collections.Counter((v.get('source','?'),v.get('verdict','?')) for v in vs)
-          print('| 来源 | 判词 | 条数 |'); print('|---|---|---|')
+          latest={}
+          for v in vs:
+              k=(v.get('name','').lower(),v.get('version'))
+              if k not in latest or str(v.get('at',''))>=str(latest[k].get('at','')): latest[k]=v
+          c=collections.Counter((v.get('source','?'),v.get('verdict','?')) for v in latest.values())
+          print('| 来源 | 判词 | 生效槽位 |'); print('|---|---|---|')
           for (s,v),n in sorted(c.items()): print(f'| {s} | {v} | {n} |')
-          fr=sum(1 for v in vs if v.get('flagsReviewed')); rec=sum(1 for v in vs if (v.get('reason') or '').startswith('对账'))
+          fr=sum(1 for v in latest.values() if v.get('flagsReviewed'))
+          rec=sum(1 for v in latest.values() if (v.get('reason') or '').startswith('对账'))
           print(f'| — | flagsReviewed=真（红旗槽放行权） | {fr} |')
           print(f'| — | 对账班产出 | {rec} |')
+          print(f'| — | 生效槽位合计 | {len(latest)} |')
+          print(f'\n<sub>日志累计 {len(vs)} 行（只增不删，含历史版本/重判/翻案前后）</sub>')
           PY
 
           echo "### 行级预读（flag-contexts.jsonl）" >> $S
