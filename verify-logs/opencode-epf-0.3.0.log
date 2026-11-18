@@ -3,55 +3,30 @@ apiNames: opencode-epf
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-IbmvG6/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-UFoM4s/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:36543
+server listening on http://127.0.0.1:34705
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T02:25:51.767Z level=INFO run=7a060f21 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-epf@0.3.0\"]" role=cli
-timestamp=2026-11-16T02:25:57.238Z level=INFO run=8b92fd6c message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T02:25:57.573Z level=INFO run=8b92fd6c message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T02:25:57.602Z level=INFO run=8b92fd6c message="database schema bootstrap completed" migrations=59 durationMs=29 role=server
-timestamp=2026-11-16T02:25:57.981Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u/.config/opencode type=directory ignores=6 http.span=56 role=server
-timestamp=2026-11-16T02:25:57.987Z level=INFO run=8b92fd6c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=62 role=server
-timestamp=2026-11-16T02:25:57.987Z level=INFO run=8b92fd6c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=62 role=server
-timestamp=2026-11-16T02:25:57.990Z level=INFO run=8b92fd6c message="watcher subscribe" path=/ type=entries ignores=0 http.span=65 role=server
-timestamp=2026-11-16T02:25:57.993Z level=INFO run=8b92fd6c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=68 role=server
-timestamp=2026-11-16T02:25:57.994Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=69 role=server
-timestamp=2026-11-16T02:25:57.995Z level=INFO run=8b92fd6c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=70 role=server
-timestamp=2026-11-16T02:25:57.995Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6 type=entries ignores=0 http.span=70 role=server
-timestamp=2026-11-16T02:25:57.996Z level=ERROR run=8b92fd6c message="failed to watch directory" path=/tmp/verify-IbmvG6 error="Error: EACCES: permission denied, watch '/tmp/verify-IbmvG6'" http.span=71 role=server
-timestamp=2026-11-16T02:25:58.000Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u type=entries ignores=0 http.span=75 role=server
-timestamp=2026-11-16T02:25:58.002Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u type=entries backend=node ignores=0 http.span=77 role=server
-timestamp=2026-11-16T02:25:58.050Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u/.config/opencode type=directory backend=inotify ignores=6 http.span=125 role=server
-timestamp=2026-11-16T02:25:58.085Z level=INFO run=8b92fd6c message="location services booted" directory=/tmp/verify-IbmvG6/u workspaceID=undefined durationMs=158 http.span=160 role=server
-timestamp=2026-11-16T02:25:58.099Z level=INFO run=8b92fd6c msg="loading plugin" id=opencode-epf@0.3.0 entrypoint=file:///tmp/verify-IbmvG6/u/cache/opencode/npm/opencode-epf@0.3.0/1794795956929/node_modules/opencode-epf/dist/index.js http.span=174 role=server
-timestamp=2026-11-16T02:25:58.220Z level=WARN run=8b92fd6c message="failed to load plugin" target=opencode-epf@0.3.0 ref=err_fb981320 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=295 role=server
-timestamp=2026-11-16T02:25:59.485Z level=ERROR run=8b92fd6c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1560 role=server
-timestamp=2026-11-16T02:25:59.521Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6 type=entries ignores=0 http.span=1596 role=server
-timestamp=2026-11-16T02:25:59.522Z level=ERROR run=8b92fd6c message="failed to watch directory" path=/tmp/verify-IbmvG6 error="Error: EACCES: permission denied, watch '/tmp/verify-IbmvG6'" http.span=1597 role=server
-timestamp=2026-11-16T02:25:59.539Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T02:25:59.539Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T02:25:59.539Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T02:25:59.539Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T02:25:59.559Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T02:25:59.562Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T02:25:59.566Z level=INFO run=8b92fd6c message="watcher subscribe" path=/tmp/verify-IbmvG6/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T02:25:59.566Z level=INFO run=8b92fd6c message="watcher started" path=/tmp/verify-IbmvG6/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T02:25:59.607Z level=INFO run=8b92fd6c message=event event.id=evt_1e22cf537001M9gIbEoRUCBSFw event.created=1794795959607 event.type=provider.updated event.location.directory=/tmp/verify-IbmvG6/u event.location.workspaceID=undefined event.data={} http.span=1682 role=server
-timestamp=2026-11-16T02:25:59.626Z level=INFO run=8b92fd6c message=event event.id=evt_1e22cf54a001upJmsDeFD6upro event.created=1794795959626 event.type=model.updated event.location.directory=/tmp/verify-IbmvG6/u event.location.workspaceID=undefined event.data={} http.span=1701 role=server
-timestamp=2026-11-16T02:25:59.629Z level=INFO run=8b92fd6c message=event event.id=evt_1e22cf54d0017iCmS6hw0Rfax2 event.created=1794795959629 event.type=agent.updated event.location.directory=/tmp/verify-IbmvG6/u event.location.workspaceID=undefined event.data={} http.span=1704 role=server
-timestamp=2026-11-16T02:25:59.630Z level=INFO run=8b92fd6c message=event event.id=evt_1e22cf54e001vHjc8Bfcw13jfs event.created=1794795959630 event.type=command.updated event.location.directory=/tmp/verify-IbmvG6/u event.location.workspaceID=undefined event.data={} http.span=1705 role=server
-timestamp=2026-11-16T02:25:59.897Z level=INFO run=8b92fd6c message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T02:25:59.897Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T02:25:59.898Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T02:25:59.906Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T02:25:59.906Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T02:25:59.939Z level=INFO run=8b92fd6c message="watcher stopped" path=/etc type=entries http.span=2014 role=server
-timestamp=2026-11-16T02:25:59.939Z level=INFO run=8b92fd6c message="watcher stopped" path=/ type=entries http.span=2014 role=server
-timestamp=2026-11-16T02:25:59.939Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp type=entries http.span=2014 role=server
-timestamp=2026-11-16T02:25:59.939Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u type=entries http.span=2014 role=server
-timestamp=2026-11-16T02:25:59.947Z level=INFO run=8b92fd6c message="watcher stopped" path=/tmp/verify-IbmvG6/u/.config/opencode type=directory http.span=2022 role=server
+timestamp=2026-11-18T10:46:44.808Z level=INFO run=17d0ec72 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-epf@0.3.0\"]" role=cli
+timestamp=2026-11-18T10:46:48.461Z level=INFO run=d9ec4564 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:46:48.636Z level=INFO run=d9ec4564 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:46:48.652Z level=INFO run=d9ec4564 message="database schema bootstrap completed" migrations=62 durationMs=16 role=server
+timestamp=2026-11-18T10:46:48.922Z level=INFO run=d9ec4564 message="watcher subscribe" path=/tmp/verify-UFoM4s/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-18T10:46:48.925Z level=INFO run=d9ec4564 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:46:48.925Z level=INFO run=d9ec4564 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:46:48.925Z level=INFO run=d9ec4564 message="watcher subscribe" path=/ type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher subscribe" path=/tmp/verify-UFoM4s type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher started" path=/tmp/verify-UFoM4s type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.926Z level=INFO run=d9ec4564 message="watcher subscribe" path=/tmp/verify-UFoM4s/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:46:48.927Z level=INFO run=d9ec4564 message="watcher started" path=/tmp/verify-UFoM4s/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:46:48.943Z level=INFO run=d9ec4564 message="watcher started" path=/tmp/verify-UFoM4s/u/.config/opencode type=directory backend=inotify ignores=6 http.span=40 role=server
+timestamp=2026-11-18T10:46:48.953Z level=INFO run=d9ec4564 message="location services booted" directory=/tmp/verify-UFoM4s/u workspaceID=undefined durationMs=49 http.span=50 role=server
+timestamp=2026-11-18T10:46:48.960Z level=INFO run=d9ec4564 msg="loading plugin" id=opencode-epf@0.3.0 entrypoint=file:///tmp/verify-UFoM4s/u/cache/opencode/npm/opencode-epf@0.3.0/1794998808282/node_modules/opencode-epf/dist/index.js http.span=57 role=server
+timestamp=2026-11-18T10:46:48.998Z level=WARN run=d9ec4564 message="failed to load plugin" target=opencode-epf@0.3.0 ref=err_3279ed99 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=95 role=server
