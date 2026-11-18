@@ -1,0 +1,60 @@
+spec: opencode-flema-engram-sidebar@0.4.6
+apiNames: opencode-flema-engram-sidebar
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-jiXAbj/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34443
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T09:43:13.648Z level=INFO run=8cfe4049 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-flema-engram-sidebar@0.4.6\"]" role=cli
+timestamp=2026-11-18T09:43:21.879Z level=INFO run=3edd2116 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T09:43:22.064Z level=INFO run=3edd2116 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T09:43:22.075Z level=INFO run=3edd2116 message="database schema bootstrap completed" migrations=62 durationMs=11 role=server
+timestamp=2026-11-18T09:43:22.338Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-18T09:43:22.340Z level=INFO run=3edd2116 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-18T09:43:22.341Z level=INFO run=3edd2116 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T09:43:22.341Z level=INFO run=3edd2116 message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T09:43:22.341Z level=INFO run=3edd2116 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T09:43:22.341Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T09:43:22.341Z level=INFO run=3edd2116 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T09:43:22.342Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T09:43:22.342Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T09:43:22.342Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T09:43:22.342Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T09:43:22.357Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/.config/opencode type=directory backend=inotify ignores=6 http.span=35 role=server
+timestamp=2026-11-18T09:43:22.364Z level=INFO run=3edd2116 message="location services booted" directory=/tmp/verify-jiXAbj/u workspaceID=undefined durationMs=41 http.span=42 role=server
+timestamp=2026-11-18T09:43:22.371Z level=INFO run=3edd2116 msg="loading plugin" id=opencode-flema-engram-sidebar@0.4.6 entrypoint=file:///tmp/verify-jiXAbj/u/cache/opencode/npm/opencode-flema-engram-sidebar@0.4.6/1794995001701/node_modules/opencode-flema-engram-sidebar/dist/index.js http.span=49 role=server
+timestamp=2026-11-18T09:43:22.495Z level=WARN run=3edd2116 message="failed to load plugin" target=opencode-flema-engram-sidebar@0.4.6 ref=err_e731194b cause="Cause([Die(Error: Environment variable \"OPENTUI_FORCE_UNICODE\" is already registered with different configuration. Existing: {\"name\":\"OPENTUI_FORCE_UNICODE\",\"description\":\"Use the Unicode width method (mode 2027) when the variable is present\",\"type\":\"string\",\"required\":false}, New: {\"name\":\"OPENTUI_FORCE_UNICODE\",\"description\":\"Force Mode 2026 Unicode support when the variable is present\",\"type\":\"string\",\"required\":false})])" http.span=173 role=server
+timestamp=2026-11-18T09:43:22.989Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T09:43:22.990Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:43:22.990Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T09:43:22.990Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T09:43:22.990Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:43:22.990Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T09:43:22.991Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:43:23.001Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T09:43:23.001Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:43:23.001Z level=INFO run=3edd2116 message="watcher subscribe" path=/tmp/verify-jiXAbj/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T09:43:23.001Z level=INFO run=3edd2116 message="watcher started" path=/tmp/verify-jiXAbj/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:43:23.019Z level=INFO run=3edd2116 message=event event.id=evt_1ee0a1e8b001vdnXWkx5DH8qKs event.created=1794995003019 event.type=provider.updated event.location.directory=/tmp/verify-jiXAbj/u event.location.workspaceID=undefined event.data={} http.span=697 role=server
+timestamp=2026-11-18T09:43:23.027Z level=INFO run=3edd2116 message=event event.id=evt_1ee0a1e93001sweLWGycJZhJcB event.created=1794995003027 event.type=model.updated event.location.directory=/tmp/verify-jiXAbj/u event.location.workspaceID=undefined event.data={} http.span=705 role=server
+timestamp=2026-11-18T09:43:23.030Z level=INFO run=3edd2116 message=event event.id=evt_1ee0a1e96001Tmx0TmXsl9p0Md event.created=1794995003030 event.type=agent.updated event.location.directory=/tmp/verify-jiXAbj/u event.location.workspaceID=undefined event.data={} http.span=708 role=server
+timestamp=2026-11-18T09:43:23.030Z level=INFO run=3edd2116 message=event event.id=evt_1ee0a1e96002MNCL0j54kCzKns event.created=1794995003030 event.type=command.updated event.location.directory=/tmp/verify-jiXAbj/u event.location.workspaceID=undefined event.data={} http.span=708 role=server
+timestamp=2026-11-18T09:43:23.209Z level=ERROR run=3edd2116 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=887 role=server
+timestamp=2026-11-18T09:43:23.436Z level=INFO run=3edd2116 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T09:43:23.436Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T09:43:23.436Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T09:43:23.438Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T09:43:23.439Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T09:43:23.439Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T09:43:23.456Z level=INFO run=3edd2116 message="watcher stopped" path=/etc type=entries http.span=1134 role=server
+timestamp=2026-11-18T09:43:23.465Z level=INFO run=3edd2116 message="watcher stopped" path=/ type=entries http.span=1143 role=server
+timestamp=2026-11-18T09:43:23.465Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp type=entries http.span=1143 role=server
+timestamp=2026-11-18T09:43:23.465Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj type=entries http.span=1143 role=server
+timestamp=2026-11-18T09:43:23.465Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u type=entries http.span=1143 role=server
+timestamp=2026-11-18T09:43:23.466Z level=INFO run=3edd2116 message="watcher stopped" path=/tmp/verify-jiXAbj/u/.config/opencode type=directory http.span=1144 role=server

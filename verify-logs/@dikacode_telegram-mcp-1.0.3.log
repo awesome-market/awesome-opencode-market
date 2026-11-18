@@ -3,10 +3,10 @@ apiNames: @dikacode/telegram-mcp, telegram-mcp
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-hGBtUh/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-JHglls/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:43799
+server listening on http://127.0.0.1:34719
 server password [redacted]
 telegram-mcp 1.0.3 · not configured yet
 [telegram-mcp] ▲ not configured — no api_id/api_hash yet
@@ -19,35 +19,22 @@ telegram-mcp 1.0.3 · not configured yet
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T07:35:26.484Z level=INFO run=b8ddbe47 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@dikacode/telegram-mcp@1.0.3\"]" role=cli
-timestamp=2026-11-16T07:35:33.036Z level=INFO run=76aeb284 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T07:35:33.378Z level=INFO run=76aeb284 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T07:35:33.429Z level=INFO run=76aeb284 message="database schema bootstrap completed" migrations=59 durationMs=51 role=server
-timestamp=2026-11-16T07:35:33.997Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u/.config/opencode type=directory ignores=6 http.span=48 role=server
-timestamp=2026-11-16T07:35:34.002Z level=INFO run=76aeb284 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=53 role=server
-timestamp=2026-11-16T07:35:34.003Z level=INFO run=76aeb284 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=54 role=server
-timestamp=2026-11-16T07:35:34.004Z level=INFO run=76aeb284 message="watcher subscribe" path=/ type=entries ignores=0 http.span=55 role=server
-timestamp=2026-11-16T07:35:34.004Z level=INFO run=76aeb284 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
-timestamp=2026-11-16T07:35:34.005Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:34.005Z level=INFO run=76aeb284 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:34.005Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh type=entries ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:34.006Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh type=entries backend=node ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:34.006Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u type=entries ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:34.007Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u type=entries backend=node ignores=0 http.span=58 role=server
-timestamp=2026-11-16T07:35:34.038Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u/.config/opencode type=directory backend=inotify ignores=6 http.span=89 role=server
-timestamp=2026-11-16T07:35:34.049Z level=INFO run=76aeb284 message="location services booted" directory=/tmp/verify-hGBtUh/u workspaceID=undefined durationMs=99 http.span=100 role=server
-timestamp=2026-11-16T07:35:34.088Z level=INFO run=76aeb284 msg="loading plugin" id=@dikacode/telegram-mcp@1.0.3 entrypoint=file:///tmp/verify-hGBtUh/u/cache/opencode/npm/@dikacode/telegram-mcp@1.0.3/1794814532622/node_modules/@dikacode/telegram-mcp/dist/index.js http.span=139 role=server
-timestamp=2026-11-16T07:35:34.637Z level=WARN run=76aeb284 message="failed to load plugin" target=@dikacode/telegram-mcp@1.0.3 ref=err_8cf67b02 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=688 role=server
-timestamp=2026-11-16T07:35:36.253Z level=ERROR run=76aeb284 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2304 role=server
-timestamp=2026-11-16T07:35:36.400Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T07:35:36.401Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:36.401Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T07:35:36.401Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:36.496Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T07:35:36.496Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:36.499Z level=INFO run=76aeb284 message="watcher subscribe" path=/tmp/verify-hGBtUh/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T07:35:36.500Z level=INFO run=76aeb284 message="watcher started" path=/tmp/verify-hGBtUh/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:36.562Z level=INFO run=76aeb284 message=event event.id=evt_1e3486b7200100SNioEp3RAlah event.created=1794814536562 event.type=provider.updated event.location.directory=/tmp/verify-hGBtUh/u event.location.workspaceID=undefined event.data={} http.span=2613 role=server
-timestamp=2026-11-16T07:35:36.606Z level=INFO run=76aeb284 message=event event.id=evt_1e3486b9e001goD5Sj5MjM8BZ6 event.created=1794814536606 event.type=model.updated event.location.directory=/tmp/verify-hGBtUh/u event.location.workspaceID=undefined event.data={} http.span=2657 role=server
-timestamp=2026-11-16T07:35:36.618Z level=INFO run=76aeb284 message=event event.id=evt_1e3486baa001xb1AN0SjdLXdRQ event.created=1794814536618 event.type=agent.updated event.location.directory=/tmp/verify-hGBtUh/u event.location.workspaceID=undefined event.data={} http.span=2669 role=server
-timestamp=2026-11-16T07:35:36.618Z level=INFO run=76aeb284 message=event event.id=evt_1e3486baa002CgRRA3SFtYCTK1 event.created=1794814536618 event.type=command.updated event.location.directory=/tmp/verify-hGBtUh/u event.location.workspaceID=undefined event.data={} http.span=2669 role=server
+timestamp=2026-11-18T09:41:39.925Z level=INFO run=6742a8e5 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@dikacode/telegram-mcp@1.0.3\"]" role=cli
+timestamp=2026-11-18T09:41:46.311Z level=INFO run=3cb11ee0 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T09:41:46.891Z level=INFO run=3cb11ee0 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T09:41:47.139Z level=INFO run=3cb11ee0 message="database schema bootstrap completed" migrations=62 durationMs=248 role=server
+timestamp=2026-11-18T09:41:47.450Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/tmp/verify-JHglls/u/.config/opencode type=directory ignores=6 http.span=49 role=server
+timestamp=2026-11-18T09:41:47.456Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-18T09:41:47.456Z level=INFO run=3cb11ee0 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-18T09:41:47.457Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/ type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-18T09:41:47.457Z level=INFO run=3cb11ee0 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-18T09:41:47.457Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-18T09:41:47.457Z level=INFO run=3cb11ee0 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=56 role=server
+timestamp=2026-11-18T09:41:47.457Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/tmp/verify-JHglls type=entries ignores=0 http.span=56 role=server
+timestamp=2026-11-18T09:41:47.459Z level=INFO run=3cb11ee0 message="watcher started" path=/tmp/verify-JHglls type=entries backend=node ignores=0 http.span=58 role=server
+timestamp=2026-11-18T09:41:47.459Z level=INFO run=3cb11ee0 message="watcher subscribe" path=/tmp/verify-JHglls/u type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-18T09:41:47.460Z level=INFO run=3cb11ee0 message="watcher started" path=/tmp/verify-JHglls/u type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-18T09:41:47.488Z level=INFO run=3cb11ee0 message="watcher started" path=/tmp/verify-JHglls/u/.config/opencode type=directory backend=inotify ignores=6 http.span=87 role=server
+timestamp=2026-11-18T09:41:47.499Z level=INFO run=3cb11ee0 message="location services booted" directory=/tmp/verify-JHglls/u workspaceID=undefined durationMs=98 http.span=98 role=server
+timestamp=2026-11-18T09:41:47.525Z level=INFO run=3cb11ee0 msg="loading plugin" id=@dikacode/telegram-mcp@1.0.3 entrypoint=file:///tmp/verify-JHglls/u/cache/opencode/npm/@dikacode/telegram-mcp@1.0.3/1794994905698/node_modules/@dikacode/telegram-mcp/dist/index.js http.span=124 role=server
+timestamp=2026-11-18T09:41:48.051Z level=WARN run=3cb11ee0 message="failed to load plugin" target=@dikacode/telegram-mcp@1.0.3 ref=err_c10d5446 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=650 role=server

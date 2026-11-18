@@ -3,53 +3,57 @@ apiNames: opencode-claude-code-auth
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-CczUrz/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-nZgxFf/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:45495
+server listening on http://127.0.0.1:33863
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T07:35:42.852Z level=INFO run=5b20c5ec message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-claude-code-auth@0.1.6\"]" role=cli
-timestamp=2026-11-16T07:35:47.192Z level=INFO run=bf7a5209 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T07:35:47.555Z level=INFO run=bf7a5209 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T07:35:47.592Z level=INFO run=bf7a5209 message="database schema bootstrap completed" migrations=59 durationMs=37 role=server
-timestamp=2026-11-16T07:35:47.948Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u/.config/opencode type=directory ignores=6 http.span=51 role=server
-timestamp=2026-11-16T07:35:47.952Z level=INFO run=bf7a5209 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=55 role=server
-timestamp=2026-11-16T07:35:47.953Z level=INFO run=bf7a5209 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:47.953Z level=INFO run=bf7a5209 message="watcher subscribe" path=/ type=entries ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:47.953Z level=INFO run=bf7a5209 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=56 role=server
-timestamp=2026-11-16T07:35:47.954Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:47.954Z level=INFO run=bf7a5209 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:47.954Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz type=entries ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:47.954Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz type=entries backend=node ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:47.954Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u type=entries ignores=0 http.span=57 role=server
-timestamp=2026-11-16T07:35:47.955Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u type=entries backend=node ignores=0 http.span=58 role=server
-timestamp=2026-11-16T07:35:48.001Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u/.config/opencode type=directory backend=inotify ignores=6 http.span=104 role=server
-timestamp=2026-11-16T07:35:48.036Z level=INFO run=bf7a5209 message="location services booted" directory=/tmp/verify-CczUrz/u workspaceID=undefined durationMs=138 http.span=139 role=server
-timestamp=2026-11-16T07:35:48.043Z level=INFO run=bf7a5209 msg="loading plugin" id=opencode-claude-code-auth@0.1.6 entrypoint=file:///tmp/verify-CczUrz/u/cache/opencode/npm/opencode-claude-code-auth@0.1.6/1794814546923/node_modules/opencode-claude-code-auth/dist/index.js http.span=146 role=server
-timestamp=2026-11-16T07:35:48.063Z level=WARN run=bf7a5209 message="failed to load plugin" target=opencode-claude-code-auth@0.1.6 ref=err_2a76ce18 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=166 role=server
-timestamp=2026-11-16T07:35:49.126Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T07:35:49.127Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:49.128Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T07:35:49.128Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:49.167Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T07:35:49.167Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:49.170Z level=INFO run=bf7a5209 message="watcher subscribe" path=/tmp/verify-CczUrz/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T07:35:49.171Z level=INFO run=bf7a5209 message="watcher started" path=/tmp/verify-CczUrz/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T07:35:49.208Z level=INFO run=bf7a5209 message=event event.id=evt_1e3489cd8001QNnNDvSInPNu7R event.created=1794814549208 event.type=provider.updated event.location.directory=/tmp/verify-CczUrz/u event.location.workspaceID=undefined event.data={} http.span=1311 role=server
-timestamp=2026-11-16T07:35:49.221Z level=INFO run=bf7a5209 message=event event.id=evt_1e3489ce5001Hfx7r4bIz0Yjko event.created=1794814549221 event.type=model.updated event.location.directory=/tmp/verify-CczUrz/u event.location.workspaceID=undefined event.data={} http.span=1324 role=server
-timestamp=2026-11-16T07:35:49.224Z level=INFO run=bf7a5209 message=event event.id=evt_1e3489ce7001mveoZZY4afpwr3 event.created=1794814549224 event.type=agent.updated event.location.directory=/tmp/verify-CczUrz/u event.location.workspaceID=undefined event.data={} http.span=1327 role=server
-timestamp=2026-11-16T07:35:49.224Z level=INFO run=bf7a5209 message=event event.id=evt_1e3489ce8001bHtGUgdoguroEu event.created=1794814549224 event.type=command.updated event.location.directory=/tmp/verify-CczUrz/u event.location.workspaceID=undefined event.data={} http.span=1327 role=server
-timestamp=2026-11-16T07:35:49.395Z level=INFO run=bf7a5209 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T07:35:49.395Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T07:35:49.395Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T07:35:49.400Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T07:35:49.401Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T07:35:49.439Z level=INFO run=bf7a5209 message="watcher stopped" path=/etc type=entries http.span=1542 role=server
-timestamp=2026-11-16T07:35:49.439Z level=INFO run=bf7a5209 message="watcher stopped" path=/ type=entries http.span=1542 role=server
-timestamp=2026-11-16T07:35:49.439Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp type=entries http.span=1542 role=server
-timestamp=2026-11-16T07:35:49.439Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz type=entries http.span=1542 role=server
-timestamp=2026-11-16T07:35:49.439Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u type=entries http.span=1542 role=server
-timestamp=2026-11-16T07:35:49.443Z level=INFO run=bf7a5209 message="watcher stopped" path=/tmp/verify-CczUrz/u/.config/opencode type=directory http.span=1546 role=server
+timestamp=2026-11-18T09:42:47.790Z level=INFO run=e1525e9e message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-claude-code-auth@0.1.6\"]" role=cli
+timestamp=2026-11-18T09:42:52.787Z level=INFO run=edd1d2b8 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T09:42:53.173Z level=INFO run=edd1d2b8 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T09:42:53.186Z level=INFO run=edd1d2b8 message="database schema bootstrap completed" migrations=62 durationMs=13 role=server
+timestamp=2026-11-18T09:42:53.455Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/.config/opencode type=directory ignores=6 http.span=18 role=server
+timestamp=2026-11-18T09:42:53.459Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T09:42:53.459Z level=INFO run=edd1d2b8 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T09:42:53.460Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/ type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T09:42:53.460Z level=INFO run=edd1d2b8 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T09:42:53.460Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T09:42:53.460Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T09:42:53.461Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T09:42:53.461Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T09:42:53.461Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T09:42:53.461Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T09:42:53.486Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-18T09:42:53.494Z level=INFO run=edd1d2b8 message="location services booted" directory=/tmp/verify-nZgxFf/u workspaceID=undefined durationMs=56 http.span=57 role=server
+timestamp=2026-11-18T09:42:53.517Z level=INFO run=edd1d2b8 msg="loading plugin" id=opencode-claude-code-auth@0.1.6 entrypoint=file:///tmp/verify-nZgxFf/u/cache/opencode/npm/opencode-claude-code-auth@0.1.6/1794994972418/node_modules/opencode-claude-code-auth/dist/index.js http.span=80 role=server
+timestamp=2026-11-18T09:42:53.528Z level=WARN run=edd1d2b8 message="failed to load plugin" target=opencode-claude-code-auth@0.1.6 ref=err_4f3426d0 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=91 role=server
+timestamp=2026-11-18T09:42:54.266Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T09:42:54.266Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:42:54.267Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T09:42:54.267Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T09:42:54.267Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:42:54.267Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T09:42:54.268Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:42:54.288Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T09:42:54.288Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:42:54.289Z level=INFO run=edd1d2b8 message="watcher subscribe" path=/tmp/verify-nZgxFf/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T09:42:54.289Z level=INFO run=edd1d2b8 message="watcher started" path=/tmp/verify-nZgxFf/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T09:42:54.320Z level=INFO run=edd1d2b8 message=event event.id=evt_1ee09ae70001RR0IlVS1m1smpu event.created=1794994974320 event.type=provider.updated event.location.directory=/tmp/verify-nZgxFf/u event.location.workspaceID=undefined event.data={} http.span=883 role=server
+timestamp=2026-11-18T09:42:54.330Z level=INFO run=edd1d2b8 message=event event.id=evt_1ee09ae7a001G7850kaAU03e5C event.created=1794994974330 event.type=model.updated event.location.directory=/tmp/verify-nZgxFf/u event.location.workspaceID=undefined event.data={} http.span=893 role=server
+timestamp=2026-11-18T09:42:54.333Z level=INFO run=edd1d2b8 message=event event.id=evt_1ee09ae7d001mUSpy8ORrBfEkI event.created=1794994974333 event.type=agent.updated event.location.directory=/tmp/verify-nZgxFf/u event.location.workspaceID=undefined event.data={} http.span=896 role=server
+timestamp=2026-11-18T09:42:54.333Z level=INFO run=edd1d2b8 message=event event.id=evt_1ee09ae7d002ZCxBxyLi1MUmrW event.created=1794994974333 event.type=command.updated event.location.directory=/tmp/verify-nZgxFf/u event.location.workspaceID=undefined event.data={} http.span=896 role=server
+timestamp=2026-11-18T09:42:54.593Z level=INFO run=edd1d2b8 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T09:42:54.593Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T09:42:54.593Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T09:42:54.595Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T09:42:54.595Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T09:42:54.595Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/etc type=entries http.span=1172 role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/ type=entries http.span=1172 role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp type=entries http.span=1172 role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf type=entries http.span=1172 role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u type=entries http.span=1172 role=server
+timestamp=2026-11-18T09:42:54.609Z level=INFO run=edd1d2b8 message="watcher stopped" path=/tmp/verify-nZgxFf/u/.config/opencode type=directory http.span=1172 role=server
