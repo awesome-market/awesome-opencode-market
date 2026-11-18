@@ -279,6 +279,12 @@ set -a; . "$ENVF"; set +a
 # path makes the L0.5 model load fail silently inside the python subprocess.
 # Say so loudly: an unmounted cache volume silently downgrades every run to
 # LLM-only review and the health stamp is the only place that shows it.
+# TRANSFORMERS_CACHE is a stale per-user var (in .zshrc for other tools) —
+# transformers v5 warns on it and the L0.5 scorer spams a FutureWarning every
+# cycle. Galvanize loads via GALVANIZE_DIR absolute path, not the cache root,
+# so unsetting is safe and keeps runs identical regardless of the caller's
+# interactive env.
+unset TRANSFORMERS_CACHE
 if [ -d /Volumes/2t/huggingface_tmp ]; then
   export HF_HOME=/Volumes/2t/huggingface_tmp
 else
