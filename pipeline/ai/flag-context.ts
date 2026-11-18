@@ -36,6 +36,10 @@ export interface FlagContext {
    *  describes a call the issue reader can't see — surface the first
    *  actual invocation line so the row is self-evidencing */
   call?: { line: number; text: string }
+  /** lifecycle/pack flags: the package.json member path of the script the
+   *  flagged command invokes (bin/x.js → dist/x.js after shim hops) — the
+   *  judge saw its entry region, so the verdict can cite real guards */
+  script?: string
   /** why ai is null — transient failures retry next run (bounded, see
    *  RETRY_BUDGET); deterministic absences (oversize file, no source URL)
    *  judge the flag's embedded excerpt instead of retrying forever */
@@ -142,6 +146,107 @@ export function findCallSite(text: string, flaggedLine: string): { line: number;
     const l = lines[i]!
     if (needles.some(n => l.includes(n)) && !/^\s*(import|export|require|\*|\/\/)/.test(l.trimStart()))
       return { line: i + 1, text: l.trim().slice(0, 200) }
+  }
+  return null
+}
+
+/** lifecycle/pack-script flags name a COMMAND in package.json, not the file
+ *  it runs — "postinstall: node bin/setup.js --auto" judged on the manifest
+ *  alone can't tell an early-return banner from silent config writes. Pull
+ *  the invoked script's entry region into the same judge call. */
+const SCRIPT_EXT = /\.(?:[cm]?[jt]s|jsx|tsx|sh|bash|zsh|py|rb)$/i
+const SCRIPT_RUNNERS = new Set(['node', 'nodejs', 'tsx', 'ts-node', 'ts-node-esm', 'bun', 'deno', 'bash', 'sh', 'zsh', 'dash', 'python', 'python3', 'ruby', 'perl'])
+const SCRIPT_SKIP_VALUE = new Set(['-e', '--eval', '-p', '--print', '-c', '--require', '-r', '--import', '--loader', '--experimental-loader'])
+// the scanner's own hook alternation — the flag excerpt can carry earlier
+// `"name": "pkg"` pairs, so grab the COMMAND after a lifecycle key, not the
+// first quoted value in the window
+const HOOK_CMD_RE = /"(?:preinstall|postinstall|install|prepublish|prepublishOnly|prepack|postpack|prepare)"\s*:\s*"((?:[^"\\]|\\.)*)"/
+const looksLikeScript = (t: string): boolean =>
+  !/[()"'=]/.test(t) && !t.startsWith('/') && !t.includes('://')
+  && (SCRIPT_EXT.test(t) || t.includes('/'))
+
+/** command → invoked script path. Accepts the whole flag string or just the
+ *  matched source line; `"postinstall": "node bin/x.js --auto || true"` →
+ *  `bin/x.js`. npm-run/npx/inline-eval resolve to null — nothing to fetch. */
+export function findLifecycleScript(flagText: string): string | null {
+  const src = flagText.replace(/^[a-z][a-z0-9-]*:\S+ — L\d+[: ]\s*/, '')
+  const qm = src.match(HOOK_CMD_RE) ?? src.match(/:\s*"((?:[^"\\]|\\.)*)"/) ?? src.match(/:\s*'([^']*)'/)
+  const cmd = (qm ? qm[1]! : src).replace(/\\([|&;])/g, '$1')
+  const tokens = cmd.split(/\s*(?:\|\||&&|[|;&])\s*/).flatMap(s => s.split(/\s+/))
+    .map(t => t.replace(/^["']|["'],?$/g, '')).filter(Boolean)
+  for (let i = 0; i < tokens.length; i++) {
+    if (!SCRIPT_RUNNERS.has(tokens[i]!)) continue
+    for (let j = i + 1; j < tokens.length; j++) {
+      const u = tokens[j]!
+      if (u.startsWith('-')) { if (SCRIPT_SKIP_VALUE.has(u)) j++; continue }
+      return looksLikeScript(u) ? u : null
+    }
+    return null
+  }
+  for (const t of tokens) if (!t.startsWith('-') && looksLikeScript(t)) return t
+  return null
+}
+
+/** posix join with . / .. resolution — script paths resolve against the
+ *  flagged file's directory (package/package.json → package/bin/x.js) */
+const normJoin = (dir: string, target: string): string => {
+  const out: string[] = []
+  for (const s of (dir ? `${dir}/${target}` : target).split('/')) {
+    if (s === '' || s === '.') continue
+    if (s === '..') out.pop()
+    else out.push(s)
+  }
+  return out.join('/')
+}
+
+const SCRIPT_CTX_CHARS = 5_000
+const SCRIPT_HOP_CAP = 2       // bin/x.js → dist/x.js shim hops
+const SHIM_LINE_CAP = 12      // ≤12 non-blank lines = re-export shim, follow it
+
+/** entry region of a lifecycle script — head imports plus ±18 lines around
+ *  each argv/main signal (max 3 hits); the guard that decides whether the
+ *  postinstall writes configs lives exactly there. */
+export function scriptWindow(text: string): string {
+  const lines = text.split('\n')
+  const keep = new Set<number>()
+  for (let i = 0; i < Math.min(lines.length, 40); i++) keep.add(i)
+  const hits: number[] = []
+  lines.forEach((l, i) => { if (/process\.argv|argv\.includes|parseArgs|\bcommander\b|\byargs\b|\bmain\s*\(/.test(l)) hits.push(i) })
+  for (const h of hits.slice(0, 3))
+    for (let i = Math.max(0, h - 18); i < Math.min(lines.length, h + 19); i++) keep.add(i)
+  let out = '', prev = -2
+  for (const i of [...keep].sort((a, b) => a - b)) {
+    if (i > prev + 1) out += '\n…\n'
+    out += `L${i + 1}: ${lines[i]}\n`
+    prev = i
+    if (out.length > SCRIPT_CTX_CHARS) break
+  }
+  return out.slice(0, SCRIPT_CTX_CHARS)
+}
+
+interface ScriptCtx { path: string; text: string }
+
+/** fetch the invoked script, following tiny re-export shims
+ *  (bin/x.js → `import('../dist/x.js')`) up to SCRIPT_HOP_CAP hops — the
+ *  real entry logic usually sits one build-output hop past the bin shim. */
+async function scriptContext(
+  e: Plugin, memberPath: string,
+  fileText: (url: string) => Promise<string | null>,
+): Promise<ScriptCtx | null> {
+  let rel = memberPath
+  for (let hop = 0; hop <= SCRIPT_HOP_CAP; hop++) {
+    const url = contextUrl(e, rel)
+    if (!url) return null
+    const text = await fileText(url)
+    if (!text || text === 'TOO-LARGE') return null
+    const body = text.split('\n').filter(l => l.trim() && !l.trimStart().startsWith('#!'))
+    const shim = body.length <= SHIM_LINE_CAP
+      ? /(?:from|import|require)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/.exec(text) : null
+    if (shim && hop < SCRIPT_HOP_CAP) {
+      rel = normJoin(rel.slice(0, rel.lastIndexOf('/')), shim[1]!)
+      continue
+    }
+    return { path: rel, text }
   }
   return null
 }
@@ -264,6 +369,7 @@ export async function main(
     const text = url ? await fileText(url) : null
     let ai: JudgeResp | null = null
     let aiNote: string | undefined
+    let scriptPath: string | undefined
     const k = `${w.e.name.toLowerCase()}\0${w.ver ?? ''}\0${w.flag}`
     const priorN = attempts.get(k) ?? 0
     // last budget attempt degrades to excerpt-only judging — a flag whose
@@ -287,6 +393,21 @@ export async function main(
       // retry: the flag string itself still carries the scanner's matched
       // excerpt — judge that honestly-labelled instead of dying silent
       window ??= `[file context unavailable — ${text === 'TOO-LARGE' ? `file exceeds ${CTX_FILE_CAP / 1_024}KB` : text ? 'retries exhausted' : 'no fetchable source'}; judging the flagged excerpt alone]\n${w.flag}`
+      // lifecycle/pack flags: the flagged line is a package.json command —
+      // the file it runs is the actual evidence. Fetch the invoked script's
+      // entry region so the judge sees argv guards (--auto early-return vs
+      // real writes), not just "calls a declared bin script".
+      if (w.rule === 'lifecycle-script' || w.rule === 'pack-script' || w.rule === 'prepare-script') {
+        const sp = findLifecycleScript(w.flag)
+        if (sp) {
+          const dir = w.path.includes('/') ? w.path.slice(0, w.path.lastIndexOf('/')) : ''
+          const sc = await scriptContext(w.e, normJoin(dir, sp), fileText)
+          if (sc) {
+            scriptPath = sc.path
+            window += `\n\nLifecycle script ${sc.path} — entry region (what the flagged command actually runs):\n${scriptWindow(sc.text)}`
+          }
+        }
+      }
       const summary = `${w.e.name}@${w.ver ?? '?'} — ${w.e.description?.en ?? '(no description)'}\nRule: ${w.rule}\nFlagged: ${w.path}:${w.line}`
       try { ai = await judge({ summary, commits: '', patches: window }, true) }
       catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
@@ -294,7 +415,7 @@ export async function main(
     const flaggedSrc = text && text !== 'TOO-LARGE' ? text.split('\n')[w.line - 1] : undefined
     const call = text && text !== 'TOO-LARGE' && flaggedSrc && /^\s*(import|export|const|let|var)\b/.test(flaggedSrc)
       ? findCallSite(text, flaggedSrc) ?? undefined : undefined
-    const a: FlagContext = { name: w.e.name, version: w.ver, flag: w.flag, rule: w.rule, path: w.path, line: w.line, at: new Date().toISOString(), ai, ...(aiNote ? { aiNote } : {}), ...(call ? { call } : {}) }
+    const a: FlagContext = { name: w.e.name, version: w.ver, flag: w.flag, rule: w.rule, path: w.path, line: w.line, at: new Date().toISOString(), ai, ...(aiNote ? { aiNote } : {}), ...(call ? { call } : {}), ...(scriptPath ? { script: scriptPath } : {}) }
     const line = JSON.stringify(a)
     if (dry) console.log(line)
     else if (spoolPath) appendFileSync(spoolPath, line + '\n')

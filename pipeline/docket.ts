@@ -1047,6 +1047,7 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       else if (SCAN_FLAG_RE.test(f) && !preKeys.has(f) && opts.flagContexts)
         L.push(`    ↳ 超出 AI 预读上限（${FLAGS_PER_ENTRY} 条/包）——未判，请人工看原文`)
       if (fc?.call) L.push(`    ↳ 实际调用 L${fc.call.line}: ${clean(fc.call.text, 160)}`)
+      if (fc?.script) L.push(`    ↳ 预读脚本：\`${clean(fc.script, 120)}\`——判词覆盖其入口逻辑`)
     }
     // two provenances share one list: sec:* identity signals (the trigger)
     // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
@@ -1121,6 +1122,8 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const bad = ctxs.find(c => c.ai!.verdict === 'concern')
       if (bad) L.push(`    ↳ AI 初筛：⚠️ 疑似异常——${clean(bad.ai!.reasonZh, 200)}`)
       else if (ctxs.length) L.push(`    ↳ AI 初筛：${ctxs.length === f.n ? '全部' : `${ctxs.length} 处`}倾向良性——${clean(ctxs[0]!.ai!.reasonZh, 200)}`)
+      const shownCtx = bad ?? ctxs[0]
+      if (shownCtx?.script) L.push(`    ↳ 预读脚本：\`${clean(shownCtx.script, 120)}\`——判词覆盖其入口逻辑`)
       else if ((f.findings ?? []).length &&
                (f.findings ?? []).every(fx => opts.deadCtx?.has(`${t.name.toLowerCase()}\0${t.version ?? ''}\0${fx}`)))
         L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
