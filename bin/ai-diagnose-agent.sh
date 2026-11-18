@@ -29,15 +29,24 @@ mkdir -p "$DIR"
 ENVF=$HOME/.config/opencode-market/ai.env
 [ -f "$ENVF" ] && bash -n "$ENVF" 2>/dev/null && { set -a; . "$ENVF"; set +a; }
 
-# 用法: ai-diagnose-agent.sh [devin] —— devin 参数把 judge 切到 devin -p
-# 单次会话后端（export AI_BACKEND 透传给 worker，ai.env 里没有该变量时
-# 继承值生效）；不传参走 ai.env/环境里的默认（本地 ornith）。参数优先于
-# ai.env 同名变量。
-case ${1:-} in
-  ''|--) ;;
+# 用法: ai-diagnose-agent.sh [devin] [-m model] [-p proxy]
+#  judge：devin（或 -m devin / -m devin:<model>）切到 devin 单次会话后端；
+#  -m <name> 本地 omlx 换模型；不传走 ai.env/环境默认。代理：-p 或
+#  MARKET_PROXY env（裸端口→socks5://127.0.0.1:<port>；flag-context/
+#  flag-delta/diagnose 的 fetch 由 installMarketProxy 接管）。参数优先于
+#  ai.env 同名变量。
+while [ $# -gt 0 ]; do case $1 in
   devin|--devin) export AI_BACKEND=devin ;;
-  *) echo "usage: $0 [devin]" >&2; exit 2 ;;
-esac
+  -m|--model) shift; [ -n "${1:-}" ] || { echo "usage: $0 [devin] [-m model] [-p proxy]" >&2; exit 2; }; case $1 in
+    devin) export AI_BACKEND=devin ;;
+    devin:*) export AI_BACKEND=devin DEVIN_REVIEW_MODEL="${1#devin:}" ;;
+    local) ;;
+    *) [ -n "${1:-}" ] && export AI_MODEL="$1" ;;
+  esac ;;
+  -p|--proxy) shift; [ -n "${1:-}" ] || { echo "usage: $0 [devin] [-m model] [-p proxy]" >&2; exit 2; }; export MARKET_PROXY="$1" ;;
+  --) ;;
+  *) echo "usage: $0 [devin] [-m model] [-p proxy]" >&2; exit 2 ;;
+esac; shift; done
 
 TICK=${DIAGNOSE_TICK:-1800}     # 正常节拍：30min——对齐 hourly catalog + 事件驱动 verify 后的判词时延目标
 RETRY=${DIAGNOSE_RETRY:-300}    # 失败重试间隔
