@@ -3,54 +3,30 @@ apiNames: gufeng0/agentrouter-magpie-plugin, agentrouter-magpie-plugin
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-rA2Pz7/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-11cXk7/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:36189
+server listening on http://127.0.0.1:37011
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T09:37:42.301Z level=INFO run=3f0207f5 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7\"]" role=cli
-timestamp=2026-11-16T09:37:43.491Z level=INFO run=8c5d7ed4 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T09:37:43.936Z level=INFO run=8c5d7ed4 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T09:37:44.019Z level=INFO run=8c5d7ed4 message="database schema bootstrap completed" migrations=59 durationMs=83 role=server
-timestamp=2026-11-16T09:37:44.385Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u/.config/opencode type=directory ignores=6 http.span=38 role=server
-timestamp=2026-11-16T09:37:44.390Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=43 role=server
-timestamp=2026-11-16T09:37:44.391Z level=INFO run=8c5d7ed4 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=44 role=server
-timestamp=2026-11-16T09:37:44.391Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/ type=entries ignores=0 http.span=44 role=server
-timestamp=2026-11-16T09:37:44.392Z level=INFO run=8c5d7ed4 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=45 role=server
-timestamp=2026-11-16T09:37:44.392Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=45 role=server
-timestamp=2026-11-16T09:37:44.392Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=45 role=server
-timestamp=2026-11-16T09:37:44.393Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7 type=entries ignores=0 http.span=46 role=server
-timestamp=2026-11-16T09:37:44.393Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7 type=entries backend=node ignores=0 http.span=46 role=server
-timestamp=2026-11-16T09:37:44.393Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u type=entries ignores=0 http.span=46 role=server
-timestamp=2026-11-16T09:37:44.393Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u type=entries backend=node ignores=0 http.span=46 role=server
-timestamp=2026-11-16T09:37:44.430Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u/.config/opencode type=directory backend=inotify ignores=6 http.span=83 role=server
-timestamp=2026-11-16T09:37:44.457Z level=INFO run=8c5d7ed4 message="location services booted" directory=/tmp/verify-rA2Pz7/u workspaceID=undefined durationMs=110 http.span=110 role=server
-timestamp=2026-11-16T09:37:44.465Z level=INFO run=8c5d7ed4 msg="loading plugin" id=gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7 entrypoint=file:///tmp/verify-rA2Pz7/u/cache/opencode/npm/git-agentrouter-magpie-plugin-2a7ac3a2f220/1794821863085/node_modules/magpie-plugin-agentrouter/index.mjs http.span=118 role=server
-timestamp=2026-11-16T09:37:44.474Z level=WARN run=8c5d7ed4 message="failed to load plugin" target=gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7 ref=err_07f87b40 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=127 role=server
-timestamp=2026-11-16T09:37:46.064Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T09:37:46.065Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T09:37:46.065Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T09:37:46.065Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T09:37:46.109Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T09:37:46.110Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T09:37:46.116Z level=INFO run=8c5d7ed4 message="watcher subscribe" path=/tmp/verify-rA2Pz7/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T09:37:46.117Z level=INFO run=8c5d7ed4 message="watcher started" path=/tmp/verify-rA2Pz7/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T09:37:46.158Z level=INFO run=8c5d7ed4 message=event event.id=evt_1e3b842ae001VTdgjc9DToKSTx event.created=1794821866158 event.type=provider.updated event.location.directory=/tmp/verify-rA2Pz7/u event.location.workspaceID=undefined event.data={} http.span=1811 role=server
-timestamp=2026-11-16T09:37:46.177Z level=INFO run=8c5d7ed4 message=event event.id=evt_1e3b842c0001EpABFn2gvz3dHF event.created=1794821866177 event.type=model.updated event.location.directory=/tmp/verify-rA2Pz7/u event.location.workspaceID=undefined event.data={} http.span=1830 role=server
-timestamp=2026-11-16T09:37:46.180Z level=INFO run=8c5d7ed4 message=event event.id=evt_1e3b842c4001jBauv0hXS18RNG event.created=1794821866180 event.type=agent.updated event.location.directory=/tmp/verify-rA2Pz7/u event.location.workspaceID=undefined event.data={} http.span=1833 role=server
-timestamp=2026-11-16T09:37:46.180Z level=INFO run=8c5d7ed4 message=event event.id=evt_1e3b842c4002RZfQcm1tPCFhuY event.created=1794821866180 event.type=command.updated event.location.directory=/tmp/verify-rA2Pz7/u event.location.workspaceID=undefined event.data={} http.span=1833 role=server
-timestamp=2026-11-16T09:37:46.244Z level=ERROR run=8c5d7ed4 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1897 role=server
-timestamp=2026-11-16T09:37:46.573Z level=INFO run=8c5d7ed4 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T09:37:46.573Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T09:37:46.573Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T09:37:46.577Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T09:37:46.577Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T09:37:46.598Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/etc type=entries http.span=2251 role=server
-timestamp=2026-11-16T09:37:46.598Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/ type=entries http.span=2251 role=server
-timestamp=2026-11-16T09:37:46.598Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp type=entries http.span=2251 role=server
-timestamp=2026-11-16T09:37:46.598Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7 type=entries http.span=2251 role=server
-timestamp=2026-11-16T09:37:46.598Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u type=entries http.span=2251 role=server
-timestamp=2026-11-16T09:37:46.605Z level=INFO run=8c5d7ed4 message="watcher stopped" path=/tmp/verify-rA2Pz7/u/.config/opencode type=directory http.span=2258 role=server
+timestamp=2026-11-18T10:54:19.144Z level=INFO run=92581973 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7\"]" role=cli
+timestamp=2026-11-18T10:54:19.947Z level=INFO run=98c11c32 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:54:20.196Z level=INFO run=98c11c32 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:54:20.226Z level=INFO run=98c11c32 message="database schema bootstrap completed" migrations=62 durationMs=30 role=server
+timestamp=2026-11-18T10:54:20.491Z level=INFO run=98c11c32 message="watcher subscribe" path=/tmp/verify-11cXk7/u/.config/opencode type=directory ignores=6 http.span=21 role=server
+timestamp=2026-11-18T10:54:20.493Z level=INFO run=98c11c32 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T10:54:20.494Z level=INFO run=98c11c32 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:54:20.494Z level=INFO run=98c11c32 message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:54:20.494Z level=INFO run=98c11c32 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:54:20.494Z level=INFO run=98c11c32 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:54:20.494Z level=INFO run=98c11c32 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T10:54:20.495Z level=INFO run=98c11c32 message="watcher subscribe" path=/tmp/verify-11cXk7 type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-18T10:54:20.495Z level=INFO run=98c11c32 message="watcher started" path=/tmp/verify-11cXk7 type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-18T10:54:20.495Z level=INFO run=98c11c32 message="watcher subscribe" path=/tmp/verify-11cXk7/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-18T10:54:20.495Z level=INFO run=98c11c32 message="watcher started" path=/tmp/verify-11cXk7/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-18T10:54:20.514Z level=INFO run=98c11c32 message="watcher started" path=/tmp/verify-11cXk7/u/.config/opencode type=directory backend=inotify ignores=6 http.span=44 role=server
+timestamp=2026-11-18T10:54:20.533Z level=INFO run=98c11c32 message="location services booted" directory=/tmp/verify-11cXk7/u workspaceID=undefined durationMs=62 http.span=63 role=server
+timestamp=2026-11-18T10:54:20.535Z level=INFO run=98c11c32 msg="loading plugin" id=gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7 entrypoint=file:///tmp/verify-11cXk7/u/cache/opencode/npm/git-agentrouter-magpie-plugin-2a7ac3a2f220/1794999259804/node_modules/magpie-plugin-agentrouter/index.mjs http.span=65 role=server
+timestamp=2026-11-18T10:54:20.543Z level=WARN run=98c11c32 message="failed to load plugin" target=gufeng0/agentrouter-magpie-plugin#7f29c1c20f4853f86dc81e248dba9dd365bc4cf7 ref=err_cbce252b cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=73 role=server
