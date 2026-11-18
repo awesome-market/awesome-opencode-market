@@ -51,7 +51,7 @@ function fieldFull(map: Map<string, string>, ...labels: string[]): string | null
   return null
 }
 
-const PKG_RE = /^(@[a-z0-9-]+\/)?[a-z0-9-_.]+$/i
+const PKG_RE = /^(@[a-z0-9-]+\/)?[a-z0-9][a-z0-9-_.]*$/i
 const LANG_LINE = /^([a-z]{2,3}(?:-[A-Za-z]{2,8})?)\s*[:：]\s*(.+)$/
 
 export function parseSubmission(body: string, title?: string | null): Submission {

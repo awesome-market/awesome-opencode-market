@@ -208,7 +208,7 @@ export function isVisible(e: MarketEntry): boolean {
  *  throwing beats falling back to the bare name, which would resolve
  *  dist-tags.latest (the UNAPPROVED pending version) and silently bypass
  *  the hold gate. */
-const VER_SAFE = /^[A-Za-z0-9._+~-]+$/
+const VER_SAFE = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 export function pinSpec(e: Pick<MarketEntry, 'name' | 'latestVersion'>): string {
   if (e.latestVersion && !VER_SAFE.test(e.latestVersion))
     throw new Error(`unsafe version in catalog entry: ${e.latestVersion.slice(0, 40)}`)
