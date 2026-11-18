@@ -233,7 +233,7 @@ function parseArgs(args: string[]) {
   const die = (m: string): never => { console.error(m); exit(1) }
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
   const numArg = (k: string, d: number) => { const n = Number(arg(k) ?? d); return Number.isFinite(n) && n >= 0 ? n : die(`usage: ${k} must be a non-negative number`) }
-  const usage = 'usage: --index <p> --verdicts <p> --assessments <p> --spool <p> [--limit N] [--dry]'
+  const usage = 'usage: --index <p> --verdicts <p> --assessments <p> --spool <p> [--limit N] [--dry] [-m local|devin|devin:<model>|<model>] [-p <proxy>]'
   return {
     idxPath: arg('--index') ?? die(usage),
     verdictsPath: arg('--verdicts') ?? die(usage),
@@ -241,6 +241,7 @@ function parseArgs(args: string[]) {
     spoolPath: arg('--spool'),
     dry: args.includes('--dry'),
     limit: numArg('--limit', 30),
+    model: arg('--model') ?? arg('-m'), proxy: arg('--proxy') ?? arg('-p'),
   }
 }
 
@@ -252,8 +253,8 @@ export async function main(
     transport?: (args: string[]) => Promise<string>
   } = {},
 ): Promise<void> {
-  installMarketProxy()
-  const { idxPath, verdictsPath, assessPath, spoolPath, dry, limit } = parseArgs(args)
+  const { idxPath, verdictsPath, assessPath, spoolPath, dry, limit, model, proxy } = parseArgs(args)
+  installMarketProxy(proxy)
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))
   const human = latestHumanVerdicts(loadVerdicts(verdictsPath))
@@ -277,12 +278,15 @@ export async function main(
   const liveTransport = deps.transport ?? ghApiTransport()
   const compareFn = deps.compareFn ?? ((r: string, b: string, h: string) =>
     fetchCompare(r, b, h, liveTransport))
+  const omlx = (m: string) => omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), m, env.AI_API_KEY ?? '')
+  const devin = (m?: string) => devinJudge(m ?? env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high')
   const judge: JudgeFn | null = deps.judge ?? (
-    env.AI_BACKEND === 'devin'
-      ? devinJudge(env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high')
-      : env.AI_MODEL
-        ? omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), env.AI_MODEL, env.AI_API_KEY ?? '')
-        : null)
+    model === 'devin' ? devin()
+      : model?.startsWith('devin:') ? devin(model.slice(6))
+      : model ? omlx(model)
+      : env.AI_BACKEND === 'devin' ? devin()
+      : env.AI_MODEL ? omlx(env.AI_MODEL)
+      : null)
   if (!judge) console.error('[flag-delta] no judge (AI_BACKEND=devin needs the devin CLI; else set AI_MODEL) — assessments still record rules+stats with ai:null (retried next run)')
 
   // candidates: live github entries whose pin drifted past a human-pass sha

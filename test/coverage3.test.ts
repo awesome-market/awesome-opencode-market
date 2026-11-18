@@ -111,13 +111,25 @@ describe('installMarketProxy', () => {
     const { installMarketProxy } = await import('../pipeline/net.ts')
     expect(() => { installMarketProxy(); installMarketProxy() }).not.toThrow()
   })
-  it('set → installs the matching agent (http vs socks5)', async () => {
+  it('normalizeProxy — bare port, sock5 typo, bare host:port, full urls', async () => {
+    const { normalizeProxy } = await import('../pipeline/net.ts')
+    expect(normalizeProxy('1080')).toBe('socks5://127.0.0.1:1080')
+    expect(normalizeProxy('sock5://10.1.1.2:1234')).toBe('socks5://10.1.1.2:1234')
+    expect(normalizeProxy('socks5://10.1.1.2:1234')).toBe('socks5://10.1.1.2:1234')
+    expect(normalizeProxy('192.168.50.123:8888')).toBe('socks5://192.168.50.123:8888')
+    expect(normalizeProxy('http://192.168.50.123:8888')).toBe('http://192.168.50.123:8888')
+    expect(normalizeProxy('https://192.168.50.123:8888')).toBe('https://192.168.50.123:8888')
+  })
+  it('set → installs the matching agent (flag override beats env)', async () => {
     const { vi } = await import('vitest')
-    for (const p of ['http://127.0.0.1:7890', 'socks5://127.0.0.1:1080', '127.0.0.1:1080']) {
+    for (const p of ['http://127.0.0.1:7890', 'socks5://127.0.0.1:1080', '1080']) {
       vi.resetModules()
       process.env.MARKET_PROXY = p
       const { installMarketProxy } = await import('../pipeline/net.ts')
       expect(() => installMarketProxy()).not.toThrow()
+      vi.resetModules()
+      const { installMarketProxy: inst2 } = await import('../pipeline/net.ts')
+      expect(() => inst2('socks5://127.0.0.2:9')).not.toThrow()
     }
     delete process.env.MARKET_PROXY
   })
