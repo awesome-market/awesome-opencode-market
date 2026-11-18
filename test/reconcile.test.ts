@@ -114,3 +114,24 @@ describe('reconcile — CLI arg mapping', () => {
     delete env.AI_MODEL; delete env.AI_BACKEND; delete env.DEVIN_REVIEW_MODEL; delete env.MARKET_PROXY
   })
 })
+
+describe('reconcile — github-kind version-less slots', () => {
+  const gh = entry({
+    name: 'Owner/Repo', source: { kind: 'github', id: 'Owner/Repo', repo: 'Owner/Repo', repoId: 1, version: 'c0ffee' },
+    latestVersion: null,
+  })
+  const ghV = (verdict: string) => ({ name: 'Owner/Repo', version: null, verdict, reason: 'AI 判 concern：提取超时', at: '2026-01-01T00:00:00Z', source: 'ai' })
+  const ghC = { ...C(), name: 'Owner/Repo', version: null }
+  it('a version-less github slot reconciles — name\\0 key resolves to the entry', async () => {
+    const s = setup([gh], [ghV('concern')], [ghC])
+    await main(args(s), { judge: judge('pass') })
+    const out = JSON.parse(readFileSync(s.spool, 'utf8').trim())
+    expect(out.verdict).toBe('pass')
+    expect(out.version).toBeNull()
+  })
+  it('an npm entry does not claim the name\\0 github key — npm slots still need a version', async () => {
+    const s = setup([entry()], [{ ...ghV('concern'), name: 'pkg', version: null }], [{ ...C(), name: 'pkg', version: null }])
+    await main(args(s), { judge: judge('pass') })
+    expect(() => readFileSync(s.spool, 'utf8')).toThrow()
+  })
+})

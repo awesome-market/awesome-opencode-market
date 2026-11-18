@@ -64,6 +64,10 @@ export async function main(
   for (const e of idx.plugins) {
     for (const ver of new Set([e.latestVersion, e.pendingUpdate?.version].filter(Boolean) as string[]))
       byKey.set(vkey(e.name, ver), e)
+    // github-kind slots key on name\0 — the version loop above never mints
+    // one (latestVersion/pendingUpdate are null), so version-less packages
+    // silently skipped reconciliation entirely
+    if (e.source?.kind === 'github') byKey.set(vkey(e.name, null), e)
   }
   const latestV = latestVerdicts(loadVerdicts(vPath))
   const ctxByName = new Map<string, FlagContext[]>()
