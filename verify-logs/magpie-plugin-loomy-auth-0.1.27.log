@@ -1,0 +1,60 @@
+spec: magpie-plugin-loomy-auth@0.1.27
+apiNames: magpie-plugin-loomy-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-O3Fn6w/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:44071
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:19:36.982Z level=INFO run=e9ecb6fc message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-plugin-loomy-auth@0.1.27\"]" role=cli
+timestamp=2026-11-18T11:19:37.897Z level=INFO run=9046e5e3 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:19:38.271Z level=INFO run=9046e5e3 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:19:38.292Z level=INFO run=9046e5e3 message="database schema bootstrap completed" migrations=62 durationMs=21 role=server
+timestamp=2026-11-18T11:19:38.456Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/.config/opencode type=directory ignores=6 http.span=28 role=server
+timestamp=2026-11-18T11:19:38.459Z level=INFO run=9046e5e3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:19:38.460Z level=INFO run=9046e5e3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:19:38.460Z level=INFO run=9046e5e3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:19:38.461Z level=INFO run=9046e5e3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:19:38.461Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:19:38.461Z level=INFO run=9046e5e3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:19:38.461Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w type=entries ignores=0 http.span=33 role=server
+timestamp=2026-11-18T11:19:38.462Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w type=entries backend=node ignores=0 http.span=34 role=server
+timestamp=2026-11-18T11:19:38.462Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u type=entries ignores=0 http.span=34 role=server
+timestamp=2026-11-18T11:19:38.463Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u type=entries backend=node ignores=0 http.span=35 role=server
+timestamp=2026-11-18T11:19:38.491Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/.config/opencode type=directory backend=inotify ignores=6 http.span=63 role=server
+timestamp=2026-11-18T11:19:38.511Z level=INFO run=9046e5e3 msg="loading plugin" id=magpie-plugin-loomy-auth@0.1.27 entrypoint=file:///tmp/verify-O3Fn6w/u/cache/opencode/npm/magpie-plugin-loomy-auth@0.1.27/1795000777392/node_modules/magpie-plugin-loomy-auth/index.mjs http.span=83 role=server
+timestamp=2026-11-18T11:19:38.524Z level=WARN run=9046e5e3 message="failed to load plugin" target=magpie-plugin-loomy-auth@0.1.27 ref=err_c03aab22 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=96 role=server
+timestamp=2026-11-18T11:19:38.541Z level=INFO run=9046e5e3 message="location services booted" directory=/tmp/verify-O3Fn6w/u workspaceID=undefined durationMs=113 http.span=113 role=server
+timestamp=2026-11-18T11:19:39.778Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:19:39.778Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:19:39.779Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:19:39.779Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:19:39.780Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:19:39.780Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:19:39.780Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:19:39.862Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:19:39.863Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:19:39.877Z level=INFO run=9046e5e3 message="watcher subscribe" path=/tmp/verify-O3Fn6w/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:19:39.878Z level=INFO run=9046e5e3 message="watcher started" path=/tmp/verify-O3Fn6w/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:19:39.919Z level=INFO run=9046e5e3 message=event event.id=evt_1ee62448f001Jf5AJrpthPXmUL event.created=1795000779919 event.type=provider.updated event.location.directory=/tmp/verify-O3Fn6w/u event.location.workspaceID=undefined event.data={} http.span=1491 role=server
+timestamp=2026-11-18T11:19:39.941Z level=INFO run=9046e5e3 message=event event.id=evt_1ee6244a5001RXvc9eIge6csld event.created=1795000779941 event.type=model.updated event.location.directory=/tmp/verify-O3Fn6w/u event.location.workspaceID=undefined event.data={} http.span=1513 role=server
+timestamp=2026-11-18T11:19:39.946Z level=INFO run=9046e5e3 message=event event.id=evt_1ee6244aa001KRfRfiYfKbpA7e event.created=1795000779946 event.type=agent.updated event.location.directory=/tmp/verify-O3Fn6w/u event.location.workspaceID=undefined event.data={} http.span=1518 role=server
+timestamp=2026-11-18T11:19:39.946Z level=INFO run=9046e5e3 message=event event.id=evt_1ee6244aa002hnRr1aJ6FeUzyJ event.created=1795000779946 event.type=command.updated event.location.directory=/tmp/verify-O3Fn6w/u event.location.workspaceID=undefined event.data={} http.span=1518 role=server
+timestamp=2026-11-18T11:19:40.069Z level=ERROR run=9046e5e3 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1641 role=server
+timestamp=2026-11-18T11:19:40.558Z level=INFO run=9046e5e3 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:19:40.558Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:19:40.558Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:19:40.566Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:19:40.566Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:19:40.566Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:19:40.604Z level=INFO run=9046e5e3 message="watcher stopped" path=/etc type=entries http.span=2176 role=server
+timestamp=2026-11-18T11:19:40.604Z level=INFO run=9046e5e3 message="watcher stopped" path=/ type=entries http.span=2176 role=server
+timestamp=2026-11-18T11:19:40.604Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp type=entries http.span=2176 role=server
+timestamp=2026-11-18T11:19:40.604Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w type=entries http.span=2176 role=server
+timestamp=2026-11-18T11:19:40.604Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u type=entries http.span=2176 role=server
+timestamp=2026-11-18T11:19:40.608Z level=INFO run=9046e5e3 message="watcher stopped" path=/tmp/verify-O3Fn6w/u/.config/opencode type=directory http.span=2180 role=server

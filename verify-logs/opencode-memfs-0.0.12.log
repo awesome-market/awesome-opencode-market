@@ -1,0 +1,60 @@
+spec: opencode-memfs@0.0.12
+apiNames: opencode-memfs
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-QPetEU/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46255
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:20:57.636Z level=INFO run=7bdb68b5 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-memfs@0.0.12\"]" role=cli
+timestamp=2026-11-18T11:21:05.812Z level=INFO run=bb40452c message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:21:06.305Z level=INFO run=bb40452c message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:21:06.474Z level=INFO run=bb40452c message="database schema bootstrap completed" migrations=62 durationMs=169 role=server
+timestamp=2026-11-18T11:21:06.951Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/.config/opencode type=directory ignores=6 http.span=92 role=server
+timestamp=2026-11-18T11:21:06.964Z level=INFO run=bb40452c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=105 role=server
+timestamp=2026-11-18T11:21:06.970Z level=INFO run=bb40452c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=111 role=server
+timestamp=2026-11-18T11:21:06.972Z level=INFO run=bb40452c message="watcher subscribe" path=/ type=entries ignores=0 http.span=113 role=server
+timestamp=2026-11-18T11:21:06.972Z level=INFO run=bb40452c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=113 role=server
+timestamp=2026-11-18T11:21:06.974Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=115 role=server
+timestamp=2026-11-18T11:21:06.974Z level=INFO run=bb40452c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=115 role=server
+timestamp=2026-11-18T11:21:06.974Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU type=entries ignores=0 http.span=115 role=server
+timestamp=2026-11-18T11:21:06.974Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU type=entries backend=node ignores=0 http.span=115 role=server
+timestamp=2026-11-18T11:21:06.974Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u type=entries ignores=0 http.span=115 role=server
+timestamp=2026-11-18T11:21:06.975Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u type=entries backend=node ignores=0 http.span=116 role=server
+timestamp=2026-11-18T11:21:07.060Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/.config/opencode type=directory backend=inotify ignores=6 http.span=201 role=server
+timestamp=2026-11-18T11:21:07.131Z level=INFO run=bb40452c message="location services booted" directory=/tmp/verify-QPetEU/u workspaceID=undefined durationMs=271 http.span=272 role=server
+timestamp=2026-11-18T11:21:07.137Z level=INFO run=bb40452c msg="loading plugin" id=opencode-memfs@0.0.12 entrypoint=file:///tmp/verify-QPetEU/u/cache/opencode/npm/opencode-memfs@0.0.12/1795000865148/node_modules/opencode-memfs/dist/index.js http.span=278 role=server
+timestamp=2026-11-18T11:21:07.250Z level=WARN run=bb40452c message="failed to load plugin" target=opencode-memfs@0.0.12 ref=err_4fa2cbdf cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=391 role=server
+timestamp=2026-11-18T11:21:08.802Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:21:08.803Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:21:08.803Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:21:08.804Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:21:08.804Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:21:08.804Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:21:08.804Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:21:08.830Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:21:08.830Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:21:08.832Z level=INFO run=bb40452c message="watcher subscribe" path=/tmp/verify-QPetEU/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:21:08.832Z level=INFO run=bb40452c message="watcher started" path=/tmp/verify-QPetEU/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:21:08.912Z level=INFO run=bb40452c message=event event.id=evt_1ee63a03000161sK4J2c8pb6qy event.created=1795000868912 event.type=provider.updated event.location.directory=/tmp/verify-QPetEU/u event.location.workspaceID=undefined event.data={} http.span=2053 role=server
+timestamp=2026-11-18T11:21:08.949Z level=INFO run=bb40452c message=event event.id=evt_1ee63a055001pL91jbP6xbNiR4 event.created=1795000868949 event.type=model.updated event.location.directory=/tmp/verify-QPetEU/u event.location.workspaceID=undefined event.data={} http.span=2090 role=server
+timestamp=2026-11-18T11:21:08.956Z level=INFO run=bb40452c message=event event.id=evt_1ee63a05c001u0tu5vuFne6iOO event.created=1795000868956 event.type=agent.updated event.location.directory=/tmp/verify-QPetEU/u event.location.workspaceID=undefined event.data={} http.span=2097 role=server
+timestamp=2026-11-18T11:21:08.956Z level=INFO run=bb40452c message=event event.id=evt_1ee63a05c002RzbhhI55IKhotw event.created=1795000868956 event.type=command.updated event.location.directory=/tmp/verify-QPetEU/u event.location.workspaceID=undefined event.data={} http.span=2097 role=server
+timestamp=2026-11-18T11:21:09.117Z level=ERROR run=bb40452c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2258 role=server
+timestamp=2026-11-18T11:21:09.437Z level=INFO run=bb40452c message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:21:09.441Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:21:09.441Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:21:09.449Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:21:09.449Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:21:09.451Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:21:09.493Z level=INFO run=bb40452c message="watcher stopped" path=/etc type=entries http.span=2634 role=server
+timestamp=2026-11-18T11:21:09.493Z level=INFO run=bb40452c message="watcher stopped" path=/ type=entries http.span=2634 role=server
+timestamp=2026-11-18T11:21:09.494Z level=INFO run=bb40452c message="watcher stopped" path=/tmp type=entries http.span=2635 role=server
+timestamp=2026-11-18T11:21:09.494Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU type=entries http.span=2635 role=server
+timestamp=2026-11-18T11:21:09.494Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u type=entries http.span=2635 role=server
+timestamp=2026-11-18T11:21:09.506Z level=INFO run=bb40452c message="watcher stopped" path=/tmp/verify-QPetEU/u/.config/opencode type=directory http.span=2647 role=server

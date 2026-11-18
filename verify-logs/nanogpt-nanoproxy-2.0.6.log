@@ -3,54 +3,30 @@ apiNames: nanogpt-nanoproxy
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-jFK2Ub/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-TWtuRn/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:34443
+server listening on http://127.0.0.1:33179
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T10:13:39.070Z level=INFO run=918b277c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"nanogpt-nanoproxy@2.0.6\"]" role=cli
-timestamp=2026-11-16T10:13:39.551Z level=INFO run=7f43c9a1 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T10:13:40.061Z level=INFO run=7f43c9a1 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T10:13:40.093Z level=INFO run=7f43c9a1 message="database schema bootstrap completed" migrations=59 durationMs=32 role=server
-timestamp=2026-11-16T10:13:40.268Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u/.config/opencode type=directory ignores=6 http.span=25 role=server
-timestamp=2026-11-16T10:13:40.271Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=28 role=server
-timestamp=2026-11-16T10:13:40.273Z level=INFO run=7f43c9a1 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
-timestamp=2026-11-16T10:13:40.273Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
-timestamp=2026-11-16T10:13:40.274Z level=INFO run=7f43c9a1 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
-timestamp=2026-11-16T10:13:40.274Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
-timestamp=2026-11-16T10:13:40.274Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
-timestamp=2026-11-16T10:13:40.275Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-16T10:13:40.275Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-16T10:13:40.275Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-16T10:13:40.275Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-16T10:13:40.293Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u/.config/opencode type=directory backend=inotify ignores=6 http.span=50 role=server
-timestamp=2026-11-16T10:13:40.303Z level=INFO run=7f43c9a1 message="location services booted" directory=/tmp/verify-jFK2Ub/u workspaceID=undefined durationMs=60 http.span=60 role=server
-timestamp=2026-11-16T10:13:40.317Z level=INFO run=7f43c9a1 msg="loading plugin" id=nanogpt-nanoproxy@2.0.6 entrypoint=file:///tmp/verify-jFK2Ub/u/cache/opencode/npm/nanogpt-nanoproxy@2.0.6/1794824019280/node_modules/nanogpt-nanoproxy/index.mjs http.span=74 role=server
-timestamp=2026-11-16T10:13:40.320Z level=WARN run=7f43c9a1 message="failed to load plugin" target=nanogpt-nanoproxy@2.0.6 ref=err_830c7a61 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=77 role=server
-timestamp=2026-11-16T10:13:41.003Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T10:13:41.003Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T10:13:41.004Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T10:13:41.004Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T10:13:41.060Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T10:13:41.062Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T10:13:41.063Z level=INFO run=7f43c9a1 message="watcher subscribe" path=/tmp/verify-jFK2Ub/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T10:13:41.064Z level=INFO run=7f43c9a1 message="watcher started" path=/tmp/verify-jFK2Ub/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T10:13:41.091Z level=INFO run=7f43c9a1 message=event event.id=evt_1e3d92463001511RNGaP5AqUvs event.created=1794824021091 event.type=provider.updated event.location.directory=/tmp/verify-jFK2Ub/u event.location.workspaceID=undefined event.data={} http.span=848 role=server
-timestamp=2026-11-16T10:13:41.101Z level=INFO run=7f43c9a1 message=event event.id=evt_1e3d9246c001UP8edt94u9zHwt event.created=1794824021100 event.type=model.updated event.location.directory=/tmp/verify-jFK2Ub/u event.location.workspaceID=undefined event.data={} http.span=858 role=server
-timestamp=2026-11-16T10:13:41.102Z level=INFO run=7f43c9a1 message=event event.id=evt_1e3d9246e001klMKDtLrFTIQoS event.created=1794824021102 event.type=agent.updated event.location.directory=/tmp/verify-jFK2Ub/u event.location.workspaceID=undefined event.data={} http.span=859 role=server
-timestamp=2026-11-16T10:13:41.103Z level=INFO run=7f43c9a1 message=event event.id=evt_1e3d9246f001s4sjugLr1GauSp event.created=1794824021103 event.type=command.updated event.location.directory=/tmp/verify-jFK2Ub/u event.location.workspaceID=undefined event.data={} http.span=860 role=server
-timestamp=2026-11-16T10:13:41.180Z level=ERROR run=7f43c9a1 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=937 role=server
-timestamp=2026-11-16T10:13:41.497Z level=INFO run=7f43c9a1 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T10:13:41.497Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T10:13:41.498Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T10:13:41.504Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T10:13:41.505Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T10:13:41.537Z level=INFO run=7f43c9a1 message="watcher stopped" path=/etc type=entries http.span=1294 role=server
-timestamp=2026-11-16T10:13:41.537Z level=INFO run=7f43c9a1 message="watcher stopped" path=/ type=entries http.span=1294 role=server
-timestamp=2026-11-16T10:13:41.537Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp type=entries http.span=1294 role=server
-timestamp=2026-11-16T10:13:41.537Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub type=entries http.span=1294 role=server
-timestamp=2026-11-16T10:13:41.543Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u type=entries http.span=1300 role=server
-timestamp=2026-11-16T10:13:41.545Z level=INFO run=7f43c9a1 message="watcher stopped" path=/tmp/verify-jFK2Ub/u/.config/opencode type=directory http.span=1302 role=server
+timestamp=2026-11-18T11:19:34.234Z level=INFO run=7f2fa393 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"nanogpt-nanoproxy@2.0.6\"]" role=cli
+timestamp=2026-11-18T11:19:34.936Z level=INFO run=9cd102c8 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:19:35.237Z level=INFO run=9cd102c8 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:19:35.289Z level=INFO run=9cd102c8 message="database schema bootstrap completed" migrations=62 durationMs=52 role=server
+timestamp=2026-11-18T11:19:35.591Z level=INFO run=9cd102c8 message="watcher subscribe" path=/tmp/verify-TWtuRn/u/.config/opencode type=directory ignores=6 http.span=35 role=server
+timestamp=2026-11-18T11:19:35.595Z level=INFO run=9cd102c8 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=39 role=server
+timestamp=2026-11-18T11:19:35.596Z level=INFO run=9cd102c8 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=40 role=server
+timestamp=2026-11-18T11:19:35.597Z level=INFO run=9cd102c8 message="watcher subscribe" path=/ type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-18T11:19:35.597Z level=INFO run=9cd102c8 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-18T11:19:35.597Z level=INFO run=9cd102c8 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-18T11:19:35.597Z level=INFO run=9cd102c8 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-18T11:19:35.598Z level=INFO run=9cd102c8 message="watcher subscribe" path=/tmp/verify-TWtuRn type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:19:35.598Z level=INFO run=9cd102c8 message="watcher started" path=/tmp/verify-TWtuRn type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:19:35.598Z level=INFO run=9cd102c8 message="watcher subscribe" path=/tmp/verify-TWtuRn/u type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:19:35.599Z level=INFO run=9cd102c8 message="watcher started" path=/tmp/verify-TWtuRn/u type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:19:35.620Z level=INFO run=9cd102c8 message="watcher started" path=/tmp/verify-TWtuRn/u/.config/opencode type=directory backend=inotify ignores=6 http.span=64 role=server
+timestamp=2026-11-18T11:19:35.634Z level=INFO run=9cd102c8 message="location services booted" directory=/tmp/verify-TWtuRn/u workspaceID=undefined durationMs=77 http.span=78 role=server
+timestamp=2026-11-18T11:19:35.646Z level=INFO run=9cd102c8 msg="loading plugin" id=nanogpt-nanoproxy@2.0.6 entrypoint=file:///tmp/verify-TWtuRn/u/cache/opencode/npm/nanogpt-nanoproxy@2.0.6/1795000774546/node_modules/nanogpt-nanoproxy/index.mjs http.span=90 role=server
+timestamp=2026-11-18T11:19:35.659Z level=WARN run=9cd102c8 message="failed to load plugin" target=nanogpt-nanoproxy@2.0.6 ref=err_d6eefef5 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=103 role=server
