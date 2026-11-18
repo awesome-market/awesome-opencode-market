@@ -3,14 +3,14 @@ apiNames: @vandoor2/opencode-latex-render, opencode-latex-render
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-JEGKzL/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-eaOrk0/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:34523
+server listening on http://127.0.0.1:43035
 server password [redacted]
 [opencode-latex-render] Installing Python dependencies...
 Defaulting to user installation because normal site-packages is not writeable
-Obtaining file:///tmp/verify-JEGKzL/u/cache/opencode/npm/%40vandoor2/opencode-latex-render%400.3.1/1794833670909/node_modules/%40vandoor2/opencode-latex-render
+Obtaining file:///tmp/verify-eaOrk0/u/cache/opencode/npm/%40vandoor2/opencode-latex-render%400.3.1/1795003069420/node_modules/%40vandoor2/opencode-latex-render
   Installing build dependencies: started
   Installing build dependencies: finished with status 'error'
   error: subprocess-exited-with-error
@@ -18,11 +18,11 @@ Obtaining file:///tmp/verify-JEGKzL/u/cache/opencode/npm/%40vandoor2/opencode-la
   × pip subprocess to install build dependencies did not run successfully.
   │ exit code: 1
   ╰─> [7 lines of output]
-      WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7516d926f380>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
-      WARNING: Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7516d923ae90>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
-      WARNING: Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7516d923afd0>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
-      WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7516d923b110>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
-      WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x7516d923b250>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=4, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x793a408b7380>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=3, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x793a40882e90>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x793a40882fd0>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x793a40883110>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
+      WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<pip._vendor.urllib3.connection.HTTPSConnection object at 0x793a40883250>: Failed to establish a new connection: [Errno 111] Connection refused')': /simple/setuptools/
       ERROR: Could not find a version that satisfies the requirement setuptools>=61.0 (from versions: none)
       ERROR: No matching distribution found for setuptools>=61.0
       [end of output]
@@ -35,51 +35,53 @@ error: subprocess-exited-with-error
 ╰─> See above for output.
 
 note: This error originates from a subprocess, and is likely not a problem with pip.
-received SIGTERM again during shutdown; exiting. Still pending:
-  nothing tracked; the stuck finalizer is outside any LayerNode layer
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T12:54:06.443Z level=INFO run=98c7a340 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@vandoor2/opencode-latex-render@0.3.1\"]" role=cli
-timestamp=2026-11-16T12:54:31.124Z level=INFO run=81d442be message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T12:54:31.314Z level=INFO run=81d442be message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T12:54:31.330Z level=INFO run=81d442be message="database schema bootstrap completed" migrations=59 durationMs=16 role=server
-timestamp=2026-11-16T12:54:31.595Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u/.config/opencode type=directory ignores=6 http.span=20 role=server
-timestamp=2026-11-16T12:54:31.598Z level=INFO run=81d442be message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
-timestamp=2026-11-16T12:54:31.599Z level=INFO run=81d442be message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
-timestamp=2026-11-16T12:54:31.599Z level=INFO run=81d442be message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
-timestamp=2026-11-16T12:54:31.599Z level=INFO run=81d442be message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
-timestamp=2026-11-16T12:54:31.600Z level=INFO run=81d442be message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-16T12:54:31.600Z level=INFO run=81d442be message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-16T12:54:31.600Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-16T12:54:31.600Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL type=entries backend=node ignores=0 http.span=25 role=server
-timestamp=2026-11-16T12:54:31.600Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u type=entries ignores=0 http.span=25 role=server
-timestamp=2026-11-16T12:54:31.601Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u type=entries backend=node ignores=0 http.span=26 role=server
-timestamp=2026-11-16T12:54:31.616Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
-timestamp=2026-11-16T12:54:31.622Z level=INFO run=81d442be message="location services booted" directory=/tmp/verify-JEGKzL/u workspaceID=undefined durationMs=46 http.span=47 role=server
-timestamp=2026-11-16T12:54:31.633Z level=INFO run=81d442be msg="loading plugin" id=@vandoor2/opencode-latex-render@0.3.1 entrypoint=file:///tmp/verify-JEGKzL/u/cache/opencode/npm/@vandoor2/opencode-latex-render@0.3.1/1794833670909/node_modules/@vandoor2/opencode-latex-render/src/index.ts http.span=58 role=server
-timestamp=2026-11-16T12:54:41.220Z level=WARN run=81d442be message="failed to load plugin" plugin.id=latex-render cause="Cause([Die(Error: Failed to install Python dependencies. Please run manually: python3 -m pip install -e \"/tmp/verify-JEGKzL/u/cache/opencode/npm/@vandoor2/opencode-latex-render@0.3.1/1794833670909/node_modules/@vandoor2/opencode-latex-render\")])" http.span=9645 role=server
-timestamp=2026-11-16T12:54:41.227Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T12:54:41.227Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T12:54:41.227Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T12:54:41.227Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T12:54:41.237Z level=ERROR run=81d442be message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=9662 role=server
-timestamp=2026-11-16T12:54:41.248Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T12:54:41.248Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T12:54:41.249Z level=INFO run=81d442be message="watcher subscribe" path=/tmp/verify-JEGKzL/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T12:54:41.249Z level=INFO run=81d442be message="watcher started" path=/tmp/verify-JEGKzL/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T12:54:41.265Z level=INFO run=81d442be message=event event.id=evt_1e46c8b710013YotuyOgxulBWK event.created=1794833681265 event.type=provider.updated event.location.directory=/tmp/verify-JEGKzL/u event.location.workspaceID=undefined event.data={} http.span=9690 role=server
-timestamp=2026-11-16T12:54:41.272Z level=INFO run=81d442be message=event event.id=evt_1e46c8b78001CFYYwg3xFjssN8 event.created=1794833681272 event.type=model.updated event.location.directory=/tmp/verify-JEGKzL/u event.location.workspaceID=undefined event.data={} http.span=9697 role=server
-timestamp=2026-11-16T12:54:41.274Z level=INFO run=81d442be message=event event.id=evt_1e46c8b7a00155sGS2ZXAInf6C event.created=1794833681274 event.type=agent.updated event.location.directory=/tmp/verify-JEGKzL/u event.location.workspaceID=undefined event.data={} http.span=9699 role=server
-timestamp=2026-11-16T12:54:41.274Z level=INFO run=81d442be message=event event.id=evt_1e46c8b7a002iOb0T3fp5qKRMK event.created=1794833681274 event.type=command.updated event.location.directory=/tmp/verify-JEGKzL/u event.location.workspaceID=undefined event.data={} http.span=9699 role=server
-timestamp=2026-11-16T12:54:41.805Z level=INFO run=81d442be message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T12:54:41.805Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T12:54:41.805Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T12:54:41.808Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T12:54:41.808Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T12:54:41.821Z level=INFO run=81d442be message="watcher stopped" path=/etc type=entries http.span=10246 role=server
-timestamp=2026-11-16T12:54:41.821Z level=INFO run=81d442be message="watcher stopped" path=/ type=entries http.span=10246 role=server
-timestamp=2026-11-16T12:54:41.821Z level=INFO run=81d442be message="watcher stopped" path=/tmp type=entries http.span=10246 role=server
-timestamp=2026-11-16T12:54:41.821Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL type=entries http.span=10246 role=server
-timestamp=2026-11-16T12:54:41.821Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u type=entries http.span=10246 role=server
-timestamp=2026-11-16T12:54:41.825Z level=INFO run=81d442be message="watcher stopped" path=/tmp/verify-JEGKzL/u/.config/opencode type=directory http.span=10250 role=server
+timestamp=2026-11-18T11:57:21.917Z level=INFO run=ccbb1597 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@vandoor2/opencode-latex-render@0.3.1\"]" role=cli
+timestamp=2026-11-18T11:57:49.694Z level=INFO run=a8196f2c message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:57:49.903Z level=INFO run=a8196f2c message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:57:49.926Z level=INFO run=a8196f2c message="database schema bootstrap completed" migrations=62 durationMs=23 role=server
+timestamp=2026-11-18T11:57:50.157Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/.config/opencode type=directory ignores=6 http.span=26 role=server
+timestamp=2026-11-18T11:57:50.160Z level=INFO run=a8196f2c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-18T11:57:50.161Z level=INFO run=a8196f2c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=30 role=server
+timestamp=2026-11-18T11:57:50.161Z level=INFO run=a8196f2c message="watcher subscribe" path=/ type=entries ignores=0 http.span=30 role=server
+timestamp=2026-11-18T11:57:50.162Z level=INFO run=a8196f2c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:57:50.162Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:57:50.162Z level=INFO run=a8196f2c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:57:50.162Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0 type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-18T11:57:50.163Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0 type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:57:50.163Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:57:50.163Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-18T11:57:50.184Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/.config/opencode type=directory backend=inotify ignores=6 http.span=53 role=server
+timestamp=2026-11-18T11:57:50.192Z level=INFO run=a8196f2c message="location services booted" directory=/tmp/verify-eaOrk0/u workspaceID=undefined durationMs=60 http.span=61 role=server
+timestamp=2026-11-18T11:57:50.205Z level=INFO run=a8196f2c msg="loading plugin" id=@vandoor2/opencode-latex-render@0.3.1 entrypoint=file:///tmp/verify-eaOrk0/u/cache/opencode/npm/@vandoor2/opencode-latex-render@0.3.1/1795003069420/node_modules/@vandoor2/opencode-latex-render/src/index.ts http.span=74 role=server
+timestamp=2026-11-18T11:57:59.908Z level=WARN run=a8196f2c message="failed to load plugin" plugin.id=latex-render cause="Cause([Die(Error: Failed to install Python dependencies. Please run manually: python3 -m pip install -e \"/tmp/verify-eaOrk0/u/cache/opencode/npm/@vandoor2/opencode-latex-render@0.3.1/1795003069420/node_modules/@vandoor2/opencode-latex-render\")])" http.span=9777 role=server
+timestamp=2026-11-18T11:57:59.916Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:57:59.917Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:57:59.918Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:57:59.920Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:57:59.929Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:57:59.929Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:57:59.929Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:57:59.930Z level=ERROR run=a8196f2c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=9799 role=server
+timestamp=2026-11-18T11:57:59.944Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:57:59.944Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:57:59.945Z level=INFO run=a8196f2c message="watcher subscribe" path=/tmp/verify-eaOrk0/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:57:59.945Z level=INFO run=a8196f2c message="watcher started" path=/tmp/verify-eaOrk0/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:57:59.965Z level=INFO run=a8196f2c message=event event.id=evt_1ee855d1d0010Mz7L2y36uZJzR event.created=1795003079965 event.type=provider.updated event.location.directory=/tmp/verify-eaOrk0/u event.location.workspaceID=undefined event.data={} http.span=9834 role=server
+timestamp=2026-11-18T11:57:59.974Z level=INFO run=a8196f2c message=event event.id=evt_1ee855d2600192SRoAUDSIt7hb event.created=1795003079974 event.type=model.updated event.location.directory=/tmp/verify-eaOrk0/u event.location.workspaceID=undefined event.data={} http.span=9843 role=server
+timestamp=2026-11-18T11:57:59.977Z level=INFO run=a8196f2c message=event event.id=evt_1ee855d28001avYyPaWcsjdEpa event.created=1795003079977 event.type=agent.updated event.location.directory=/tmp/verify-eaOrk0/u event.location.workspaceID=undefined event.data={} http.span=9846 role=server
+timestamp=2026-11-18T11:57:59.977Z level=INFO run=a8196f2c message=event event.id=evt_1ee855d290014aEQydsTOe1b1l event.created=1795003079977 event.type=command.updated event.location.directory=/tmp/verify-eaOrk0/u event.location.workspaceID=undefined event.data={} http.span=9846 role=server
+timestamp=2026-11-18T11:58:00.462Z level=INFO run=a8196f2c message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:58:00.462Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:58:00.463Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:58:00.467Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:58:00.467Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:58:00.467Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:58:00.486Z level=INFO run=a8196f2c message="watcher stopped" path=/etc type=entries http.span=10355 role=server
+timestamp=2026-11-18T11:58:00.486Z level=INFO run=a8196f2c message="watcher stopped" path=/ type=entries http.span=10355 role=server
+timestamp=2026-11-18T11:58:00.487Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp type=entries http.span=10356 role=server
+timestamp=2026-11-18T11:58:00.487Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0 type=entries http.span=10356 role=server
+timestamp=2026-11-18T11:58:00.487Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u type=entries http.span=10356 role=server
+timestamp=2026-11-18T11:58:00.488Z level=INFO run=a8196f2c message="watcher stopped" path=/tmp/verify-eaOrk0/u/.config/opencode type=directory http.span=10357 role=server

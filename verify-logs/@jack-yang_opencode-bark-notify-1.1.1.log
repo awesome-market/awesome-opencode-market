@@ -1,0 +1,60 @@
+spec: @jack-yang/opencode-bark-notify@1.1.1
+apiNames: @jack-yang/opencode-bark-notify, opencode-bark-notify
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-PpYTll/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39143
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:58:28.524Z level=INFO run=7ff4c957 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@jack-yang/opencode-bark-notify@1.1.1\"]" role=cli
+timestamp=2026-11-18T11:58:29.507Z level=INFO run=1ad2208e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:58:29.832Z level=INFO run=1ad2208e message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:58:29.851Z level=INFO run=1ad2208e message="database schema bootstrap completed" migrations=62 durationMs=19 role=server
+timestamp=2026-11-18T11:58:30.181Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/.config/opencode type=directory ignores=6 http.span=55 role=server
+timestamp=2026-11-18T11:58:30.186Z level=INFO run=1ad2208e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-18T11:58:30.187Z level=INFO run=1ad2208e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-18T11:58:30.187Z level=INFO run=1ad2208e message="watcher subscribe" path=/ type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-18T11:58:30.188Z level=INFO run=1ad2208e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=62 role=server
+timestamp=2026-11-18T11:58:30.188Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=62 role=server
+timestamp=2026-11-18T11:58:30.189Z level=INFO run=1ad2208e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-18T11:58:30.189Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-18T11:58:30.189Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll type=entries backend=node ignores=0 http.span=63 role=server
+timestamp=2026-11-18T11:58:30.190Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u type=entries ignores=0 http.span=64 role=server
+timestamp=2026-11-18T11:58:30.191Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u type=entries backend=node ignores=0 http.span=65 role=server
+timestamp=2026-11-18T11:58:30.251Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/.config/opencode type=directory backend=inotify ignores=6 http.span=125 role=server
+timestamp=2026-11-18T11:58:30.273Z level=INFO run=1ad2208e message="location services booted" directory=/tmp/verify-PpYTll/u workspaceID=undefined durationMs=146 http.span=147 role=server
+timestamp=2026-11-18T11:58:30.287Z level=INFO run=1ad2208e msg="loading plugin" id=@jack-yang/opencode-bark-notify@1.1.1 entrypoint=file:///tmp/verify-PpYTll/u/cache/opencode/npm/@jack-yang/opencode-bark-notify@1.1.1/1795003108839/node_modules/@jack-yang/opencode-bark-notify/index.ts http.span=161 role=server
+timestamp=2026-11-18T11:58:30.289Z level=WARN run=1ad2208e message="failed to load plugin" target=@jack-yang/opencode-bark-notify@1.1.1 ref=err_33aa49de cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=163 role=server
+timestamp=2026-11-18T11:58:31.964Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:58:31.964Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:58:31.964Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:58:31.965Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T11:58:31.965Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:58:31.966Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T11:58:31.967Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:58:32.006Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T11:58:32.006Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:58:32.009Z level=INFO run=1ad2208e message="watcher subscribe" path=/tmp/verify-PpYTll/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T11:58:32.011Z level=INFO run=1ad2208e message="watcher started" path=/tmp/verify-PpYTll/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T11:58:32.012Z level=ERROR run=1ad2208e message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1886 role=server
+timestamp=2026-11-18T11:58:32.050Z level=INFO run=1ad2208e message=event event.id=evt_1ee85da72001DKXvENmCOtp5Oo event.created=1795003112050 event.type=provider.updated event.location.directory=/tmp/verify-PpYTll/u event.location.workspaceID=undefined event.data={} http.span=1924 role=server
+timestamp=2026-11-18T11:58:32.095Z level=INFO run=1ad2208e message=event event.id=evt_1ee85da9f0011DvkvD4J5oNKRt event.created=1795003112095 event.type=model.updated event.location.directory=/tmp/verify-PpYTll/u event.location.workspaceID=undefined event.data={} http.span=1969 role=server
+timestamp=2026-11-18T11:58:32.100Z level=INFO run=1ad2208e message=event event.id=evt_1ee85daa40011UPtTbgi6r798k event.created=1795003112100 event.type=agent.updated event.location.directory=/tmp/verify-PpYTll/u event.location.workspaceID=undefined event.data={} http.span=1974 role=server
+timestamp=2026-11-18T11:58:32.102Z level=INFO run=1ad2208e message=event event.id=evt_1ee85daa6001308b4iXVm9uR5f event.created=1795003112102 event.type=command.updated event.location.directory=/tmp/verify-PpYTll/u event.location.workspaceID=undefined event.data={} http.span=1976 role=server
+timestamp=2026-11-18T11:58:32.533Z level=INFO run=1ad2208e message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T11:58:32.533Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T11:58:32.533Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T11:58:32.544Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T11:58:32.546Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:58:32.548Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T11:58:32.595Z level=INFO run=1ad2208e message="watcher stopped" path=/etc type=entries http.span=2469 role=server
+timestamp=2026-11-18T11:58:32.595Z level=INFO run=1ad2208e message="watcher stopped" path=/ type=entries http.span=2469 role=server
+timestamp=2026-11-18T11:58:32.595Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp type=entries http.span=2469 role=server
+timestamp=2026-11-18T11:58:32.596Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll type=entries http.span=2470 role=server
+timestamp=2026-11-18T11:58:32.596Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u type=entries http.span=2470 role=server
+timestamp=2026-11-18T11:58:32.600Z level=INFO run=1ad2208e message="watcher stopped" path=/tmp/verify-PpYTll/u/.config/opencode type=directory http.span=2474 role=server

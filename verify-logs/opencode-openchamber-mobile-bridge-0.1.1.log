@@ -1,0 +1,32 @@
+spec: opencode-openchamber-mobile-bridge@0.1.1
+apiNames: opencode-openchamber-mobile-bridge
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-xJ0z4V/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39935
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:57:34.420Z level=INFO run=5c93b4ee message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-openchamber-mobile-bridge@0.1.1\"]" role=cli
+timestamp=2026-11-18T11:57:34.972Z level=INFO run=33fdb7d0 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:57:35.221Z level=INFO run=33fdb7d0 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:57:35.265Z level=INFO run=33fdb7d0 message="database schema bootstrap completed" migrations=62 durationMs=44 role=server
+timestamp=2026-11-18T11:57:35.656Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/tmp/verify-xJ0z4V/u/.config/opencode type=directory ignores=6 http.span=27 role=server
+timestamp=2026-11-18T11:57:35.670Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-18T11:57:35.671Z level=INFO run=33fdb7d0 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:57:35.671Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/ type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:57:35.671Z level=INFO run=33fdb7d0 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/tmp/verify-xJ0z4V type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher started" path=/tmp/verify-xJ0z4V type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher subscribe" path=/tmp/verify-xJ0z4V/u type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.672Z level=INFO run=33fdb7d0 message="watcher started" path=/tmp/verify-xJ0z4V/u type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-18T11:57:35.703Z level=INFO run=33fdb7d0 message="watcher started" path=/tmp/verify-xJ0z4V/u/.config/opencode type=directory backend=inotify ignores=6 http.span=74 role=server
+timestamp=2026-11-18T11:57:35.721Z level=INFO run=33fdb7d0 message="location services booted" directory=/tmp/verify-xJ0z4V/u workspaceID=undefined durationMs=91 http.span=92 role=server
+timestamp=2026-11-18T11:57:35.739Z level=INFO run=33fdb7d0 msg="loading plugin" id=opencode-openchamber-mobile-bridge@0.1.1 entrypoint=file:///tmp/verify-xJ0z4V/u/cache/opencode/npm/opencode-openchamber-mobile-bridge@0.1.1/1795003054613/node_modules/opencode-openchamber-mobile-bridge/index.js http.span=110 role=server
+timestamp=2026-11-18T11:57:35.743Z level=WARN run=33fdb7d0 message="failed to load plugin" target=opencode-openchamber-mobile-bridge@0.1.1 ref=err_4c48ea6a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=114 role=server

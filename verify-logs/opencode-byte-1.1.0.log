@@ -3,30 +3,32 @@ apiNames: opencode-byte
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-d2IL8n/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-M9UehF/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:36183
+server listening on http://127.0.0.1:43729
 server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-17T19:09:21.376Z level=INFO run=d715d80c message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-byte@1.1.0\"]" role=cli
-timestamp=2026-11-17T19:09:26.757Z level=INFO run=f8a031ed message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-17T19:09:26.960Z level=INFO run=f8a031ed message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-17T19:09:26.980Z level=INFO run=f8a031ed message="database schema bootstrap completed" migrations=59 durationMs=20 role=server
-timestamp=2026-11-17T19:09:27.233Z level=INFO run=f8a031ed message="watcher subscribe" path=/tmp/verify-d2IL8n/u/.config/opencode type=directory ignores=6 http.span=38 role=server
-timestamp=2026-11-17T19:09:27.247Z level=INFO run=f8a031ed message="watcher subscribe" path=/etc type=entries ignores=0 http.span=52 role=server
-timestamp=2026-11-17T19:09:27.249Z level=INFO run=f8a031ed message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=54 role=server
-timestamp=2026-11-17T19:09:27.249Z level=INFO run=f8a031ed message="watcher subscribe" path=/ type=entries ignores=0 http.span=54 role=server
-timestamp=2026-11-17T19:09:27.250Z level=INFO run=f8a031ed message="watcher started" path=/ type=entries backend=node ignores=0 http.span=55 role=server
-timestamp=2026-11-17T19:09:27.250Z level=INFO run=f8a031ed message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=55 role=server
-timestamp=2026-11-17T19:09:27.250Z level=INFO run=f8a031ed message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=55 role=server
-timestamp=2026-11-17T19:09:27.250Z level=INFO run=f8a031ed message="watcher subscribe" path=/tmp/verify-d2IL8n type=entries ignores=0 http.span=55 role=server
-timestamp=2026-11-17T19:09:27.251Z level=INFO run=f8a031ed message="watcher started" path=/tmp/verify-d2IL8n type=entries backend=node ignores=0 http.span=56 role=server
-timestamp=2026-11-17T19:09:27.252Z level=INFO run=f8a031ed message="watcher subscribe" path=/tmp/verify-d2IL8n/u type=entries ignores=0 http.span=57 role=server
-timestamp=2026-11-17T19:09:27.253Z level=INFO run=f8a031ed message="watcher started" path=/tmp/verify-d2IL8n/u type=entries backend=node ignores=0 http.span=58 role=server
-timestamp=2026-11-17T19:09:27.299Z level=INFO run=f8a031ed message="watcher started" path=/tmp/verify-d2IL8n/u/.config/opencode type=directory backend=inotify ignores=6 http.span=104 role=server
-timestamp=2026-11-17T19:09:27.341Z level=INFO run=f8a031ed msg="loading plugin" id=opencode-byte@1.1.0 entrypoint=file:///tmp/verify-d2IL8n/u/cache/opencode/npm/opencode-byte@1.1.0/1794942566196/node_modules/opencode-byte/src/index.ts http.span=146 role=server
-timestamp=2026-11-17T19:09:27.381Z level=WARN run=f8a031ed message="failed to load plugin" target=opencode-byte@1.1.0 ref=err_01731dd5 cause="Cause([Die(SyntaxError: Export named 'Plugin' not found in module '/tmp/verify-d2IL8n/u/cache/opencode/npm/opencode-byte@1.1.0/1794942566196/node_modules/@opencode-ai/plugin/dist/index.js'.)])" http.span=186 role=server
-timestamp=2026-11-17T19:09:27.392Z level=INFO run=f8a031ed message="location services booted" directory=/tmp/verify-d2IL8n/u workspaceID=undefined durationMs=196 http.span=197 role=server
+timestamp=2026-11-18T11:58:40.600Z level=INFO run=7bbd519b message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-byte@1.1.0\"]" role=cli
+timestamp=2026-11-18T11:58:44.841Z level=INFO run=5b7307c2 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:58:45.209Z level=INFO run=5b7307c2 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:58:45.255Z level=INFO run=5b7307c2 message="database schema bootstrap completed" migrations=62 durationMs=46 role=server
+timestamp=2026-11-18T11:58:45.521Z level=INFO run=5b7307c2 message="watcher subscribe" path=/tmp/verify-M9UehF/u/.config/opencode type=directory ignores=6 http.span=13 role=server
+timestamp=2026-11-18T11:58:45.523Z level=INFO run=5b7307c2 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-18T11:58:45.523Z level=INFO run=5b7307c2 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-18T11:58:45.523Z level=INFO run=5b7307c2 message="watcher subscribe" path=/ type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-18T11:58:45.523Z level=INFO run=5b7307c2 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=15 role=server
+timestamp=2026-11-18T11:58:45.523Z level=INFO run=5b7307c2 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=15 role=server
+timestamp=2026-11-18T11:58:45.524Z level=INFO run=5b7307c2 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-18T11:58:45.524Z level=INFO run=5b7307c2 message="watcher subscribe" path=/tmp/verify-M9UehF type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-18T11:58:45.524Z level=INFO run=5b7307c2 message="watcher started" path=/tmp/verify-M9UehF type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-18T11:58:45.524Z level=INFO run=5b7307c2 message="watcher subscribe" path=/tmp/verify-M9UehF/u type=entries ignores=0 http.span=16 role=server
+timestamp=2026-11-18T11:58:45.524Z level=INFO run=5b7307c2 message="watcher started" path=/tmp/verify-M9UehF/u type=entries backend=node ignores=0 http.span=16 role=server
+timestamp=2026-11-18T11:58:45.538Z level=INFO run=5b7307c2 message="watcher started" path=/tmp/verify-M9UehF/u/.config/opencode type=directory backend=inotify ignores=6 http.span=30 role=server
+timestamp=2026-11-18T11:58:45.543Z level=INFO run=5b7307c2 message="location services booted" directory=/tmp/verify-M9UehF/u workspaceID=undefined durationMs=35 http.span=35 role=server
+timestamp=2026-11-18T11:58:45.549Z level=INFO run=5b7307c2 msg="loading plugin" id=opencode-byte@1.1.0 entrypoint=file:///tmp/verify-M9UehF/u/cache/opencode/npm/opencode-byte@1.1.0/1795003124626/node_modules/opencode-byte/src/index.ts http.span=41 role=server
+timestamp=2026-11-18T11:58:45.570Z level=WARN run=5b7307c2 message="failed to load plugin" target=opencode-byte@1.1.0 ref=err_5142ae38 cause="Cause([Die(SyntaxError: Export named 'Plugin' not found in module '/tmp/verify-M9UehF/u/cache/opencode/npm/opencode-byte@1.1.0/1795003124626/node_modules/@opencode-ai/plugin/dist/index.js'.)])" http.span=62 role=server
