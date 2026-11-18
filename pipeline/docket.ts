@@ -1041,12 +1041,12 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       const fkey = `${t.name.toLowerCase()}\0${t.version ?? ''}\0${f}`
       const fc = opts.flagContexts?.get(fkey)
       if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 240)}`)
-      if (fc?.call) L.push(`    ↳ 实际调用 L${fc.call.line}: ${clean(fc.call.text, 160)}`)
       else if (opts.deadCtx?.has(fkey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
       else if (opts.deadDelta?.has(`${t.name.toLowerCase()}\0${f}`))
         L.push('    ↳ AI 差异初筛不可用——多次拉取对比失败，请人工看原文')
       else if (SCAN_FLAG_RE.test(f) && !preKeys.has(f) && opts.flagContexts)
         L.push(`    ↳ 超出 AI 预读上限（${FLAGS_PER_ENTRY} 条/包）——未判，请人工看原文`)
+      if (fc?.call) L.push(`    ↳ 实际调用 L${fc.call.line}: ${clean(fc.call.text, 160)}`)
     }
     // two provenances share one list: sec:* identity signals (the trigger)
     // vs static-scan hits (standing evidence on the whole tree). Flat-mixed
@@ -1094,9 +1094,9 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
         const ekey = `${t.name.toLowerCase()}\0${t.version ?? ''}\0${s}`
         const fc = opts.flagContexts?.get(ekey)
         if (fc?.ai) L.push(`    ↳ AI 初筛：${fc.ai.verdict === 'pass' ? '倾向良性' : '⚠️ 疑似异常'}——${clean(fc.ai.reasonZh, 200)}`)
-        if (fc?.call) L.push(`    ↳ 实际调用 L${fc.call.line}: ${clean(fc.call.text, 160)}`)
         else if (opts.deadCtx?.has(ekey)) L.push('    ↳ AI 初筛不可用——多次判定失败，请人工看原文')
         else if (!preKeys.has(s) && opts.flagContexts) L.push(`    ↳ 超出 AI 预读上限——未判，请人工看原文`)
+        if (fc?.call) L.push(`    ↳ 实际调用 L${fc.call.line}: ${clean(fc.call.text, 160)}`)
       }
     }
   }

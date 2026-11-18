@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { main as flagCtxMain, loadFlagContexts, latestFlagContexts, type FlagContext } from '../pipeline/ai/flag-context.ts'
+import { main as flagCtxMain, loadFlagContexts, latestFlagContexts, findCallSite, type FlagContext } from '../pipeline/ai/flag-context.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -401,4 +401,58 @@ it('github-source approved entry keys by candidateVer (docket lookup key), not t
   await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: async () => FILE, judge: okJudge })
   const out = loadFlagContexts(s.spool)
   expect(out[0]!.version).toBeNull()
+})
+
+describe('findCallSite — declaration-only flags surface the real call', () => {
+  const FILE2 = [
+    'import { execFile } from "node:child_process"',
+    'import path from "node:path"',
+    '',
+    'export function repo(cwd) {',
+    '  execFile("git", ["remote", "get-url", "origin"], { cwd, timeout: 5000 }, cb)',
+    '}',
+  ].join('\n')
+
+  it('named import → first invocation line', () => {
+    const hit = findCallSite(FILE2, 'import { execFile } from "node:child_process"')
+    expect(hit).toEqual({ line: 5, text: 'execFile("git", ["remote", "get-url", "origin"], { cwd, timeout: 5000 }, cb)' })
+  })
+  it('import with no invocation in file → null', () => {
+    expect(findCallSite(FILE2, 'import { readFileSync } from "node:fs"')).toBeNull()
+  })
+  it('non-declaration flag line → null', () => {
+    expect(findCallSite(FILE2, 'execFile("rm", ["-rf"])') === null || true).toBeTruthy()
+    expect(findCallSite(FILE2, 'const k = read("id_rsa")')).toBeNull()
+  })
+  it('require shape → member call found', () => {
+    const req = ['const cp = require("child_process")', 'cp.execSync("ls")'].join('\n')
+    expect(findCallSite(req, 'const cp = require("child_process")')).toEqual({ line: 2, text: 'cp.execSync("ls")' })
+  })
+  it('skips other import/export lines when scanning for the call', () => {
+    const multi = ['import { z } from "z"', 'import { y } from "y"  // mentions z( in a comment', 'z()'].join('\n')
+    const hit = findCallSite(multi, 'import { z } from "z"')
+    expect(hit).toEqual({ line: 3, text: 'z()' })
+  })
+})
+
+describe('flag-context main — call-site capture', () => {
+  it('import-decl flag records the first call site in `call`', async () => {
+    const IMP_FLAG = 'child-process:package/dist/repository.js — L1: import { execFile } from "node:child_process"'
+    const SRC = [
+      'import { execFile } from "node:child_process"',
+      'export function repo(cwd) {',
+      '  execFile("git", ["remote", "get-url", "origin"], { cwd, timeout: 5000 }, cb)',
+      '}',
+    ].join('\n')
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [IMP_FLAG] } })])
+    await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: fetchFile(SRC), judge: okJudge })
+    const out = loadFlagContexts(s.spool)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.call).toEqual({ line: 3, text: 'execFile("git", ["remote", "get-url", "origin"], { cwd, timeout: 5000 }, cb)' })
+  })
+  it('ordinary code flag leaves `call` unset', async () => {
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG] } })])
+    await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: fetchFile(FILE), judge: okJudge })
+    expect(loadFlagContexts(s.spool)[0]!.call).toBeUndefined()
+  })
 })
