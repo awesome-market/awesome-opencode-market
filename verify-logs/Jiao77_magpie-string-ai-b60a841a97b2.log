@@ -1,0 +1,55 @@
+spec: Jiao77/magpie-string-ai#b60a841a97b2df2733b9ef819ca6196d1d3c8869
+apiNames: Jiao77/magpie-string-ai, magpie-string-ai, jiao77/magpie-string-ai
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-wsfIgi/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40461
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T00:13:16.554Z level=INFO run=7f645a0e message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"Jiao77/magpie-string-ai#b60a841a97b2df2733b9ef819ca6196d1d3c8869\"]" role=cli
+timestamp=2026-11-18T00:13:17.384Z level=INFO run=c94436c3 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T00:13:17.588Z level=INFO run=c94436c3 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-18T00:13:17.606Z level=INFO run=c94436c3 message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
+timestamp=2026-11-18T00:13:17.808Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-18T00:13:17.812Z level=INFO run=c94436c3 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T00:13:17.812Z level=INFO run=c94436c3 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-18T00:13:17.812Z level=INFO run=c94436c3 message="watcher subscribe" path=/ type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-18T00:13:17.813Z level=INFO run=c94436c3 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T00:13:17.813Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T00:13:17.813Z level=INFO run=c94436c3 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-18T00:13:17.813Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-18T00:13:17.814Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-18T00:13:17.814Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-18T00:13:17.814Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-18T00:13:17.835Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u/.config/opencode type=directory backend=inotify ignores=6 http.span=46 role=server
+timestamp=2026-11-18T00:13:17.847Z level=INFO run=c94436c3 message="location services booted" directory=/tmp/verify-wsfIgi/u workspaceID=undefined durationMs=57 http.span=58 role=server
+timestamp=2026-11-18T00:13:17.852Z level=INFO run=c94436c3 msg="loading plugin" id=Jiao77/magpie-string-ai#b60a841a97b2df2733b9ef819ca6196d1d3c8869 entrypoint=file:///tmp/verify-wsfIgi/u/cache/opencode/npm/git-magpie-string-ai-959068b94f4d/1794960797160/node_modules/magpie-string-ai/index.mjs http.span=63 role=server
+timestamp=2026-11-18T00:13:17.856Z level=WARN run=c94436c3 message="failed to load plugin" target=Jiao77/magpie-string-ai#b60a841a97b2df2733b9ef819ca6196d1d3c8869 ref=err_bdab56f6 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=67 role=server
+timestamp=2026-11-18T00:13:18.338Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T00:13:18.339Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T00:13:18.339Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T00:13:18.339Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T00:13:18.349Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T00:13:18.350Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T00:13:18.350Z level=INFO run=c94436c3 message="watcher subscribe" path=/tmp/verify-wsfIgi/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T00:13:18.350Z level=INFO run=c94436c3 message="watcher started" path=/tmp/verify-wsfIgi/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T00:13:18.368Z level=INFO run=c94436c3 message=event event.id=evt_1ec0032a0001V9GDRA2z3FiIU5 event.created=1794960798368 event.type=provider.updated event.location.directory=/tmp/verify-wsfIgi/u event.location.workspaceID=undefined event.data={} http.span=579 role=server
+timestamp=2026-11-18T00:13:18.376Z level=INFO run=c94436c3 message=event event.id=evt_1ec0032a8001JZG5aWIzswzuou event.created=1794960798376 event.type=model.updated event.location.directory=/tmp/verify-wsfIgi/u event.location.workspaceID=undefined event.data={} http.span=587 role=server
+timestamp=2026-11-18T00:13:18.379Z level=INFO run=c94436c3 message=event event.id=evt_1ec0032ab001lXergFGW8H850H event.created=1794960798379 event.type=agent.updated event.location.directory=/tmp/verify-wsfIgi/u event.location.workspaceID=undefined event.data={} http.span=590 role=server
+timestamp=2026-11-18T00:13:18.379Z level=INFO run=c94436c3 message=event event.id=evt_1ec0032ab002WF0QVrua0znkvF event.created=1794960798379 event.type=command.updated event.location.directory=/tmp/verify-wsfIgi/u event.location.workspaceID=undefined event.data={} http.span=590 role=server
+timestamp=2026-11-18T00:13:18.458Z level=INFO run=c94436c3 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T00:13:18.459Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T00:13:18.459Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T00:13:18.462Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T00:13:18.462Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T00:13:18.476Z level=INFO run=c94436c3 message="watcher stopped" path=/etc type=entries http.span=687 role=server
+timestamp=2026-11-18T00:13:18.476Z level=INFO run=c94436c3 message="watcher stopped" path=/ type=entries http.span=687 role=server
+timestamp=2026-11-18T00:13:18.477Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp type=entries http.span=688 role=server
+timestamp=2026-11-18T00:13:18.477Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi type=entries http.span=688 role=server
+timestamp=2026-11-18T00:13:18.477Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u type=entries http.span=688 role=server
+timestamp=2026-11-18T00:13:18.482Z level=INFO run=c94436c3 message="watcher stopped" path=/tmp/verify-wsfIgi/u/.config/opencode type=directory http.span=693 role=server
