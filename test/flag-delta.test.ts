@@ -719,3 +719,18 @@ describe('devinJudge (env-selected, no deps.judge)', () => {
     expect(a.aiNote).toContain('judge-error')
   }, 30_000)
 })
+
+describe('pickJudge — -m/env model selection', () => {
+  const sys = 's'; const usr = () => 'u'
+  it('devin / devin:<model> / named omlx model', async () => {
+    const { pickJudge } = await import('../pipeline/ai/flag-delta.ts')
+    for (const m of ['devin', 'devin:my-model', 'local-model'])
+      expect(typeof pickJudge(m, { AI_API_KEY: 'k' }, sys, usr)).toBe('function')
+  })
+  it('unset model → AI_BACKEND=devin env, AI_MODEL env, or null', async () => {
+    const { pickJudge } = await import('../pipeline/ai/flag-delta.ts')
+    expect(typeof pickJudge(undefined, { AI_BACKEND: 'devin' }, sys, usr)).toBe('function')
+    expect(typeof pickJudge(undefined, { AI_MODEL: 'm' }, sys, usr)).toBe('function')
+    expect(pickJudge(undefined, {}, sys, usr)).toBeNull()
+  })
+})

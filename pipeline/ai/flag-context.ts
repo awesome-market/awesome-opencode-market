@@ -18,7 +18,7 @@ import { exit, env } from 'node:process'
 import { isMain } from '../main-guard.ts'
 import { CatalogIndex } from '../../src/schema.ts'
 import { latestHumanVerdicts, loadVerdicts, vkey, candidateVer } from '../verdicts.ts'
-import { omlxJudge, devinJudge, type JudgeFn, type JudgeResp } from './flag-delta.ts'
+import { pickJudge, type JudgeFn, type JudgeResp } from './flag-delta.ts'
 import { installMarketProxy } from '../net.ts'
 
 export interface FlagContext {
@@ -192,15 +192,7 @@ export async function main(
     const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
     attempts.set(k, (attempts.get(k) ?? 0) + 1)
   }
-  const omlx = (m: string) => omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), m, env.AI_API_KEY ?? '', FLAG_SYSTEM, flagUser)
-  const devin = (m?: string) => devinJudge(m ?? env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)
-  const judge: JudgeFn | null = deps.judge ?? (
-    model === 'devin' ? devin()
-      : model?.startsWith('devin:') ? devin(model.slice(6))
-      : model ? omlx(model)
-      : env.AI_BACKEND === 'devin' ? devin()
-      : env.AI_MODEL ? omlx(env.AI_MODEL)
-      : null)
+  const judge: JudgeFn | null = deps.judge ?? pickJudge(model, env, FLAG_SYSTEM, flagUser)
   if (!judge) console.error('[flag-context] no judge — contexts still record rule/path with ai:null (retried next run)')
   const fetchFn = deps.fetchFn ?? fetchContext
 

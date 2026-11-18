@@ -125,6 +125,22 @@ function parseJudgeResp(content: string): JudgeResp {
 /** omlx judge for the delta — same endpoint/contract as diagnose's
  *  ornithReview. system/user are parameters so sibling reviewers
  *  (flag-context) reuse the plumbing with their own scoped prompt. */
+/** CLI `-m` / env judge selection — 'devin' or 'devin:<model>' pick the
+ *  devin backend, any other name picks local omlx with that model, unset
+ *  falls back to AI_BACKEND/AI_MODEL env. Shared with flag-context, which
+ *  passes its own system+user prompts. */
+export const pickJudge = (
+  model: string | undefined, e: NodeJS.ProcessEnv,
+  system: string, user: (m: { summary: string; commits: string; patches: string }) => string,
+): JudgeFn | null => {
+  const base = (e.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, '')
+  if (model === 'devin') return devinJudge(e.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', system, user)
+  if (model?.startsWith('devin:')) return devinJudge(model.slice(6), system, user)
+  if (model) return omlxJudge(base, model, e.AI_API_KEY ?? '', system, user)
+  if (e.AI_BACKEND === 'devin') return devinJudge(e.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', system, user)
+  return e.AI_MODEL ? omlxJudge(base, e.AI_MODEL, e.AI_API_KEY ?? '', system, user) : null
+}
+
 export const omlxJudge =
   (base: string, model: string, key: string, system: string = DELTA_SYSTEM, user: (m: { summary: string; commits: string; patches: string }) => string = deltaUser): JudgeFn =>
   async (material, think) => {
@@ -278,15 +294,7 @@ export async function main(
   const liveTransport = deps.transport ?? ghApiTransport()
   const compareFn = deps.compareFn ?? ((r: string, b: string, h: string) =>
     fetchCompare(r, b, h, liveTransport))
-  const omlx = (m: string) => omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), m, env.AI_API_KEY ?? '')
-  const devin = (m?: string) => devinJudge(m ?? env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high')
-  const judge: JudgeFn | null = deps.judge ?? (
-    model === 'devin' ? devin()
-      : model?.startsWith('devin:') ? devin(model.slice(6))
-      : model ? omlx(model)
-      : env.AI_BACKEND === 'devin' ? devin()
-      : env.AI_MODEL ? omlx(env.AI_MODEL)
-      : null)
+  const judge: JudgeFn | null = deps.judge ?? pickJudge(model, env, DELTA_SYSTEM, deltaUser)
   if (!judge) console.error('[flag-delta] no judge (AI_BACKEND=devin needs the devin CLI; else set AI_MODEL) — assessments still record rules+stats with ai:null (retried next run)')
 
   // candidates: live github entries whose pin drifted past a human-pass sha
