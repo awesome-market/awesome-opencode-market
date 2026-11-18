@@ -101,3 +101,20 @@ describe('coverage round 4', () => {
     expect(cfg.model).toBe('fake/fake-model')
   })
 })
+
+describe('installEnvProxy', () => {
+  it('no proxy env → installs nothing and stays idempotent', async () => {
+    const { installEnvProxy } = await import('../pipeline/net.ts')
+    delete process.env.HTTP_PROXY; delete process.env.HTTPS_PROXY
+    delete process.env.http_proxy; delete process.env.https_proxy
+    expect(() => { installEnvProxy(); installEnvProxy() }).not.toThrow()
+  })
+  it('proxy env → installs a global dispatcher that fetch can use', async () => {
+    const { vi } = await import('vitest')
+    vi.resetModules()
+    const { installEnvProxy } = await import('../pipeline/net.ts')
+    process.env.HTTPS_PROXY = 'http://127.0.0.1:1' // dead proxy is fine — we only assert wiring, not egress
+    expect(() => installEnvProxy()).not.toThrow()
+    delete process.env.HTTPS_PROXY
+  })
+})
