@@ -68,6 +68,12 @@ export MARKET_REPO=${MARKET_REPO:-${SELF_REPO:-/Volumes/2t/code/opencode-market}
 
 log() { printf '%s [agent] %s\n' "$(date '+[%Y-%m-%d %H:%M:%S]')" "$*"; }
 log "judge backend: ${AI_BACKEND:-omlx (local ornith)}"
+if [ -n "${MARKET_PROXY:-}" ]; then
+  case $MARKET_PROXY in *[!0-9]*|'') ;; *) MARKET_PROXY="socks5://127.0.0.1:$MARKET_PROXY"; export MARKET_PROXY ;; esac
+  log "outbound proxy: $MARKET_PROXY (localhost/LAN bypass)"
+else
+  log "outbound proxy: none (direct)"
+fi
 
 # 每行最左补 [yyyy-mm-dd HH:mm:ss] 本地时区戳 —— worker 的 log() 已自带
 # 该格式（透传不双标），diagnose.ts 的 '[diagnose] …' 控制台行和杂项输出
