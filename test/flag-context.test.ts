@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { main as flagCtxMain, loadFlagContexts, latestFlagContexts, findCallSite, type FlagContext } from '../pipeline/ai/flag-context.ts'
+import { main as flagCtxMain, loadFlagContexts, latestFlagContexts, findCallSite, findLifecycleScript, scriptWindow, type FlagContext } from '../pipeline/ai/flag-context.ts'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 
 const entry = (over: Partial<PluginEntry> = {}): PluginEntry => ({
@@ -454,5 +454,122 @@ describe('flag-context main — call-site capture', () => {
     const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG] } })])
     await flagCtxMain([...args(s), '--limit', '5'], { fetchFn: fetchFile(FILE), judge: okJudge })
     expect(loadFlagContexts(s.spool)[0]!.call).toBeUndefined()
+  })
+})
+
+describe("lifecycle-script callee context — the command target rides the judge call", () => {
+  const LFLAG = 'lifecycle-script:package/package.json — L16: "postinstall": "node bin/setup.js --auto || true"'
+  const PKG = ['{', '  "name": "pkg",', '  "scripts": {', '    "postinstall": "node bin/setup.js --auto || true"', '  }', '}'].join('\n')
+  const SCRIPT = [
+    '#!/usr/bin/env node',
+    "if (process.argv.includes('--auto')) { console.log('installed'); return }",
+    'function configureAll() { /* interactive wizard */ }',
+    ...Array.from({ length: 15 }, (_, i) => `// pad ${i}`),
+  ].join('\n')
+
+  it('fetches the invoked script, feeds its entry region to the judge, records script path', async () => {
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [LFLAG] } })])
+    const urls: string[] = []
+    let patches = ''
+    await flagCtxMain([...args(s), '--limit', '5'], {
+      fetchFn: async u => { urls.push(u); return u.endsWith('/bin/setup.js') ? SCRIPT : PKG },
+      judge: async m => { patches = m.patches; return { verdict: 'pass', reasonZh: '', reasonEn: '' } },
+    })
+    expect(urls).toContain('https://unpkg.com/pkg@1.0.0/bin/setup.js')
+    expect(patches).toContain("argv.includes('--auto')")
+    const rec = loadFlagContexts(s.spool)[0]!
+    expect(rec.script).toBe('package/bin/setup.js')
+    expect(rec.ai?.verdict).toBe('pass')
+  })
+
+  it('follows a re-export shim — bin/x.js → dist/x.js — and records the leaf path', async () => {
+    const shim = '#!/usr/bin/env node\nimport("../dist/cli/setup.js")\n'
+    const real = ['const a = 1', ...Array.from({ length: 15 }, (_, i) => `const v${i} = ${i}`),
+      'if (process.argv.includes("--auto")) banner()', 'else configureAll()'].join('\n')
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [LFLAG] } })])
+    const urls: string[] = []
+    await flagCtxMain([...args(s), '--limit', '5'], {
+      fetchFn: async u => {
+        urls.push(u)
+        if (u.endsWith('/bin/setup.js')) return shim
+        if (u.endsWith('/dist/cli/setup.js')) return real
+        return PKG
+      },
+      judge: okJudge,
+    })
+    expect(urls).toContain('https://unpkg.com/pkg@1.0.0/dist/cli/setup.js')
+    expect(loadFlagContexts(s.spool)[0]!.script).toBe('package/dist/cli/setup.js')
+  })
+
+  it('script fetch failure still judges the manifest window — no script field', async () => {
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [LFLAG] } })])
+    let patches = ''
+    await flagCtxMain([...args(s), '--limit', '5'], {
+      fetchFn: async u => u.endsWith('/bin/setup.js') ? null : PKG,
+      judge: async m => { patches = m.patches; return { verdict: 'pass', reasonZh: '', reasonEn: '' } },
+    })
+    expect(patches).not.toContain('Lifecycle script')
+    const rec = loadFlagContexts(s.spool)[0]!
+    expect(rec.script).toBeUndefined()
+    expect(rec.ai?.verdict).toBe('pass')
+  })
+
+  it('commands with no fetchable script (npm run, node -e) skip the extra fetch', async () => {
+    const flags = [
+      'lifecycle-script:package/package.json — L3: "postinstall": "npm run build"',
+      'pack-script:package/package.json — L4: "prepack": "node -e \\"console.log(1)\\""',
+    ]
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: flags } })])
+    const urls: string[] = []
+    await flagCtxMain([...args(s), '--limit', '5'], {
+      fetchFn: async u => { urls.push(u); return PKG },
+      judge: okJudge,
+    })
+    expect(urls.filter(u => !u.endsWith('/package.json'))).toHaveLength(0)
+  })
+
+  it('non-lifecycle rules never trigger callee resolution', async () => {
+    const s = setup([entry({ capabilities: { scannedAt: 't', findings: [], redFlags: [FLAG] } })])
+    const urls: string[] = []
+    await flagCtxMain([...args(s), '--limit', '5'], {
+      fetchFn: async u => { urls.push(u); return FILE },
+      judge: okJudge,
+    })
+    expect(urls).toHaveLength(1)
+  })
+})
+
+describe('findLifecycleScript — command → script path', () => {
+  it('extracts the invoked file from runner invocations and plain paths', () => {
+    expect(findLifecycleScript('lifecycle-script:package/package.json — L16: "postinstall": "node bin/setup.js --auto || true"')).toBe('bin/setup.js')
+    expect(findLifecycleScript('…"prepack": "bash scripts/build.sh && tsc"…')).toBe('scripts/build.sh')
+    expect(findLifecycleScript('"prepare": "node --require ts-node/register src/x.ts"')).toBe('src/x.ts')
+    expect(findLifecycleScript('"install": "./bin/setup.sh"')).toBe('./bin/setup.sh')
+    expect(findLifecycleScript('"postinstall": "python3 scripts/setup.py"')).toBe('scripts/setup.py')
+  })
+
+  it('returns null for npm-run indirection, inline eval, and non-script tokens', () => {
+    expect(findLifecycleScript('"postinstall": "npm run build"')).toBeNull()
+    expect(findLifecycleScript('"postinstall": "npx some-cli"')).toBeNull()
+    expect(findLifecycleScript('"postinstall": "node -e \"console.log(1)\""')).toBeNull()
+    expect(findLifecycleScript('"postinstall": "curl https://x.sh | sh"')).toBeNull()
+  })
+
+  it('picks the hook command, not an earlier quoted pair in the excerpt', () => {
+    // srcLine excerpt can carry `"name": "pkg"` before the match — the hook
+    // regex must win over the generic first-quote grab
+    expect(findLifecycleScript('…"name": "pkg", "version": "1.0", "postinstall": "node bin/x.js"')).toBe('bin/x.js')
+  })
+})
+
+describe('scriptWindow — entry region selection', () => {
+  it('keeps head imports plus the argv-guard neighbourhood, discloses skips', () => {
+    const lines = ['#!/usr/bin/env node', 'import x from "y"', ...Array.from({ length: 60 }, (_, i) => `const pad${i} = ${i}`),
+      'if (process.argv.includes("--auto")) return banner()', 'configureAll()']
+    const w = scriptWindow(lines.join('\n'))
+    expect(w).toContain('argv.includes')
+    expect(w).toContain('import x')
+    expect(w).toContain('\n…\n')   // skipped middle disclosed
+    expect(w.length).toBeLessThanOrEqual(5000)
   })
 })
