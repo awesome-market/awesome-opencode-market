@@ -32,6 +32,10 @@ export interface FlagContext {
   line: number
   at: string
   ai: JudgeResp | null
+  /** when the flagged line is a declaration (import/require) the verdict
+   *  describes a call the issue reader can't see — surface the first
+   *  actual invocation line so the row is self-evidencing */
+  call?: { line: number; text: string }
   /** why ai is null — transient failures retry next run (bounded, see
    *  RETRY_BUDGET); deterministic absences (oversize file, no source URL)
    *  judge the flag's embedded excerpt instead of retrying forever */
@@ -115,6 +119,33 @@ const hotFileFindings = (e: Plugin): string[] => {
     .flatMap(([, findings]) => findings)
 }
 
+/** import/require declaration → first invocation of the imported name in
+ *  the same file. `import { execFile, execFileSync }` looks for `execFile(`
+ *  / `execFileSync(`; `import cp` / `const cp = require(...)` looks for
+ *  `cp.<member>(`. Returns {line, text} or null — mechanical, no judge. */
+export function findCallSite(text: string, flaggedLine: string): { line: number; text: string } | null {
+  const named = flaggedLine.match(/import\s+\{([^}]+)\}/)
+  const def = flaggedLine.match(/import\s+([A-Za-z_$][\w$]*)\s*(?:,|\s*from)/) ??
+              flaggedLine.match(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require/)
+  const needles: string[] = []
+  if (named) {
+    for (const n of named[1]!.split(',')) {
+      const id = n.trim().split(/\s+as\s+/).pop()?.trim()
+      if (id && /^[\w$]+$/.test(id)) needles.push(`${id}(`)
+    }
+  } else if (def) {
+    needles.push(`${def[1]}.`)
+  }
+  if (!needles.length) return null
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]!
+    if (needles.some(n => l.includes(n)) && !/^\s*(import|export|require|\*|\/\/)/.test(l.trimStart()))
+      return { line: i + 1, text: l.trim().slice(0, 200) }
+  }
+  return null
+}
+
 /** file-window fetch — unpkg for npm (prefix-stripped tree, same rule as
  *  the docket fileHref), raw.githubusercontent for github@pinned sha. */
 async function fetchContext(url: string): Promise<string | null> {
@@ -126,7 +157,7 @@ async function fetchContext(url: string): Promise<string | null> {
   } catch { return null }
 }
 
-const contextUrl = (e: CatalogIndex['plugins'][number], path: string): string | null => {
+export const contextUrl = (e: CatalogIndex['plugins'][number], path: string): string | null => {
   const s = e.source
   const rel = path.startsWith('package/') ? path.slice(8) : path
   if (s.kind === 'npm') {
@@ -260,7 +291,10 @@ export async function main(
       try { ai = await judge({ summary, commits: '', patches: window }, true) }
       catch (x) { aiNote = `judge-error: ${x instanceof Error ? x.message.slice(0, 120) : x}` }
     }
-    const a: FlagContext = { name: w.e.name, version: w.ver, flag: w.flag, rule: w.rule, path: w.path, line: w.line, at: new Date().toISOString(), ai, ...(aiNote ? { aiNote } : {}) }
+    const flaggedSrc = text && text !== 'TOO-LARGE' ? text.split('\n')[w.line - 1] : undefined
+    const call = text && text !== 'TOO-LARGE' && flaggedSrc && /^\s*(import|export|const|let|var)\b/.test(flaggedSrc)
+      ? findCallSite(text, flaggedSrc) ?? undefined : undefined
+    const a: FlagContext = { name: w.e.name, version: w.ver, flag: w.flag, rule: w.rule, path: w.path, line: w.line, at: new Date().toISOString(), ai, ...(aiNote ? { aiNote } : {}), ...(call ? { call } : {}) }
     const line = JSON.stringify(a)
     if (dry) console.log(line)
     else if (spoolPath) appendFileSync(spoolPath, line + '\n')
