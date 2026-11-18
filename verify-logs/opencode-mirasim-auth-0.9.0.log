@@ -1,0 +1,30 @@
+spec: opencode-mirasim-auth@0.9.0
+apiNames: opencode-mirasim-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-vIGJCY/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42387
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:29:26.175Z level=INFO run=2c7d8142 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-mirasim-auth@0.9.0\"]" role=cli
+timestamp=2026-11-18T11:29:26.912Z level=INFO run=30df6811 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:29:27.262Z level=INFO run=30df6811 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:29:27.436Z level=INFO run=30df6811 message="database schema bootstrap completed" migrations=62 durationMs=174 role=server
+timestamp=2026-11-18T11:29:27.866Z level=INFO run=30df6811 message="watcher subscribe" path=/tmp/verify-vIGJCY/u/.config/opencode type=directory ignores=6 http.span=46 role=server
+timestamp=2026-11-18T11:29:27.870Z level=INFO run=30df6811 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=50 role=server
+timestamp=2026-11-18T11:29:27.870Z level=INFO run=30df6811 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-18T11:29:27.871Z level=INFO run=30df6811 message="watcher subscribe" path=/ type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-18T11:29:27.871Z level=INFO run=30df6811 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-18T11:29:27.871Z level=INFO run=30df6811 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-18T11:29:27.872Z level=INFO run=30df6811 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-18T11:29:27.872Z level=INFO run=30df6811 message="watcher subscribe" path=/tmp/verify-vIGJCY type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-18T11:29:27.873Z level=INFO run=30df6811 message="watcher started" path=/tmp/verify-vIGJCY type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-18T11:29:27.875Z level=INFO run=30df6811 message="watcher subscribe" path=/tmp/verify-vIGJCY/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-18T11:29:27.875Z level=INFO run=30df6811 message="watcher started" path=/tmp/verify-vIGJCY/u type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-18T11:29:27.911Z level=INFO run=30df6811 message="watcher started" path=/tmp/verify-vIGJCY/u/.config/opencode type=directory backend=inotify ignores=6 http.span=91 role=server
+timestamp=2026-11-18T11:29:27.930Z level=INFO run=30df6811 message="location services booted" directory=/tmp/verify-vIGJCY/u workspaceID=undefined durationMs=109 http.span=110 role=server

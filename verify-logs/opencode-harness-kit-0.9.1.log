@@ -1,0 +1,32 @@
+spec: opencode-harness-kit@0.9.1
+apiNames: opencode-harness-kit
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-EYjq8D/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:43767
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T11:28:17.688Z level=INFO run=09a7624f message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-harness-kit@0.9.1\"]" role=cli
+timestamp=2026-11-18T11:28:18.339Z level=INFO run=4c25385d message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T11:28:18.713Z level=INFO run=4c25385d message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T11:28:18.756Z level=INFO run=4c25385d message="database schema bootstrap completed" migrations=62 durationMs=43 role=server
+timestamp=2026-11-18T11:28:19.148Z level=INFO run=4c25385d message="watcher subscribe" path=/tmp/verify-EYjq8D/u/.config/opencode type=directory ignores=6 http.span=76 role=server
+timestamp=2026-11-18T11:28:19.163Z level=INFO run=4c25385d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=91 role=server
+timestamp=2026-11-18T11:28:19.164Z level=INFO run=4c25385d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-18T11:28:19.164Z level=INFO run=4c25385d message="watcher subscribe" path=/ type=entries ignores=0 http.span=92 role=server
+timestamp=2026-11-18T11:28:19.164Z level=INFO run=4c25385d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=92 role=server
+timestamp=2026-11-18T11:28:19.164Z level=INFO run=4c25385d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=92 role=server
+timestamp=2026-11-18T11:28:19.165Z level=INFO run=4c25385d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-18T11:28:19.165Z level=INFO run=4c25385d message="watcher subscribe" path=/tmp/verify-EYjq8D type=entries ignores=0 http.span=93 role=server
+timestamp=2026-11-18T11:28:19.165Z level=INFO run=4c25385d message="watcher started" path=/tmp/verify-EYjq8D type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-18T11:28:19.165Z level=INFO run=4c25385d message="watcher subscribe" path=/tmp/verify-EYjq8D/u type=entries ignores=0 http.span=93 role=server
+timestamp=2026-11-18T11:28:19.165Z level=INFO run=4c25385d message="watcher started" path=/tmp/verify-EYjq8D/u type=entries backend=node ignores=0 http.span=93 role=server
+timestamp=2026-11-18T11:28:19.205Z level=INFO run=4c25385d message="watcher started" path=/tmp/verify-EYjq8D/u/.config/opencode type=directory backend=inotify ignores=6 http.span=133 role=server
+timestamp=2026-11-18T11:28:19.229Z level=INFO run=4c25385d message="location services booted" directory=/tmp/verify-EYjq8D/u workspaceID=undefined durationMs=156 http.span=157 role=server
+timestamp=2026-11-18T11:28:19.269Z level=INFO run=4c25385d msg="loading plugin" id=opencode-harness-kit@0.9.1 entrypoint=file:///tmp/verify-EYjq8D/u/cache/opencode/npm/opencode-harness-kit@0.9.1/1795001298133/node_modules/opencode-harness-kit/dist/index.js http.span=197 role=server
+timestamp=2026-11-18T11:28:19.280Z level=WARN run=4c25385d message="failed to load plugin" target=opencode-harness-kit@0.9.1 ref=err_b7ab05d9 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=208 role=server
