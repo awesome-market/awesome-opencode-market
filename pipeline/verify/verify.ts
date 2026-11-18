@@ -613,7 +613,9 @@ export async function verifyPackage(
     // future version loads eagerly at boot, plugin output could print a fake
     // "server listening" line pointing at a plugin-owned socket; re-audit
     // this extraction on host upgrades (or switch to a runner-side probe).
-    // Re-audited for 2.3.0: plugin stdout/stderr never reaches serve's output
+    // Re-audited for 2.3.1: changelog reviewed — no plugin-load/serve changes
+    // (Extensions 'Update Plugins' is a client UI feature); plugin stdout/stderr
+    // still never reaches serve's output
     // at all (captured to the opencode log file), so even an eagerly-loaded
     // plugin could not forge a marker on this host version.
     for (const t0 = Date.now(); Date.now() - t0 < (opts.bootWaitMs ?? 15_000) && !dead;) {

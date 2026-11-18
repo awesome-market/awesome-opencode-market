@@ -32,7 +32,7 @@ it('OPENCODE_VERSION stays pinned to the version the marker-trust was audited un
     'the serve marker scrape trusts that no plugin code can run before the ' +
     'listening/password lines print (lazy load). If the new host loads eagerly, ' +
     'a plugin can print a forged listener pointing at its own socket.')
-    .toBe('2.3.0')
+    .toBe('2.3.1')
 })
 
 const spawnOf = (out: string): SpawnFn => (() => ({
