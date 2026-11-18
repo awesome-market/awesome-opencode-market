@@ -1,0 +1,32 @@
+spec: @dzhechkov/adapter-opencode@0.2.10
+apiNames: @dzhechkov/adapter-opencode, adapter-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-9YNtq4/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35705
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T21:49:34.085Z level=INFO run=722947c0 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@dzhechkov/adapter-opencode@0.2.10\"]" role=cli
+timestamp=2026-11-18T21:49:35.719Z level=INFO run=1f7ccf8c message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T21:49:36.050Z level=INFO run=1f7ccf8c message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T21:49:36.103Z level=INFO run=1f7ccf8c message="database schema bootstrap completed" migrations=62 durationMs=53 role=server
+timestamp=2026-11-18T21:49:36.472Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/tmp/verify-9YNtq4/u/.config/opencode type=directory ignores=6 http.span=68 role=server
+timestamp=2026-11-18T21:49:36.476Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=72 role=server
+timestamp=2026-11-18T21:49:36.477Z level=INFO run=1f7ccf8c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=73 role=server
+timestamp=2026-11-18T21:49:36.477Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/ type=entries ignores=0 http.span=73 role=server
+timestamp=2026-11-18T21:49:36.478Z level=INFO run=1f7ccf8c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-18T21:49:36.478Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-18T21:49:36.478Z level=INFO run=1f7ccf8c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=74 role=server
+timestamp=2026-11-18T21:49:36.478Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/tmp/verify-9YNtq4 type=entries ignores=0 http.span=74 role=server
+timestamp=2026-11-18T21:49:36.479Z level=INFO run=1f7ccf8c message="watcher started" path=/tmp/verify-9YNtq4 type=entries backend=node ignores=0 http.span=75 role=server
+timestamp=2026-11-18T21:49:36.480Z level=INFO run=1f7ccf8c message="watcher subscribe" path=/tmp/verify-9YNtq4/u type=entries ignores=0 http.span=76 role=server
+timestamp=2026-11-18T21:49:36.481Z level=INFO run=1f7ccf8c message="watcher started" path=/tmp/verify-9YNtq4/u type=entries backend=node ignores=0 http.span=77 role=server
+timestamp=2026-11-18T21:49:36.522Z level=INFO run=1f7ccf8c message="watcher started" path=/tmp/verify-9YNtq4/u/.config/opencode type=directory backend=inotify ignores=6 http.span=118 role=server
+timestamp=2026-11-18T21:49:36.559Z level=INFO run=1f7ccf8c message="location services booted" directory=/tmp/verify-9YNtq4/u workspaceID=undefined durationMs=148 http.span=155 role=server
+timestamp=2026-11-18T21:49:36.572Z level=INFO run=1f7ccf8c msg="loading plugin" id=@dzhechkov/adapter-opencode@0.2.10 entrypoint=file:///tmp/verify-9YNtq4/u/cache/opencode/npm/@dzhechkov/adapter-opencode@0.2.10/1795038575431/node_modules/@dzhechkov/adapter-opencode/dist/index.js http.span=168 role=server
+timestamp=2026-11-18T21:49:36.663Z level=WARN run=1f7ccf8c message="failed to load plugin" target=@dzhechkov/adapter-opencode@0.2.10 ref=err_cae2ebdb cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=259 role=server
