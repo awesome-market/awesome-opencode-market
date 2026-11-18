@@ -10819,7 +10819,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-18T18:29:58.990Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832721",
+          "integrity": "sha512-qu9PytipfVwR1XivZvzlCZJPYpRG5PyWtG3rXWsSTxc/6IEXndmwbQynwxj+hukb/jRlbBrmoDLQ1b0FXdUHwQ==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -10834,7 +10840,7 @@
         ],
         "integrity": "sha512-qu9PytipfVwR1XivZvzlCZJPYpRG5PyWtG3rXWsSTxc/6IEXndmwbQynwxj+hukb/jRlbBrmoDLQ1b0FXdUHwQ==",
         "publishedAt": "2026-11-18T13:15:38.748Z",
-        "reason": "包含浏览器自动化（agent-browser，含登录/表单操作与认证 vault）及可执行网络请求脚本，扫描发现多处 atob 解码、child_process、fetch 调用，且 18 个文件未被评审覆盖，风险敞口不足。",
+        "reason": "awaiting-review",
         "heldAt": "2026-11-18T13:44:03.293Z"
       }
     },
@@ -45484,7 +45490,7 @@
         "engines": "node >=24"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "机械红旗待人工：credential-read:package/dist/plugin.js — L8987: return { text: fs5.readFileSync(path7.join(home, \".ssh\", \"config\"), \"utf8\"), home };"
     },
     {
       "name": "@writingmate/auth",
@@ -65759,7 +65765,8 @@
       "compat": {
         "peer": "typescript@^5"
       },
-      "approval": "approved"
+      "approval": "pending",
+      "approvalReason": "L0.5 命中注入信号（score 0.741 ≥ 0.662，块 finding:21:network-call:src/runtime/watch.ts — L186: const response = await fetch(`${base}/）"
     },
     {
       "name": "@alexsun-top/opencode-turbo",
@@ -67696,7 +67703,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：Failed to start bot: Missing required environment variable: TELEGRAM_BOT_TOKEN (expected in /tmp/verify-nXVZj3/u/.env)"
+      "approvalReason": "对账：验证失败源于缺少TELEGRAM_BOT_TOKEN环境变量，而所有已审查行均未覆盖配置加载与token获取逻辑，存在未审查的代码路径。"
     },
     {
       "name": "@ai-setting/opencode-cli",
@@ -67985,12 +67992,19 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-18T18:29:58.194Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832721",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ai4nucleome_BioMaster-6f98a63aa182.log",
+        "integrity": "6f98a63aa1823304403475b1929424ccf9d4ec46",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：描述符为空且含3个红色标志（Function构造器混淆、读取AWS/.npmrc凭据、大量外部网络调用），描述不明确且存在安全风险"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "@ai4paper/apaper-plugin",
@@ -68578,20 +68592,20 @@
       "verification": {
         "status": "failed",
         "level": "install",
-        "opencodeVersion": "2.3.0",
-        "verifiedAt": "2026-11-18T05:31:38.646Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44244731012/job/134601051018",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-18T18:29:56.133Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/aideveloper1976-arch_agentic-sdlc-1ec80b22504f.log",
-        "logExcerpt": "NpmInstallFailedError: Failed to install aideveloper1976-arch/agentic-sdlc#1ec80b22504f46a955393f0d9739afc0b517bc41: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-n73hzg4d.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-n73hzg4d.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-xz7fzbec.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-n73hzg4d.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-zw8xxtvj.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-xz7fzbec.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-4wczprss.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/workspaces makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "logExcerpt": "NpmInstallFailedError: Failed to install aideveloper1976-arch/agentic-sdlc#1ec80b22504f46a955393f0d9739afc0b517bc41: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/workspaces makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "1ec80b22504f46a955393f0d9739afc0b517bc41",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该包的安全MCP服务器读取.netrc凭据、使用eval()与child_process.exec执行代码，多个MCP服务器向任意URL发起网络请求，且23个文件超出评审预算未审查，存在凭据窃取与任意代码执行风险。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-anthropic",
@@ -69991,7 +70005,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"id\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"id\\\"])))])"
+      "approvalReason": "对账：加载错误源于插件未导出带 id 与 effect/setup 的默认定义，属未审查的模块级/契约结构问题，不在上述逐行（HTTP/子进程/爬取）证据覆盖范围内，可能是当前 OpenCode 版本未适配所致。"
     },
     {
       "name": "@air-bizapps/opencode-plugin-vision",
@@ -71326,7 +71340,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])"
+      "approvalReason": "对账：核心问题不是已审查行是否泄露，而是插件因未导出带 id 与 effect/setup 的默认定义而根本无法被宿主加载，属已声明功能的实现失败而非代码行为风险，但加载失败本身仍是真实存在的加载级故障。"
     },
     {
       "name": "omo-olympus",
@@ -72822,7 +72836,7 @@
         "peer": "@opencode-ai/plugin@>=0.1.0, @opencode-ai/sdk@>=0.1.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install Alaye-Dong/opencode-hud#ffabf499d384c5df89440a99a5ce79fb36536a1e: git dep preparation failed"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "AlbertArakelyan/build-to-learn",
@@ -73207,7 +73221,7 @@
         "peer": "@opencode-ai/plugin@>=1.4.0, @opentui/solid@>=0.1.0, solid-js@>=1.8.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])"
+      "approvalReason": "对账：插件未导出声明的 default definition（缺少 effect/setup），导致宿主无法加载，这是实际存在的加载失败风险，非已审查行的范畴。"
     },
     {
       "name": "Aldo-f/opencode-multi-model-fallback",
@@ -73793,7 +73807,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install aleks-spv/opencode_retrypush#c74bfcabb5438d8538f60b96506997076c625eaf: git dep preparation failed"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-jevcode",
@@ -75279,7 +75293,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])"
+      "approvalReason": "对账：错误明确指向导出契约不满足（缺少default定义含id及effect/setup），这是插件无法被宿主加载的核心故障，单行prepublishOnly无法覆盖此加载失败。"
     },
     {
       "name": "impulso",
@@ -75679,7 +75693,7 @@
         "peer": "@opentui/core@>=0.5.17, @opentui/solid@>=0.5.17, solid-js@>=1.9.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install alexandru/opencode-session-todo#7dc6492e600205eb490d873eaac62f6b46bb3d69: git dep preparation failed"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-shell-safety",
@@ -75907,7 +75921,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：Error: API key required. Use --api-key or set KEI_API_KEY environment variable."
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "alexeyco/multitool",
@@ -76510,7 +76524,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install AlexisBalayre/agentspine#40b8d2585f913616b607efc3d58c44f64766b689: git dep preparation failed"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "AlexJoaquimPereira/opencode-cache-engine",
@@ -77496,7 +77510,7 @@
         "peer": "@vibecontrols/agent@>=2.0.0, @vibecontrols/vibe-plugin-ai@2026.509.1"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install @vibecontrols/vibe-plugin-ai-opencode@2026.1115.1: unable to resolve dependency tree"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "awesome-agent-packs",
@@ -77574,7 +77588,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "扫描结果检测到安全模块直接执行\"curl | bash\"远程脚本、扫描并含关键字读取 ~/.ssh/.aws/.env 等凭证的 pattern，README 也存在引用外部链接、agent 外发 Vercel 链接等敏感网络行为。"
+      "approvalReason": "对账：所有被逐行审阅的代码均为声明式规则数据，未覆盖 README 中的外部链接引用及 agent 实际外发 Vercel 链接等动态网络行为"
     },
     {
       "name": "ali5ter/opencode-what-context",
@@ -79081,7 +79095,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify render 级）：ambiguous gui bundle under git-opencode-read-aloud-bfd65c9d8429: plugin, opencode-tts — cannot identify the plugin's own"
     },
     {
       "name": "almas/opencode-tts",
@@ -79226,7 +79240,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify render 级）：gui render: SettingsPage.render threw: Unknown error (cause: Cannot read properties of undefined (reading 'catch'))"
     },
     {
       "name": "@turingincomplete/opencode-keepgoing",
@@ -80062,7 +80076,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"id\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"id\\\"])))])"
+      "approvalReason": "对账：加载契约未满足：插件未导出含 id 与 effect/setup 的默认定义，导致宿主无法加载，且该问题不在已审阅的 functions 行为行内。"
     },
     {
       "name": "alpha-innovation-labs/opennexus-rs",
@@ -81147,7 +81161,7 @@
         "engines": "node ^22.13.0 || ^24.3.0 || ^26.0.0 || >=27.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install alvarolorentedev/opencode-mobile#6abc1bc6ca07bd6eddb3505e29ff9bbc8a5d7cf3: git dep preparation failed"
     },
     {
       "name": "alvaroofernaandez/dotfiles",
@@ -84392,8 +84406,8 @@
       "compat": {
         "engines": "node 24.x"
       },
-      "approval": "approved",
-      "approvalReason": "awaiting-review"
+      "approval": "pending",
+      "approvalReason": "同版本换包（该键曾有人工裁决，re-tag 自动重审）——装测失败（verify structure 级）：(无日志摘录)"
     },
     {
       "name": "amrahman90/agent-p",
@@ -93699,7 +93713,8 @@
       "compat": {
         "engines": "node >=24"
       },
-      "approval": "approved"
+      "approval": "pending",
+      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install apelabs-dev/sur9e#303edc6f14a7bdc3e8e377a8ec338f450d8b2e7a: git dep preparation failed"
     },
     {
       "name": "apenlor/opencode-em-os",
@@ -97736,7 +97751,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify structure 级）：(无日志摘录)"
     },
     {
       "name": "armin-opencode",
@@ -100398,7 +100413,7 @@
         "engines": "node >=22.7.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.917 ≥ 0.662，块 finding:54:credential-read:tests/unit/gate_verdicts.test.mjs — L195: …h key path', kind: 'w）"
     },
     {
       "name": "asadullah48/opencode-prompt-forge",
@@ -103939,7 +103954,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify structure 级）：(无日志摘录)"
     },
     {
       "name": "opencode-capture",
@@ -105872,7 +105887,8 @@
       "compat": {
         "engines": "node >=22.18.0"
       },
-      "approval": "approved"
+      "approval": "pending",
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install AVIDS2/memorix#a83a6fa15a0a4c204ada88fa3af8581d619ef132: git dep preparation failed"
     },
     {
       "name": "avinash-1707/Myrios",
@@ -120960,7 +120976,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.912 ≥ 0.662，块 finding:13:child-process:scripts/agent-probe/run.cjs — L6: const { spawn } = require('node:）"
     },
     {
       "name": "BlaDevHard/opencode-req-counter",
@@ -168553,7 +168569,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "同版本换包（该键曾有人工裁决，re-tag 自动重审）——装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install disafronov/opencode-memoir#804876db508e0934beef568942d62947601ad6d8: git dep preparation failed"
     },
     {
       "name": "display-dev/skill",
@@ -169939,7 +169955,16 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "failed",
+          "level": "install",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-18T18:30:03.344Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
+          "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/rsshub-1.0.0-master.1b1f001.log",
+          "logExcerpt": "NpmInstallFailedError: Failed to install rsshub@1.0.0-master.1b1f001: An unknown git error occurred\nfatal: failed to stat '/home/runner/work/awesome-opencode-market/awesome-opencode-market': Permission denied\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: An unknown git error occurred\n      at Kn (/$bunfs/root/chunk-wmhdg2vw.js:8:9340)\n      at <anonymous> (/$bunfs/root/chunk-wmhdg2vw.js:8:10904)\n      at processTicksAndRejections (native:7:39)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+          "integrity": "sha512-PKBQUFWATl8fDMiWHxzkZOZxrqf1mpImM0ebHPRWNszi/mHDrCQeyFjVV+neGx3PmMmAaHydseHVCG6vReX4Eg==",
+          "retries": 1,
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -187648,7 +187673,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "对账：版本级别红旗指出仓库发布后已移动且包内容提取超时失败，导致无法验证实际包内容是否与已验证状态一致，存在内容不一致风险，而所有行级判读均未覆盖此提取/验证失效问题。"
+      "approvalReason": "L0.5 命中注入信号（score 0.740 ≥ 0.662，块 finding:1:network-call:benchmarks/agent/run_qwen36.sh — L27: curl -s -m 900 http://127.0.0）"
     },
     {
       "name": "everest-an/geo-seo-skill",
@@ -192676,12 +192701,17 @@
         ]
       },
       "verification": {
-        "status": "skipped",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-18T18:29:56.117Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
+        "integrity": "ac099ff5bf6f5cba78da5a39c31ba45c611fb5e1",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：清单描述仅含包名而无实质说明，且包内容提取超时失败导致未能审查实际代码，同时 prepare 脚本被标为红旗，需人工介入核查。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-context-watch",
@@ -194152,7 +194182,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install felipesauer/mnema#2fd306c2dbcb7de88e851c7ed272163fa75dc163: git dep preparation failed"
     },
     {
       "name": "opencode-hard-limit",
@@ -196628,12 +196658,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-18T14:55:40.928Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44329406588",
+        "verifiedAt": "2026-11-18T18:29:57.026Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@fish-under-sea_magpie-dragonapi-2.1.2.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T14:55:43.105Z level=WARN run=dc566cef message=\"failed to load plugin\" target=@fish-under-sea/magpie-dragonapi@2.1.2 ref=err_45d27700 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=89 role=server\n--- stream tail ---\n14:55:44.266Z level=INFO run=dc566cef message=\"watcher stopped\" path=/tmp/verify-OFGb0H/u type=entries http.span=1250 role=server\ntimestamp=2026-11-18T14:55:44.268Z level=INFO run=dc566cef message=\"watcher stopped\" path=/tmp/verify-OFGb0H/u/.config/opencode type=directory http.span=1252 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T18:29:58.694Z level=WARN run=0a914434 message=\"failed to load plugin\" target=@fish-under-sea/magpie-dragonapi@2.1.2 ref=err_571d1f20 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=146 role=server\n--- stream tail ---\n18:30:00.673Z level=INFO run=0a914434 message=\"watcher stopped\" path=/tmp/verify-g17ATD/u type=entries http.span=2125 role=server\ntimestamp=2026-11-18T18:30:00.680Z level=INFO run=0a914434 message=\"watcher stopped\" path=/tmp/verify-g17ATD/u/.config/opencode type=directory http.span=2132 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-4pY7/30nWfUbyxniEi7YIToojWgAzYvgSQelojjwpk7O3WxEk4xVcIhfXJbtFp7kYY59gqnt2XF7c9P0OradwQ==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -198308,7 +198338,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify structure 级）：(无日志摘录)"
     },
     {
       "name": "@foae/opencode-timings",
@@ -220284,7 +220314,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install hamzasoussi53/opencode-island#619f5dfd0a44394ae7e015f27394ae8a53ca2d63: git dep preparation failed"
     },
     {
       "name": "@laxture/vibe-pm",
@@ -232531,7 +232561,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-18T18:30:01.982Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
+        "integrity": "sha512-fgvf0aUkZX7N8lWS9MFb0TYAc1/CfEsieCLgH4ry/JlGcNTK73hnJgPFThPCq1Cn8ehJV9N/r3OYCT64ciCCPA==",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -238535,7 +238571,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "manifest未说明这是个包含大量shell脚本（按行执行curl/wget、grep凭证路径）的教学/演示项目，仅用营销化措辞称‘为AI编程代理提供隔离microVM’，且代码实际上是练习脚本而非真实安全隔离实现，描述与内容不符。"
+      "approvalReason": "L0.5 命中注入信号（score 0.925 ≥ 0.662，块 finding:3:credential-read:spike/learn-mode/s1_home_readback.sh — L48: …2>/dev/null | grep ）"
     },
     {
       "name": "opencode-agents-local",
@@ -257158,7 +257194,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-history#4ca311108ac47f6498cf0923a9dc953a00a84d66: git dep preparation failed"
     },
     {
       "name": "joe-broadhead/opencode-inference",
@@ -257886,7 +257922,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-notion#de166803c73121a2ba7a9e1932a0cc2c394f82c3: git dep preparation failed"
     },
     {
       "name": "joe-broadhead/opencode-openrouter",
@@ -260029,7 +260065,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "同版本换包（该键曾有人工裁决，re-tag 自动重审）——装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])"
     },
     {
       "name": "jokerXYH/opencode-companion",
@@ -268275,7 +268311,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.771 ≥ 0.662，块 finding:24:install-pipe:share/commands/_shared/context.md — L19: `curl -fsSL https://raw.gi）"
     },
     {
       "name": "kasisama/magpie-intern-tokenplan",
@@ -282458,7 +282494,7 @@
         ],
         "integrity": "sha512-iEnt9ezKf3wQg/ta4VpPsriBP74K1kZzS8MxsC7PpkJgnKZz/mC+ItUEUr6LzikpjSObRwCgNnveUePi9MnBtQ==",
         "publishedAt": "2026-11-18T12:01:39.572Z",
-        "reason": "装测失败（verify install 级）：Error: Plugin package has no server, GUI, or TUI entrypoint: lazycodex-ai@5.1.77",
+        "reason": "对账：verifier 的 concern 是包缺少 server/GUI/TUI 入口点，而所有已审查行均为功能/声明/注释，完全不涉及入口点是否存在，属于未被覆盖的额外风险。",
         "heldAt": "2026-11-18T12:13:25.672Z"
       }
     },
@@ -295894,7 +295930,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.822 ≥ 0.662，块 finding:1:credential-read:scripts/test-opencode-matrix.mjs — L164: …onfiguration and its c）"
     },
     {
       "name": "opencode-pi",
@@ -314705,7 +314741,8 @@
         "harnessGen": 2
       },
       "compat": {},
-      "approval": "approved"
+      "approval": "pending",
+      "approvalReason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:1:network-call:tui.ts — L560: const response = await fetch(UPDATE_MANIFEST_URL, {）"
     },
     {
       "name": "megallm",
@@ -326962,12 +326999,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-18T14:55:45.239Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44329406588",
+        "verifiedAt": "2026-11-18T18:29:58.948Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832721",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-work-context-0.10.1.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T14:55:51.370Z level=WARN run=8394a4ee message=\"failed to load plugin\" target=opencode-work-context@0.10.1 ref=err_555df778 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=126 role=server\n--- stream tail ---\n14:55:52.500Z level=INFO run=8394a4ee message=\"watcher stopped\" path=/tmp/verify-X93TYg/u type=entries http.span=1256 role=server\ntimestamp=2026-11-18T14:55:52.502Z level=INFO run=8394a4ee message=\"watcher stopped\" path=/tmp/verify-X93TYg/u/.config/opencode type=directory http.span=1258 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T18:30:04.589Z level=WARN run=1303a6c2 message=\"failed to load plugin\" target=opencode-work-context@0.10.1 ref=err_a5a4989a cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=251 role=server\n--- stream tail ---\n18:30:06.198Z level=INFO run=1303a6c2 message=\"watcher stopped\" path=/tmp/verify-q0uizS/u type=entries http.span=1860 role=server\ntimestamp=2026-11-18T18:30:06.201Z level=INFO run=1303a6c2 message=\"watcher stopped\" path=/tmp/verify-q0uizS/u/.config/opencode type=directory http.span=1863 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-14/iT1tcFRycx8WmxoDCkYCF8V5+y+XUS8UvmS/W7h0x4ByQTaSqYhEYpmbEH+KGwFWVCFGPk7ukwz7Q3teaow==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -335630,7 +335667,8 @@
       "compat": {
         "engines": "node >=20.0.0"
       },
-      "approval": "approved"
+      "approval": "pending",
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install N0moreher0/Venira-mcp#fdd47816f352dc385835a65e36e22c8d9383c6c7: git dep preparation failed"
     },
     {
       "name": "@n24q02m/better-notion-mcp",
@@ -338515,7 +338553,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.867 ≥ 0.662，块 finding:7:credential-read:website/tests/negative-private-history.test.mjs — L130: const cr）"
     },
     {
       "name": "@naxodev/opencode-music-player",
@@ -341934,7 +341972,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（install 级）：包无插件入口，确认非可装插件 → 维持 concern 刹车"
+      "approvalReason": "L0.5 命中注入信号（score 0.932 ≥ 0.662，块 finding:2:child-process:config/run-maestro-suite.ts — L40: const listResult = Bun.spawnSyn）"
     },
     {
       "name": "neur1n/dotfiles",
@@ -366439,12 +366477,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-18T14:55:43.860Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44329406588",
+        "verifiedAt": "2026-11-18T18:29:56.960Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-browser-kit-0.1.0.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T14:55:52.307Z level=WARN run=b946a7d0 message=\"failed to load plugin\" target=opencode-browser-kit@0.1.0 ref=err_08d959e7 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=1061 role=server\n--- stream tail ---\n14:55:54.872Z level=INFO run=b946a7d0 message=\"watcher stopped\" path=/tmp/verify-Mf5uwr/u type=entries http.span=3626 role=server\ntimestamp=2026-11-18T14:55:54.877Z level=INFO run=b946a7d0 message=\"watcher stopped\" path=/tmp/verify-Mf5uwr/u/.config/opencode type=directory http.span=3631 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T18:30:06.391Z level=WARN run=fd4b9027 message=\"failed to load plugin\" target=opencode-browser-kit@0.1.0 ref=err_e68b8505 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=781 role=server\n--- stream tail ---\n18:30:07.805Z level=INFO run=fd4b9027 message=\"watcher stopped\" path=/tmp/verify-ALPNXs/u type=entries http.span=2195 role=server\ntimestamp=2026-11-18T18:30:07.809Z level=INFO run=fd4b9027 message=\"watcher stopped\" path=/tmp/verify-ALPNXs/u/.config/opencode type=directory http.span=2199 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-h6yqVriburuKAnvJ6Es7Y0Ws/1mYztMBExiynbJC2gqsdHl0rC7PdH/ddi0ALkR91be3I2DUG5rW7tYkTfuSTA==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -378168,7 +378206,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-18T18:30:01.361Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832721",
+          "integrity": "sha512-FWMBu2dXUkwOJZ0r9PhczzbHXVbfoNpCCPCi50dg7kahaPMMTJUkH8efevNNX06WZ8XL9xhnZ2hca53gD36/Mg==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -379240,7 +379284,7 @@
         ],
         "integrity": "sha512-ZfBKRYbkh1ai11vKfpxGpc89IhVSpeM8+EN5sxLnvrB8hhPWDbcJ9lsAT/77pqognGdow3HiS6rRMwtfe/HKYQ==",
         "publishedAt": "2026-11-18T13:50:48.572Z",
-        "reason": "awaiting-review",
+        "reason": "机械红旗待人工：prepare-script:package/package.json — L41: \"prepare\": \"husky\"",
         "heldAt": "2026-11-18T14:41:53.190Z"
       }
     },
@@ -379336,12 +379380,12 @@
           "status": "failed",
           "level": "load",
           "opencodeVersion": "2.3.1",
-          "verifiedAt": "2026-11-18T14:55:43.993Z",
-          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44329406588",
+          "verifiedAt": "2026-11-18T18:30:03.271Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
           "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-memoir-3.3.12.log",
-          "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T14:55:54.832Z level=WARN run=7d3c43c1 message=\"failed to load plugin\" target=opencode-memoir@3.3.12 ref=err_536e1d9b cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=387 role=server\n--- stream tail ---\n14:55:56.825Z level=INFO run=7d3c43c1 message=\"watcher stopped\" path=/tmp/verify-DCrnQ4/u type=entries http.span=2380 role=server\ntimestamp=2026-11-18T14:55:56.827Z level=INFO run=7d3c43c1 message=\"watcher stopped\" path=/tmp/verify-DCrnQ4/u/.config/opencode type=directory http.span=2382 role=server\n\nserve reports the plugin failed to load",
+          "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T18:30:11.621Z level=WARN run=a3a3ef38 message=\"failed to load plugin\" target=opencode-memoir@3.3.12 ref=err_de6a25ce cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=221 role=server\n--- stream tail ---\n18:30:12.735Z level=INFO run=a3a3ef38 message=\"watcher stopped\" path=/tmp/verify-Ui95AA/u type=entries http.span=1335 role=server\ntimestamp=2026-11-18T18:30:12.735Z level=INFO run=a3a3ef38 message=\"watcher stopped\" path=/tmp/verify-Ui95AA/u/.config/opencode type=directory http.span=1335 role=server\n\nserve reports the plugin failed to load",
           "integrity": "sha512-FRbXM4i3Nrva7yR2MTAkQ9Ho54eEgzYbhFSzDm5yGQ+H3pHTy1AfPm/CXLXTJfuq5zpecrT2Tr50gQ4B/U6dOg==",
-          "retries": 1,
+          "retries": 2,
           "harnessGen": 2
         },
         "features": [
@@ -382830,7 +382874,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "interactive",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-18T18:29:58.871Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832721",
+        "integrity": "sha512-BCsmVtfwFS55UwMhGWfg5yi+ssKc0wkOiuSzmQSJzHjLkJ6onvoorPK+4wkj8om0/2YDXNNxmfEz94yRF/cn+w==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "opencode >=2.1.0",
@@ -394972,7 +395022,7 @@
         ],
         "integrity": "sha512-vdEesKgOAIsQ9FBzMyNi2XeI1ErOR4gIjj4OD+COmtSEpoBWQrJfj9DzTjSKHySkbxc7SOxLuUTDrfnO0t3nVg==",
         "publishedAt": "2026-11-18T13:50:43.490Z",
-        "reason": "awaiting-review",
+        "reason": "机械红旗待人工：obfuscation:package/dist/cli/index-7ryh498h.js — L2322: ASM_CONSTS[start] = eval(func);; obfuscation:package/dist/cli/index-8n3r2h0k.js — L375: …eplace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\\S+\\s+)+/, \"\").replace(/^eval(?:\\s+--)?\\s+[\"']?/, \"\").replace(/[\"']\\s*$/, \"\").replace(/^\\$\\(\\s*/, \"\").replace(…; credent",
         "heldAt": "2026-11-18T14:41:53.190Z"
       }
     },
@@ -410523,7 +410573,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.754 ≥ 0.662，块 finding:8:network-call:.shellrc/rc.d/aliases.sh — L7: alias myip=\"curl http://ipecho.net/p）"
     },
     {
       "name": "pedropombeiro/opencode-plugins",
@@ -410598,7 +410648,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "对账：仓库已移动/重命名且提取超时，无法验证当前代码与清单声明一致或网络调用安全，存在来源与供应链未知风险。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）"
     },
     {
       "name": "opencode-google-ai-mode",
@@ -431719,7 +431769,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.856 ≥ 0.662，块 finding:6:child-process:home/dot_config/opencode/exact_plugins/research/run.ts — L1: impor）"
     },
     {
       "name": "theclawbay",
@@ -443269,7 +443319,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "安装脚本使用 curl|bash 方式从 GitHub raw 下载并执行 install.sh，且 manifest 仅用含糊的「skills, role agents and hooks」掩盖该远程下载行为，能力描述与隐藏的网络调用不符。"
+      "approvalReason": "L0.5 命中注入信号（score 0.716 ≥ 0.662，块 finding:5:network-call:scripts/install.sh — L5: #   bash <(curl -fsSL https://raw.githubus）"
     },
     {
       "name": "Rsonlyone/claude-max-bridge",
@@ -448947,7 +448997,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "同版本换包（该键曾有人工裁决，re-tag 自动重审）——装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install samiralibabic/opencode-rexd-target#0847612d37d4b154ae535d1929031f1bf8c586eb: git dep preparation failed"
     },
     {
       "name": "opencode-temporal-context",
@@ -463990,7 +464040,7 @@
         "engines": "node >=22.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])"
     },
     {
       "name": "skyhong2002/harpscore",
@@ -471842,7 +471892,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.889 ≥ 0.662，块 finding:4:network-call:install-shell.ts — L173: 'sh -c \"$(curl -fsSL https://raw.githubuse）"
     },
     {
       "name": "opencode-agent-wingman",
@@ -492659,12 +492709,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-18T14:55:55.918Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44329406588",
+        "verifiedAt": "2026-11-18T18:29:57.990Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44370163624/job/135034832034",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/magpie-nowcoding-0.1.0.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T14:55:57.436Z level=WARN run=325cce2f message=\"failed to load plugin\" target=magpie-nowcoding@0.1.0 ref=err_10e9a47d cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=115 role=server\n--- stream tail ---\n14:55:59.306Z level=INFO run=325cce2f message=\"watcher stopped\" path=/tmp/verify-YM3u2B/u type=entries http.span=1985 role=server\ntimestamp=2026-11-18T14:55:59.308Z level=INFO run=325cce2f message=\"watcher stopped\" path=/tmp/verify-YM3u2B/u/.config/opencode type=directory http.span=1987 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T18:29:59.708Z level=WARN run=2b377b35 message=\"failed to load plugin\" target=magpie-nowcoding@0.1.0 ref=err_d43a059f cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=160 role=server\n--- stream tail ---\n18:30:01.862Z level=INFO run=2b377b35 message=\"watcher stopped\" path=/tmp/verify-5qBi7B/u type=entries http.span=2314 role=server\ntimestamp=2026-11-18T18:30:01.867Z level=INFO run=2b377b35 message=\"watcher stopped\" path=/tmp/verify-5qBi7B/u/.config/opencode type=directory http.span=2319 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-Pc5HNNI0mmhSs4JeM/oAXoBIxMfBLg6jmO7xyaWjRr5vS5NzNnid3ZoJGTYgnBbelQYiQ25o+2gvH7yrezuLbA==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -493004,7 +493054,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install tickernelz/opencode-mem#94a849ca7a7c17cc772fa45b0c5312e56b76aa9e: git dep preparation failed"
     },
     {
       "name": "@tim_hilde/opencode-insights",
@@ -546469,7 +546519,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install zyvo9/ZYVO-AI#667d6463a85d6a89f9812c80e08c52a6b8787e41: git dep preparation failed"
     },
     {
       "name": "opencode-wechat-bot",
