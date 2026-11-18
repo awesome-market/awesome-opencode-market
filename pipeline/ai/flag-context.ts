@@ -150,6 +150,7 @@ function parseArgs(args: string[]) {
     idxPath: arg('--index'), verdictsPath: arg('--verdicts'),
     contextsPath: arg('--contexts'), spoolPath: arg('--spool'),
     limit: Number(arg('--limit') ?? 20), dry: args.includes('--dry'),
+    model: arg('--model') ?? arg('-m'), proxy: arg('--proxy') ?? arg('-p'),
   }
 }
 
@@ -172,8 +173,8 @@ export async function main(
   args: string[] = process.argv,
   deps: { judge?: JudgeFn; fetchFn?: (url: string) => Promise<string | null> } = {},
 ): Promise<void> {
-  installMarketProxy()
-  const { idxPath, verdictsPath, contextsPath, spoolPath, dry, limit } = parseArgs(args)
+  const { idxPath, verdictsPath, contextsPath, spoolPath, dry, limit, model, proxy } = parseArgs(args)
+  installMarketProxy(proxy)
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath!, 'utf8')))
   const all = loadFlagContexts(contextsPath)
   const prior = latestFlagContexts(all)
@@ -191,12 +192,15 @@ export async function main(
     const k = `${a.name.toLowerCase()}\0${a.version ?? ''}\0${a.flag}`
     attempts.set(k, (attempts.get(k) ?? 0) + 1)
   }
+  const omlx = (m: string) => omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), m, env.AI_API_KEY ?? '', FLAG_SYSTEM, flagUser)
+  const devin = (m?: string) => devinJudge(m ?? env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)
   const judge: JudgeFn | null = deps.judge ?? (
-    env.AI_BACKEND === 'devin'
-      ? devinJudge(env.DEVIN_REVIEW_MODEL ?? 'swe-2-flash-high', FLAG_SYSTEM, flagUser)
-      : env.AI_MODEL
-        ? omlxJudge((env.AI_BASE_URL ?? 'http://localhost:8001/v1').replace(/\/$/, ''), env.AI_MODEL, env.AI_API_KEY ?? '', FLAG_SYSTEM, flagUser)
-        : null)
+    model === 'devin' ? devin()
+      : model?.startsWith('devin:') ? devin(model.slice(6))
+      : model ? omlx(model)
+      : env.AI_BACKEND === 'devin' ? devin()
+      : env.AI_MODEL ? omlx(env.AI_MODEL)
+      : null)
   if (!judge) console.error('[flag-context] no judge — contexts still record rule/path with ai:null (retried next run)')
   const fetchFn = deps.fetchFn ?? fetchContext
 
