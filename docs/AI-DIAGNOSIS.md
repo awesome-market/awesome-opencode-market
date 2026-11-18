@@ -440,6 +440,19 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 - 实现要点：该模型是**推理模型**——响应先吐 `reasoning_content`
   （思考链）再给 `content`；解析取 `content`，`max_tokens` 须为
   思考链留足余量（实测 8 tokens 全耗在 reasoning 上）
+- 预读 CLI 通用参数（`pipeline/ai/flag-context.ts`、`flag-delta.ts`）：
+  `-m/--model` 选判官——`devin` 走 devinJudge、`devin:<model>` 指定
+  devin 模型、`<name>` 本地 omlx 换模型；不给 = env 行为
+  （`AI_BACKEND`/`AI_MODEL`）。`-p/--proxy` 出站代理，认
+  `1080`（裸端口→`socks5://127.0.0.1:1080`）、`ip:port`、
+  `sock5://`/`socks5://`、`http(s)://`；等效 env `MARKET_PROXY`，
+  **刻意不读** `HTTP(S)_PROXY`（本机死代理不能悄悄接管，未配置=纯直连）
+- `scripts/ssh-proxy.sh [ip] [username] [port]`：SSH `-D` SOCKS5
+  转发守护循环——ip/username 缺省逐个提问、密码手输仅存进程内存
+  （SSH_ASKPASS 桩不含密钥本体、退出即删），`ServerAlive`+3s 间隔
+  自动重连；配 `MARKET_PROXY=socks5://127.0.0.1:<port>` 给审核 CLI
+  用（raw.githubusercontent/api.github 只能走代理出网的机器上
+  预读全靠它——Node undici fetch 默认不认任何代理）
 - launchd：ai-diagnose 每小时、digest 每日 21:00；plist 交付后
   `launchctl` 激活与否由人定；GUI 管理推荐 `azu/launchd-ui`
   （开源，定时预览/日志/启停），备选 jayhickey/Launchyard
