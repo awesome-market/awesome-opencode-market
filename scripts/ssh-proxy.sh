@@ -1,18 +1,25 @@
 #!/bin/bash
 # SSH SOCKS5 proxy with auto-reconnect.
-#   scripts/ssh-proxy.sh [local-port]          (default 1080)
+#   scripts/ssh-proxy.sh [ip] [username]
 #
-# Prompts once for `user@host` and password — the password lives only in
-# this process's environment (the askpass helper on disk holds a variable
-# reference, not the secret) and is gone when the script exits.
+# ip / username are optional — anything not given on the command line is
+# asked for interactively, one prompt at a time. The password is ALWAYS
+# asked interactively and lives only in this process's environment (the
+# askpass helper on disk holds a variable reference, not the secret).
 #
+# Local listen port defaults to 1080 — override with PORT=<n>.
 # Point the pipeline at it with:
 #   export MARKET_PROXY=socks5://127.0.0.1:<port>
 set -u
-PORT="${1:-1080}"
+PORT="${PORT:-1080}"
 
-read -rp "ssh user@host: " SSH_HOST
-[ -n "$SSH_HOST" ] || { echo "no host given"; exit 1; }
+IP="${1:-}"
+USER="${2:-}"
+[ -n "$IP" ] || read -rp "ssh ip: " IP
+[ -n "$USER" ] || read -rp "ssh username: " USER
+[ -n "$IP" ] && [ -n "$USER" ] || { echo "ip and username are required"; exit 1; }
+SSH_HOST="$USER@$IP"
+
 read -rsp "ssh password (memory only): " SSH_PASS; echo
 
 # askpass helper: ssh reads the password from OUR env via this stub —
@@ -47,10 +54,8 @@ while true; do
   for _ in $(seq 1 20); do alive && break; sleep 0.5; done
   if alive; then
     echo "[$(date +%H:%M:%S)] proxy UP → socks5://127.0.0.1:$PORT"
-  else
-    echo "[$(date +%H:%M:%S)] proxy failed to come up — retrying in 5s…"
   fi
   wait "$SSHPID" 2>/dev/null
-  echo "[$(date +%H:%M:%S)] ssh exited — reconnecting…"
+  echo "[$(date +%H:%M:%S)] ssh exited — reconnecting in 3s…"
   sleep 3
 done
