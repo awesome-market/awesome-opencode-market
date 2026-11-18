@@ -1,0 +1,59 @@
+spec: @ai-sdk/harness-opencode@1.0.191
+apiNames: @ai-sdk/harness-opencode, harness-opencode
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-NepBCF/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:42535
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T20:24:09.426Z level=INFO run=eca7df36 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@ai-sdk/harness-opencode@1.0.191\"]" role=cli
+timestamp=2026-11-18T20:24:13.081Z level=INFO run=8318a111 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T20:24:13.196Z level=INFO run=8318a111 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T20:24:13.205Z level=INFO run=8318a111 message="database schema bootstrap completed" migrations=62 durationMs=9 role=server
+timestamp=2026-11-18T20:24:13.321Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/.config/opencode type=directory ignores=6 http.span=15 role=server
+timestamp=2026-11-18T20:24:13.324Z level=INFO run=8318a111 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-18T20:24:13.324Z level=INFO run=8318a111 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=18 role=server
+timestamp=2026-11-18T20:24:13.324Z level=INFO run=8318a111 message="watcher subscribe" path=/ type=entries ignores=0 http.span=18 role=server
+timestamp=2026-11-18T20:24:13.325Z level=INFO run=8318a111 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T20:24:13.325Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T20:24:13.325Z level=INFO run=8318a111 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T20:24:13.325Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T20:24:13.325Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T20:24:13.327Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-18T20:24:13.328Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T20:24:13.346Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/.config/opencode type=directory backend=inotify ignores=6 http.span=40 role=server
+timestamp=2026-11-18T20:24:13.360Z level=INFO run=8318a111 msg="loading plugin" id=@ai-sdk/harness-opencode@1.0.191 entrypoint=file:///tmp/verify-NepBCF/u/cache/opencode/npm/@ai-sdk/harness-opencode@1.0.191/1795033452970/node_modules/@ai-sdk/harness-opencode/dist/index.js http.span=54 role=server
+timestamp=2026-11-18T20:24:13.424Z level=WARN run=8318a111 message="failed to load plugin" target=@ai-sdk/harness-opencode@1.0.191 ref=err_e51a464c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=118 role=server
+timestamp=2026-11-18T20:24:13.433Z level=INFO run=8318a111 message="location services booted" directory=/tmp/verify-NepBCF/u workspaceID=undefined durationMs=127 http.span=127 role=server
+timestamp=2026-11-18T20:24:13.919Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T20:24:13.919Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T20:24:13.919Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T20:24:13.920Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T20:24:13.920Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T20:24:13.920Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T20:24:13.920Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T20:24:13.931Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T20:24:13.931Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T20:24:13.932Z level=INFO run=8318a111 message="watcher subscribe" path=/tmp/verify-NepBCF/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T20:24:13.932Z level=INFO run=8318a111 message="watcher started" path=/tmp/verify-NepBCF/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T20:24:13.948Z level=INFO run=8318a111 message=event event.id=evt_1f054d57c001vcR82hF2px7aYf event.created=1795033453948 event.type=provider.updated event.location.directory=/tmp/verify-NepBCF/u event.location.workspaceID=undefined event.data={} http.span=642 role=server
+timestamp=2026-11-18T20:24:13.955Z level=INFO run=8318a111 message=event event.id=evt_1f054d583001Rvkz64XIxSUaDs event.created=1795033453955 event.type=model.updated event.location.directory=/tmp/verify-NepBCF/u event.location.workspaceID=undefined event.data={} http.span=649 role=server
+timestamp=2026-11-18T20:24:13.958Z level=INFO run=8318a111 message=event event.id=evt_1f054d586001L0dfF4VyloWouE event.created=1795033453958 event.type=agent.updated event.location.directory=/tmp/verify-NepBCF/u event.location.workspaceID=undefined event.data={} http.span=652 role=server
+timestamp=2026-11-18T20:24:13.958Z level=INFO run=8318a111 message=event event.id=evt_1f054d586002lLAaCHR0o5oLZe event.created=1795033453958 event.type=command.updated event.location.directory=/tmp/verify-NepBCF/u event.location.workspaceID=undefined event.data={} http.span=652 role=server
+timestamp=2026-11-18T20:24:14.039Z level=INFO run=8318a111 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T20:24:14.039Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T20:24:14.039Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T20:24:14.043Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T20:24:14.043Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T20:24:14.043Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T20:24:14.054Z level=INFO run=8318a111 message="watcher stopped" path=/etc type=entries http.span=748 role=server
+timestamp=2026-11-18T20:24:14.054Z level=INFO run=8318a111 message="watcher stopped" path=/ type=entries http.span=748 role=server
+timestamp=2026-11-18T20:24:14.054Z level=INFO run=8318a111 message="watcher stopped" path=/tmp type=entries http.span=748 role=server
+timestamp=2026-11-18T20:24:14.054Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF type=entries http.span=748 role=server
+timestamp=2026-11-18T20:24:14.054Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u type=entries http.span=748 role=server
+timestamp=2026-11-18T20:24:14.055Z level=INFO run=8318a111 message="watcher stopped" path=/tmp/verify-NepBCF/u/.config/opencode type=directory http.span=749 role=server
