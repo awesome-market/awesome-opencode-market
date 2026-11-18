@@ -154,12 +154,12 @@ describe('stale blind-evidence concerns re-queue when scan evidence postdates th
   it('scan landed after the verdict → the "cannot judge" basis evaporated → re-queue', () => {
     expect(unreviewedTargets(idx([scanned('2026-01-03T00:00:00Z')]), [blind])).toHaveLength(1)
   })
-  it('scan predates the verdict — judged on the same absence → stays decided', () => {
-    expect(unreviewedTargets(idx([scanned('2026-01-01T00:00:00Z')]), [blind])).toEqual([])
+  it('scan predates the verdict — a judge-time fetch failure can never freshen → bounded retry re-queues', () => {
+    expect(unreviewedTargets(idx([scanned('2026-01-01T00:00:00Z')]), [blind])).toHaveLength(1)
   })
-  it('still unscanned — blind judgment remains honestly true → stays', () => {
+  it('still unscanned — retry gives the fetch another chance before settling', () => {
     expect(unreviewedTargets(idx([entry({
-      capabilities: { scannedAt: null, findings: [], redFlags: [] } as PluginEntry['capabilities'] })]), [blind])).toEqual([])
+      capabilities: { scannedAt: null, findings: [], redFlags: [] } as PluginEntry['capabilities'] })]), [blind])).toHaveLength(1)
   })
   it('non-blind concerns never re-queue on rescan churn', () => {
     const real = v({ verdict: 'concern', source: 'ai', reason: '红旗在案，AI 判 concern：postinstall 可疑',
@@ -169,6 +169,43 @@ describe('stale blind-evidence concerns re-queue when scan evidence postdates th
   it('human blind-shaped verdict untouched — source:ai only', () => {
     const h = { ...blind, source: 'human' as const }
     expect(unreviewedTargets(idx([scanned('2026-01-03T00:00:00Z')]), [h])).toEqual([])
+  })
+})
+
+describe('blind-concern retry is bounded by the consecutive-blind streak', () => {
+  const blindAt = (at: string) => v({ verdict: 'concern', source: 'ai',
+    reason: '包内容提取失败，无法核实其实际行为', at })
+  it('one trailing blind concern → retry once (fresh fetch may recover)', () => {
+    expect(unreviewedTargets(idx([entry()]), [blindAt('2026-01-02T00:00:00Z')])).toHaveLength(1)
+  })
+  it('streak reaches BLIND_RETRY_CAP → settles as human debt, no more token burn', () => {
+    expect(unreviewedTargets(idx([entry()]), [
+      blindAt('2026-01-02T00:00:00Z'), blindAt('2026-01-03T00:00:00Z'),
+    ])).toEqual([])
+  })
+  it('an intervening real verdict resets the streak — a NEW blind run gets its own retry budget', () => {
+    const pass = v({ verdict: 'pass', at: '2026-01-03T00:00:00Z' })
+    expect(unreviewedTargets(idx([entry()]), [
+      blindAt('2026-01-02T00:00:00Z'), pass, blindAt('2026-01-04T00:00:00Z'),
+    ])).toHaveLength(1)
+  })
+  it('a blind PASS never re-queues — only concerns carry the can\'t-verify basis', () => {
+    expect(unreviewedTargets(idx([entry()]), [
+      v({ verdict: 'pass', source: 'ai', reason: '内容提取失败但放行', at: '2026-01-02T00:00:00Z' }),
+    ])).toEqual([])
+  })
+  it('streak counts per slot key — another version\'s capped streak doesn\'t block this slot', () => {
+    const blind2 = (at: string) => v({ version: '2.0.0', verdict: 'concern', source: 'ai',
+      reason: '包内容提取失败，无法核实', at })
+    expect(unreviewedTargets(idx([entry()]), [
+      blind2('2026-01-02T00:00:00Z'), blind2('2026-01-03T00:00:00Z'), // 2.0.0 capped at 2
+      blindAt('2026-01-04T00:00:00Z'),                              // this slot's streak = 1
+    ])).toHaveLength(1)
+  })
+  it('未能提取 phrasing matches too — reason-shape variants all count', () => {
+    const alt = v({ verdict: 'concern', source: 'ai',
+      reason: '包内容未能提取（133MB超出上限）', at: '2026-01-02T00:00:00Z' })
+    expect(unreviewedTargets(idx([entry()]), [alt])).toHaveLength(1)
   })
 })
 
