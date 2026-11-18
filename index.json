@@ -15808,7 +15808,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.752 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-cloudflare-workers-ai-auth）；LLM 判 concern：扫描报告存在仓库不匹配(sec)发现：包@jianmu-plugins/opencode-cloudflare-workers-ai-auth引用的源仓库归属@magpie-community下的同名包，来源归属需核实；fetch网络调用本身符合AI provider插件的正常功能。"
+      "approvalReason": "L0.5 命中注入信号（score 0.752 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-cloudflare-workers-ai-auth）；LLM 判 concern：包名为 @jianmu-plugins 但 repository 指向 @magpie-community 上游仓库（repo-mismatch），来源与代码出处无法核实，且关键 src/index.mjs 中间部分被省略，无法完整确认凭证仅流向 Cloudflare API。"
     },
     {
       "name": "@jianmu-plugins/opencode-commandcode-auth",
@@ -15877,7 +15877,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.664 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-commandcode-auth）；LLM 判 concern：插件名为 auth，代码将用户 API 密钥以 Bearer 和 x-api-key 形式发送至未明示的 BASE 端点，且发现仓库归属不匹配（@magpie-community vs @jianmu-plugins），存在凭据外泄风险。"
+      "approvalReason": "L0.5 命中注入信号（score 0.664 ≥ 0.662，块 finding:1:sec:repo-mismatch:@magpie-community/opencode-commandcode-auth）；LLM 判 pass：插件仅将 API key 发送至其所服务的 commandcode.ai 官方端点并使用本地 127.0.0.1 回调完成登录，无第三方凭证外泄或可疑网络行为；repo-mismatch 仅为命名空间差异，不构成安全隐患。"
     },
     {
       "name": "@jianmu-plugins/opencode-copilot-auth",
@@ -28796,7 +28796,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "failed",
+        "level": "load",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:52:37.440Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@omniroute_opencode-plugin-v2-0.1.1.log",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:53:00.389Z level=WARN run=e980549c message=\"failed to load plugin\" plugin.id=omniroute-v2 cause=\"Cause([Die(Error: [omniroute-v2] invalid plugin options — baseURL: Invalid input: expected string, received undefined)])\" http.span=1189 role=server\n--- stream tail ---\n07:53:00.743Z level=INFO run=e980549c message=\"watcher stopped\" path=/tmp/verify-0rHPPn/u type=entries http.span=1543 role=server\ntimestamp=2026-11-18T07:53:00.744Z level=INFO run=e980549c message=\"watcher stopped\" path=/tmp/verify-0rHPPn/u/.config/opencode type=directory http.span=1544 role=server\n\nserve reports the plugin failed to load",
+        "integrity": "sha512-J587GrrqsZO94RzJn1STEgTt3wFf3HyQNXeWEmnBLrXQ+OHJJJGFsgr9qLRN9HuoTS2aKXnQi2DeNHkFW60ikw==",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=22.22.3",
@@ -44759,7 +44768,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "failed",
+        "level": "load",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:52:37.548Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@writingmate_auth-0.1.0.log",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:52:38.933Z level=WARN run=807e07bd message=\"failed to load plugin\" target=@writingmate/auth@0.1.0 ref=err_69fa5ccd cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=70 role=server\n--- stream tail ---\n07:52:40.108Z level=INFO run=807e07bd message=\"watcher stopped\" path=/tmp/verify-B1ZhKz/u type=entries http.span=1245 role=server\ntimestamp=2026-11-18T07:52:40.109Z level=INFO run=807e07bd message=\"watcher stopped\" path=/tmp/verify-B1ZhKz/u/.config/opencode type=directory http.span=1246 role=server\n\nserve reports the plugin failed to load",
+        "integrity": "sha512-EFAh4+O1yRZ2vP7Gy1L5KXWSum/fKt/VQxsu7h2lmxdWGZUPWl9zztK3i9K5jMukK8IxwsuHJQCj9mOrWEAe1A==",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=20.0.0"
@@ -78386,8 +78404,13 @@
         "flaggedAt": "2026-11-18T06:35:15.115Z"
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "render",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:52:36.646Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "integrity": "d1bd06f3c99a956549f2d83d73c129f37a95522c",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -145516,7 +145539,7 @@
         "engines": "node ^24.11.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install codesensehq/codesense#7cc7193794aeb1a8624157a86f2164a8fd8be2fb: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install codesensehq/codesense#962d3e888477c5f7d4a2acd1a8c61f106652d45e: git dep preparation failed"
     },
     {
       "name": "opencode-guildhall",
@@ -211628,8 +211651,16 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "install",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:52:36.658Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/gonzalezpazmonica_savia-a180d61b930d.log",
+        "logExcerpt": "\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "integrity": "a180d61b930d8790b61408fa1d42e7cac16f2a66",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -248285,7 +248316,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "interactive",
+          "opencodeVersion": "2.3.0",
+          "verifiedAt": "2026-11-18T07:52:40.736Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+          "integrity": "sha512-cJOoQFnk+M8N0m4/cHg/ht9IfU4YYADOtBa+neCUx93sKeh7dzx3rKiHe6Civ9jPCtPHSj8iqCABxyqgwfBROw==",
+          "harnessGen": 2
         },
         "features": [
           "server",
@@ -264377,7 +264414,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "interactive",
+          "opencodeVersion": "2.3.0",
+          "verifiedAt": "2026-11-18T07:52:50.844Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+          "integrity": "sha512-jkAc+Y29JajWUrtxcvy7M4HAehXpCGpc1S4DCzFM9/LONAX24WEI7JtCIL5ns/GK0Q4Z/LjCt6h/NVgzj9ChaA==",
+          "harnessGen": 2
         },
         "features": [
           "server",
@@ -320320,8 +320363,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "install",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:53:02.633Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/MisonL_magpie-plugin-msmoli-e5869e447dac.log",
+        "logExcerpt": "NpmInstallFailedError: Failed to install MisonL/magpie-plugin-msmoli#e5869e447dacaa420013a6ed64ca57759620a8b8: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-n73hzg4d.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-n73hzg4d.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-xz7fzbec.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-n73hzg4d.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-zw8xxtvj.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-xz7fzbec.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-4wczprss.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring prepack/prepublishOnly makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "integrity": "e5869e447dacaa420013a6ed64ca57759620a8b8",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=18.13"
@@ -323472,7 +323523,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "failed",
+        "level": "load",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:53:04.078Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@monotykamary_pi-opencode-provider-1.0.85.log",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:53:15.878Z level=WARN run=47c65991 message=\"failed to load plugin\" target=@monotykamary/pi-opencode-provider@1.0.85 ref=err_9630aa77 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=707 role=server\n--- stream tail ---\n07:53:16.998Z level=INFO run=47c65991 message=\"watcher stopped\" path=/tmp/verify-uekvkm/u type=entries http.span=1827 role=server\ntimestamp=2026-11-18T07:53:17.004Z level=INFO run=47c65991 message=\"watcher stopped\" path=/tmp/verify-uekvkm/u/.config/opencode type=directory http.span=1833 role=server\n\nserve reports the plugin failed to load",
+        "integrity": "sha512-f+nUZJRlSc+AB77Xzfr3ldVmhRMVBT10U5x8ZgamCSkPRPd3qzKhMvhEY7U/gEEMR0DEAqf77t1Ap2X0iGaDQg==",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "peer": "@earendil-works/pi-ai@*, @earendil-works/pi-coding-agent@*"
@@ -404150,8 +404210,15 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "structure",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:53:15.392Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ParadevAI_Paradev-36d1cfb6fd17.log",
+        "integrity": "36d1cfb6fd17ef6b26348ca966cd1628f5f1aac8",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -406195,8 +406262,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:53:17.671Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "integrity": "49b5a19e1c1c0feb2f1fe371a0dfee46c08a0f30",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -433917,8 +433989,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T07:53:18.096Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+        "integrity": "45738864393bc61116fc2540117d0c85040f7413",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "approved",
@@ -446469,7 +446546,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install sblattj/agentic-coding-harness#007b755c82e6b17f81c19d647928ce64f61952a4: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install sblattj/agentic-coding-harness#2714ee5bbd3435cb3a88cef2021be53d15c81b6f: git dep preparation failed"
     },
     {
       "name": "opencode-goal-pro-max-complete-plugin",
@@ -471584,7 +471661,16 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "failed",
+          "level": "load",
+          "opencodeVersion": "2.3.0",
+          "verifiedAt": "2026-11-18T07:53:19.035Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44262159184",
+          "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@sublang_cligent-0.40.0.log",
+          "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T07:53:28.594Z level=WARN run=db3e37bb message=\"failed to load plugin\" target=@sublang/cligent@0.40.0 ref=err_58597fd9 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=87 role=server\n--- stream tail ---\n07:53:29.701Z level=INFO run=db3e37bb message=\"watcher stopped\" path=/tmp/verify-XL5k7H/u type=entries http.span=1194 role=server\ntimestamp=2026-11-18T07:53:29.702Z level=INFO run=db3e37bb message=\"watcher stopped\" path=/tmp/verify-XL5k7H/u/.config/opencode type=directory http.span=1195 role=server\n\nserve reports the plugin failed to load",
+          "integrity": "sha512-MCbCwCi3KrRmLc2P+Tlt7PjN89DE0b6UIPjnt12Hc9iMHgLv+5iNWdAVDsQ2rkANRlW5MVg2BUJHoPzKiIVQLg==",
+          "retries": 1,
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -503322,7 +503408,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Verbiflow/mako#6bcb86515444d93a783f28fbc07875d231c2d348: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Verbiflow/mako#0dc4d104e2af76b4a6cb2c07d2ec71c5be96dff4: git dep preparation failed"
     },
     {
       "name": "vercel-labs/durable-harness",
@@ -537589,7 +537675,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install zhiwenC125/Cybertron-agents#971416e41117818de4cf4565964ce3d699fb915e: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install zhiwenC125/Cybertron-agents#149d74743411989bf785323b96b8adbaa0a7a054: git dep preparation failed"
     },
     {
       "name": "zhoushoujianwork/easyeda-agent",
