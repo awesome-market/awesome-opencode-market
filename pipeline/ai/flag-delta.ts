@@ -26,7 +26,6 @@ import { CatalogIndex, AiVerdict } from '../../src/schema.ts'
 import { latestHumanVerdicts, loadVerdicts, vkey, epochGoverning, tombEpochs } from '../verdicts.ts'
 import { fetchCompare, classifyDelta, isRiskyDeltaPath, ghApiTransport, type DeltaCompare } from '../delta.ts'
 import { readJsonCapped } from '../fetch/npm.ts'
-import { installEnvProxy } from '../net.ts'
 
 export interface FlagAssessment {
   name: string
@@ -252,7 +251,6 @@ export async function main(
     transport?: (args: string[]) => Promise<string>
   } = {},
 ): Promise<void> {
-  installEnvProxy()
   const { idxPath, verdictsPath, assessPath, spoolPath, dry, limit } = parseArgs(args)
 
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath, 'utf8')))

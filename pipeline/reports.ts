@@ -22,7 +22,6 @@ import { CatalogIndex, AiVerdict, DigestState } from '../src/schema.ts'
 import { readJsonCapped } from './fetch/npm.ts'
 import { docketTargets, type DocketTarget } from './docket.ts'
 import { loadVerdicts, loadDigestState } from './verdicts.ts'
-import { installEnvProxy } from './net.ts'
 
 export interface DailySnap {
   date: string               // UTC YYYY-MM-DD
@@ -330,7 +329,6 @@ export async function main(
   args: string[] = process.argv,
   deps: { downloadsFn?: (names: string[]) => Promise<number | null> } = {},
 ): Promise<void> {
-  installEnvProxy()
   const die = (m: string): never => { console.error(m); exit(1) }
   const arg = (k: string) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined }
   const usage = 'usage: --index <p> --state <p> --out <dir> [--date YYYY-MM-DD] [--dry]'

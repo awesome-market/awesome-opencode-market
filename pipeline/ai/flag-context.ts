@@ -19,7 +19,6 @@ import { isMain } from '../main-guard.ts'
 import { CatalogIndex } from '../../src/schema.ts'
 import { latestHumanVerdicts, loadVerdicts, vkey, candidateVer } from '../verdicts.ts'
 import { omlxJudge, devinJudge, type JudgeFn, type JudgeResp } from './flag-delta.ts'
-import { installEnvProxy } from '../net.ts'
 
 export interface FlagContext {
   name: string
@@ -172,7 +171,6 @@ export async function main(
   args: string[] = process.argv,
   deps: { judge?: JudgeFn; fetchFn?: (url: string) => Promise<string | null> } = {},
 ): Promise<void> {
-  installEnvProxy()
   const { idxPath, verdictsPath, contextsPath, spoolPath, dry, limit } = parseArgs(args)
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath!, 'utf8')))
   const all = loadFlagContexts(contextsPath)
