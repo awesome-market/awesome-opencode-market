@@ -33,15 +33,20 @@ describe('catalog.ts integrity/version helpers', () => {
     expect(pinSpec({ name: 'a', latestVersion: '1.2.3' })).toBe('a@1.2.3')
     expect(pinSpec({ name: 'a', latestVersion: null })).toBe('a')
     expect(() => pinSpec({ name: 'a', latestVersion: '1;rm -rf' })).toThrow('unsafe version')
+    // npm range / partial / dist-tag shapes resolve to the newest match, not
+    // the approved bytes — they must fail closed like any other unsafe pin
+    for (const v of ['~1.2.3', '^1.2.3', '1.2', '1', 'latest', '*', '>=1.0.0'])
+      expect(() => pinSpec({ name: 'a', latestVersion: v })).toThrow('unsafe version')
+    expect(pinSpec({ name: 'a', latestVersion: '1.2.3-beta.1' })).toBe('a@1.2.3-beta.1')
   })
 
   it('assertApprovedPin — fresh entry, moved catalog, absent entry', async () => {
-    const e = mkEntry('p', { latestVersion: '2' })
+    const e = mkEntry('p', { latestVersion: '2.0.0' })
     const idx = { plugins: [e] } as MarketIndex
-    expect(await assertApprovedPin(async () => idx, 'p', 'p@2')).toBe(e)
-    await expect(assertApprovedPin(async () => idx, 'p', 'p@1')).rejects.toThrow('catalog moved')
+    expect(await assertApprovedPin(async () => idx, 'p', 'p@2.0.0')).toBe(e)
+    await expect(assertApprovedPin(async () => idx, 'p', 'p@1.0.0')).rejects.toThrow('catalog moved')
     await expect(assertApprovedPin(async () => idx, 'ghost', 'ghost')).rejects.toThrow('not in catalog')
-    await expect(assertApprovedPin(async () => null, 'p', 'p@2')).rejects.toThrow('not in catalog')
+    await expect(assertApprovedPin(async () => null, 'p', 'p@2.0.0')).rejects.toThrow('not in catalog')
   })
 
   it('assertApprovedPin — bare-name spec refused even when entry has no pin', async () => {
