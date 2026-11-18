@@ -20140,7 +20140,7 @@
         ],
         "integrity": "sha512-NKFTihVq04u7LMFScd15M5GSiHa5Hf71nY/BGlhVxZ3kSNaxkh/2UZDqoUP0ZKzM/beS2A8BWrQgB+uwUpOYNg==",
         "publishedAt": "2026-11-17T22:48:57.938Z",
-        "reason": "awaiting-review",
+        "reason": "README 中的安装脚本通过 curl 管道执行 bash 并修改 ~/.config/opencode/opencode.json 及写入 agent 文件，存在注入与凭证/配置操纵风险，与描述不符。",
         "heldAt": "2026-11-17T23:51:56.939Z"
       }
     },
@@ -44164,7 +44164,13 @@
         ]
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T00:52:36.568Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44211253987",
+        "integrity": "sha512-ZNYKnmIjjpUe/grzamICVEp6ItZznlEakITKxIouaEEYwAvq30u/9YhJTVVl2AURhtwOywZHmR1nwbT1Gqcb3A==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=24"
@@ -220169,7 +220175,7 @@
         "engines": "node >=20.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "telemetry用PostHog向主机名（HAWIYAT_TELEMETRY_HOST）发送事件，且README文档明确声称『无遥测/无HTTP调用』，与代码矛盾"
     },
     {
       "name": "dico-open",
@@ -251637,7 +251643,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.762 ≥ 0.662，块 manifest）；LLM 判 pass：两个扫描发现（node:child_process spawn 与 4.6MB PE 面板二进制）均为文档化、预期内的行为——spawn 用于启动本地附带且经 sha256/源码摘要完整性校验的面板，包明确声明不出网、无遥测、零依赖，清单描述准确，未发现提示注入、凭证外泄、混淆或与实际用途不符的二进制。"
     },
     {
       "name": "opencode-cost-guard",
@@ -292473,7 +292479,7 @@
         ],
         "integrity": "sha512-DMDOnrDagyrZDSdOukeKeMlyQia4B86dKaveNG+mc2LPlZxyzmTbO/ddSWCl2OYxM1hayXO16V9pmsrSvTinoQ==",
         "publishedAt": "2026-11-17T20:45:17.560Z",
-        "reason": "awaiting-review",
+        "reason": "L0.5 命中注入信号（score 0.769 ≥ 0.662，块 finding:0:credential-read:package/src/convert-tools.ts — L405: // Hidden path components (）；LLM 判 pass：三个扫描发现均对应插件连接 LunaRoute 后端的合法功能（PKCE 登录、/v1/auth/exchange token 交换、模型/MCP 同步），凭证读取注释明确说明凭证不离开本机，manifest 描述与代码功能一致，未见提示注入、凭证外泄、恶意调用或伪装能力。",
         "heldAt": "2026-11-17T23:51:56.939Z"
       }
     },
@@ -301153,7 +301159,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "interactive",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T00:52:36.542Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44211253987",
+        "integrity": "sha512-QErD43tnqboRvlGEjAFInht7UokCHrDjuwC+6T9lO/a9rDyW4kBoU6nC1a9ssKFvHbnao1N7wGlEVbvb2ap17w==",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -318456,7 +318468,7 @@
         "peer": "@opencode/plugin@>=2.0.27 <3"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "README/CONTRIBUTING.md中混入了与浏览器自动化无关的计分器/评测器脚本说明（answers.json、score、ours-current等），与插件声明功能不符且隐藏了真实代码行为；同时含13.1MB未审查的原生ELF二进制。"
     },
     {
       "name": "@mirsella/computer-use-mcp",
@@ -378318,7 +378330,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "failed",
+        "level": "render",
+        "opencodeVersion": "2.3.0",
+        "verifiedAt": "2026-11-18T00:52:36.539Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44211253987",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-openclaw-inbox-0.4.0.log",
+        "logExcerpt": "gui whitelist: module not in gui host whitelist: node:fs",
+        "integrity": "sha512-B9z/lbyw3nikk0244b/QkxACNAiMWHB/B6cFD7ERjqU1ateWuixc5rib9bbA6md2dOvJX7jwBwKVAg19H99nhg==",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -508679,12 +508700,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.0",
-        "verifiedAt": "2026-11-18T00:32:53.473Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44208535604/job/134480898589",
+        "verifiedAt": "2026-11-18T00:52:36.728Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44211253987",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@wakeshift_opencode-1.4.63.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T00:32:54.374Z level=WARN run=2f74b155 message=\"failed to load plugin\" target=@wakeshift/opencode@1.4.63 ref=err_da14157d cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=45 role=server\n--- stream tail ---\n8T00:32:54.928Z level=INFO run=2f74b155 message=\"watcher stopped\" path=/tmp/verify-xGFhys/u type=entries http.span=599 role=server\ntimestamp=2026-11-18T00:32:54.932Z level=INFO run=2f74b155 message=\"watcher stopped\" path=/tmp/verify-xGFhys/u/.config/opencode type=directory http.span=603 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-18T00:52:38.775Z level=WARN run=a643dce6 message=\"failed to load plugin\" target=@wakeshift/opencode@1.4.63 ref=err_2e1cda04 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=128 role=server\n--- stream tail ---\n00:52:39.991Z level=INFO run=a643dce6 message=\"watcher stopped\" path=/tmp/verify-Fwk7RF/u type=entries http.span=1344 role=server\ntimestamp=2026-11-18T00:52:39.996Z level=INFO run=a643dce6 message=\"watcher stopped\" path=/tmp/verify-Fwk7RF/u/.config/opencode type=directory http.span=1349 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-mPqOb0aIfOeFEzSAtFbK4bl194kTTpz54EfK6F/mhCK1OCFNOhjox3VVArtlAWDByPdnfWozMQ8yLKwRKRgmew==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
