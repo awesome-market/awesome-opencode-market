@@ -1,0 +1,105 @@
+spec: artificial-code-cli@0.7.0
+apiNames: artificial-code-cli
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-N5WWDX/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34313
+server password [redacted]
+
+
+    ◆  Artificial Code
+       AI coding agent — Poe API
+
+
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │                                                                          │
+  │  First-time Setup                                                        │
+  │                                                                          │
+  │  Enter your Poe.com API key to access DeepSeek V4 Flash and other        │
+  │  models.                                                                 │
+  │                                                                          │
+  │  Get one at: https://poe.com/api_key                                     │
+  │                                                                          │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │                                                                          │
+  │  Poe API Key                                                             │
+  │                                                                          │
+  │  Enter your Poe API key...                                               │
+  │                                                                          │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+
+  Your key is stored securely in
+  /tmp/verify-N5WWDX/u/.config/artificial-code-nodejs/config.json
+
+  Press Enter to continue · Ctrl+C to exit
+
+
+[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G
+  ERROR Raw mode is not supported on the current process.stdin, which Ink uses
+       as input stream by default.
+       Read about how to prevent this error on
+       https://github.com/vadimdemedes/ink/#israwmodesupported
+
+ - Read about how to prevent this error on
+   https://github.com/vadimdemedes/ink/#israwmodesupported
+ -handleSetRawM (cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208/nod
+  ode          e_modules/ink/build/components/App.js:108:27)
+ -<anonymous (cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208/node_m
+            odules/ink/build/hooks/use-input.js:36:9)
+ -commitHookEffectLis (cache/opencode/npm/artificial-code-cli@0.7.0/17949983092
+  Mount              08/node_modules/react-reconciler/cjs/react-reconciler.deve
+                     lopment.js:14817:26)
+ -commitPassiveMountO (cache/opencode/npm/artificial-code-cli@0.7.0/17949983092
+  Fiber              08/node_modules/react-reconciler/cjs/react-reconciler.deve
+                     lopment.js:16648:11)
+ -commitPassiveMountEffec (cache/opencode/npm/artificial-code-cli@0.7.0/1794998
+  s_complete             309208/node_modules/react-reconciler/cjs/react-reconci
+                         ler.development.js:16608:9)
+ -commitPassiveMountEffe (cache/opencode/npm/artificial-code-cli@0.7.0/17949983
+  ts_begin              09208/node_modules/react-reconciler/cjs/react-reconcile
+                        r.development.js:16595:7)
+ -commitPassiveMountE (cache/opencode/npm/artificial-code-cli@0.7.0/17949983092
+  fects              08/node_modules/react-reconciler/cjs/react-reconciler.deve
+                     lopment.js:16583:3)
+ -flushPassiveEffec (cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208
+  sImpl            /node_modules/react-reconciler/cjs/react-reconciler.developm
+                   ent.js:19221:3)
+ -flushPassiveEff (cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208/n
+  cts            ode_modules/react-reconciler/cjs/react-reconciler.development.
+                 js:19166:14)
+ -<anonymous
+            (cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208/node_mo
+            dules/react-reconciler/cjs/react-reconciler.development.js:18951:9)
+
+
+received SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+  0.0s  layer plugin-supervisor releasing
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T10:38:20.818Z level=INFO run=f37fa89b message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"artificial-code-cli@0.7.0\"]" role=cli
+timestamp=2026-11-18T10:38:29.817Z level=INFO run=2cdc9115 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:38:30.226Z level=INFO run=2cdc9115 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:38:30.255Z level=INFO run=2cdc9115 message="database schema bootstrap completed" migrations=62 durationMs=29 role=server
+timestamp=2026-11-18T10:38:30.687Z level=INFO run=2cdc9115 message="watcher subscribe" path=/tmp/verify-N5WWDX/u/.config/opencode type=directory ignores=6 http.span=86 role=server
+timestamp=2026-11-18T10:38:30.704Z level=INFO run=2cdc9115 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=103 role=server
+timestamp=2026-11-18T10:38:30.705Z level=INFO run=2cdc9115 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=104 role=server
+timestamp=2026-11-18T10:38:30.706Z level=INFO run=2cdc9115 message="watcher subscribe" path=/ type=entries ignores=0 http.span=105 role=server
+timestamp=2026-11-18T10:38:30.706Z level=INFO run=2cdc9115 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=105 role=server
+timestamp=2026-11-18T10:38:30.706Z level=INFO run=2cdc9115 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=105 role=server
+timestamp=2026-11-18T10:38:30.709Z level=INFO run=2cdc9115 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=108 role=server
+timestamp=2026-11-18T10:38:30.709Z level=INFO run=2cdc9115 message="watcher subscribe" path=/tmp/verify-N5WWDX type=entries ignores=0 http.span=108 role=server
+timestamp=2026-11-18T10:38:30.710Z level=INFO run=2cdc9115 message="watcher started" path=/tmp/verify-N5WWDX type=entries backend=node ignores=0 http.span=109 role=server
+timestamp=2026-11-18T10:38:30.710Z level=INFO run=2cdc9115 message="watcher subscribe" path=/tmp/verify-N5WWDX/u type=entries ignores=0 http.span=109 role=server
+timestamp=2026-11-18T10:38:30.710Z level=INFO run=2cdc9115 message="watcher started" path=/tmp/verify-N5WWDX/u type=entries backend=node ignores=0 http.span=109 role=server
+timestamp=2026-11-18T10:38:30.759Z level=INFO run=2cdc9115 message="watcher started" path=/tmp/verify-N5WWDX/u/.config/opencode type=directory backend=inotify ignores=6 http.span=158 role=server
+timestamp=2026-11-18T10:38:30.797Z level=INFO run=2cdc9115 message="location services booted" directory=/tmp/verify-N5WWDX/u workspaceID=undefined durationMs=195 http.span=196 role=server
+timestamp=2026-11-18T10:38:30.807Z level=INFO run=2cdc9115 msg="loading plugin" id=artificial-code-cli@0.7.0 entrypoint=file:///tmp/verify-N5WWDX/u/cache/opencode/npm/artificial-code-cli@0.7.0/1794998309208/node_modules/artificial-code-cli/dist/cli.js http.span=206 role=server
+timestamp=2026-11-18T10:38:31.975Z level=WARN run=2cdc9115 message="failed to load plugin" target=artificial-code-cli@0.7.0 ref=err_61cc82dc cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=1374 role=server

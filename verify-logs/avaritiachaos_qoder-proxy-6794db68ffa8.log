@@ -3,66 +3,70 @@ apiNames: avaritiachaos/qoder-proxy, qoder-proxy
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-z3h7C0/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-QWHRVN/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:45961
+server listening on http://127.0.0.1:41363
 server password [redacted]
-[2026-11-16T08:47:42.099Z] Qoder Proxy listening on http://127.0.0.1:3000
-[2026-11-16T08:47:42.099Z] CLI backend {
+[2026-11-18T10:39:26.162Z] Qoder Proxy listening on http://127.0.0.1:3000
+[2026-11-18T10:39:26.162Z] CLI backend {
   name: "cn",
   command: "qoderclicn",
-  home: "/tmp/verify-z3h7C0/u/.qoderworkcn",
+  home: "/tmp/verify-QWHRVN/u/.qoderworkcn",
   token_configured: "[REDACTED]",
 }
-[2026-11-16T08:47:42.100Z] security {
+[2026-11-18T10:39:26.162Z] security {
   proxy_api_key: "not set",
   cross_origin: "loopback origins only",
   server_tool_execution: "off",
 }
-[2026-11-16T08:47:42.100Z] note: PROXY_API_KEY is not set, so any process on this machine can use the proxy. Set it in .env to require a key.
+[2026-11-18T10:39:26.162Z] note: PROXY_API_KEY is not set, so any process on this machine can use the proxy. Set it in .env to require a key.
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-16T08:47:38.169Z level=INFO run=1b461a97 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8\"]" role=cli
-timestamp=2026-11-16T08:47:41.313Z level=INFO run=3649be58 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-16T08:47:41.582Z level=INFO run=3649be58 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-16T08:47:41.600Z level=INFO run=3649be58 message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
-timestamp=2026-11-16T08:47:41.963Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u/.config/opencode type=directory ignores=6 http.span=23 role=server
-timestamp=2026-11-16T08:47:41.970Z level=INFO run=3649be58 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=30 role=server
-timestamp=2026-11-16T08:47:41.971Z level=INFO run=3649be58 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=31 role=server
-timestamp=2026-11-16T08:47:41.971Z level=INFO run=3649be58 message="watcher subscribe" path=/ type=entries ignores=0 http.span=31 role=server
-timestamp=2026-11-16T08:47:41.971Z level=INFO run=3649be58 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=31 role=server
-timestamp=2026-11-16T08:47:41.972Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-16T08:47:41.972Z level=INFO run=3649be58 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-16T08:47:41.972Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0 type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-16T08:47:41.972Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0 type=entries backend=node ignores=0 http.span=32 role=server
-timestamp=2026-11-16T08:47:41.972Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u type=entries ignores=0 http.span=32 role=server
-timestamp=2026-11-16T08:47:41.973Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u type=entries backend=node ignores=0 http.span=33 role=server
-timestamp=2026-11-16T08:47:41.995Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u/.config/opencode type=directory backend=inotify ignores=6 http.span=55 role=server
-timestamp=2026-11-16T08:47:42.003Z level=INFO run=3649be58 message="location services booted" directory=/tmp/verify-z3h7C0/u workspaceID=undefined durationMs=63 http.span=63 role=server
-timestamp=2026-11-16T08:47:42.011Z level=INFO run=3649be58 msg="loading plugin" id=avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8 entrypoint=file:///tmp/verify-z3h7C0/u/cache/opencode/npm/git-qoder-proxy-af5acca8c893/1794818861057/node_modules/qoder-proxy/clean/server.js http.span=71 role=server
-timestamp=2026-11-16T08:47:42.079Z level=WARN run=3649be58 message="failed to load plugin" target=avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8 ref=err_be1da0dd cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=139 role=server
-timestamp=2026-11-16T08:47:42.779Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T08:47:42.779Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T08:47:42.780Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-16T08:47:42.780Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T08:47:42.824Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-16T08:47:42.825Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T08:47:42.829Z level=INFO run=3649be58 message="watcher subscribe" path=/tmp/verify-z3h7C0/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-16T08:47:42.830Z level=INFO run=3649be58 message="watcher started" path=/tmp/verify-z3h7C0/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-16T08:47:42.855Z level=INFO run=3649be58 message=event event.id=evt_1e38a6f07001zzpD5nA2sCBYMy event.created=1794818862855 event.type=provider.updated event.location.directory=/tmp/verify-z3h7C0/u event.location.workspaceID=undefined event.data={} http.span=915 role=server
-timestamp=2026-11-16T08:47:42.864Z level=INFO run=3649be58 message=event event.id=evt_1e38a6f10001ZIPnFybyBr4Wo2 event.created=1794818862864 event.type=model.updated event.location.directory=/tmp/verify-z3h7C0/u event.location.workspaceID=undefined event.data={} http.span=924 role=server
-timestamp=2026-11-16T08:47:42.866Z level=INFO run=3649be58 message=event event.id=evt_1e38a6f12001uO99kjQ2JPGbjn event.created=1794818862866 event.type=agent.updated event.location.directory=/tmp/verify-z3h7C0/u event.location.workspaceID=undefined event.data={} http.span=926 role=server
-timestamp=2026-11-16T08:47:42.866Z level=INFO run=3649be58 message=event event.id=evt_1e38a6f12002lDJ4v7UNhwzMj5 event.created=1794818862866 event.type=command.updated event.location.directory=/tmp/verify-z3h7C0/u event.location.workspaceID=undefined event.data={} http.span=926 role=server
-timestamp=2026-11-16T08:47:43.195Z level=INFO run=3649be58 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-16T08:47:43.196Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-16T08:47:43.196Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-16T08:47:43.199Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u/AGENTS.md type=file role=server
-timestamp=2026-11-16T08:47:43.199Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-16T08:47:43.212Z level=INFO run=3649be58 message="watcher stopped" path=/etc type=entries http.span=1272 role=server
-timestamp=2026-11-16T08:47:43.212Z level=INFO run=3649be58 message="watcher stopped" path=/ type=entries http.span=1272 role=server
-timestamp=2026-11-16T08:47:43.212Z level=INFO run=3649be58 message="watcher stopped" path=/tmp type=entries http.span=1272 role=server
-timestamp=2026-11-16T08:47:43.212Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0 type=entries http.span=1272 role=server
-timestamp=2026-11-16T08:47:43.212Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u type=entries http.span=1272 role=server
-timestamp=2026-11-16T08:47:43.214Z level=INFO run=3649be58 message="watcher stopped" path=/tmp/verify-z3h7C0/u/.config/opencode type=directory http.span=1274 role=server
+timestamp=2026-11-18T10:39:23.216Z level=INFO run=03b5d2db message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8\"]" role=cli
+timestamp=2026-11-18T10:39:25.440Z level=INFO run=22898510 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T10:39:25.680Z level=INFO run=22898510 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-18T10:39:25.706Z level=INFO run=22898510 message="database schema bootstrap completed" migrations=62 durationMs=26 role=server
+timestamp=2026-11-18T10:39:25.994Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/.config/opencode type=directory ignores=6 http.span=49 role=server
+timestamp=2026-11-18T10:39:26.003Z level=INFO run=22898510 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=58 role=server
+timestamp=2026-11-18T10:39:26.004Z level=INFO run=22898510 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=59 role=server
+timestamp=2026-11-18T10:39:26.005Z level=INFO run=22898510 message="watcher subscribe" path=/ type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-18T10:39:26.005Z level=INFO run=22898510 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-18T10:39:26.005Z level=INFO run=22898510 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=60 role=server
+timestamp=2026-11-18T10:39:26.005Z level=INFO run=22898510 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=60 role=server
+timestamp=2026-11-18T10:39:26.006Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-18T10:39:26.006Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-18T10:39:26.006Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u type=entries ignores=0 http.span=61 role=server
+timestamp=2026-11-18T10:39:26.006Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u type=entries backend=node ignores=0 http.span=61 role=server
+timestamp=2026-11-18T10:39:26.037Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/.config/opencode type=directory backend=inotify ignores=6 http.span=92 role=server
+timestamp=2026-11-18T10:39:26.047Z level=INFO run=22898510 message="location services booted" directory=/tmp/verify-QWHRVN/u workspaceID=undefined durationMs=101 http.span=102 role=server
+timestamp=2026-11-18T10:39:26.061Z level=INFO run=22898510 msg="loading plugin" id=avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8 entrypoint=file:///tmp/verify-QWHRVN/u/cache/opencode/npm/git-qoder-proxy-af5acca8c893/1794998365135/node_modules/qoder-proxy/clean/server.js http.span=116 role=server
+timestamp=2026-11-18T10:39:26.141Z level=WARN run=22898510 message="failed to load plugin" target=avaritiachaos/qoder-proxy#6794db68ffa8a6caee0aa930b05ff0cd611c01b8 ref=err_59acdd1a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=196 role=server
+timestamp=2026-11-18T10:39:27.074Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T10:39:27.075Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T10:39:27.075Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T10:39:27.077Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T10:39:27.077Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T10:39:27.077Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-18T10:39:27.078Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T10:39:27.094Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T10:39:27.095Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T10:39:27.096Z level=INFO run=22898510 message="watcher subscribe" path=/tmp/verify-QWHRVN/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T10:39:27.098Z level=INFO run=22898510 message="watcher started" path=/tmp/verify-QWHRVN/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T10:39:27.120Z level=INFO run=22898510 message=event event.id=evt_1ee3d7390001j3f5hjQkkDbDlm event.created=1794998367120 event.type=provider.updated event.location.directory=/tmp/verify-QWHRVN/u event.location.workspaceID=undefined event.data={} http.span=1175 role=server
+timestamp=2026-11-18T10:39:27.134Z level=INFO run=22898510 message=event event.id=evt_1ee3d739e001tzjPs30VgAlrKg event.created=1794998367134 event.type=model.updated event.location.directory=/tmp/verify-QWHRVN/u event.location.workspaceID=undefined event.data={} http.span=1189 role=server
+timestamp=2026-11-18T10:39:27.138Z level=INFO run=22898510 message=event event.id=evt_1ee3d73a200158EBRJ6HMjQjqv event.created=1794998367138 event.type=agent.updated event.location.directory=/tmp/verify-QWHRVN/u event.location.workspaceID=undefined event.data={} http.span=1193 role=server
+timestamp=2026-11-18T10:39:27.141Z level=INFO run=22898510 message=event event.id=evt_1ee3d73a3001xAwyGGadUDE043 event.created=1794998367141 event.type=command.updated event.location.directory=/tmp/verify-QWHRVN/u event.location.workspaceID=undefined event.data={} http.span=1196 role=server
+timestamp=2026-11-18T10:39:27.273Z level=INFO run=22898510 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T10:39:27.273Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T10:39:27.273Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T10:39:27.279Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/CLAUDE.md type=file role=server
+timestamp=2026-11-18T10:39:27.279Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T10:39:27.279Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T10:39:27.307Z level=INFO run=22898510 message="watcher stopped" path=/etc type=entries http.span=1362 role=server
+timestamp=2026-11-18T10:39:27.307Z level=INFO run=22898510 message="watcher stopped" path=/ type=entries http.span=1362 role=server
+timestamp=2026-11-18T10:39:27.307Z level=INFO run=22898510 message="watcher stopped" path=/tmp type=entries http.span=1362 role=server
+timestamp=2026-11-18T10:39:27.307Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN type=entries http.span=1362 role=server
+timestamp=2026-11-18T10:39:27.307Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u type=entries http.span=1362 role=server
+timestamp=2026-11-18T10:39:27.308Z level=INFO run=22898510 message="watcher stopped" path=/tmp/verify-QWHRVN/u/.config/opencode type=directory http.span=1363 role=server
