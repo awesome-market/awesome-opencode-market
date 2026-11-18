@@ -1,15 +1,19 @@
-/** outbound fetch honoring HTTP(S)_PROXY/NO_PROXY — Node's undici fetch
- *  ignores proxy env vars by default, so hosts only reachable via a local
- *  proxy (raw.githubusercontent/api.github.com behind a network filter)
- *  time out silently and masquerade as "fetch failed". EnvHttpProxyAgent
- *  is a no-op when no proxy env is set, so CI is unaffected. */
-import { EnvHttpProxyAgent, setGlobalDispatcher } from 'undici'
+/** opt-in outbound proxy — ONLY honors MARKET_PROXY (e.g.
+ *  `socks5://127.0.0.1:1080` for `ssh -D`, or `http://127.0.0.1:7890`).
+ *  HTTP_PROXY/HTTPS_PROXY/ALL_PROXY are deliberately ignored: Node's
+ *  undici fetch uses no proxy by default and this machine's context
+ *  fetches must never silently pick up a dead ambient proxy. Unset or
+ *  empty → plain direct fetch. */
+import { ProxyAgent, Socks5ProxyAgent, setGlobalDispatcher } from 'undici'
 
 let installed = false
-export function installEnvProxy(): void {
+export function installMarketProxy(): void {
   if (installed) return
   installed = true
-  if (!process.env.HTTP_PROXY && !process.env.HTTPS_PROXY &&
-      !process.env.http_proxy && !process.env.https_proxy) return
-  setGlobalDispatcher(new EnvHttpProxyAgent())
+  const p = process.env.MARKET_PROXY?.trim()
+  if (!p) return
+  const agent = p.startsWith('http://') || p.startsWith('https://')
+    ? new ProxyAgent(p)
+    : new Socks5ProxyAgent(p.startsWith('socks5://') || p.startsWith('socks4://') ? p : `socks5://${p}`)
+  setGlobalDispatcher(agent)
 }

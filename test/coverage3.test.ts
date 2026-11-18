@@ -102,19 +102,23 @@ describe('coverage round 4', () => {
   })
 })
 
-describe('installEnvProxy', () => {
-  it('no proxy env → installs nothing and stays idempotent', async () => {
-    const { installEnvProxy } = await import('../pipeline/net.ts')
-    delete process.env.HTTP_PROXY; delete process.env.HTTPS_PROXY
-    delete process.env.http_proxy; delete process.env.https_proxy
-    expect(() => { installEnvProxy(); installEnvProxy() }).not.toThrow()
-  })
-  it('proxy env → installs a global dispatcher that fetch can use', async () => {
+
+describe('installMarketProxy', () => {
+  it('unset → no dispatcher, plain direct fetch', async () => {
     const { vi } = await import('vitest')
     vi.resetModules()
-    const { installEnvProxy } = await import('../pipeline/net.ts')
-    process.env.HTTPS_PROXY = 'http://127.0.0.1:1' // dead proxy is fine — we only assert wiring, not egress
-    expect(() => installEnvProxy()).not.toThrow()
-    delete process.env.HTTPS_PROXY
+    delete process.env.MARKET_PROXY
+    const { installMarketProxy } = await import('../pipeline/net.ts')
+    expect(() => { installMarketProxy(); installMarketProxy() }).not.toThrow()
+  })
+  it('set → installs the matching agent (http vs socks5)', async () => {
+    const { vi } = await import('vitest')
+    for (const p of ['http://127.0.0.1:7890', 'socks5://127.0.0.1:1080', '127.0.0.1:1080']) {
+      vi.resetModules()
+      process.env.MARKET_PROXY = p
+      const { installMarketProxy } = await import('../pipeline/net.ts')
+      expect(() => installMarketProxy()).not.toThrow()
+    }
+    delete process.env.MARKET_PROXY
   })
 })

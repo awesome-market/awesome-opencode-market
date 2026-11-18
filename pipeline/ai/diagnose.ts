@@ -62,7 +62,7 @@ import { HARNESS_GEN } from '../verify/verify.ts'
 import { OPENCODE_VERSION } from '../publish/merge.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, egressBlockedExcerpt, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from '../verify/failExplain.ts'
 import { isMain } from '../main-guard.ts'
-import { installEnvProxy } from '../net.ts'
+import { installMarketProxy } from '../net.ts'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const L05_THRESHOLD = 0.662 // thresholds.json benign_max
@@ -1031,7 +1031,7 @@ export async function main(
     fetchFn?: typeof fetch
   } = {},
 ): Promise<void> {
-  installEnvProxy()
+  installMarketProxy()
   const l05 = deps.l05 ?? l05Score
   // judge backend: AI_BACKEND=devin → one-shot `devin -p` session per
   // candidate; anything else (unset included) → local ornith/omlx, unchanged
