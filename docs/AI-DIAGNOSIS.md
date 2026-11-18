@@ -403,6 +403,8 @@ skill 走 `installSkillTar` 独立路径，同步钉。
 
 ## 11. 本地组件
 
+> 用法/运维手册见 [LOCAL-OPS.md](LOCAL-OPS.md)——本文只管设计取舍。
+
 - `pipeline/ai-diagnose.ts`：拉 pending 条目+pendingUpdate →
   verify-failed **终态**短路（`verification.status==='failed'` 且
   retries≥3 或超 7d 重试窗 → 直接写 concern、reason 带 verify
