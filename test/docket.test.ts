@@ -2139,3 +2139,41 @@ describe('pre-read completeness gate — no half-baked review issues', () => {
     } finally { keep === undefined ? delete process.env.GH_REPO : process.env.GH_REPO = keep }
   })
 })
+
+describe('实际调用 — call-site rendering under pre-read verdicts', () => {
+  const CALL = { line: 5, text: 'execFile("git", ["remote","get-url","origin"], {timeout:5000}, cb)' }
+  it('红旗清单 row shows ↳ 实际调用 when the context carries one', () => {
+    const flag = 'child-process:dist/repository.js — L1: import { execFile } from "node:child_process"'
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [], redFlags: [flag] },
+    })]), [v({ verdict: 'concern' })])
+    const key = `${t[0]!.name.toLowerCase()}\0${t[0]!.version ?? ''}\0${flag}`
+    const ctx: FlagContext = {
+      name: t[0]!.name, version: t[0]!.version, flag, rule: 'child-process',
+      path: 'dist/repository.js', line: 1, at: '2026-01-01T00:00:00Z',
+      ai: { verdict: 'pass' as const, reasonZh: '固定 git 只读调用', reasonEn: 'fixed git read' },
+      call: CALL,
+    }
+    const body = issueBody(t[0]!, { flagContexts: new Map([[key, ctx]]) })
+    expect(body).toContain('↳ AI 初筛：倾向良性——固定 git 只读调用')
+    expect(body).toContain('↳ 实际调用 L5: execFile("git", \\["remote","get-url","origin"\\], {timeout:5000}, cb)')
+    const { call: _drop, ...noCall } = ctx
+    const bare = issueBody(t[0]!, { flagContexts: new Map([[key, noCall]]) })
+    expect(bare).not.toContain('实际调用')
+  })
+  it('excerpt row shows the same call-site line', () => {
+    const F = 'child-process:dist/repository.js — L1: import { execFile } from "node:child_process"'
+    const t = docketTargets(idx([e({
+      capabilities: { scannedAt: 't', findings: [F], redFlags: [] },
+    })]), [v({ verdict: 'concern' })])
+    const key = `${t[0]!.name.toLowerCase()}\0${t[0]!.version ?? ''}\0${F}`
+    const ctx: FlagContext = {
+      name: t[0]!.name, version: t[0]!.version, flag: F, rule: 'child-process',
+      path: 'dist/repository.js', line: 1, at: '2026-01-01T00:00:00Z',
+      ai: { verdict: 'concern' as const, reasonZh: '参数来自外部输入', reasonEn: 'untrusted args' },
+      call: CALL,
+    }
+    const body = issueBody(t[0]!, { flagContexts: new Map([[key, ctx]]) })
+    expect(body).toContain('↳ 实际调用 L5:')
+  })
+})
