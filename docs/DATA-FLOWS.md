@@ -950,6 +950,8 @@ ai-diagnose.sh 壳：env 检查（bash -n 预检）→ mkdir 原子锁（防 lau
 
 Env：`AI_BASE_URL`（默认 `http://localhost:8001/v1`）、`AI_MODEL`、`AI_API_KEY`（`~/.config/opencode-market/ai.env`）、`HF_HOME`/`GALVANIZE_DIR`（L0.5）。
 
+flag-context / flag-delta 另有 `-m <local|devin|devin:<model>|<model>>`（换判官，默认走 env）与 `-p <proxy>`（出站代理：`1080`/`ip:port`/`sock5://`/`socks5://`/`http(s)://`，等效 `MARKET_PROXY`，刻意不读 HTTP(S)_PROXY）；`scripts/ssh-proxy.sh [ip] [username] [port]` 是配它用的 ssh -D 守护脚本。
+
 ---
 
 ## 5. 人工裁决流 — `concern.yml`（maintainer 专属，手机可用）
