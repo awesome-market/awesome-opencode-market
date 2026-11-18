@@ -859,7 +859,7 @@ export const isStaleL05DocScore = (v: AiVerdict | undefined): boolean => {
  *  basis evaporated: re-queue so the model rules on real material. A slot
  *  that stays unreviewable re-concerns cheaply on the same honest basis —
  *  scannedAt === null (never scanned) parses NaN and stays put. */
-const BLIND_CONCERN_RE = /未扫描|未能核对|无法提取|未做任何|无任何扫描|无任何.{0,4}证据|超出上限|盲审|无法通过文本审查|无法核实/
+const BLIND_CONCERN_RE = /未扫描|未能核对|无法提取|未做任何|无任何扫描|无任何.{0,4}证据|超出上限|盲审|无法通过文本审查|无法核实|提取失败|未能提取/
 export const staleBlindConcern = (
   v: AiVerdict | undefined,
   caps: { scannedAt: string | null } | undefined,
@@ -867,6 +867,28 @@ export const staleBlindConcern = (
   v?.verdict === 'concern' && v.source === 'ai' && BLIND_CONCERN_RE.test(v.reason ?? '')
   && !!caps?.scannedAt && !!v?.at
   && Date.parse(caps.scannedAt) > Date.parse(v.at)
+
+/** Bounded retry for blind concerns whose evidence can never freshen on its
+ *  own. staleBlindConcern fires when a RESCAN lands after the verdict — but
+ *  a JUDGE-TIME extraction failure (codeload blip, proxy outage) mints the
+ *  same "can't verify" concern while the slot's scan sits OLDER than the
+ *  verdict: the timestamp gate can never fire, so the slot would stay
+ *  blind-concerned forever even though a fresh fetch would see the code.
+ *  Re-queue the slot bounded by its consecutive-blind streak — a transient
+ *  failure heals on the next run (judge sees real content → real verdict);
+ *  a permanent one (>cap tarball, dead repo) mints another blind concern
+ *  until the streak hits BLIND_RETRY_CAP, then settles as human debt
+ *  instead of burning a judge call every cycle forever. streak counts
+ *  consecutive TRAILING blind concerns on the slot — any non-blind verdict
+ *  resets it, so the bound is per-unhealed-run, not lifetime. */
+export const BLIND_RETRY_CAP = 2
+export const blindConcernRetry = (
+  v: AiVerdict | undefined,
+  streak: number,
+): boolean =>
+  v?.verdict === 'concern' && v.source === 'ai'
+  && BLIND_CONCERN_RE.test(v.reason ?? '')
+  && streak < BLIND_RETRY_CAP
 
 /** Mirror of plan.ts's verifyPartsOf membership check (can't import plan —
  *  plan already imports this module). True when the candidate slot still
@@ -902,6 +924,18 @@ export function unreviewedTargets(
   const seen = latestVerdicts(verdicts)
   const human = latestHumanVerdicts(verdicts)
   const tomb = tombEpochs(index.removed)
+  // consecutive TRAILING blind-concern count per slot — the retry bound for
+  // blindConcernRetry. Walk the log in `at` order: a blind concern bumps the
+  // streak, any other verdict resets it (a healed slot starts fresh).
+  const blindStreaks = new Map<string, number>()
+  {
+    const sorted = [...verdicts].sort((a, b) => atCmp(a.at, b.at))
+    for (const v of sorted) {
+      const k = vkey(v.name, v.version)
+      const blind = v.verdict === 'concern' && v.source === 'ai' && BLIND_CONCERN_RE.test(v.reason ?? '')
+      blindStreaks.set(k, blind ? (blindStreaks.get(k) ?? 0) + 1 : 0)
+    }
+  }
   // name match is case-insensitive: npm names are canonical-lowercase but
   // github-kind entry names can carry case — --name 'Owner/Repo' and
   // '--name owner/repo' must select the same target (verify's targets
@@ -941,7 +975,7 @@ export function unreviewedTargets(
       gov?.verdict === 'pass' && gov.source === 'ai' && !gov.flagsReviewed
       && slotCaps.redFlags.length > 0
       && !humanPassCovers(human, e.name, ver, tomb)
-    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov) && !isStaleL05DocScore(gov) && !staleBlindConcern(gov, slotCaps)) return false
+    if (gov !== undefined && !isMechFlagConcern(gov) && !staleVerifyFail(gov, vf) && !flagBlockedPass && !isStaleL05Concern(gov) && !isStaleL05DocScore(gov) && !staleBlindConcern(gov, slotCaps) && !blindConcernRetry(gov, blindStreaks.get(vkey(e.name, ver)) ?? 0)) return false
     // A package-level human concern (name@null) brakes EVERY slot — the
     // standing decision is already made, so an AI verdict here could never
     // apply; reviewing anyway burns tokens AND §⑤ would count the slot as
