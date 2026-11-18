@@ -3,54 +3,30 @@ apiNames: relay-flow-plugin
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-FhshVX/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-Xfk1hP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:36713
+server listening on http://127.0.0.1:44279
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T02:35:07.743Z level=INFO run=8e2fcc3a message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"relay-flow-plugin@0.0.1\"]" role=cli
-timestamp=2026-11-18T02:35:08.330Z level=INFO run=9bc40298 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T02:35:08.564Z level=INFO run=9bc40298 message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-18T02:35:08.595Z level=INFO run=9bc40298 message="database schema bootstrap completed" migrations=59 durationMs=31 role=server
-timestamp=2026-11-18T02:35:09.045Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u/.config/opencode type=directory ignores=6 http.span=53 role=server
-timestamp=2026-11-18T02:35:09.059Z level=INFO run=9bc40298 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=67 role=server
-timestamp=2026-11-18T02:35:09.060Z level=INFO run=9bc40298 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=68 role=server
-timestamp=2026-11-18T02:35:09.061Z level=INFO run=9bc40298 message="watcher subscribe" path=/ type=entries ignores=0 http.span=69 role=server
-timestamp=2026-11-18T02:35:09.061Z level=INFO run=9bc40298 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=69 role=server
-timestamp=2026-11-18T02:35:09.061Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=69 role=server
-timestamp=2026-11-18T02:35:09.062Z level=INFO run=9bc40298 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=70 role=server
-timestamp=2026-11-18T02:35:09.066Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX type=entries ignores=0 http.span=74 role=server
-timestamp=2026-11-18T02:35:09.068Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX type=entries backend=node ignores=0 http.span=76 role=server
-timestamp=2026-11-18T02:35:09.068Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u type=entries ignores=0 http.span=76 role=server
-timestamp=2026-11-18T02:35:09.068Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u type=entries backend=node ignores=0 http.span=76 role=server
-timestamp=2026-11-18T02:35:09.101Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u/.config/opencode type=directory backend=inotify ignores=6 http.span=109 role=server
-timestamp=2026-11-18T02:35:09.120Z level=INFO run=9bc40298 msg="loading plugin" id=relay-flow-plugin@0.0.1 entrypoint=file:///tmp/verify-FhshVX/u/cache/opencode/npm/relay-flow-plugin@0.0.1/1794969307997/node_modules/relay-flow-plugin/report-status.ts http.span=128 role=server
-timestamp=2026-11-18T02:35:09.122Z level=WARN run=9bc40298 message="failed to load plugin" target=relay-flow-plugin@0.0.1 ref=err_f3a6f7e6 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=130 role=server
-timestamp=2026-11-18T02:35:09.138Z level=INFO run=9bc40298 message="location services booted" directory=/tmp/verify-FhshVX/u workspaceID=undefined durationMs=145 http.span=146 role=server
-timestamp=2026-11-18T02:35:10.311Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T02:35:10.312Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T02:35:10.313Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T02:35:10.313Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T02:35:10.386Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-18T02:35:10.387Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T02:35:10.390Z level=INFO run=9bc40298 message="watcher subscribe" path=/tmp/verify-FhshVX/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-18T02:35:10.390Z level=INFO run=9bc40298 message="watcher started" path=/tmp/verify-FhshVX/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T02:35:10.451Z level=INFO run=9bc40298 message=event event.id=evt_1ec8214f30013Jz1hWZ13cyW2d event.created=1794969310451 event.type=provider.updated event.location.directory=/tmp/verify-FhshVX/u event.location.workspaceID=undefined event.data={} http.span=1459 role=server
-timestamp=2026-11-18T02:35:10.468Z level=INFO run=9bc40298 message=event event.id=evt_1ec821504001qzrKgH2KRykG6B event.created=1794969310468 event.type=model.updated event.location.directory=/tmp/verify-FhshVX/u event.location.workspaceID=undefined event.data={} http.span=1476 role=server
-timestamp=2026-11-18T02:35:10.472Z level=INFO run=9bc40298 message=event event.id=evt_1ec821508001tD6Z0vUdW9PDPq event.created=1794969310472 event.type=agent.updated event.location.directory=/tmp/verify-FhshVX/u event.location.workspaceID=undefined event.data={} http.span=1480 role=server
-timestamp=2026-11-18T02:35:10.472Z level=INFO run=9bc40298 message=event event.id=evt_1ec821508002FVKVBP1lHXJpbj event.created=1794969310472 event.type=command.updated event.location.directory=/tmp/verify-FhshVX/u event.location.workspaceID=undefined event.data={} http.span=1480 role=server
-timestamp=2026-11-18T02:35:10.674Z level=ERROR run=9bc40298 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1682 role=server
-timestamp=2026-11-18T02:35:10.985Z level=INFO run=9bc40298 message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-18T02:35:10.985Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-18T02:35:10.985Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-18T02:35:10.992Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u/AGENTS.md type=file role=server
-timestamp=2026-11-18T02:35:10.993Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-18T02:35:11.024Z level=INFO run=9bc40298 message="watcher stopped" path=/etc type=entries http.span=2032 role=server
-timestamp=2026-11-18T02:35:11.024Z level=INFO run=9bc40298 message="watcher stopped" path=/ type=entries http.span=2032 role=server
-timestamp=2026-11-18T02:35:11.024Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp type=entries http.span=2032 role=server
-timestamp=2026-11-18T02:35:11.024Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX type=entries http.span=2032 role=server
-timestamp=2026-11-18T02:35:11.024Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u type=entries http.span=2032 role=server
-timestamp=2026-11-18T02:35:11.030Z level=INFO run=9bc40298 message="watcher stopped" path=/tmp/verify-FhshVX/u/.config/opencode type=directory http.span=2038 role=server
+timestamp=2026-11-18T02:49:43.182Z level=INFO run=68984293 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"relay-flow-plugin@0.0.1\"]" role=cli
+timestamp=2026-11-18T02:49:43.862Z level=INFO run=cadd7033 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T02:49:44.162Z level=INFO run=cadd7033 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-18T02:49:44.177Z level=INFO run=cadd7033 message="database schema bootstrap completed" migrations=59 durationMs=15 role=server
+timestamp=2026-11-18T02:49:44.482Z level=INFO run=cadd7033 message="watcher subscribe" path=/tmp/verify-Xfk1hP/u/.config/opencode type=directory ignores=6 http.span=43 role=server
+timestamp=2026-11-18T02:49:44.487Z level=INFO run=cadd7033 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=48 role=server
+timestamp=2026-11-18T02:49:44.488Z level=INFO run=cadd7033 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=49 role=server
+timestamp=2026-11-18T02:49:44.488Z level=INFO run=cadd7033 message="watcher subscribe" path=/ type=entries ignores=0 http.span=49 role=server
+timestamp=2026-11-18T02:49:44.489Z level=INFO run=cadd7033 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=50 role=server
+timestamp=2026-11-18T02:49:44.490Z level=INFO run=cadd7033 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-18T02:49:44.490Z level=INFO run=cadd7033 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=51 role=server
+timestamp=2026-11-18T02:49:44.490Z level=INFO run=cadd7033 message="watcher subscribe" path=/tmp/verify-Xfk1hP type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-18T02:49:44.491Z level=INFO run=cadd7033 message="watcher started" path=/tmp/verify-Xfk1hP type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-18T02:49:44.492Z level=INFO run=cadd7033 message="watcher subscribe" path=/tmp/verify-Xfk1hP/u type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-18T02:49:44.492Z level=INFO run=cadd7033 message="watcher started" path=/tmp/verify-Xfk1hP/u type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-18T02:49:44.532Z level=INFO run=cadd7033 message="watcher started" path=/tmp/verify-Xfk1hP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=93 role=server
+timestamp=2026-11-18T02:49:44.541Z level=INFO run=cadd7033 message="location services booted" directory=/tmp/verify-Xfk1hP/u workspaceID=undefined durationMs=101 http.span=102 role=server
+timestamp=2026-11-18T02:49:44.562Z level=INFO run=cadd7033 msg="loading plugin" id=relay-flow-plugin@0.0.1 entrypoint=file:///tmp/verify-Xfk1hP/u/cache/opencode/npm/relay-flow-plugin@0.0.1/1794970183502/node_modules/relay-flow-plugin/report-status.ts http.span=123 role=server
+timestamp=2026-11-18T02:49:44.564Z level=WARN run=cadd7033 message="failed to load plugin" target=relay-flow-plugin@0.0.1 ref=err_66a7679a cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=125 role=server
