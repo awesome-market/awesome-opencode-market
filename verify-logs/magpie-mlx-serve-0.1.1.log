@@ -3,54 +3,53 @@ apiNames: magpie-mlx-serve
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-muZVPG/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-orlGhp/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:43221
+server listening on http://127.0.0.1:41129
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-18T05:18:25.514Z level=INFO run=6c9e1686 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-mlx-serve@0.1.1\"]" role=cli
-timestamp=2026-11-18T05:18:25.927Z level=INFO run=4fdff0fa message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-18T05:18:26.408Z level=INFO run=4fdff0fa message="database schema bootstrap started" migrations=59 role=server
-timestamp=2026-11-18T05:18:26.682Z level=INFO run=4fdff0fa message="database schema bootstrap completed" migrations=59 durationMs=274 role=server
-timestamp=2026-11-18T05:18:26.923Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u/.config/opencode type=directory ignores=6 http.span=16 role=server
-timestamp=2026-11-18T05:18:26.926Z level=INFO run=4fdff0fa message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
-timestamp=2026-11-18T05:18:26.927Z level=INFO run=4fdff0fa message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
-timestamp=2026-11-18T05:18:26.927Z level=INFO run=4fdff0fa message="watcher subscribe" path=/ type=entries ignores=0 http.span=20 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher started" path=/ type=entries backend=node ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG type=entries ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG type=entries backend=node ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.928Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u type=entries ignores=0 http.span=21 role=server
-timestamp=2026-11-18T05:18:26.929Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u type=entries backend=node ignores=0 http.span=22 role=server
-timestamp=2026-11-18T05:18:26.948Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
-timestamp=2026-11-18T05:18:26.960Z level=INFO run=4fdff0fa message="location services booted" directory=/tmp/verify-muZVPG/u workspaceID=undefined durationMs=53 http.span=53 role=server
-timestamp=2026-11-18T05:18:26.970Z level=INFO run=4fdff0fa msg="loading plugin" id=magpie-mlx-serve@0.1.1 entrypoint=file:///tmp/verify-muZVPG/u/cache/opencode/npm/magpie-mlx-serve@0.1.1/1794979105641/node_modules/magpie-mlx-serve/server.mjs http.span=63 role=server
-timestamp=2026-11-18T05:18:26.972Z level=WARN run=4fdff0fa message="failed to load plugin" target=magpie-mlx-serve@0.1.1 ref=err_5b7137df cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=65 role=server
-timestamp=2026-11-18T05:18:27.563Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T05:18:27.563Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T05:18:27.564Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-18T05:18:27.564Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T05:18:27.588Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-18T05:18:27.588Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T05:18:27.589Z level=INFO run=4fdff0fa message="watcher subscribe" path=/tmp/verify-muZVPG/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-18T05:18:27.589Z level=INFO run=4fdff0fa message="watcher started" path=/tmp/verify-muZVPG/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-18T05:18:27.610Z level=INFO run=4fdff0fa message=event event.id=evt_1ed17931a0019uHHI7LuaoZn3N event.created=1794979107610 event.type=provider.updated event.location.directory=/tmp/verify-muZVPG/u event.location.workspaceID=undefined event.data={} http.span=703 role=server
-timestamp=2026-11-18T05:18:27.622Z level=INFO run=4fdff0fa message=event event.id=evt_1ed179326001fMhdoZUZDajj2T event.created=1794979107622 event.type=model.updated event.location.directory=/tmp/verify-muZVPG/u event.location.workspaceID=undefined event.data={} http.span=715 role=server
-timestamp=2026-11-18T05:18:27.624Z level=INFO run=4fdff0fa message=event event.id=evt_1ed179327001yxfKKMNL36Fr5x event.created=1794979107623 event.type=agent.updated event.location.directory=/tmp/verify-muZVPG/u event.location.workspaceID=undefined event.data={} http.span=717 role=server
-timestamp=2026-11-18T05:18:27.624Z level=INFO run=4fdff0fa message=event event.id=evt_1ed179328001k3J2HbHi7IhKcl event.created=1794979107624 event.type=command.updated event.location.directory=/tmp/verify-muZVPG/u event.location.workspaceID=undefined event.data={} http.span=717 role=server
-timestamp=2026-11-18T05:18:27.783Z level=ERROR run=4fdff0fa message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=876 role=server
-timestamp=2026-11-18T05:18:28.075Z level=INFO run=4fdff0fa message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-18T05:18:28.075Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-18T05:18:28.075Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-18T05:18:28.082Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u/AGENTS.md type=file role=server
-timestamp=2026-11-18T05:18:28.083Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-18T05:18:28.108Z level=INFO run=4fdff0fa message="watcher stopped" path=/etc type=entries http.span=1201 role=server
-timestamp=2026-11-18T05:18:28.108Z level=INFO run=4fdff0fa message="watcher stopped" path=/ type=entries http.span=1201 role=server
-timestamp=2026-11-18T05:18:28.108Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp type=entries http.span=1201 role=server
-timestamp=2026-11-18T05:18:28.108Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG type=entries http.span=1201 role=server
-timestamp=2026-11-18T05:18:28.108Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u type=entries http.span=1201 role=server
-timestamp=2026-11-18T05:18:28.109Z level=INFO run=4fdff0fa message="watcher stopped" path=/tmp/verify-muZVPG/u/.config/opencode type=directory http.span=1202 role=server
+timestamp=2026-11-18T05:24:55.557Z level=INFO run=30dbaef6 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-mlx-serve@0.1.1\"]" role=cli
+timestamp=2026-11-18T05:24:55.824Z level=INFO run=a03e2fde message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T05:24:55.994Z level=INFO run=a03e2fde message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-18T05:24:56.012Z level=INFO run=a03e2fde message="database schema bootstrap completed" migrations=59 durationMs=18 role=server
+timestamp=2026-11-18T05:24:56.292Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-18T05:24:56.295Z level=INFO run=a03e2fde message="watcher subscribe" path=/etc type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T05:24:56.295Z level=INFO run=a03e2fde message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=19 role=server
+timestamp=2026-11-18T05:24:56.295Z level=INFO run=a03e2fde message="watcher subscribe" path=/ type=entries ignores=0 http.span=19 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher started" path=/ type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.296Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T05:24:56.312Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u/.config/opencode type=directory backend=inotify ignores=6 http.span=36 role=server
+timestamp=2026-11-18T05:24:56.324Z level=INFO run=a03e2fde message="location services booted" directory=/tmp/verify-orlGhp/u workspaceID=undefined durationMs=47 http.span=48 role=server
+timestamp=2026-11-18T05:24:56.326Z level=INFO run=a03e2fde msg="loading plugin" id=magpie-mlx-serve@0.1.1 entrypoint=file:///tmp/verify-orlGhp/u/cache/opencode/npm/magpie-mlx-serve@0.1.1/1794979495679/node_modules/magpie-mlx-serve/server.mjs http.span=50 role=server
+timestamp=2026-11-18T05:24:56.328Z level=WARN run=a03e2fde message="failed to load plugin" target=magpie-mlx-serve@0.1.1 ref=err_72f3c0b7 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"])))])" http.span=52 role=server
+timestamp=2026-11-18T05:24:56.770Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T05:24:56.770Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T05:24:56.770Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-18T05:24:56.770Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T05:24:56.780Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-18T05:24:56.780Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T05:24:56.781Z level=INFO run=a03e2fde message="watcher subscribe" path=/tmp/verify-orlGhp/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-18T05:24:56.781Z level=INFO run=a03e2fde message="watcher started" path=/tmp/verify-orlGhp/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-18T05:24:56.795Z level=INFO run=a03e2fde message=event event.id=evt_1ed1d835b001gc2xPN6w7U7an0 event.created=1794979496795 event.type=provider.updated event.location.directory=/tmp/verify-orlGhp/u event.location.workspaceID=undefined event.data={} http.span=519 role=server
+timestamp=2026-11-18T05:24:56.802Z level=INFO run=a03e2fde message=event event.id=evt_1ed1d8362001eQQMvvLT3T01D5 event.created=1794979496802 event.type=model.updated event.location.directory=/tmp/verify-orlGhp/u event.location.workspaceID=undefined event.data={} http.span=526 role=server
+timestamp=2026-11-18T05:24:56.804Z level=INFO run=a03e2fde message=event event.id=evt_1ed1d8364001cbpMjYVfSFczbW event.created=1794979496804 event.type=agent.updated event.location.directory=/tmp/verify-orlGhp/u event.location.workspaceID=undefined event.data={} http.span=528 role=server
+timestamp=2026-11-18T05:24:56.804Z level=INFO run=a03e2fde message=event event.id=evt_1ed1d8364002w0fIJY770a7jdM event.created=1794979496804 event.type=command.updated event.location.directory=/tmp/verify-orlGhp/u event.location.workspaceID=undefined event.data={} http.span=528 role=server
+timestamp=2026-11-18T05:24:56.868Z level=INFO run=a03e2fde message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-18T05:24:56.868Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-18T05:24:56.868Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-18T05:24:56.871Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u/AGENTS.md type=file role=server
+timestamp=2026-11-18T05:24:56.871Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-18T05:24:56.884Z level=INFO run=a03e2fde message="watcher stopped" path=/etc type=entries http.span=608 role=server
+timestamp=2026-11-18T05:24:56.884Z level=INFO run=a03e2fde message="watcher stopped" path=/ type=entries http.span=608 role=server
+timestamp=2026-11-18T05:24:56.884Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp type=entries http.span=608 role=server
+timestamp=2026-11-18T05:24:56.884Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp type=entries http.span=608 role=server
+timestamp=2026-11-18T05:24:56.884Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u type=entries http.span=608 role=server
+timestamp=2026-11-18T05:24:56.886Z level=INFO run=a03e2fde message="watcher stopped" path=/tmp/verify-orlGhp/u/.config/opencode type=directory http.span=610 role=server
