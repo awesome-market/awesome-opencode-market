@@ -1,0 +1,33 @@
+spec: magpie-gateway-admin@1.0.0
+apiNames: magpie-gateway-admin
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-tZ9X6V/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39515
+server password [redacted]
+[gateway-admin] listening on http://127.0.0.1:3478
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T07:20:47.484Z level=INFO run=053a7888 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"magpie-gateway-admin@1.0.0\"]" role=cli
+timestamp=2026-11-18T07:20:48.145Z level=INFO run=aea07c6d message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T07:20:48.427Z level=INFO run=aea07c6d message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-18T07:20:48.441Z level=INFO run=aea07c6d message="database schema bootstrap completed" migrations=59 durationMs=14 role=server
+timestamp=2026-11-18T07:20:48.739Z level=INFO run=aea07c6d message="watcher subscribe" path=/tmp/verify-tZ9X6V/u/.config/opencode type=directory ignores=6 http.span=16 role=server
+timestamp=2026-11-18T07:20:48.743Z level=INFO run=aea07c6d message="watcher subscribe" path=/etc type=entries ignores=0 http.span=20 role=server
+timestamp=2026-11-18T07:20:48.743Z level=INFO run=aea07c6d message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=20 role=server
+timestamp=2026-11-18T07:20:48.744Z level=INFO run=aea07c6d message="watcher subscribe" path=/ type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-18T07:20:48.744Z level=INFO run=aea07c6d message="watcher started" path=/ type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-18T07:20:48.744Z level=INFO run=aea07c6d message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-18T07:20:48.744Z level=INFO run=aea07c6d message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=21 role=server
+timestamp=2026-11-18T07:20:48.744Z level=INFO run=aea07c6d message="watcher subscribe" path=/tmp/verify-tZ9X6V type=entries ignores=0 http.span=21 role=server
+timestamp=2026-11-18T07:20:48.745Z level=INFO run=aea07c6d message="watcher started" path=/tmp/verify-tZ9X6V type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T07:20:48.745Z level=INFO run=aea07c6d message="watcher subscribe" path=/tmp/verify-tZ9X6V/u type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-18T07:20:48.745Z level=INFO run=aea07c6d message="watcher started" path=/tmp/verify-tZ9X6V/u type=entries backend=node ignores=0 http.span=22 role=server
+timestamp=2026-11-18T07:20:48.765Z level=INFO run=aea07c6d message="watcher started" path=/tmp/verify-tZ9X6V/u/.config/opencode type=directory backend=inotify ignores=6 http.span=42 role=server
+timestamp=2026-11-18T07:20:48.775Z level=INFO run=aea07c6d message="location services booted" directory=/tmp/verify-tZ9X6V/u workspaceID=undefined durationMs=51 http.span=52 role=server
+timestamp=2026-11-18T07:20:48.782Z level=INFO run=aea07c6d msg="loading plugin" id=magpie-gateway-admin@1.0.0 entrypoint=file:///tmp/verify-tZ9X6V/u/cache/opencode/npm/magpie-gateway-admin@1.0.0/1794986447712/node_modules/magpie-gateway-admin/index.mjs http.span=59 role=server
+timestamp=2026-11-18T07:20:48.799Z level=WARN run=aea07c6d message="failed to load plugin" target=magpie-gateway-admin@1.0.0 ref=err_db233187 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=76 role=server
