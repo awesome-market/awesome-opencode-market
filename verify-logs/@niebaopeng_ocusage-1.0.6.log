@@ -1,0 +1,18 @@
+spec: @niebaopeng/ocusage@1.0.6
+apiNames: @niebaopeng/ocusage, ocusage
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-SMEgH0/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46173
+server password [redacted]
+Unknown option: --port
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-18T02:09:10.916Z level=INFO run=97129e57 message="cli starting" version=2.3.0 channel=latest local=false args="[\"plugin\",\"add\",\"@niebaopeng/ocusage@1.0.6\"]" role=cli
+timestamp=2026-11-18T02:09:12.494Z level=INFO run=d26c20b9 message="cli starting" version=2.3.0 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-18T02:09:13.343Z level=INFO run=d26c20b9 message="database schema bootstrap started" migrations=59 role=server
+timestamp=2026-11-18T02:09:13.375Z level=INFO run=d26c20b9 message="database schema bootstrap completed" migrations=59 durationMs=32 role=server
