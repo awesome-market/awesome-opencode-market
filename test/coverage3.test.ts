@@ -102,3 +102,23 @@ describe('coverage round 4', () => {
   })
 })
 
+
+describe('installMarketProxy', () => {
+  it('unset → no dispatcher, plain direct fetch', async () => {
+    const { vi } = await import('vitest')
+    vi.resetModules()
+    delete process.env.MARKET_PROXY
+    const { installMarketProxy } = await import('../pipeline/net.ts')
+    expect(() => { installMarketProxy(); installMarketProxy() }).not.toThrow()
+  })
+  it('set → installs the matching agent (http vs socks5)', async () => {
+    const { vi } = await import('vitest')
+    for (const p of ['http://127.0.0.1:7890', 'socks5://127.0.0.1:1080', '127.0.0.1:1080']) {
+      vi.resetModules()
+      process.env.MARKET_PROXY = p
+      const { installMarketProxy } = await import('../pipeline/net.ts')
+      expect(() => installMarketProxy()).not.toThrow()
+    }
+    delete process.env.MARKET_PROXY
+  })
+})
