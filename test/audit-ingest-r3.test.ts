@@ -383,3 +383,115 @@ describe('gone-check rescan: pending plugin-shape veto', () => {
     expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
   })
 })
+
+describe('gone-check rescan: pending plugin-shape veto — branch coverage', () => {
+  const SHAPELESS = 'module.exports = function cli() {}\n'
+  const SKILL_MD = '---\nname: demo\n---\n# demo\n'
+  const gonePack = (name: string) => packument(name, { dist: { tarball: 'https://x/gone.tgz', integrity: 'sha512-old' } })
+  const pendingEntry = (over: Partial<PluginEntry> = {}) => e({
+    approval: 'pending', contains: ['plugin'], verification: { status: 'unverified' },
+    capabilities: { scannedAt: 'old', rulesetVersion: 'r0', findings: [], redFlags: [] },
+    ...over,
+  })
+  const npmFetch = (goneTgz: Buffer) =>
+    baseFetch(mkTgz(), url => {
+      if (url.includes('registry.npmjs.org/gone-pkg')) return new Response(gonePack('gone-pkg'))
+      if (url.includes('x/gone.tgz')) return new Response(new Uint8Array(goneTgz))
+      return null
+    })
+
+  it('npm pending + contains:[skill] only → veto skipped, entry untouched', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'gone-pkg', slug: 'gone-pkg', type: 'skill', contains: ['skill'],
+    })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['skill'])
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('npm pending + features:[gui] → GUI exemption, contains kept', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'gone-pkg', slug: 'gone-pkg', features: ['gui'],
+    })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('npm pending + contains:[plugin,skill] + SKILL.md → contains:[skill] (no dup)', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'gone-pkg', slug: 'gone-pkg', contains: ['plugin', 'skill'],
+    })])))
+    const tgz = mkTgzFiles({ 'index.js': SHAPELESS, 'skills/demo/SKILL.md': SKILL_MD })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(tgz), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['skill'])
+  })
+
+  it('CATALOG_VETO_DRY_RUN env (no opts) → dry-run honored, report written', async () => {
+    const d = tmp('sv-')
+    const reportPath = join(d, 'veto.json')
+    process.env.CATALOG_VETO_DRY_RUN = '1'
+    try {
+      writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+      const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't', vetoReportPath: reportPath })
+      expect(out.plugins.some(p => p.name === 'gone-pkg')).toBe(true)
+      expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+      const report = JSON.parse(readFileSync(reportPath, 'utf8')) as { action: string }[]
+      expect(report.some(r => r.action === 'would-filter')).toBe(true)
+    } finally {
+      delete process.env.CATALOG_VETO_DRY_RUN
+    }
+  })
+
+  it('github pending + shapeless + SKILL.md → contains:[skill]', async () => {
+    const d = tmp('sv-')
+    const tgz = mkTgzFiles({ 'index.js': SHAPELESS, 'skills/demo/SKILL.md': SKILL_MD })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'o/gh', slug: 'o/gh', latestVersion: null, contains: ['plugin'], features: ['server'],
+      source: { kind: 'github', id: 'o/gh', repo: 'o/gh', version: 'oldsha' },
+      integrity: null,
+    })])))
+    const f = baseFetch(mkTgz(), url => {
+      if (url.includes('api.github.com/repos/o/gh') && !url.includes('/git/trees/'))
+        return mkRes({ stargazers_count: 1, full_name: 'o/gh', default_branch: 'main' })
+      if (url.includes('/git/trees/'))
+        return mkRes({ tree: [{ path: 'package.json' }, { path: 'index.js' }], sha: 'newsha', truncated: false })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(tgz))
+      return null
+    })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.contains).toEqual(['skill'])
+    expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
+  })
+
+  it('github pending + shapeless + vetoDryRun → contains kept, report would-contains', async () => {
+    const d = tmp('sv-')
+    const reportPath = join(d, 'veto.json')
+    const shapelessTgz = mkTgzFiles({ 'index.js': SHAPELESS })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'o/gh', slug: 'o/gh', latestVersion: null, contains: ['plugin'], features: ['server'],
+      source: { kind: 'github', id: 'o/gh', repo: 'o/gh', version: 'oldsha' },
+      integrity: null,
+    })])))
+    const f = baseFetch(mkTgz(), url => {
+      if (url.includes('api.github.com/repos/o/gh') && !url.includes('/git/trees/'))
+        return mkRes({ stargazers_count: 1, full_name: 'o/gh', default_branch: 'main' })
+      if (url.includes('/git/trees/'))
+        return mkRes({ tree: [{ path: 'package.json' }, { path: 'index.js' }], sha: 'newsha', truncated: false })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(shapelessTgz))
+      return null
+    })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't', vetoDryRun: true, vetoReportPath: reportPath })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.contains).toEqual(['plugin'])
+    const report = JSON.parse(readFileSync(reportPath, 'utf8')) as { name: string; action: string }[]
+    expect(report).toContainEqual(expect.objectContaining({ name: 'o/gh', kind: 'github', action: 'would-contains→[none]' }))
+  })
+})
