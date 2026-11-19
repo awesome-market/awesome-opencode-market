@@ -54,6 +54,9 @@ ASSESS_SPOOL=$STATED/flag-assessments.jsonl
 # flag-context per-flag AI pre-reads share the same durability model —
 # emit→spool→push flag-contexts.jsonl, clear on success
 CTX_SPOOL=$STATED/flag-contexts.jsonl
+# concern-look agentic second-looks share it too — emit→spool→push
+# concern-looks.jsonl. Advisory only: records never carry a verdict.
+LOOK_SPOOL=$STATED/concern-looks.jsonl
 # material-bundle deletions ride out on the same push as verdicts — the list
 # is durable state like the spool: a failed push keeps it for next run's replay
 RMF=$STATED/material-rm.list
@@ -374,6 +377,8 @@ VASSESS=$(mktemp "${TMPDIR:-/tmp}/assess-view.XXXXXXXX")
 AMISS=$(mktemp "${TMPDIR:-/tmp}/assess-missing.XXXXXXXX")
 VCTX=$(mktemp "${TMPDIR:-/tmp}/ctx-view.XXXXXXXX")
 CMISS=$(mktemp "${TMPDIR:-/tmp}/ctx-missing.XXXXXXXX")
+VLOOK=$(mktemp "${TMPDIR:-/tmp}/look-view.XXXXXXXX")
+LMISS=$(mktemp "${TMPDIR:-/tmp}/look-missing.XXXXXXXX")
 
 # diagnose must see spooled (un-pushed) verdicts as already-decided — else a
 # push that failed last run triggers a second LLM review of the same keys
@@ -435,6 +440,18 @@ npx tsx pipeline/ai/flag-context.ts \
   --limit "${FLAG_CONTEXT_LIMIT:-20}" \
   || log "flag-context failed (non-fatal) — verdicts still push"
 
+# concern-look: agentic second-look on AI-concern slots — a sandboxed devin
+# session may fetch bounded package sources (domain allowlist, GET-only)
+# to verify the concern CLAIM the 32KB excerpt couldn't settle. Advisory
+# records only — never AiVerdicts, so they can't release anything.
+{ cat "$CAT/concern-looks.jsonl" 2>/dev/null; cat "$LOOK_SPOOL" 2>/dev/null; } \
+  | sort -u > "$VLOOK" 2>/dev/null || : > "$VLOOK"
+npx tsx pipeline/ai/concern-look.ts \
+  --index "$CAT/index.json" --verdicts "$VVIEW" \
+  --looks "$VLOOK" --spool "$LOOK_SPOOL" \
+  --limit "${CONCERN_LOOK_LIMIT:-5}" \
+  || log "concern-look failed (non-fatal) — verdicts still push"
+
 # health stamp → catalog branch (transition/24h gated, advisory). CI's
 # watchdog leg 5 and digest §⑤ read it there — the local file alone is
 # invisible to them, and verdict commits can't express "alive but degraded"
@@ -468,7 +485,7 @@ cp "$PAY" "$SPOOL" 2>/dev/null \
 
 # an assessment-only run (flag-delta emitted, diagnose idle) must still push —
 # verdict emptiness alone is not "nothing to do"
-[ -s "$PAY" ] || [ -s "$RMF" ] || [ -s "$ASSESS_SPOOL" ] || [ -s "$CTX_SPOOL" ] || { log "no new verdicts — idle (常驻等待请跑 bin/ai-diagnose-agent.sh)"; exit 0; }
+[ -s "$PAY" ] || [ -s "$RMF" ] || [ -s "$ASSESS_SPOOL" ] || [ -s "$CTX_SPOOL" ] || [ -s "$LOOK_SPOOL" ] || { log "no new verdicts — idle (常驻等待请跑 bin/ai-diagnose-agent.sh)"; exit 0; }
 
 # Replay push: verdicts live in $PAY, not the worktree — a failed push just
 # means re-append onto the newest origin/catalog next attempt.
@@ -494,7 +511,10 @@ for i in 1 2 3 4; do
   # same missing-set for flag-context pre-reads
   comm -13 <(git show origin/catalog:flag-contexts.jsonl 2>/dev/null | sort -u) \
            <(cat "$CTX_SPOOL" 2>/dev/null | sort -u) > "$CMISS"
-  [ -s "$VVIEW" ] || [ -s "$AMISS" ] || [ -s "$CMISS" ] || [ -s "$RMF" ] || { log "verdicts+assessments already on origin/catalog"; : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; stamp_health pushed already-landed; exit 0; }
+  # and for concern-look second-look records
+  comm -13 <(git show origin/catalog:concern-looks.jsonl 2>/dev/null | sort -u) \
+           <(cat "$LOOK_SPOOL" 2>/dev/null | sort -u) > "$LMISS"
+  [ -s "$VVIEW" ] || [ -s "$AMISS" ] || [ -s "$CMISS" ] || [ -s "$LMISS" ] || [ -s "$RMF" ] || { log "verdicts+assessments already on origin/catalog"; : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; : > "$LOOK_SPOOL"; stamp_health pushed already-landed; exit 0; }
   if [ -s "$AMISS" ]; then
     touch flag-assessments.jsonl
     [ -s flag-assessments.jsonl ] && [ -n "$(tail -c1 flag-assessments.jsonl)" ] && printf '\n' >> flag-assessments.jsonl
@@ -506,6 +526,12 @@ for i in 1 2 3 4; do
     [ -s flag-contexts.jsonl ] && [ -n "$(tail -c1 flag-contexts.jsonl)" ] && printf '\n' >> flag-contexts.jsonl
     cat "$CMISS" >> flag-contexts.jsonl
     git add flag-contexts.jsonl
+  fi
+  if [ -s "$LMISS" ]; then
+    touch concern-looks.jsonl
+    [ -s concern-looks.jsonl ] && [ -n "$(tail -c1 concern-looks.jsonl)" ] && printf '\n' >> concern-looks.jsonl
+    cat "$LMISS" >> concern-looks.jsonl
+    git add concern-looks.jsonl
   fi
   if [ -s "$VVIEW" ]; then
     touch ai-verdicts.jsonl
@@ -530,11 +556,11 @@ for i in 1 2 3 4; do
   # failures and misreport the push as lost
   if git diff --cached --quiet; then
     log "nothing new to push — remote already carries verdicts+assessments+cleanup"
-    : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; : > "$RMF"; stamp_health pushed already-landed; exit 0
+    : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; : > "$LOOK_SPOOL"; : > "$RMF"; stamp_health pushed already-landed; exit 0
   fi
   git commit -qm "ai-diagnose: $(date '+%F %H:%M')" \
     || { log "commit attempt $i failed"; sleep 3; continue; }
-  git push -q origin catalog && { : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; : > "$RMF"; stamp_health pushed ok; exit 0; }
+  git push -q origin catalog && { : > "$SPOOL"; : > "$ASSESS_SPOOL"; : > "$CTX_SPOOL"; : > "$LOOK_SPOOL"; : > "$RMF"; stamp_health pushed ok; exit 0; }
   log "push attempt $i failed"; sleep 3
 done
 # push never landed — keep the payload for the next run instead of burning

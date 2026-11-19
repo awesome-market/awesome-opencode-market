@@ -139,6 +139,12 @@ jobs:
           elif git cat-file -e origin/catalog:flag-contexts.jsonl 2>/dev/null; then
             echo "flag-contexts.jsonl exists on origin/catalog but git show failed — defer to next tick"; exit 0
           else touch /tmp/flag-contexts.jsonl; fi
+          # concern-look agentic second-look records — advisory 「AI 复审」
+          # lines on concern issues; same exists-but-unreadable → defer posture
+          if git show origin/catalog:concern-looks.jsonl > /tmp/concern-looks.jsonl 2>/dev/null; then :;
+          elif git cat-file -e origin/catalog:concern-looks.jsonl 2>/dev/null; then
+            echo "concern-looks.jsonl exists on origin/catalog but git show failed — defer to next tick"; exit 0
+          else touch /tmp/concern-looks.jsonl; fi
           # diagnose.paused declares the local AI queue stopped on PURPOSE
           # (bin/ai-diagnose.sh pause) — docket.ts looks for it next to the
           # index file; absent = normal queue. Without this fetch the paused
@@ -162,7 +168,7 @@ jobs:
           # silently run live issue writes (fail-open on the safety flag)
           npx tsx pipeline/docket.ts --index /tmp/index.json --verdicts /tmp/ai-verdicts.jsonl ${{ inputs.dry && '--dry' || '' }} \
             --digest-state /tmp/digest-state.json --assessments /tmp/flag-assessments.jsonl \
-            --contexts /tmp/flag-contexts.jsonl
+            --contexts /tmp/flag-contexts.jsonl --looks /tmp/concern-looks.jsonl
 
   # the ONLY failure surface for the review-issue sync — without it a broken
   # docket silently leaves stale [review] issues open while the digest keeps

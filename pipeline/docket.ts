@@ -43,6 +43,7 @@ import { explainFlag } from './scan/flagExplain.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, deadAssessmentKeys, type FlagAssessment } from './ai/flag-delta.ts'
 import { loadFlagContexts, latestFlagContexts, deadContextKeys, SCAN_FLAG_RE, FLAGS_PER_ENTRY, FINDINGS_PER_ENTRY, type FlagContext } from './ai/flag-context.ts'
+import { loadConcernLooks, latestConcernLooks, type ConcernLook } from './ai/concern-look.ts'
 import { verifyPartsOf } from './verify/plan.ts'
 
 export interface DocketTarget {
@@ -609,6 +610,11 @@ export interface IssueBodyOpts {
    *  judge's "去向本地还是外发" answer for each scan flag. Advisory like
    *  assessments: the flag still wants a human verdict. */
   flagContexts?: Map<string, FlagContext> | null
+  /** concern-look agentic second-looks keyed "name\0version" — the sandboxed
+   *  reviewer's advisory on whether the AI concern CLAIM held up under
+   *  deeper evidence. Advisory like flagContexts: it informs the human
+   *  verdict, it can never substitute for one. */
+  concernLooks?: Map<string, ConcernLook> | null
   // keys that exhausted every retry (deadContextKeys) — render an explicit
   // "unjudged" marker so a bare row never masquerades as "not yet pre-read"
   deadCtx?: Set<string> | null
@@ -884,6 +890,22 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       // 🟢 line already fired above for LLM-pass-mechanical-block concerns —
       // "AI concern 已拦截" would contradict it (the LLM didn't concern)
       L.push('- AI concern 已拦截放行——无人翻案则该版本保持 held；人工 pass 可放行，人工 concern 锁死。')
+    }
+    // agentic second-look — only meaningful on a live AI concern (a human
+    // verdict or a pass verdict retires the question). Rendered as advisory
+    // evidence with its own honesty labels: 复审未成 ≠ 复审通过.
+    if (t.verdict === 'concern') {
+      const look = opts.concernLooks?.get(`${t.name.toLowerCase()}\0${t.version ?? ''}`)
+      if (look?.aiNote) {
+        L.push(`- 🔍 AI 复审：**未完成**（${look.aiNote}，${(look.at ?? '').slice(0, 10)}）——沙箱审查未产出结论，concern 维持原判`)
+      } else if (look?.claimCheck) {
+        const sug = look.suggestion === 'pass' ? '倾向误报' : look.suggestion === 'concern' ? '维持疑虑' : '无明确建议'
+        const claim = look.claimCheck === 'unsupported' ? '指控不成立'
+          : look.claimCheck === 'supported' ? '指控成立'
+          : '证据不足无法判定'
+        const why = look.reasonZh ? `——${clean(look.reasonZh, 200)}` : ''
+        L.push(`- 🔍 AI 复审（agentic 二审，${(look.at ?? '').slice(0, 10)}）：**${claim}** · 建议${sug}${why}——advisory 证据，放行仍需人工 verdict`)
+      }
     }
   }
   const vs = t.verification ?? 'unverified'
@@ -1266,6 +1288,11 @@ export async function main(
   // only ever coincides with a dead daemon (fail-visible: open anyway).
   const ctxFreshAt = ctxList.reduce((m, a) => (a.at > m ? a.at : m), '')
   const prereadAlive = !!ctxPath && !!ctxFreshAt && Date.now() - Date.parse(ctxFreshAt) < 3 * 3_600_000
+  // concern-look agentic second-looks — advisory render data, same posture:
+  // absent/corrupt degrades to "no 复审 line", never a sync failure
+  const looksPath = arg('--looks')
+  const lookList = looksPath ? loadConcernLooks(looksPath) : []
+  const concernLooks = looksPath ? latestConcernLooks(lookList) : undefined
   /** scan-format flag+finding keys this target's issue would look up —
    *  mirrors flag-context's per-entry candidate caps so the gate never
    *  waits on keys that will never be judged. */
@@ -1509,7 +1536,7 @@ export async function main(
         ...(cl ? ['--label', cl] : []),
         ...(t.skill ? ['--label', 'type:skill'] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
-        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx, deadDelta })]
+        '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, concernLooks: concernLooks ?? null, deadCtx, deadDelta })]
       if (dry) { created.push(title); continue }
       ops.push({ kind: 'create', title, run: async () => {
         const url = String(await ghFn(args))
@@ -1550,7 +1577,7 @@ export async function main(
       .filter(l => l === 'verdict:pass' || l === 'verdict:concern' || l === 'verdict:blocked')
       .sort()
     const stuck = stuckList.length ? stuckList.join('`, `') : null
-    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx, deadDelta })
+    const body = issueBody(t, { repo, pagesBase, stuckLabel: stuck, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, concernLooks: concernLooks ?? null, deadCtx, deadDelta })
     // REST returns body:null for empty bodies — ?? '' keeps .trim() safe and
     // an empty existing body correctly reads as drift against a non-empty one
     const bodyDrift = (ex.body ?? '').trim() !== body.trim()

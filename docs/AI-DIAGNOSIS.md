@@ -463,6 +463,18 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   `1080`（裸端口→`socks5://127.0.0.1:1080`）、`ip:port`、
   `sock5://`/`socks5://`、`http(s)://`；等效 env `MARKET_PROXY`，
   **刻意不读** `HTTP(S)_PROXY`（本机死代理不能悄悄接管，未配置=纯直连）
+- `pipeline/ai/concern-look.ts`：**agentic 二审**（concern 槽专用）——
+  一审判官只见 32KB 摘录，「证据不足」型 concern 需要人肉追调用点；
+  本 job 把同一指控交给 `devin -p --sandbox` 会话：OS 沙箱 +
+  `allowed_domains`（unpkg/registry.npmjs.org/jsdelivr/raw.githubusercontent/
+  api.github.com/codeload）+ `network_mode:"limited"`（仅 GET/HEAD/OPTIONS，
+  无 POST 外泄通道）+ `Read()` deny 全部 home/卷宗路径（注入内容想读
+  `~/.ssh` 再塞进 URL 外发时两头都断）。产出 `concern-looks.jsonl`
+  （catalog 分支），docket 在 concern 单上渲染「AI 复审」advisory 行。
+  **记录不是 AiVerdict**——agentic pass 建议永不放行，只有人工 verdict
+  能解锁；沙箱/agent 失败记 `aiNote` 重试（预算 3，devin-unavailable
+  不计），inconclusive 维持 held。默认每 sweep `CONCERN_LOOK_LIMIT=5`，
+  模型 `DEVIN_CONCERN_MODEL`（默认 swe-2-flash-high）
 - `scripts/ssh-proxy.sh [ip] [username] [port]`：SSH `-D` SOCKS5
   转发守护循环——ip/username 缺省逐个提问、密码手输仅存进程内存
   （SSH_ASKPASS 桩不含密钥本体、退出即删），`ServerAlive`+3s 间隔
