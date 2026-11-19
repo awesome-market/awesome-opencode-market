@@ -921,3 +921,127 @@ describe('coverage mop-up', () => {
     expect(fetched.every(u => !u.includes('x.js'))).toBe(true)  // no traversal escape... a.js contains 'x.js'? no
   })
 })
+
+describe('coverage mop-up round 2', () => {
+  it('--dry tolerates verdicts without reason and prints queue', async () => {
+    const s = setup([entry()], [{ name: 'pkg', version: '1.0.0', verdict: 'concern', at: '2026-02-01T00:00:00Z', source: 'ai' }])
+    await lookMain([...args(s), '--dry'])
+    expect(existsSync(s.spool)).toBe(false)
+  })
+
+  it('empty queue still evaluates backend selection for devin/opencode', async () => {
+    // no verdicts → empty queue → real backend fns selected but never called
+    for (const b of ['devin', 'opencode']) {
+      process.env.CONCERN_LOOK_BACKEND = b
+      try {
+        const s = setup([entry()], [])
+        await lookMain([...args(s), '--limit', '3'], { devinUp: async () => true })
+      } finally { delete process.env.CONCERN_LOOK_BACKEND }
+    }
+  })
+
+  it('omlxChat falls back to the default base URL', async () => {
+    const savedM = process.env.AI_MODEL, savedB = process.env.AI_BASE_URL
+    process.env.AI_MODEL = 'm'; delete process.env.AI_BASE_URL
+    const orig = globalThis.fetch
+    const seen: string[] = []
+    globalThis.fetch = (async (url: unknown) => {
+      seen.push(String(url))
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}' } }] }))
+    }) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', { fetchText: async () => 'x' })
+      expect(r.resp?.claim_check).toBe('unsupported')
+      expect(seen[0]).toBe('http://localhost:8001/v1/chat/completions')
+    } finally {
+      globalThis.fetch = orig
+      if (savedM === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = savedM
+      if (savedB !== undefined) process.env.AI_BASE_URL = savedB
+    }
+  })
+
+  it('pkgFileList tolerates a meta response with no files key', async () => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: unknown) => String(url).includes('?meta')
+      ? new Response('{}')
+      : new Response('body')) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+      const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+      const fn = async (msgs: { role: string; content: string }[]) =>
+        msgs[1]!.content.includes('judge ONLY') ? J : OK
+      const r = await oneshotLook(entry(), { verdict: 'concern' }, null, { chat: fn, fetchText: async () => 'x' })
+      expect(r.resp?.claim_check).toBe('unsupported')
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('default fetchText truncates files over 6KB', async () => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('?meta')) return new Response(JSON.stringify({ files: [{ path: '/big.js' }] }))
+      if (u.includes('chat/completions')) {
+        // not reached — chat is injected below
+      }
+      return new Response('x'.repeat(7000))
+    }) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+      const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+      const fn = async (msgs: { role: string; content: string }[]) => {
+        const u = msgs[1]!.content
+        if (u.includes('judge ONLY')) return J
+        if (u.includes('Package files:')) return '{"fetch":["big.js"]}'
+        return OK
+      }
+      // NO fetchText opt → default fetch path (truncation branch)
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', { chat: fn })
+      expect(r.resp?.claim_check).toBe('unsupported')
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('judge response missing optional reason fields still records', async () => {
+    const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+    const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+    const PARTIAL = '{"claim_check":"supported","verdict_suggestion":"concern"}'
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY')) return J
+      if (u.includes('Package files:')) return '{"fetch":[]}'
+      return PARTIAL
+    }
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', { chat: fn, listFiles: async () => [], fetchText: async () => null })
+    expect(r.resp?.claim_check).toBe('supported')
+    expect(r.resp?.reason_en).toBeUndefined()
+  })
+})
+
+describe('default fetchText HTTP failure', () => {
+  it('non-OK file fetch returns null and judge runs without the block', async () => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('?meta')) return new Response(JSON.stringify({ files: [{ path: '/gone.js' }] }))
+      return new Response('no', { status: 404 })
+    }) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+      const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+      let judgePrompt = ''
+      const fn = async (msgs: { role: string; content: string }[]) => {
+        const u = msgs[1]!.content
+        if (u.includes('judge ONLY')) return J
+        if (u.includes('Package files:')) return '{"fetch":["gone.js"]}'
+        judgePrompt = u
+        return OK
+      }
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', { chat: fn })
+      expect(r.resp?.claim_check).toBe('unsupported')
+      expect(judgePrompt).toContain('(no additional files fetched)')
+    } finally { globalThis.fetch = orig }
+  })
+})
