@@ -1,0 +1,32 @@
+spec: @doyzheng/ezllm-workbuddy-pool-auth@0.1.6
+apiNames: @doyzheng/ezllm-workbuddy-pool-auth, ezllm-workbuddy-pool-auth
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-damh0D/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:35075
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-19T17:42:28.453Z level=INFO run=a396b6f7 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@doyzheng/ezllm-workbuddy-pool-auth@0.1.6\"]" role=cli
+timestamp=2026-11-19T17:42:29.234Z level=INFO run=c113aace message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-19T17:42:29.572Z level=INFO run=c113aace message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-19T17:42:29.592Z level=INFO run=c113aace message="database schema bootstrap completed" migrations=62 durationMs=20 role=server
+timestamp=2026-11-19T17:42:29.882Z level=INFO run=c113aace message="watcher subscribe" path=/tmp/verify-damh0D/u/.config/opencode type=directory ignores=6 http.span=38 role=server
+timestamp=2026-11-19T17:42:29.886Z level=INFO run=c113aace message="watcher subscribe" path=/etc type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-19T17:42:29.887Z level=INFO run=c113aace message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-19T17:42:29.888Z level=INFO run=c113aace message="watcher subscribe" path=/ type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-19T17:42:29.888Z level=INFO run=c113aace message="watcher started" path=/ type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-19T17:42:29.888Z level=INFO run=c113aace message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=44 role=server
+timestamp=2026-11-19T17:42:29.888Z level=INFO run=c113aace message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=44 role=server
+timestamp=2026-11-19T17:42:29.889Z level=INFO run=c113aace message="watcher subscribe" path=/tmp/verify-damh0D type=entries ignores=0 http.span=45 role=server
+timestamp=2026-11-19T17:42:29.889Z level=INFO run=c113aace message="watcher started" path=/tmp/verify-damh0D type=entries backend=node ignores=0 http.span=45 role=server
+timestamp=2026-11-19T17:42:29.890Z level=INFO run=c113aace message="watcher subscribe" path=/tmp/verify-damh0D/u type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-19T17:42:29.891Z level=INFO run=c113aace message="watcher started" path=/tmp/verify-damh0D/u type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-19T17:42:29.931Z level=INFO run=c113aace message="watcher started" path=/tmp/verify-damh0D/u/.config/opencode type=directory backend=inotify ignores=6 http.span=87 role=server
+timestamp=2026-11-19T17:42:29.944Z level=INFO run=c113aace message="location services booted" directory=/tmp/verify-damh0D/u workspaceID=undefined durationMs=99 http.span=100 role=server
+timestamp=2026-11-19T17:42:29.955Z level=INFO run=c113aace msg="loading plugin" id=@doyzheng/ezllm-workbuddy-pool-auth@0.1.6 entrypoint=file:///tmp/verify-damh0D/u/cache/opencode/npm/@doyzheng/ezllm-workbuddy-pool-auth@0.1.6/1795110148847/node_modules/@doyzheng/ezllm-workbuddy-pool-auth/dist/index.mjs http.span=111 role=server
+timestamp=2026-11-19T17:42:29.958Z level=WARN run=c113aace message="failed to load plugin" target=@doyzheng/ezllm-workbuddy-pool-auth@0.1.6 ref=err_1da55ec8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=114 role=server
