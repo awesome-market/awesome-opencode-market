@@ -463,18 +463,31 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   `1080`（裸端口→`socks5://127.0.0.1:1080`）、`ip:port`、
   `sock5://`/`socks5://`、`http(s)://`；等效 env `MARKET_PROXY`，
   **刻意不读** `HTTP(S)_PROXY`（本机死代理不能悄悄接管，未配置=纯直连）
-- `pipeline/ai/concern-look.ts`：**agentic 二审**（concern 槽专用）——
-  一审判官只见 32KB 摘录，「证据不足」型 concern 需要人肉追调用点；
-  本 job 把同一指控交给 `devin -p --sandbox` 会话：OS 沙箱 +
-  `allowed_domains`（unpkg/registry.npmjs.org/jsdelivr/raw.githubusercontent/
-  api.github.com/codeload）+ `network_mode:"limited"`（仅 GET/HEAD/OPTIONS，
-  无 POST 外泄通道）+ `Read()` deny 全部 home/卷宗路径（注入内容想读
-  `~/.ssh` 再塞进 URL 外发时两头都断）。产出 `concern-looks.jsonl`
+- `pipeline/ai/concern-look.ts`：**二审**（concern 槽专用）——一审
+  判官只见 32KB 摘录，「证据不足」型 concern 需要追调用点/凭据去向；
+  本 job 把同一指控交给第二审查者产出 `concern-looks.jsonl`
   （catalog 分支），docket 在 concern 单上渲染「AI 复审」advisory 行。
-  **记录不是 AiVerdict**——agentic pass 建议永不放行，只有人工 verdict
-  能解锁；沙箱/agent 失败记 `aiNote` 重试（预算 3，devin-unavailable
-  不计），inconclusive 维持 held。默认每 sweep `CONCERN_LOOK_LIMIT=5`，
-  模型 `DEVIN_CONCERN_MODEL`（默认 swe-2-flash-high）
+  **记录不是 AiVerdict**——二审 pass 建议永不放行，只有人工 verdict
+  能解锁；失败记 `aiNote` 重试（预算 3，`<backend>-unavailable` 不计），
+  inconclusive 维持 held。默认每 sweep `CONCERN_LOOK_LIMIT=5`。
+  三个后端，`CONCERN_LOOK_BACKEND` 选择（默认 `oneshot`）：
+  - **`oneshot`**（默认，本地免费）：最多三轮——tier-0 judge 只凭
+    物料做 claim-check（物料已含 flagctx 窗口），结论自洽
+    （unsupported+pass / supported+concern）即收工；混合信号或
+    inconclusive 才升级——planner（think 关）看 claim+物料+
+    `unpkg ?meta` 文件清单点名 ≤5 个文件，管线机械抓取（每文件
+    ≤6KB、共 ≤24KB）后 judge（think 开）出终判。模型全程不碰
+    网络/工具，无注入面；GitHub 条目无文件清单时退回 flagged
+    路径。代价：只追一跳、覆盖不如 agentic，疑难件会 inconclusive
+    ——但成本约为 agentic 的 1/10。
+  - **`opencode`**：`opencode run --auto` agentic 会话，cwd 是空
+    tmpdir + 专用 opencode.json 把 bash/edit/task/websearch 等全
+    deny、`external_directory:deny`——agent 物理上只剩 GET-only 的
+    webfetch 一个工具。harness 层强制（非 OS 沙箱），模型用机器
+    opencode.json 默认（本地 Ornith）。分钟~半小时级/件。
+  - **`devin`**：`devin -p --sandbox`——最强边界（OS seatbelt +
+    域名白名单 + GET-only + home 路径 deny），但烧账号额度；
+    `CONCERN_LOOK_MODEL`/`DEVIN_CONCERN_MODEL` 选模型。
 - `scripts/ssh-proxy.sh [ip] [username] [port]`：SSH `-D` SOCKS5
   转发守护循环——ip/username 缺省逐个提问、密码手输仅存进程内存
   （SSH_ASKPASS 桩不含密钥本体、退出即删），`ServerAlive`+3s 间隔
