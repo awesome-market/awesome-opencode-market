@@ -1,0 +1,36 @@
+spec: openkodo@0.2.3
+apiNames: openkodo
+verdict: plugin absent from /api/plugin after the load window
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-msQSyG/u"},"data":[]}
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:38469
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  0.1s  layer @opencode/Worktree releasing
+  0.1s  layer @opencode/example/LocationServiceMap releasing
+  0.1s  layer plugin-supervisor releasing
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-19T04:24:51.190Z level=INFO run=202895d5 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"openkodo@0.2.3\"]" role=cli
+timestamp=2026-11-19T04:24:51.576Z level=INFO run=bc16565e message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-19T04:24:51.881Z level=INFO run=bc16565e message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-19T04:24:51.903Z level=INFO run=bc16565e message="database schema bootstrap completed" migrations=62 durationMs=22 role=server
+timestamp=2026-11-19T04:24:52.248Z level=INFO run=bc16565e message="watcher subscribe" path=/tmp/verify-msQSyG/u/.config/opencode type=directory ignores=6 http.span=19 role=server
+timestamp=2026-11-19T04:24:52.254Z level=INFO run=bc16565e message="watcher subscribe" path=/etc type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-19T04:24:52.256Z level=INFO run=bc16565e message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=27 role=server
+timestamp=2026-11-19T04:24:52.256Z level=INFO run=bc16565e message="watcher subscribe" path=/ type=entries ignores=0 http.span=27 role=server
+timestamp=2026-11-19T04:24:52.257Z level=INFO run=bc16565e message="watcher started" path=/ type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-19T04:24:52.257Z level=INFO run=bc16565e message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-19T04:24:52.257Z level=INFO run=bc16565e message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-19T04:24:52.257Z level=INFO run=bc16565e message="watcher subscribe" path=/tmp/verify-msQSyG type=entries ignores=0 http.span=28 role=server
+timestamp=2026-11-19T04:24:52.257Z level=INFO run=bc16565e message="watcher started" path=/tmp/verify-msQSyG type=entries backend=node ignores=0 http.span=28 role=server
+timestamp=2026-11-19T04:24:52.258Z level=INFO run=bc16565e message="watcher subscribe" path=/tmp/verify-msQSyG/u type=entries ignores=0 http.span=29 role=server
+timestamp=2026-11-19T04:24:52.258Z level=INFO run=bc16565e message="watcher started" path=/tmp/verify-msQSyG/u type=entries backend=node ignores=0 http.span=29 role=server
+timestamp=2026-11-19T04:24:52.274Z level=INFO run=bc16565e message="watcher started" path=/tmp/verify-msQSyG/u/.config/opencode type=directory backend=inotify ignores=6 http.span=45 role=server
+timestamp=2026-11-19T04:24:52.284Z level=INFO run=bc16565e message="location services booted" directory=/tmp/verify-msQSyG/u workspaceID=undefined durationMs=54 http.span=55 role=server
+timestamp=2026-11-19T04:24:52.290Z level=INFO run=bc16565e msg="loading plugin" id=openkodo@0.2.3 entrypoint=file:///tmp/verify-msQSyG/u/cache/opencode/npm/openkodo@0.2.3/1795062291364/node_modules/openkodo/v2.mjs http.span=61 role=server
+timestamp=2026-11-19T04:25:02.287Z level=ERROR run=bc16565e message="Failed to fetch models.dev" cause="Cause([Fail(TimeoutError: Operation timed out after '10s')])" http.span=10058 role=server
