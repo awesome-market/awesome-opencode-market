@@ -17316,7 +17316,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "package-name与scan报告的repo-mismatch目标不一致（@jianmu-plugins vs @magpie-community），且manifest自称仅展示TokenPlan余额/窗口/模型，但代码含fetch网络调用、本地127.0.0.1 CDP访问、子进程spawn等，能力描述与实现不符"
     },
     {
       "name": "@jianmu-plugins/opencode-joycode-auth",
@@ -17464,7 +17464,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "包名@jianmu-plugins与仓库源@magpie-community不一致，且含网络POST调用、子进程执行及订阅鉴权逻辑，存在来源不符与凭证外泄风险。"
     },
     {
       "name": "@jianmu-plugins/opencode-loomy-auth",
@@ -17538,7 +17538,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "描述称仅实现SMS登录、聊天、钱包等正常功能，但存在未解释的网络调用及仓库名与包名不一致的安全告警，需进一步审查其网络行为与来源一致性"
     },
     {
       "name": "@jianmu-plugins/opencode-mimo-auth",
@@ -17612,7 +17612,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "插件名称与npm源不匹配，且存在不明网络请求，需核实身份验证逻辑与数据传输是否安全"
     },
     {
       "name": "@jianmu-plugins/opencode-minimax-auth",
@@ -17690,7 +17690,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "存在网络调用且npm仓库标识与声明不一致（repo-mismatch），需人工确认其网络行为是否与MiniMax认证相关"
     },
     {
       "name": "@jianmu-plugins/opencode-nous-auth",
@@ -17765,7 +17765,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.675 ≥ 0.662，块 finding:2:sec:repo-mismatch:@magpie-community/opencode-nous-auth）；LLM 判 concern：已发布 npm 包名（@jianmu-plugins/...）与源码仓库名（@magpie-community/...）不一致，且通过 fetch 向可配置的 baseURL 发起网络请求，存在来源不明与凭据外泄风险。"
     },
     {
       "name": "@jianmu-plugins/opencode-openai-decisions-auth",
@@ -17840,7 +17840,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "L0.5 命中注入信号（score 0.770 ≥ 0.662，块 finding:0:sec:repo-mismatch:@magpie-community/opencode-openai-decisions-auth）；LLM 判 concern：npm 来源包名 @jianmu-plugins/opencode-openai-decisions-auth 与仓库引用 @magpie-community/opencode-openai-decisions-auth 不一致，存在所有权/发布来源不符的风险。"
     },
     {
       "name": "@jianmu-plugins/opencode-opendesign-auth",
@@ -18535,12 +18535,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:44:48.106Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44467136921",
+        "verifiedAt": "2026-11-19T05:57:29.616Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@jianmu-plugins_tools-layerfs-0.10.3.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:44:49.833Z level=WARN run=ba26b661 message=\"failed to load plugin\" target=@jianmu-plugins/tools-layerfs@0.10.3 ref=err_4e2fc99f cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=156 role=server\n--- stream tail ---\nage=\"failed to load plugin\" target=@jianmu-plugins/tools-layerfs@0.10.3 ref=err_4e2fc99f cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=156 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:57:31.172Z level=WARN run=c1abd67b message=\"failed to load plugin\" target=@jianmu-plugins/tools-layerfs@0.10.3 ref=err_4e92e718 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])\" http.span=169 role=server\n--- stream tail ---\n05:57:32.667Z level=INFO run=c1abd67b message=\"watcher stopped\" path=/tmp/verify-MfS4py/u type=entries http.span=1664 role=server\ntimestamp=2026-11-19T05:57:32.669Z level=INFO run=c1abd67b message=\"watcher stopped\" path=/tmp/verify-MfS4py/u/.config/opencode type=directory http.span=1666 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-UmJg27dOSwTuqOER82DHLRqKcnIpfi1tdXu2A9MFtoH1LU24wcPXlCfVJICBHY86Qyl8u1ZjYQ6oetUCh1f13A==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -36634,7 +36634,7 @@
         ],
         "integrity": "sha512-EeRcpWVYDWXeeWtRgYr/yey+OnT9U4H86U49f3AxzTTAhLSGC+T5XCe7EaNsJz5I6qscm25Gwyf1kxf8+IsF2g==",
         "publishedAt": "2026-11-18T22:56:21.050Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:1:sec:repo-mismatch:oc-plugins）；LLM 判 concern：npm 发布的包与引用仓库不一致（repo-mismatch），且 index.ts 引入 child_process 的 execFileSync/spawn，供应链链条断裂、无法核对安装代码与审计仓库一致，存在任意命令执行风险。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:1:sec:repo-mismatch:oc-plugins）；LLM 判 pass：未检测到提示注入、凭证外泄、网络调用或混淆，功能描述与实现一致，仅使用子进程维持系统唤醒，且仅有一个普通的子进程导入和一个低优先级的仓库元数据不一致提示。",
         "heldAt": "2026-11-19T00:15:30.206Z"
       }
     },
@@ -36832,7 +36832,7 @@
         ],
         "integrity": "sha512-OapbapwOEbP8Y8/b6pRTR0K8fL/qDDN3OmsZHae0JIJv+XFPKCa35CZFpWJnJRNiuRC9EAnAH3TsytjGZJeKLg==",
         "publishedAt": "2026-11-18T22:56:05.719Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:4:sec:repo-mismatch:oc-plugins）；LLM 判 concern：该包声明与manifest描述相符（model picker/价格/tps），但存在子进程execFile调用与仓库名不匹配（oc-plugins），涉及任意命令执行与来源可信度问题。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:4:sec:repo-mismatch:oc-plugins）；LLM 判 concern：扫描发现仓库地址与声明不符（sec:repo-mismatch）且存在子进程 execFile 执行能力，供应链来源存疑，需人工审查而非直接放行。",
         "heldAt": "2026-11-19T00:15:30.206Z"
       }
     },
@@ -36944,7 +36944,7 @@
         ],
         "integrity": "sha512-np/pEk/s7UnUDvf0VSHiPYB7gvrQc/d5qxD2fTHRTrmxS4EVgZ8jmN1byxTFwDCYAAlV/UCA6Y0mdBb/NjoqNw==",
         "publishedAt": "2026-11-18T22:58:47.771Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:2:sec:repo-mismatch:oc-plugins）；LLM 判 concern：manifest仓库与oc-plugins不一致且代码同时使用网络请求与子进程execFileSync，能力范围超出其声明的通知功能。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:2:sec:repo-mismatch:oc-plugins）；LLM 判 pass：扫描到的fetch调用与execFileSync均为该插件向ntfy发送通知及本地执行命令的核心功能，描述准确且无注入、外泄、混淆或矛盾声称",
         "heldAt": "2026-11-19T00:15:30.206Z"
       }
     },
@@ -37201,7 +37201,7 @@
         ],
         "integrity": "sha512-vWFdjv1JCg9Xw3Z6Aud106kbbwIQyqEj89Oydj+OICqozSnon3X7pIOt8zo6xkZjynxhVnY5u0TvRsDWASnbwQ==",
         "publishedAt": "2026-11-18T22:58:55.960Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:1:sec:repo-mismatch:oc-plugins）；LLM 判 pass：代码仅使用子进程执行文件来实现文档化的会话搜索功能，未发现提示注入、凭证外泄、恶意网络调用或混淆，manifest 描述与功能一致。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:1:sec:repo-mismatch:oc-plugins）；LLM 判 pass：清单描述准确且与代码行为一致，扫描结果显示0个红牌，唯一两个发现（子进程导入对搜索工具属预期行为、仓库元数据不匹配）均非明确安全威胁。",
         "heldAt": "2026-11-19T00:15:30.206Z"
       }
     },
@@ -41755,12 +41755,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:44:38.889Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44467136921",
+        "verifiedAt": "2026-11-19T05:57:28.506Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@suncreation_opencode-toolsearch-0.3.3.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:44:44.432Z level=WARN run=83201298 message=\"failed to load plugin\" target=@suncreation/opencode-toolsearch@0.3.3 ref=err_b61cd890 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=216 role=server\n--- stream tail ---\n05:44:46.450Z level=INFO run=83201298 message=\"watcher stopped\" path=/tmp/verify-dXbANo/u type=entries http.span=2234 role=server\ntimestamp=2026-11-19T05:44:46.452Z level=INFO run=83201298 message=\"watcher stopped\" path=/tmp/verify-dXbANo/u/.config/opencode type=directory http.span=2236 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:57:33.594Z level=WARN run=a3e2a285 message=\"failed to load plugin\" target=@suncreation/opencode-toolsearch@0.3.3 ref=err_07b7e6a7 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=134 role=server\n--- stream tail ---\n05:57:35.618Z level=INFO run=a3e2a285 message=\"watcher stopped\" path=/tmp/verify-boIM9E/u type=entries http.span=2158 role=server\ntimestamp=2026-11-19T05:57:35.625Z level=INFO run=a3e2a285 message=\"watcher stopped\" path=/tmp/verify-boIM9E/u/.config/opencode type=directory http.span=2165 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-wxTbusih3fvYn0egDTizeR+GbJUq9wt7K4nleTx/aYiYrzbN7fjQXsiaGOHin0wyXDtgkaiMf12im0aP/Mfs0Q==",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -52544,7 +52544,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.942 ≥ 0.662，块 finding:28:network-call:scripts/verify.sh — L455: check_cmds git curl wget openssl python3 ）；LLM 判 pass：扫描29项发现均为安全技能文档、正常HTTPS安装脚本和沙箱实现（base64解码后仅得到alert(1)等无害示例），0红旗，未见提示注入、凭证外泄、混淆等实际恶意行为；但包内容提取失败，需人工留意。"
+      "approvalReason": "L0.5 命中注入信号（score 0.942 ≥ 0.662，块 finding:28:network-call:scripts/verify.sh — L455: check_cmds git curl wget openssl python3 ）；LLM 判 concern：包内容提取失败，实际行为无法验证，而清单以维护者身份不明、验证状态为“未验证”的强声明宣称670+工具/872技能/Kata沙箱，且扫描结果涉及curl|bash安装链与MCP子进程调用等供应链与执行风险。"
     },
     {
       "name": "@2jmalvarez/opencode-editor",
@@ -60207,7 +60207,7 @@
         ],
         "integrity": "sha512-wsG8vMqryfkJ1CWYc2AAMQdhGNqct8wwOpL5CPbnBwsP7MxtWLOIlaWGZ1P5ai3gHT3sd/NWGPztviZ2QAsmRw==",
         "publishedAt": "2026-11-19T02:46:28.422Z",
-        "reason": "L0.5 命中注入信号（score 0.694 ≥ 0.662，块 finding:1:child-process:package/src/init/detect.ts — L37: const p = Bun.spawnSync(cmd, { c）；LLM 判 pass：所有扫描发现（子进程环境检测、服务器 fetch 请求处理）均为历史已有且无新增异常，清单描述与核心功能（跨会话记忆/仓库初始化）基本吻合，未见注入、凭据外泄、混淆或能力夸大。",
+        "reason": "L0.5 命中注入信号（score 0.694 ≥ 0.662，块 finding:1:child-process:package/src/init/detect.ts — L37: const p = Bun.spawnSync(cmd, { c）；LLM 判 pass：现有发现均为低严重度模式匹配（子进程Bun.spawnSync仅捕获管道输出、fetch仅用于查看器服务），且与上一版本0.30.0完全一致、0个redFlags，代码行为与清单描述的「跨会话记忆+仓库检测/查看器」功能一致，未发现提示注入、凭据外泄、混淆或虚假能力声明。",
         "heldAt": "2026-11-19T02:54:21.352Z"
       }
     },
@@ -81450,7 +81450,7 @@
         "engines": "bun >=1.1"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.868 ≥ 0.662，块 finding:0:network-call:get.sh — L4: #   curl -fsSL https://raw.githubusercontent.com/alok-）；LLM 判 pass：该包是一个合法的 OpenCode agent 防火墙/监控工具，所有网络调用均仅指向本地回环 127.0.0.1:4317 的本地守护进程，子进程派生仅用于启动本地守护进程，base64 解码用于内部连接令牌，安装脚本从官方仓库拉取，未见凭证外泄、提示注入或外部恶意调用。"
+      "approvalReason": "L0.5 命中注入信号（score 0.868 ≥ 0.662，块 finding:0:network-call:get.sh — L4: #   curl -fsSL https://raw.githubusercontent.com/alok-）；LLM 判 pass：扫描发现的18项多为本地守护进程/子进程监控架构的固有模式（全部网络调用指向127.0.0.1、child_process是工具本身的功能），manifest描述与代码一致，无外部外泄、无注入、无矛盾声明；仅安装包脚本的curl|sh与GITHUB_TOKEN经curl属常见安装机制并取自同仓库，内容提取失败已标记需人工复核。"
     },
     {
       "name": "opencode-usage-total",
@@ -95653,7 +95653,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "interactive",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T05:57:30.129Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
+        "integrity": "sha512-2YQe9AWZbjniK8Aq/w7bPTitRvsDqqVcyZM8eDS2dIjM1OMjc7FWS4H2Rgw+AFChK44mZTuP6jvH7DFiUm4OMw==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=23.6.0",
@@ -96551,7 +96557,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.840 ≥ 0.662，块 finding:0:network-call:scripts/resolve-versions.sh — L22: token=\"$(curl -fsS \\）；LLM 判 pass：唯一的网络调用是 resolve-versions.sh 获取公开的 OpenCode 标签与 Node LTS 版本元数据，未检出提示注入、凭证窃取、混淆或误导性声明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.840 ≥ 0.662，块 finding:0:network-call:scripts/resolve-versions.sh — L22: token=\"$(curl -fsS \\）；LLM 判 concern：包内容提取失败，且扫描已发现 resolve-versions.sh 通过 curl 获取 token 的网络调用，在无法看到包内原文、仅通过结构级验证的情况下，网络取 token 行为与 Manifest 描述的一致性均无法确认，需人工审查。"
     },
     {
       "name": "apsquared/promotion-agent",
@@ -102790,7 +102796,7 @@
         "engines": "node >=22.7.0"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.917 ≥ 0.662，块 finding:54:credential-read:tests/unit/gate_verdicts.test.mjs — L195: …h key path', kind: 'w）；LLM 判 concern：包内容提取失败（fetch failed），只能依赖元数据/扫描/测试证据，无法确认实际运行代码；且存在未核实的注册表更新检查与本地守护进程网络请求。"
+      "approvalReason": "L0.5 命中注入信号（score 0.917 ≥ 0.662，块 finding:54:credential-read:tests/unit/gate_verdicts.test.mjs — L195: …h key path', kind: 'w）；LLM 判 concern：包内容提取失败（content-error），只能依赖元数据/扫描/测试证据，无法核对实际代码中的子进程与网络调用是否安全，且清单能力声明较强（植入任意仓库、可执行本地命令与发请求），需人工复核。"
     },
     {
       "name": "relay-opencode",
@@ -104283,7 +104289,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.796 ≥ 0.662，块 finding:13:network-call:vendor/download-ubol.sh — L12: need curl）；LLM 判 pass：清单描述与代码结构（Playwright 截图、Bun 前端、localhost CDP 调用）一致，扫描发现的子进程/网络调用/ base64 解码均符合此类工具的正常行为，无注入、外泄或混淆迹象。"
+      "approvalReason": "L0.5 命中注入信号（score 0.796 ≥ 0.662，块 finding:13:network-call:vendor/download-ubol.sh — L12: need curl）；LLM 判 pass：扫描结果均为正常的子进程调用、本地 CDP 网络请求与 Playwright 浏览器抓取逻辑，与 manifest 描述的 .NET/Playwright 作业聚合引擎一致，未见注入、凭据外传或混淆等风险（且包内容提取失败，需人工复核）。"
     },
     {
       "name": "opencode2-notifier",
@@ -107729,7 +107735,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容提取失败且仓库被标记为过度庞大、扫描从未运行、验证状态为未验证，无法确认实际代码行为，且描述为营销式空话而非准确说明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容提取失败（TypeError: fetch failed）导致实际代码无法审查，而manifest仅用'All your agents. All your machines'等宏大营销套话描述，且从未经过安全扫描、并被标记为超大型仓库，均需要人工核实。"
     },
     {
       "name": "autopus-ai/autopus-adk",
@@ -108336,12 +108342,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:21:36.466Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44464509358/job/135359121649",
+        "verifiedAt": "2026-11-19T05:57:22.890Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/AVIDS2_memorix-8769d7478204.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install AVIDS2/memorix#8769d7478204e9771914c39d9fe50057b73a4618: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/workspaces makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "8769d7478204e9771914c39d9fe50057b73a4618",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -124838,7 +124844,7 @@
         "engines": "node >=20.10.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify load 级）：插件入口疑似是 CLI 程序——宿主加载入口模块时顶层 program.parse() 吞掉宿主 argv（包把命令行工具当插件入口打包，真包缺陷） — Error: Invalid port '0'. Port must be a number between 1 and 65535."
     },
     {
       "name": "opencode-tui-utils",
@@ -142648,7 +142654,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.823 ≥ 0.662，块 finding:0:sec:evidence-regressed@3f8610ef095a）；LLM 判 pass：该包仅含 Markdown 文档（标题公式与营销文案），无可执行代码、无网络调用、无注入或数据外泄，清单描述与内容基本相符。"
+      "approvalReason": "L0.5 命中注入信号（score 0.823 ≥ 0.662，块 finding:0:sec:evidence-regressed@3f8610ef095a）；LLM 判 pass：扫描结果为0个红旗，3个finding均为空占位；描述与包名一致且准确，仅内容提取因fetch失败未能获取源码需人工留意。"
     },
     {
       "name": "chinabizskills/weekly-report-pack",
@@ -149255,12 +149261,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:21:37.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44464509358/job/135359121649",
+        "verifiedAt": "2026-11-19T05:57:22.882Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/codesensehq_codesense-99c7930ecce0.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install codesensehq/codesense#99c7930ecce00aa1f9b47673103e0a04d13b20fd: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "99c7930ecce00aa1f9b47673103e0a04d13b20fd",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -153644,7 +153650,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.845 ≥ 0.662，块 finding:34:sec:evidence-regressed@acc60a4a7487）；LLM 判 pass：扫描零红旗，35 项发现均为合法前端自调用、JWT 解析、ML 测试 fixtures、监控配置等常规模式，未见提示注入、凭证外泄、可疑网络调用、混淆或误导性能力声明，内容提取失败仅为扫描过程限制而非包本身安全问题。"
+      "approvalReason": "L0.5 命中注入信号（score 0.845 ≥ 0.662，块 finding:34:sec:evidence-regressed@acc60a4a7487）；LLM 判 concern：包内容提取失败且存在安全回归证据、不透明的 .joblib 二进制与硬编码外部 IP，无法充分验证代码实际行为。"
     },
     {
       "name": "opencode-obsidian",
@@ -160842,7 +160848,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 pass：所提供的元数据仅包含一个正常的游戏描述，未出现提示注入、凭据外泄、恶意网络调用或混淆等安全迹象。"
+      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容提取失败且从未运行静态扫描，实际代码无法核实；同时星数为零、未验证、无维护者并标记oversize-repo，无法确认其安全性。"
     },
     {
       "name": "opencode-antigravity-auth-remix",
@@ -165969,7 +165975,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.933 ≥ 0.662，块 finding:0:child-process:verify.mjs — L11: import { spawnSync } from \"node:child_process\";）；LLM 判 pass：该包为面向编码智能体的提示词优化工具，其 SKILL.md 内容始终强调保留用户意图、约束与审批边界、将 prompt 塑形与推理分离，manifest 中“无额外 LLM 调用”的描述与 SKILL.md 一致；唯一被标记的 spawnSync 非红色标志，未见提示注入、凭据外泄、恶意网络调用、混淆或夸大声称。"
+      "approvalReason": "L0.5 命中注入信号（score 0.933 ≥ 0.662，块 finding:0:child-process:verify.mjs — L11: import { spawnSync } from \"node:child_process\";）；LLM 判 pass：清单描述与包名及功能定位一致；扫描仅1项子进程 spawnSync 导入、0红牌、结构验证通过，未见提示注入、凭据外泄、伪装网络调用或混淆；但内容提取失败，内部代码未被实际审查，此为评审局限而非安全发现。"
     },
     {
       "name": "deneuv34/agent-snap",
@@ -190558,7 +190564,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.740 ≥ 0.662，块 finding:1:network-call:benchmarks/agent/run_qwen36.sh — L27: curl -s -m 900 http://127.0.0）；LLM 判 pass：未发现凭证外泄、提示注入、混淆或异常外联，所有网络调用均指向本地 Ollama 端点或官方 OpenCode 安装脚本，且 manifest 描述与包的基准测试用途一致（仅因 fetch 失败未能完整提取包内代码，需人工复核）。"
+      "approvalReason": "L0.5 命中注入信号（score 0.740 ≥ 0.662，块 finding:1:network-call:benchmarks/agent/run_qwen36.sh — L27: curl -s -m 900 http://127.0.0）；LLM 判 pass：所有网络调用仅指向用户本机127.0.0.1的本地LLM服务器（无外泄），安装管道均引用官方OpenCode安装URL，扫描redFlags=0且manifest描述准确。"
     },
     {
       "name": "everest-an/geo-seo-skill",
@@ -197128,12 +197134,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:21:36.454Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44464509358/job/135359121649",
+        "verifiedAt": "2026-11-19T05:57:22.867Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/felipesauer_mnema-b96c17fc2e61.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install felipesauer/mnema#b96c17fc2e6160353d0fd56e005cab17cb4e9fe6: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "b96c17fc2e6160353d0fd56e005cab17cb4e9fe6",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -229117,7 +229123,7 @@
         "peer": "ai@>=6.0.0"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.719 ≥ 0.662，块 finding:1:child-process:scripts/catalog-sync-ci.ts — L4: import { execSync } from \"child_p）；LLM 判 pass：网络调用均指向预期的 npm registry、Command Code API 端点与自有 models.json，API key 仅用于向配置的 baseURL 认证，catalog 的 regex+eval 提取为文档化设计，manifest 描述与代码行为一致。"
+      "approvalReason": "L0.5 命中注入信号（score 0.719 ≥ 0.662，块 finding:1:child-process:scripts/catalog-sync-ci.ts — L4: import { execSync } from \"child_p）；LLM 判 pass：该插件是 Command Code API 的合法封装，扫描结果 0 个红旗、无提示注入/凭据外泄/混淆，网络调用与子进程使用均在预期范围内，且清单描述与代码功能一致。"
     },
     {
       "name": "herouu/opencode-credential-redaction",
@@ -236155,7 +236161,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.716 ≥ 0.662，块 finding:6:network-call:scripts/install.sh — L29: curl -fsSL \"$URL\" -o \"$PKG\" || fail \"down）；LLM 判 pass：该包是真实的路由/验证/升级技能，manifest 准确描述其功能，仅使用标准 Node 子进程与网络 API，且凭据 regex 实际是隐去密钥而非外泄，未发现提示注入、凭证外泄或误导性声明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.716 ≥ 0.662，块 finding:6:network-call:scripts/install.sh — L29: curl -fsSL \"$URL\" -o \"$PKG\" || fail \"down）；LLM 判 pass：扫描报告0个红旗，child_process、SQL exec、install.sh的curl下载均为常见库/安装脚本用法，manifest描述与功能一致；但包内容提取失败、且handoff.ts含匹配.env/.key/id_rsa/credentials等敏感文件的正则，需人工留意。"
     },
     {
       "name": "@iam-brain/opencode-codex-auth",
@@ -259913,7 +259919,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.777 ≥ 0.662，块 finding:0:child-process:scripts/check-forbidden.mjs — L82: const { execFileSync } = await ）；LLM 判 pass：清单描述与代码一致，仅通过 Ashby 官方 MCP 服务器发起网络调用并妥善处理访问令牌，发布文件中不含任何使用子进程的脚本，且未发现提示注入、凭据外泄、混淆或能力夸大。"
+      "approvalReason": "L0.5 命中注入信号（score 0.777 ≥ 0.662，块 finding:0:child-process:scripts/check-forbidden.mjs — L82: const { execFileSync } = await ）；LLM 判 pass：扫描结果零红标，7项发现均为构建/发布脚本中的标准子进程调用，manifest 描述准确且与代码功能一致；但包内容提取失败、未能直接检查运行时代码，需人工留意。"
     },
     {
       "name": "joe-broadhead/opencode-boxd",
@@ -260258,7 +260264,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.777 ≥ 0.662，块 finding:0:child-process:scripts/check-forbidden.mjs — L86: const { execFileSync } = await ）"
+      "approvalReason": "L0.5 命中注入信号（score 0.777 ≥ 0.662，块 finding:0:child-process:scripts/check-forbidden.mjs — L86: const { execFileSync } = await ）；LLM 判 concern：无活动威胁证据，但包内容提取失败，仅凭元数据/扫描/安装测试证据无法验证插件实际运行时行为，需人工留意"
     },
     {
       "name": "joe-broadhead/opencode-github",
@@ -305050,7 +305056,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "npm包名与仓库名不一致（@jianmu-plugins vs @magpie-community），且扫描检测到未说明的 fetch 网络调用，存在不明网络行为。"
     },
     {
       "name": "magpie-deeprelay",
@@ -315985,7 +315991,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.902 ≥ 0.662，块 finding:11:child-process:test-herdr-config.mjs — L5: import { spawnSync } from \"node:child_）；LLM 判 pass：这是一个dotfiles配置仓库，扫描结果仅为正常的子进程spawn调用和向github.com安装zsh-autosuggestions的curl，无凭证外泄、prompt注入、混淆或夸大声明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.902 ≥ 0.662，块 finding:11:child-process:test-herdr-config.mjs — L5: import { spawnSync } from \"node:child_）；LLM 判 pass：扫描仅发现子进程调用与向GitHub拉取zsh插件的正常curl，无红牌、无提示注入/凭证外泄/混淆/矛盾描述，manifest描述准确但内容提取失败需人工留意。"
     },
     {
       "name": "mchittineni/cloud-platform-skills",
@@ -326378,12 +326384,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:21:40.552Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44464509358/job/135359121649",
+        "verifiedAt": "2026-11-19T05:57:26.743Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/MisonL_magpie-plugin-msmoli-b91bbc0e180f.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install MisonL/magpie-plugin-msmoli#b91bbc0e180f590b21bca2395f16061cf9e5051f: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring prepack/prepublishOnly makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "b91bbc0e180f590b21bca2395f16061cf9e5051f",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -329725,7 +329731,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.669 ≥ 0.662，块 finding:7:child-process:plugins/opencode/src/prevent/index.ts — L379: const proc = Bun.spa）；LLM 判 pass：声明的遥测/可观测性工具用途与扫描结果一致（beacon 网络调用+git 变更检测），0 red flags，清单描述准确，内容提取失败本身不构成安全问题"
+      "approvalReason": "L0.5 命中注入信号（score 0.669 ≥ 0.662，块 finding:7:child-process:plugins/opencode/src/prevent/index.ts — L379: const proc = Bun.spa）；LLM 判 pass：该包为可观测性/遥测工具，其向 beacon 的网络调用与 git 元数据收集均与 manifest 声明的监控/可观测性目的一致，扫描零红旗、描述准确且未 obfuscation。"
     },
     {
       "name": "opencode-copilot-usage-detector",
@@ -335577,7 +335583,7 @@
         "contains": [],
         "integrity": "sha512-lNFxe5A+2yWrIkHFarrZOE3gS+uW4eRHHl4/giZtY+14zdV5bkkf1z3bbVAsx/W5eWIs+XJvF5ytbK6lkks4yw==",
         "publishedAt": "2026-11-19T04:45:42.561Z",
-        "reason": "awaiting-review",
+        "reason": "红旗在案，AI 判 concern：安装后生命周期脚本 install.js 在 postinstall 阶段发起网络 fetch 并派生子进程，未经认证的远程下载与执行带来潜在任意代码执行风险。",
         "heldAt": "2026-11-19T05:28:48.377Z"
       }
     },
@@ -345665,7 +345671,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.932 ≥ 0.662，块 finding:2:child-process:config/run-maestro-suite.ts — L40: const listResult = Bun.spawnSyn）；LLM 判 pass：扫描发现的15条均为React Native校园应用的正常模式（各API的fetch调用、JWT的base64解码、CI脚本下载Node.js、Maestro测试的spawnSync、以及assetlinks.json中的证书指纹），redFlags=0，manifest描述准确。"
+      "approvalReason": "L0.5 命中注入信号（score 0.932 ≥ 0.662，块 finding:2:child-process:config/run-maestro-suite.ts — L40: const listResult = Bun.spawnSyn）；LLM 判 pass：所有扫描发现均为合法校园App的常规行为（正常API调用、base64图片解码、CI脚本、测试 runner、assetlinks指纹），0条红旗，且manifest描述与React Native校园App定位一致。"
     },
     {
       "name": "neur1n/dotfiles",
@@ -348574,7 +348580,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "render",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T05:57:33.993Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
+        "integrity": "sha512-0vlhVM1EI3NygRhJPb8lJhNT18lvjoBhAcjbNA6EFeCXRWUfbgMUSZT/jbO1rfEDedo+Faxw8rHpV2xyMPEEiw==",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -507141,7 +507153,7 @@
         ],
         "integrity": "sha512-PDoNBYSdcB7rhUjJl4WZ/jZsHZDpCEOcPgpx/3q2CjhE/wD1UvUynPXF8aAYauxq1vKJUu28O9YLbf20UbFuPQ==",
         "publishedAt": "2026-11-18T22:56:35.954Z",
-        "reason": "L0.5 命中注入信号（score 0.765 ≥ 0.662，块 finding:7:network-call:package/dist/steps/verify.js — L51: res = await fetch(SELF_IDENTITY）；LLM 判 pass：该包是UluOps安装器，发现项均为正常的CLI子进程、账号认证/identity校验和npm registry元数据查询，无prompt注入、混淆、凭证外泄或误导性描述，redFlags为0。",
+        "reason": "L0.5 命中注入信号（score 0.765 ≥ 0.662，块 finding:7:network-call:package/dist/steps/verify.js — L51: res = await fetch(SELF_IDENTITY）；LLM 判 pass：该包是UluOps的正规安装/设置工具，其spawnSync调用CLI、fetch请求指向自有身份认证API、npm registry探测及build脚本均属设置类包的预期行为，未发现提示注入、凭证外泄、混淆或可疑网络调用。",
         "heldAt": "2026-11-19T00:15:30.206Z"
       }
     },
@@ -532668,12 +532680,12 @@
           "status": "failed",
           "level": "load",
           "opencodeVersion": "2.3.1",
-          "verifiedAt": "2026-11-19T05:45:07.911Z",
-          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44467136921",
+          "verifiedAt": "2026-11-19T05:57:35.455Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
           "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/magpie-google-ai-studio-0.1.3.log",
-          "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:45:08.729Z level=WARN run=99ceefcd message=\"failed to load plugin\" target=magpie-google-ai-studio@0.1.3 ref=err_56086cee cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=50 role=server\n--- stream tail ---\n9T05:45:09.301Z level=INFO run=99ceefcd message=\"watcher stopped\" path=/tmp/verify-Jy31TR/u type=entries http.span=622 role=server\ntimestamp=2026-11-19T05:45:09.303Z level=INFO run=99ceefcd message=\"watcher stopped\" path=/tmp/verify-Jy31TR/u/.config/opencode type=directory http.span=624 role=server\n\nserve reports the plugin failed to load",
+          "logExcerpt": "--- errors ---\ntimestamp=2026-11-19T05:57:37.065Z level=WARN run=5e4bba59 message=\"failed to load plugin\" target=magpie-google-ai-studio@0.1.3 ref=err_7e47fe64 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])\" http.span=109 role=server\n--- stream tail ---\n05:57:40.848Z level=INFO run=5e4bba59 message=\"watcher stopped\" path=/tmp/verify-VaqhRn/u type=entries http.span=3892 role=server\ntimestamp=2026-11-19T05:57:40.849Z level=INFO run=5e4bba59 message=\"watcher stopped\" path=/tmp/verify-VaqhRn/u/.config/opencode type=directory http.span=3893 role=server\n\nserve reports the plugin failed to load",
           "integrity": "sha512-SE13F29+eHQSPvgDrmqWyWkAhLMapXXoCdJ/U59hXYuhIjMu5YLRaAWkDUfMuy1DhFV9JlHBUZj8x/J1TKHSxA==",
-          "retries": 2,
+          "retries": 3,
           "harnessGen": 2
         },
         "features": [
@@ -537374,12 +537386,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T05:21:36.464Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44464509358/job/135359121649",
+        "verifiedAt": "2026-11-19T05:57:22.872Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44468584742",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/YKLovePython_halfsize-6a75918b4218.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: YKLovePython/halfsize#6a75918b4218f0f2bb76da7fac7df7e3045b56e8\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "6a75918b4218f0f2bb76da7fac7df7e3045b56e8",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
