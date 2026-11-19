@@ -23,7 +23,7 @@ const mkRes = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status:
 function mkTgz(files: Record<string, string> = {}): Buffer {
   const dir = mkdtempSync(join(tmpdir(), 'auditfx-'))
   writeFileSync(join(dir, 't.txt'), 'x')
-  const entries = Object.keys(files).length ? files : { 'pkg/index.js': 'export default {}' }
+  const entries = Object.keys(files).length ? files : { 'pkg/index.js': 'export default { id: "x", setup() {} }' }
   for (const [p, c] of Object.entries(entries)) {
     const fp = join(dir, p)
     execFileSync('mkdir', ['-p', join(fp, '..')])

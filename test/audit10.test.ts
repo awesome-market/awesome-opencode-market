@@ -261,7 +261,7 @@ describe('run — cap bounds NEW candidates only (存量+seed 豁免)', () => {
     // Old semantics: newCap = 2-2 = 0 → c,d silently never admitted.
     const oldPath = join(dir, 'old.json')
     writeFileSync(oldPath, JSON.stringify(mkIndex([mkEntry('a'), mkEntry('b')])))
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), oldIndexPath: oldPath, maxEntries: 2,
       fetchFn: mkFetch({ search: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }], packument: n => pkWith(n), tgz }),
@@ -275,7 +275,7 @@ describe('run — cap bounds NEW candidates only (存量+seed 豁免)', () => {
 describe('run — compat fill from packument + repo package.json', () => {
   it('npm entry compat carries engines/peerDependencies', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-compat-'))
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'),
       fetchFn: mkFetch({
@@ -321,7 +321,7 @@ describe('run — seed github: candidate backfills real repo meta', () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-seedarch-'))
     const seedPath = join(dir, 'seeds.txt')
     writeFileSync(seedPath, 'github:owner/repo\n')
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), seedPath,
       fetchFn: mkFetch({
@@ -368,7 +368,7 @@ describe('run — declared skill type does not strip a real plugin entry point',
     writeFileSync(seedPath, JSON.stringify({ name: 'sp', type: 'skill' }) + '\n')
     const tgz = mkTgz({
       'package.json': JSON.stringify({ name: 'sp', main: 'index.js' }),
-      'index.js': 'export default {}',
+      'index.js': 'export default { id: "x", setup() {} }',
       'SKILL.md': '# skill',
     })
     const idx = await run({
@@ -388,7 +388,7 @@ describe('run — forceGate + resilience edges', () => {
   it('corruption gate throws; --force-gate publishes', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-gate-'))
     const oldPath = join(dir, 'old.json'); writeFileSync(oldPath, JSON.stringify(tenOld()))
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     // old names must 404 their gone-check probe or the gate never sees a drop
     const cfg: StubCfg = { search: [{ name: 'x' }], packument: n => n === 'x' ? pkWith(n) : null, tgz }
     await expect(run({ outPath: join(dir, 'o1.json'), oldIndexPath: oldPath, fetchFn: mkFetch(cfg), now: '2026-02-02T00:00:00Z' }))
@@ -399,7 +399,7 @@ describe('run — forceGate + resilience edges', () => {
   })
   it('missing seed file warns but does not abort the run', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-noseed-'))
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), seedPath: join(dir, 'does-not-exist.txt'),
       fetchFn: mkFetch({ search: [{ name: 'x' }], packument: () => pkWith('x'), tgz }),
@@ -410,7 +410,7 @@ describe('run — forceGate + resilience edges', () => {
   it('blocklist rows written in display case still block', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'a10-bl-'))
     writeFileSync(join(dir, 'bl.json'), JSON.stringify({ names: ['Bad-Pkg'], slugs: [] }))
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), blocklistPath: join(dir, 'bl.json'),
       fetchFn: mkFetch({ search: [{ name: 'bad-pkg' }, { name: 'x' }], packument: n => pkWith(n), tgz }),
@@ -457,7 +457,7 @@ describe('run — ruleset rescan keeps github drift flags (aged-out entries)', (
       name: 'Owner/Repo', version: null, verdict: 'pass', source: 'human',
       at: '2026-01-15T00:00:00Z', sha: 'oldsha', by: 'terry',
     }) + '\n')
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), oldIndexPath: oldPath, verdictsPath: vf,
       fetchFn: mkFetch({
@@ -489,7 +489,7 @@ describe('run — ruleset rescan keeps github drift flags (aged-out entries)', (
       name: 'Owner/Repo', version: null, verdict: 'pass', source: 'human',
       at: '2026-01-15T00:00:00Z', sha: 'samehash', by: 'terry',
     }) + '\n')
-    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' })
+    const tgz = mkTgz({ 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' })
     const idx = await run({
       outPath: join(dir, 'out.json'), oldIndexPath: oldPath, verdictsPath: vf,
       fetchFn: mkFetch({

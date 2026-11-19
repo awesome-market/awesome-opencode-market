@@ -31,7 +31,7 @@ const mkEntry = (name: string, over: Partial<PluginEntry> = {}): PluginEntry => 
 const mkIndex = (plugins: PluginEntry[], removed: RemovedEntry[] = []): CatalogIndex => ({
   version: '1', generatedAt: 't', categories: {}, plugins, removed,
 })
-const mkTgz = (files: Record<string, string> = { 'package.json': '{"name":"x","main":"i.js"}', 'index.js': 'export default {}' }): Buffer => {
+const mkTgz = (files: Record<string, string> = { 'package.json': '{"name":"x","main":"i.js"}', 'index.js': 'export default { id: "x", setup() {} }' }): Buffer => {
   const dir = mkdtempSync(join(tmpdir(), 'ir2tgz-'))
   mkdirSync(join(dir, 'pkg'), { recursive: true })
   for (const [p, body] of Object.entries(files)) {

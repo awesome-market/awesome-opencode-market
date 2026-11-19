@@ -316,7 +316,7 @@ describe('O-4: notified seed rows are terminal at ingestion', () => {
       JSON.stringify({ name: 'live-pkg', issue: 3 }),
     ].join('\n'))
     const urls: string[] = []
-    const tgz = mkTgz({ 'package.json': '{"name":"live-pkg","main":"i.js"}', 'i.js': 'x' })
+    const tgz = mkTgz({ 'package.json': '{"name":"live-pkg","main":"i.js"}', 'i.js': 'export default { id: "x", setup() {} }' })
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input); urls.push(url)
       if (url.includes('/-/v1/search')) return mkRes({ objects: [] })

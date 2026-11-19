@@ -10,7 +10,7 @@ import { normalizeRepoUrl } from '../pipeline/discover/github.ts'
 import { run } from '../pipeline/run.ts'
 import { REJECT_REASONS } from '../pipeline/submission-status.ts'
 
-const TGZ_STUB = { 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default {}' }
+const TGZ_STUB = { 'package.json': JSON.stringify({ name: 'x', main: 'i.js' }), 'index.js': 'export default { id: "x", setup() {} }' }
 
 // same fetch-stub shape as audit10: routes npm search/packument/tarball +
 // github search/meta/tree/raw/codeload; anything unconfigured 404s

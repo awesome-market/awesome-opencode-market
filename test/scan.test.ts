@@ -290,6 +290,24 @@ describe('scan/scanTarball', () => {
     expect(r.findings.filter(f => f.rule === 'scan-capped')).toHaveLength(1)
   }, 30000)
 
+  it('pluginModule: true when any text file looks like a plugin definition', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'scanplug-'))
+    mkdirSync(join(dir, 'pkg'), { recursive: true })
+    writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+    writeFileSync(join(dir, 'pkg/index.js'), 'module.exports = { id: "p", setup: async (ctx) => {} }')
+    const out = join(dir, 'p.tgz')
+    execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+    const r = await scanTarball(readFileSync(out))
+    expect(r.pluginModule).toBe(true)
+  })
+
+  it('pluginModule: false for non-plugin payloads (CLI/API-server shapes)', async () => {
+    // the shared fixture's index.js is eval/fetch/child_process noise with
+    // no plugin definition — and the shared package.json carries no SDK dep
+    const r = await scanTarball(tgz)
+    expect(r.pluginModule).toBe(false)
+  })
+
   it('parses in memory — no tar entries land under cwd', async () => {
     // regression: extract() is Unpack — it writes every entry to
     // process.cwd() (the CI workspace in production). tar.t parses only.

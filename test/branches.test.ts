@@ -150,7 +150,7 @@ describe('branch coverage', () => {
       if (url.includes('x/k.tgz')) {
         const pkg = mkdtempSync(join(tmpdir(), 'kp-'))
         mkdirSync(join(pkg, 'pkg'), { recursive: true })
-        writeFileSync(join(pkg, 'pkg', 'i.js'), 'export default {}')
+        writeFileSync(join(pkg, 'pkg', 'i.js'), 'export default { id: "x", setup() {} }')
         execFileSync('tar', ['-czf', pkg + '/k.tgz', '-C', pkg, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
         return new Response(readFileSync(pkg + '/k.tgz'), { status: 200 })
       }

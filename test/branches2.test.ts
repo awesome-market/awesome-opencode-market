@@ -94,6 +94,7 @@ describe('branches round 2', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rtgz-'))
     mkdirSync(join(dir, 'pkg'))
     writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'evil', scripts: { postinstall: 'x' } }))
+    writeFileSync(join(dir, 'pkg', 'i.js'), 'export default { id: "x", setup() {} }')
     writeFileSync(join(dir, 'pkg', 'SKILL.md'), '---\nname: s\n---\n')   // dual-nature needs the skill IN the tarball
     execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
     const tgz = readFileSync(dir + '/p.tgz')
@@ -123,7 +124,8 @@ describe('branches round 2', () => {
   it('run: repo-tree SKILL.md alone does not make an npm entry a skill (V-P install-truth)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'rtgz-'))
     mkdirSync(join(dir, 'pkg'))
-    writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'good' }))
+    writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'good', main: 'i.js' }))
+    writeFileSync(join(dir, 'pkg', 'i.js'), 'export default { id: "x", setup() {} }')
     execFileSync('tar', ['-czf', dir + '/p.tgz', '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
     const tgz = readFileSync(dir + '/p.tgz')
     const f = (async (input: RequestInfo | URL) => {
