@@ -6,7 +6,7 @@
  *  leaves previously-admitted entries reuse-skipping the new gate forever
  *  (the foreign-host demotion shipped under r9 proved this — r9-stamped
  *  rescan entries kept their slots without ever facing the gate). */
-export const RULESET_VERSION = 'r13'
+export const RULESET_VERSION = 'r14'
 
 export type Severity = 'high' | 'medium' | 'low'
 
