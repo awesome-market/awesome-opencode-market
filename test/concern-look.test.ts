@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   main as lookMain, loadConcernLooks, latestConcernLooks, deadLookKeys,
-  parseLookOutput, concernQueue, devinLook, type ConcernLook,
+  parseLookOutput, concernQueue, devinLook, oneshotLook, type ConcernLook,
 } from '../pipeline/ai/concern-look.ts'
 import { CatalogIndex } from '../src/schema.ts'
 import type { PluginEntry } from '../src/schema.ts'
@@ -164,18 +164,21 @@ describe('main', () => {
     expect(out[0]!.verdictAt).toBe('2026-02-01T00:00:00Z')
   })
 
-  it('devin unavailable → devin-unavailable records, no look calls', async () => {
-    const s = setup([entry()], [verdict()])
-    let called = 0
-    await lookMain([...args(s), '--limit', '5'], {
-      devinUp: async () => false,
-      look: async () => { called++; return { resp: null, raw: '' } },
-    })
-    expect(called).toBe(0)
-    const out = loadConcernLooks(s.spool)
-    expect(out).toHaveLength(1)
-    expect(out[0]!.aiNote).toBe('devin-unavailable')
-    expect(out[0]!.claimCheck).toBeNull()
+  it('backend unavailable → <backend>-unavailable records, no look calls', async () => {
+    process.env.CONCERN_LOOK_BACKEND = 'devin'
+    try {
+      const s = setup([entry()], [verdict()])
+      let called = 0
+      await lookMain([...args(s), '--limit', '5'], {
+        devinUp: async () => false,
+        look: async () => { called++; return { resp: null, raw: '' } },
+      })
+      expect(called).toBe(0)
+      const out = loadConcernLooks(s.spool)
+      expect(out).toHaveLength(1)
+      expect(out[0]!.aiNote).toBe('devin-unavailable')
+      expect(out[0]!.claimCheck).toBeNull()
+    } finally { delete process.env.CONCERN_LOOK_BACKEND }
   })
 
   it('--dry lists the queue without writing', async () => {
@@ -378,5 +381,75 @@ describe('docket 复审 rendering', () => {
     expect(issueBody({ ...target, verdict: 'pass' }, {
       concernLooks: looks(look({ name: 'pkg' })),
     })).not.toContain('AI 复审')
+  })
+})
+
+describe('oneshotLook', () => {
+  const JUDGE_OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+  const chatSeq = (plan: string, judge: string) => {
+    const calls: { role: string; content: string }[][] = []
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      calls.push(msgs)
+      return calls.length === 1 ? plan : judge
+    }
+    return { fn, calls }
+  }
+
+  it('plan → fetch → judge: fetched evidence reaches the judge prompt', async () => {
+    const { fn, calls } = chatSeq('{"fetch":["src/client.js"]}', JUDGE_OK)
+    const fetched: string[] = []
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn,
+      listFiles: async () => ['src/client.js', 'src/other.js'],
+      fetchText: async (url) => { fetched.push(url); return 'export const x = 1' },
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
+    expect(calls).toHaveLength(2)
+    expect(calls[1]![1]!.content).toContain('[fetched src/client.js]')
+    expect(calls[1]![1]!.content).toContain('export const x = 1')
+  })
+
+  it('drops fetch picks outside the allowed set', async () => {
+    const { fn, calls } = chatSeq('{"fetch":["../etc/passwd","notreal.js","src/client.js"]}', JUDGE_OK)
+    const fetched: string[] = []
+    await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn,
+      listFiles: async () => ['src/client.js'],
+      fetchText: async (url) => { fetched.push(url); return 'x' },
+    })
+    expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
+    expect(calls[1]![1]!.content).not.toContain('passwd')
+  })
+
+  it('empty file list falls back to flagged paths from capabilities', async () => {
+    const e = entry({ capabilities: { scannedAt: 't', findings: ['network-call:src/net.js — L4: fetch(u)'], redFlags: [] } })
+    const { fn } = chatSeq('{"fetch":["src/net.js"]}', JUDGE_OK)
+    const fetched: string[] = []
+    const r = await oneshotLook(e, verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => [],
+      fetchText: async (url) => { fetched.push(url); return 'const u = "https://api.example.com"' },
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/net.js'])
+  })
+
+  it('fetch failure skips the block; judge still runs on material alone', async () => {
+    const { fn, calls } = chatSeq('{"fetch":["src/gone.js"]}', JUDGE_OK)
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['src/gone.js'],
+      fetchText: async () => null,
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(calls[1]![1]!.content).toContain('(no additional files fetched)')
+  })
+
+  it('unparseable judge output records parse-failed', async () => {
+    const { fn } = chatSeq('{"fetch":[]}', 'I cannot determine this.')
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => [], fetchText: async () => null,
+    })
+    expect(r.resp).toBeNull()
+    expect(r.note).toBe('parse-failed')
   })
 })
