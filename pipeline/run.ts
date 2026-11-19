@@ -882,11 +882,13 @@ export async function run(opts: RunOptions = {}) {
 
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
+      let pluginModule = false
       if (pk.tarballUrl) {
         try {
           const tgz = await fetchTarball(pk.tarballUrl, { fetchFn: f })
           const r = await scanTarball(tgz)
           scanFiles = r.files
+          pluginModule = r.pluginModule
           scan = {
             scannedAt: now,
             rulesetVersion: RULESET_VERSION,
@@ -952,17 +954,43 @@ export async function run(opts: RunOptions = {}) {
       const sub = seedMeta.get(cand.name)
 
       // contains claims only what the artifacts support: an npm 'plugin' part
-      // requires an entry point (main/exports — what opencode loads); a
-      // tarball whose only artifact is SKILL.md declares 'skill' and routes
-      // off the plugin verify chain instead of failing a nonexistent plugin
-      // install. An explicit empty list means "no installable payload".
+      // requires an entry point (main/exports — what opencode loads) AND
+      // plugin-shaped code — `main` alone can't tell a plugin from a CLI or
+      // API server (opencode-api-node shipped an express app behind `main`).
+      // A resolved ./gui-experimental entrypoint stands alone: GUI bundles
+      // carry a different contract (no {id,setup} schema — module.ts gives
+      // them the package-name id). A FAILED scan is absent evidence, not
+      // proof of shapelessness — the veto only fires on scanned bytes.
       // The author-DECLARED type never strips a real entry point's plugin
       // part — a 'skill'-labeled package that ships main/exports still goes
       // through install+load verification (the label sets the badge, not
       // the verification level).
+      const feats = detectFeatures({ exports: pk.exports, main: pk.main, files: scanFiles })
       const hasEntry = !!(pk.main || pk.exports)
+      const scanned = scan.scannedAt !== null
+      const hasPluginShape = pluginModule || feats.includes('gui')
+      const shapelessPlugin = scanned && hasEntry && !hasSkill && !hasPluginShape
+      if (shapelessPlugin) {
+        // same posture as the packument evidence gate above: an APPROVED
+        // display is never touched — the shapeless bump simply produces no
+        // candidate (a later shapely version re-enters the normal hold
+        // flow); a pending or brand-new entry is refused outright — a
+        // 'filtered' tombstone, and the submission issue gets the reason
+        if (prev && prev.approval !== 'pending' && !isBlocked(prev.name, prev.slug)) {
+          const base = prev.pendingUpdate?.version === pk.latest
+            ? (() => { const { pendingUpdate: _pu, ...r } = prev; return r })()
+            : prev
+          entries.push({ ...base, capabilities: addFinding(base.capabilities, `sec:plugin-shape-regressed@${pk.latest}`) })
+          reusedNames.add(cand.name)
+          console.log(`  [${entries.length}] ${cand.name} (no plugin-shaped module at v${pk.latest}; approved display kept)`)
+        } else {
+          rejectedNpm.add(cand.name)
+          if (seedNames.has(cand.name)) seedOutcomes.set(cand.name, 'no-plugin-shape')
+        }
+        return
+      }
       const parts: NonNullable<PluginEntry['contains']> = [
-        ...(hasEntry ? ['plugin' as const] : []),
+        ...(hasEntry && (!scanned || hasPluginShape) ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
       // marketMeta/submission category strings are author-controlled — only
@@ -982,7 +1010,7 @@ export async function run(opts: RunOptions = {}) {
           en: marketMeta?.description?.en ?? sub?.desc?.en ?? cand.description,
           ...(marketMeta?.description?.zh || sub?.desc?.zh ? { zh: marketMeta?.description?.zh ?? sub?.desc?.zh } : {}),
         },
-        features: detectFeatures({ exports: pk.exports, main: pk.main, files: scanFiles }),
+        features: feats,
         category: claimedCats.length ? claimedCats
           : classify(cand.name, slug, cand.description ?? '', [...pk.keywords, ...(repoMeta?.topics ?? [])]),
         license: pk.license ?? repoMeta?.license ?? null,
@@ -1290,12 +1318,14 @@ export async function run(opts: RunOptions = {}) {
       // commit sha verbatim — archives are immutable)
       let scan = { scannedAt: null as string | null, rulesetVersion: undefined as string | undefined, findings: [] as string[], redFlags: [] as string[] }
       let scanFiles: string[] = []
+      let pluginModule = false
       try {
         // github repo archives carry the whole tree (docs/assets/vendored
         // bits) — 3× the npm cap is routine, and MAX_UNPACKED still bounds
         // what actually inflates in memory
         const tgz = await fetchTarball(`https://codeload.github.com/${cand.fullName}/tar.gz/${treeRes.sha ?? 'HEAD'}`, { fetchFn: f, maxBytes: 192 * 1024 * 1024 })
         const r = await scanTarball(tgz)
+        pluginModule = r.pluginModule
         const strip = (p: string) => p.replace(/^[^/]+\//, '')   // owner-repo-sha/ prefix
         scanFiles = r.files.map(strip)
         scan = {
@@ -1373,7 +1403,18 @@ export async function run(opts: RunOptions = {}) {
       // The 'plugin' part requires a ROOT package.json; nested-only plugin
       // evidence previously minted entries that could never verify (every
       // install attempt ends ENOENT package.json → mechanical concern loop).
-      const pluginPart = treeRes.paths.has('package.json') && (pluginArtifact || feats.length > 0)
+      // feats (entrypoint resolution) still needs plugin-shaped code — a
+      // root package.json `main` can't tell plugin from CLI, the same hole
+      // npm had. .opencode/plugin(s)/ dirs are explicit intent and stand
+      // alone; a ./gui-experimental bundle carries a different contract.
+      // Approved displays keep their claim — contains must not change under
+      // a live listing (moved-bytes questions belong to the flag surface).
+      // A failed scan is absent evidence — the gate only fires on scanned
+      // bytes, and a shapeless pending repo keeps an honest empty contains
+      // rather than a 'plugin' claim verify could never satisfy.
+      const ghShapeOk = pluginModule || feats.includes('gui') || scan.scannedAt === null
+        || !!(ghPrev && ghPrev.approval !== 'pending')
+      const pluginPart = treeRes.paths.has('package.json') && (pluginArtifact || (feats.length > 0 && ghShapeOk))
       // badge: a root package.json makes `plugin add o/r` installable at all,
       // so a root-package repo stays plugin-shaped even when nothing yet marks
       // it as a plugin (contains stays evidence-gated below); nested-only

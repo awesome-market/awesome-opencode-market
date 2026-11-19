@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { detectFeatures } from '../src/features.ts'
+import { detectFeatures, looksLikePluginModule } from '../src/features.ts'
 
 // mirrors opencode's official Host.resolve entrypoint rules
 describe('detectFeatures (Host.resolve parity)', () => {
@@ -45,5 +45,41 @@ describe('detectFeatures (Host.resolve parity)', () => {
       exports: { '.': './dist/server.js', './server': './dist/server.js', './gui-experimental': './dist/gui-experimental.cjs', './detect/detector': './d.js' },
     })
     expect(out).toEqual(['server', 'gui'])
+  })
+})
+
+describe('looksLikePluginModule (module.ts load-contract shapes)', () => {
+  it('literal default-export definition', () => {
+    expect(looksLikePluginModule('export default { id: "p", async setup(ctx) {} }')).toBe(true)
+    expect(looksLikePluginModule('export default { id: "p", effect() {} }')).toBe(true)
+  })
+  it('SDK helpers count without a literal id', () => {
+    expect(looksLikePluginModule('import { Plugin } from "@opencode/plugin"\nconst p = Plugin.define({ id: pluginId, setup(c) {} })')).toBe(true)
+    expect(looksLikePluginModule('const r = Rpc.define({ id: "x", methods: {} })')).toBe(true)
+  })
+  it('split definition — const plugin object re-exported as default', () => {
+    // the defining file carries no default-export marker; the id-first
+    // object + surface key still marks it plugin-shaped
+    expect(looksLikePluginModule('export const plugin = { id: "x", setup(ctx) { return 1 } }')).toBe(true)
+  })
+  it('TUI shorthand and RPC literal shapes', () => {
+    expect(looksLikePluginModule('var plugin = { id: "opencode.voice-input", tui }; export { plugin as default }')).toBe(true)
+    expect(looksLikePluginModule('export default { id: "x", methods: { ping() {} } }')).toBe(true)
+  })
+  it('CJS module.exports definition', () => {
+    expect(looksLikePluginModule('module.exports = { id: "p", setup: async (ctx) => {} }')).toBe(true)
+  })
+  it('computed id still counts when a surface key sits in object-literal context', () => {
+    expect(looksLikePluginModule('export default { id: pkg.name, setup(ctx) {} }')).toBe(true)
+  })
+  it('rejects OpenAI-compatible API shapes — template-literal ids are not plugin ids', () => {
+    // opencode-api-node: express app returning chatcmpl-* response objects
+    expect(looksLikePluginModule('return res.json({ id: `chatcmpl-${randomUUID()}`, object: "chat.completion" })')).toBe(false)
+    expect(looksLikePluginModule('const app = express(); app.get("/v1/x", (req, res) => res.json({ id: sessionId })); module.exports = app')).toBe(false)
+  })
+  it('rejects plain modules and incidental id fields', () => {
+    expect(looksLikePluginModule('export default { id: "user-1", name: "sess" }')).toBe(false)
+    expect(looksLikePluginModule('module.exports = () => console.log("cli")')).toBe(false)
+    expect(looksLikePluginModule('const s = { id: "abc-123", created: Date.now() }; module.exports = s')).toBe(false)
   })
 })

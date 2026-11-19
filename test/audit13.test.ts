@@ -65,7 +65,7 @@ const ADMIT = (seedRepo: string) => (async (input: RequestInfo | URL) => {
   if (url.includes('api.github.com/search')) return mkRes({ items: [] })
   if (url.includes('registry.npmjs.org/filler'))
     return mkRes({ 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/f.tgz' } } }, time: {} })
-  if (url === 'https://x/f.tgz') return new Response(new Uint8Array(mkTgz({ 'package.json': '{"name":"filler"}' })))
+  if (url === 'https://x/f.tgz') return new Response(new Uint8Array(mkTgz({ 'package.json': '{"name":"filler","main":"i.js"}', 'i.js': 'export default { id: "x", setup() {} }' })))
   if (url.includes(`/repos/${seedRepo}`) && !url.includes('/git/trees/'))
     return mkRes({}, 500)                                                     // identity probe fails
   if (url.includes('/git/trees/'))
@@ -115,7 +115,7 @@ describe('ghWorker meta-backfill failure — no admission on fabricated identity
       if (url.includes('api.github.com/search')) return mkRes({ items: [] })
       if (url.includes('registry.npmjs.org/filler'))
         return mkRes({ 'dist-tags': { latest: '1.0.0' }, versions: { '1.0.0': { keywords: ['opencode'], main: 'i.js', dist: { tarball: 'https://x/f.tgz' } } }, time: {} })
-      if (url === 'https://x/f.tgz') return new Response(new Uint8Array(mkTgz({ 'package.json': '{"name":"filler"}' })))
+      if (url === 'https://x/f.tgz') return new Response(new Uint8Array(mkTgz({ 'package.json': '{"name":"filler","main":"i.js"}', 'i.js': 'export default { id: "x", setup() {} }' })))
       if (url.includes('api.npmjs.org/downloads')) return mkRes({ downloads: 1 })
       return mkRes({}, 404)                                        // meta AND tree both 404
     }) as typeof fetch

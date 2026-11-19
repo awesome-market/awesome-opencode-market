@@ -817,7 +817,7 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 | S-4 flagged 投稿人工推翻 catch-22：未入库无种子 → /approve noseed 拒；[concern] 表单不在 index 也拒 | ✅ | verdict job late-ingest：无种子+pass+最近 bot 初审 clean\|flagged 且有被审版本/resolvedSha → 先补种子行（钉被审版本，catalog 收录端仍重扫字节）再落裁决；invalid/error 初审无推翻目标仍 noseed，ack 按 lastreview 说清路径 |
 | S-5 freeform [submit] 单不挂基标签 `submission` → 防滥用门计数漏掉、sweep 孤儿扫描漏掉、评论重审门漏掉 | ✅ | report 同时 `--add-label submission`（label create 只是定义） |
 | S-6 `/withdraw` 只删种子行 → 已建 pending 条目继续占扫描/验证/AI 预算甚至后被放行 | ✅ | catalog-withdraw.sh 新增 ENTRY：approval=pending 且 discoveredVia⊆{submission} → 撤下并 tombstone(reason:manual)；已上架/有有机来源不动（maintainer 裁决域） |
-| S-7 收录端拒绝无回执：status 承诺"届时会在本 issue 说明原因"无机制兑现，作者干等 14 天 generic staleWarned | ✅ | run.ts `--seed-outcomes` 产出 per-seed 拒绝码（pkg-not-found/no-plugin-evidence/blocklisted/template-spam/archived/repo-not-found/no-opencode-evidence/fetch-error）→ catalog.yml publish 经 `pipeline/seed-outcome.ts` 回写种子行 `rejected` 字段 → submission-status 新增 `rejected` 相位渲染"发生了啥→为啥→咋办"；条目落地即清除 |
+| S-7 收录端拒绝无回执：status 承诺"届时会在本 issue 说明原因"无机制兑现，作者干等 14 天 generic staleWarned | ✅ | run.ts `--seed-outcomes` 产出 per-seed 拒绝码（pkg-not-found/no-plugin-evidence/no-plugin-shape/blocklisted/template-spam/archived/repo-not-found/no-opencode-evidence/fetch-error）→ catalog.yml publish 经 `pipeline/seed-outcome.ts` 回写种子行 `rejected` 字段 → submission-status 新增 `rejected` 相位渲染"发生了啥→为啥→咋办"；条目落地即清除 |
 | S-8 sweep 覆盖不全：基标签孤儿与 approved 停滞单永不被扫 | ✅ | sweep 增补 `submission:approved` 30d（与 dead 种子同视界）+ 基标签无 `submission:*` 子标签 30d 孤儿（预标签崩溃残留） |
 | S-9 submit verdict ack 缺槽位诚实：过审未验证版说"公示后进入上架"，无 vstatus/deadslot/幽灵条目口径（concern.yml 有 H-17/K-4） | ✅ | ack 新增：目标缺席→"裁决存档待条目落地"（repo 按名匹配）；VER 不在活动槽位→dead-slot 提示；pass 落 unverified/failed/skipped 槽→附验证状态说明 |
 | S-10 submission-status `'published'` 相位死代码：同轮 markNotified 先标 notified → statuses 跳过，永远不可达 | ✅ | 移除该相位；文档注明"notify 评论即是已上架信号" |
@@ -951,3 +951,10 @@ H 系列之后的演进补丁。链路：四通道 → `human-verdict.ts` 解析
 **评估未改**：healthGate 的 skills.degraded 阈值（candidates≥10）对 unpinned 不重复计数是正确的——unpinned 行仍参与 landed/candidates 比率，HEAD 抓取失败会真实拉低 landed；`npm ci` 装脚本与全仓 workflow 同姿态不算站点独有；冷启动 ~700 技能 ÷ SKILL_POOL=8 最坏情况可逼近 job timeout 30min，稳态有 actions/cache 兜底，mass version bump 日才需关注（已在 DATA-FLOWS 注明池化语义）。
 
 **验证**：site.test.ts 58 例全绿（新增 4 例：大小写单测+落盘端到端、unpinned 计数、membersDropped 截断计数、skillsPage caveat）；typecheck 0 错；DATA-FLOWS §9 同步（裁决匹配/SRI 语义/health.json 字段/commit 溯源）。
+
+## 附二十六：非插件包混入收录面专项修复（issue #6755/#6814 触发，X 系列）
+
+| 缺陷 | 状态 | 修法 |
+|---|---|---|
+| X-1 npm 准入把 `main`/`exports` 当「opencode 可加载件」——任何 Node CLI/API 服务都有入口（opencode-api-node：express 应用+shebang+bin，README 只教 `npm i -g` 自称服务），keyword+main 双证即过门，verify 才炸 LoadError，每个混入者烧一轮 AI 审核+一张 docket 单等人工 | ✅ | scanTarball 同趟已缓冲文本顺带判 `looksLikePluginModule`（src/features.ts——镜像 module.ts 装载契约：SDK 标记 ∨ `{id,setup|effect|tui|methods}` 定义对象 ∨ 导出+面键+id 三组合；id 限引号字面量挡 `chatcmpl-${uuid}` 式 API 响应形状；宁宽勿漏——误判只多留候选给 verify/AI，漏判才误杀真插件）。否决=扫描成功∧有入口∧无 SKILL.md∧全包无一文件像插件 → new/pending filtered 立碑+种子回执 `no-plugin-shape`（submission-status 含"入口 default 导出 {id,setup}/{id,effect} 或 Plugin.define"自证指引）；**approved 展示版不动**——shapeless bump 无候选产生，shapely 版本照常走 hold；扫描失败=缺席证据不否决；gui-experimental 入口与 SKILL.md 双栖豁免 |
+| X-2 github-kind 同洞：根 package.json+main 解析出 server feature 即领 'plugin' 部件 | ✅ | contains 'plugin' 追加形态条件（pluginModule ∨ gui ∨ 扫描失败 ∨ approved prev）；`.opencode/plugin(s)/` 目录=显式意图不受否决；形状不符 pending repo 领诚实空 contains 不立碑——repo 证据门（.opencode//opencode topic+产物）已比 npm keyword 严，仓库仍值得挂名，installPlan 对 [] fail-closed 无安装路由，verify/AI 照常审 |

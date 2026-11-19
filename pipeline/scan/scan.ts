@@ -2,6 +2,7 @@
 import { Readable } from 'node:stream'
 import { t as tarList } from 'tar'
 import { RULES, isBinary, knownBinaryMagic, testPath, ASSET_PATH, type Severity } from './rules.ts'
+import { looksLikePluginModule } from '../../src/features.ts'
 
 export interface ScanFinding {
   rule: string
@@ -28,6 +29,8 @@ export interface ScanResult {
   fileCount: number
   files: string[]                  // all tarball paths — conventional-name
                                    // entrypoint resolution (Host.resolve parity)
+  pluginModule: boolean            // ≥1 text file looks like an opencode plugin
+                                   // definition (features.looksLikePluginModule)
 }
 
 const TEXT_EXT = /\.(js|mjs|cjs|ts|mts|cts|json|md|txt|yml|yaml|sh|toml)$/i
@@ -59,7 +62,7 @@ const MAX_TEXT_SCAN = 32 * 1024 * 1024
 export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<ScanResult> {
   const findings: ScanFinding[] = []
   const files: string[] = []
-  let fileCount = 0, unpacked = 0, capped = false
+  let fileCount = 0, unpacked = 0, capped = false, pluginModule = false
   const pushFinding = (f: ScanFinding) => {
     if (findings.length < MAX_FINDINGS) findings.push(f)
     else if (!capped) {
@@ -127,6 +130,9 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
             return
           }
           const text = isText ? buf.toString('utf8') : null
+          // plugin-shape evidence piggybacks on the already-buffered text —
+          // one boolean for the whole tarball, checked until first hit
+          if (!pluginModule && text !== null && looksLikePluginModule(text)) pluginModule = true
           for (const r of RULES) {
             const hit = r.test(path, text)
             if (hit) pushFinding({
@@ -144,7 +150,7 @@ export async function scanTarball(tgz: Buffer, maxFiles = MAX_FILES): Promise<Sc
     parser.on('error', reject)
     Readable.from(tgz).pipe(parser)
   })
-  return { findings, redFlags: findings.filter(f => f.severity === 'high'), fileCount, files }
+  return { findings, redFlags: findings.filter(f => f.severity === 'high'), fileCount, files, pluginModule }
 }
 
 const isPkgJson = (p: string) => /(^|\/)package\.json$/.test(p)

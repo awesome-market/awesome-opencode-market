@@ -29,6 +29,31 @@ function mkTgzSkill(): Buffer {
   return readFileSync(out)
 }
 
+/** package.json declares main but the code has no plugin definition —
+ *  the opencode-api-node shape (CLI/API server behind an entry point). */
+function mkTgzShapeless(): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
+  mkdirSync(join(dir, 'pkg'), { recursive: true })
+  writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+  writeFileSync(join(dir, 'pkg/index.js'), 'module.exports = () => console.log("cli")')
+  const out = join(dir, 'p.tgz')
+  execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+  return readFileSync(out)
+}
+
+/** Shapeless entry point plus a real SKILL.md payload — the plugin claim
+ *  is bogus but the skill part is genuine. */
+function mkTgzShapelessSkill(): Buffer {
+  const dir = mkdtempSync(join(tmpdir(), 'runtgz-'))
+  mkdirSync(join(dir, 'pkg/skills/x'), { recursive: true })
+  writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+  writeFileSync(join(dir, 'pkg/index.js'), 'module.exports = () => console.log("cli")')
+  writeFileSync(join(dir, 'pkg/skills/x/SKILL.md'), '---\nname: x\n---\n# skill\n')
+  const out = join(dir, 'p.tgz')
+  execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
+  return readFileSync(out)
+}
+
 /** Mock fetch routing by URL substring. */
 function mkFetch(tgz: Buffer) {
   return (async (input: RequestInfo | URL) => {
@@ -219,6 +244,35 @@ describe('github-kind hardening', () => {
     expect(e?.contains).toEqual(['skill'])
   })
 
+  it('plugin-shape gate: root package.json + main but shapeless tree claims no plugin part', async () => {
+    // same hole as npm: a CLI/API repo with a root package.json resolves a
+    // 'server' feature but holds no plugin definition — contains must not
+    // claim 'plugin' for bytes verify could never load
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: 'package.json' }, { path: 'index.js' }] }))
+        : null,
+      () => new Response(new Uint8Array(mkTgzShapeless())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'ghs-')), 'i.json'), fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'o/r')
+    expect(e?.contains).toEqual([])
+  })
+
+  it('plugin-shape gate: .opencode/plugin dir evidence stands without shape match', async () => {
+    // explicit intent signal — the directory convention itself is the claim;
+    // shape absence doesn't veto it (verify stays the real gate)
+    const f = ghBase(
+      url => url.includes('/git/trees/')
+        ? new Response(JSON.stringify({ tree: [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }] }))
+        : null,
+      () => new Response(new Uint8Array(mkTgzShapeless())),
+    )
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'ghp-')), 'i.json'), fetchFn: f, now: 't' })
+    const e = idx.plugins.find(p => p.name === 'o/r')
+    expect(e?.contains).toEqual(['plugin'])
+  })
+
   it('hold surgery splits contains per version — candidate parts on pendingUpdate, displayed parts stay on entry', async () => {
     // v1.0.0 plugin-only → v2.0.0 adds a skill payload: install routing reads
     // entry.contains for the DISPLAYED version, so the held candidate's parts
@@ -267,6 +321,69 @@ describe('github-kind hardening', () => {
     expect(e.pendingUpdate?.version).toBe('2.0.0')
     expect(e.contains).toEqual(['plugin'])                          // displayed v1's parts
     expect(e.pendingUpdate?.contains).toEqual(['plugin', 'skill'])   // candidate v2's parts
+  })
+
+  it('plugin-shape gate: main but no plugin module → refused, never listed', async () => {
+    // opencode-api-node shape: packument evidence passes (keyword+main) but
+    // the tarball holds an express-style app, not a plugin definition
+    // forceGate: the fixture catalog would be empty — the publish gate
+    // (correctly) refuses to ship a zero-entry index; the veto itself is
+    // what we're asserting, not gate behavior
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'shp-')), 'i.json'), fetchFn: mkFetch(mkTgzShapeless()), now: 't', forceGate: true })
+    expect(idx.plugins).toHaveLength(0)
+  })
+
+  it('plugin-shape gate: shapeless entry + SKILL.md keeps the skill part only', async () => {
+    const idx = await run({ outPath: join(mkdtempSync(join(tmpdir(), 'shs-')), 'i.json'), fetchFn: mkFetch(mkTgzShapelessSkill()), now: 't' })
+    const e = idx.plugins.find(p => p.name === 'good-pkg')!
+    expect(e.contains).toEqual(['skill'])
+  })
+
+  it('plugin-shape gate: approved display survives a shapeless bump — no hold formed', async () => {
+    let ver = '1.0.0'
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/-/v1/search')) {
+        return new Response(JSON.stringify({ objects: [
+          { package: { name: 'good-pkg', version: ver, description: 'd',
+            keywords: ['opencode'], links: { repository: 'https://github.com/o/good' }, date: 't' } }] }))
+      }
+      if (url.includes('api.github.com/search')) return new Response(JSON.stringify({ items: [] }))
+      if (url.includes('registry.npmjs.org') && url.includes('good-pkg')) {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: ver },
+          versions: { [ver]: { repository: 'https://github.com/o/good', license: 'MIT',
+            dist: { tarball: `https://x/t-${ver}.tgz` }, keywords: ['opencode'], main: 'index.js' } },
+          time: { [ver]: 't' },
+        }))
+      }
+      if (url.includes('x/t-1.0.0.tgz')) return new Response(new Uint8Array(mkTgz()))
+      if (url.includes('x/t-2.0.0.tgz')) return new Response(new Uint8Array(mkTgzShapeless()))
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: [
+        { path: '.opencode/plugin/x.ts' }, { path: 'package.json' }, { path: 'README.md' }] }))
+      if (url.includes('api.github.com/repos/')) return new Response(JSON.stringify({ stargazers_count: 3, archived: false, pushed_at: 't', license: { spdx_id: 'MIT' } }))
+      if (url.includes('api.npmjs.org/downloads')) return new Response(JSON.stringify({ downloads: 7 }))
+      if (url.includes('/contents/')) return new Response('', { status: 404 })
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const d = mkdtempSync(join(tmpdir(), 'shb-'))
+    const out1 = join(d, 'i1.json')
+    await run({ outPath: out1, fetchFn: f, now: '2026-11-02T00:00:00Z' })
+    const first = JSON.parse(readFileSync(out1, 'utf8'))
+    first.plugins[0].approval = 'approved'
+    delete first.plugins[0].approvalReason
+    writeFileSync(out1, JSON.stringify(first))
+    ver = '2.0.0'
+    const idx2 = await run({ outPath: join(d, 'i2.json'), oldIndexPath: out1, fetchFn: f, now: '2026-11-03T00:00:00Z' })
+    const e = idx2.plugins.find(p => p.name === 'good-pkg')!
+    // display untouched: still v1, no pendingUpdate — the shapeless v2
+    // simply produced no candidate (same posture as evidence regression)
+    expect(e.latestVersion).toBe('1.0.0')
+    expect(e.pendingUpdate).toBeUndefined()
+    expect(e.approval).toBe('approved')
+    // version-anchored fact (npm bytes are immutable) — surfaces why the
+    // displayed version stayed put, same channel as evidence-regressed
+    expect(e.capabilities.findings).toContain('sec:plugin-shape-regressed@2.0.0')
   })
 
   it('oversize tarball stamps rulesetVersion — next run reuses, no re-fetch', async () => {

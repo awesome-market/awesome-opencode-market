@@ -42,6 +42,7 @@ export const REJECT_REASONS: Record<string, string> = {
   'pkg-not-found': 'npm 上找不到这个包——包名可能拼写有误，或包尚未发布/已被下架。确认包名后回复本 issue 即可重新审查。',
   'fetch-error': 'npm registry 暂时不可用，收录端没能取到包信息——下一轮目录构建会自动重试，无需操作。',
   'no-plugin-evidence': '包内缺少 opencode 插件信号（keywords、main 入口或 README 安装说明都未命中收录规则）。修好 package.json 后回复本 issue 重新审查。',
+  'no-plugin-shape': '包声明了入口（main/exports）但代码里没有 opencode 插件定义——目录按「可被 `opencode plugin add` 加载的插件」收录，CLI 工具、API 服务等普通 Node 包不在收录范围。如这确为插件（入口文件 default 导出 `{id, setup}`/`{id, effect}` 或使用 `Plugin.define`），回复本 issue 说明入口位置，maintainer 会人工复核。',
   'blocklisted': '该包在收录黑名单中，目录不会收录。如认为误封请联系 maintainer。',
   'template-spam': '同一 owner 下的投稿批量模板痕迹过重，被反垃圾规则拦截。如为误伤请联系 maintainer。',
   'archived-or-fork': '仓库已归档或为 fork——目录只收录仍在维护的主仓库。',

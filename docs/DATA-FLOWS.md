@@ -105,7 +105,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `slug` | string | 详情页 URL 键；repo 优先于包名（`slugOf`） |
 | `aliases[]` | string[] | 同名不同源去重时挂的别名 |
 | `type` | enum | `plugin|skill|agent|command|mcp|theme|bundle|rule`——schema 预留八值，但当前管线只产出 `plugin`/`skill` 两种（其余为死 schema 面）；分类器产出，默认 plugin |
-| `contains[]` | enum? | `plugin|skill|mcp|command|agent|hook`——部件清单**显式且权威**（含 `[]`=无可装载荷；仅字段缺失才按 type 回落推导——三处消费方 verifyPartsOf/installPlan/entryParts 同规则）；npm 'plugin' 需 main/exports 入口，SKILL.md-only 包只领 'skill'；repo 探测 SKILL.md→'skill'（github-kind 也跑 hasSkillPath）。**随版本分槽**：hold 存在时钉在展示版，候选版的 parts 存 `pendingUpdate.contains`（含显式 []） |
+| `contains[]` | enum? | `plugin|skill|mcp|command|agent|hook`——部件清单**显式且权威**（含 `[]`=无可装载荷；仅字段缺失才按 type 回落推导——三处消费方 verifyPartsOf/installPlan/entryParts 同规则）；npm 'plugin' 需 main/exports 入口 **且** tarball 扫描文本里存在插件形态模块（`main` 只证明有入口——CLI/API 服务同样有；形态判定 looksLikePluginModule，见 run 节），SKILL.md-only 包只领 'skill'；repo 'plugin' 部件同要形态证据（.opencode/plugin 目录证据除外），repo 探测 SKILL.md→'skill'（github-kind 也跑 hasSkillPath）。**随版本分槽**：hold 存在时钉在展示版，候选版的 parts 存 `pendingUpdate.contains`（含显式 []） |
 | `features[]` | enum? | `server|tui|gui|rpc`——镜像官方 Host.resolve：`./server`或根入口(`./`.`main`/`index.*`)→server；`./tui`→tui；`./rpc`+有 server→rpc；`./gui-experimental`（无 exports 时根下 `gui-experimental.cjs/.js`）且目标 `.cjs/.js`→gui。**无保底 server**——GUI/TUI-only 包合法为空 |
 | `discoveredVia[]` | enum[] | `npm-keyword|github-topic|code-search|topic-list|submission`——生产者：npm-keyword=registry 搜索、github-topic=topic 搜索、code-search=github 代码搜索（.opencode/opencode.json/SKILL.md 提及）、submission=投稿种子；`topic-list` 为**预留枚举值**（暂无生产者，保留兼容旧 index 解析） |
 | `source` | obj | `{kind:npm|github, id, repo?, repoId?, version?}`；repoId=GitHub 数字 id，repojacking 检测 |
@@ -293,9 +293,25 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       字段优先级：marketMeta > 投稿声明 > 自动派生（description/category）；
       **category 白名单**：声明值过 catId 归一并限 CAT_NAMES 税目内——
         任意字符串不进条目、不铸全局字典；识别不出退回 classify 分类器
-      contains=按产物发牌：npm 'plugin' 需 main/exports 入口（opencode 实际
-        加载的东西）；SKILL.md-only 包只领 'skill'（走 skill 验证链，不再
-        替不存在的 plugin 失败安装）；空数组=无可装载荷，显式记录而非省略；
+      **插件形态闸**（scanTarball 同一趟已缓冲文本顺带判定，零额外 IO）：
+        `looksLikePluginModule`（src/features.ts，镜像 module.ts 装载契约）——
+        SDK 标记（@opencode/plugin、Plugin.define/Rpc.define/definePlugin）
+        ∨ `{id:'…',…setup|effect|tui|methods…}` 定义对象（id 须引号字面量，
+        模板串 id 是 OpenAI 式响应形状不算）∨ 默认/CJS 导出+面键+id 字段
+        三条件组合；**宁宽勿漏**——误判=多留一个候选给 verify/AI 把关，
+        漏判=真插件被拒。否决条件：扫描成功 ∧ packument 有 main/exports ∧
+        无 SKILL.md ∧ 全包无一文件像插件 → new/pending 直接拒收
+        （filtered 立碑 + 种子回执 `no-plugin-shape`）；**approved 展示版
+        不动**——shapeless bump 不产生候选，展示槽挂
+        `sec:plugin-shape-regressed@<ver>` finding 留痕（npm 字节不可变，
+        版本锚事实无需清理），后续 shapely 版本照常走 hold；
+        扫描失败（scannedAt:null）=缺席证据不否决；`./gui-experimental`
+        入口豁免（GUI 契约无 {id,setup} schema）；SKILL.md 在场的双栖包
+        不否决——plugin 部件仍按形态发牌（形状不符只领 'skill'）
+      contains=按产物发牌：npm 'plugin' 需 main/exports 入口且形态证据
+        （opencode 实际加载的东西）；SKILL.md-only 包只领 'skill'（走
+        skill 验证链，不替不存在的 plugin 失败安装）；空数组=无可装载荷，
+        显式记录而非省略；
         **投稿声明 type='skill' 不再剥离真实入口的 plugin 部件**——声明设
         徽章不设验证级别，带 main/exports 的 "skill 包" 仍走 install+load 链
       detectFeatures({exports, main, files:tarball 路径})——镜像官方 Host.resolve
@@ -336,6 +352,13 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       type：投稿声明优先；纯 skill 证据（有 SKILL.md、无根 package.json、
         无 .opencode plugin 路径——**任意深度**，monorepo 子目录同样算数）
         → 'skill'，否则 'plugin'
+      contains 'plugin' 部件同样要形态证据：根 package.json + 入口解析出
+        features 还需 codeload 扫描文本里存在插件形态模块
+        （looksLikePluginModule，与 npm 同一判定）；`.opencode/plugin(s)/`
+        目录证据是显式意图声明，不受形态否决；approved 展示版 keeps claim；
+        扫描失败不否决；形状不符的 pending repo 领诚实空 contains——repo
+        证据门比 npm 严，仓库本身仍值得挂名，只是不虚报 'plugin' 给
+        verify 必败的字节（installPlan 对 [] fail-closed 无安装路由）
       条目命名：既有条目保持已存 name（显示大小写改名不分叉身份）；新条目
         用 fetchRepoMeta 的 canonical fullName；slug 恒小写
       latestVersion:null、verification 按部件发牌（有可装部件→
