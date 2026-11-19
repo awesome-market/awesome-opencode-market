@@ -579,6 +579,110 @@ describe('issueBody', () => {
   })
 })
 
+describe('type:skill label', () => {
+  it('skill-bearing entries mark the target — type fallback and contains override', () => {
+    // legacy skill entry: type only, no contains field
+    expect(docketTargets(idx([e({ type: 'skill' })]), [v()])[0]!.skill).toBe(true)
+    // plugin default stays unmarked — the key is absent, not false
+    expect(docketTargets(idx([e()]), [v()])[0]!.skill).toBeUndefined()
+    // explicit contains is authoritative — [] on a skill-typed entry means
+    // no installable payload, dual payloads still carry the skill mark
+    expect(docketTargets(idx([e({ type: 'skill', contains: [] })]), [v()])[0]!.skill).toBeUndefined()
+    expect(docketTargets(idx([e({ type: 'plugin', contains: ['skill'] })]), [v()])[0]!.skill).toBe(true)
+    expect(docketTargets(idx([e({ type: 'plugin', contains: ['plugin', 'skill'] })]), [v()])[0]!.skill).toBe(true)
+  })
+  it('held candidate parts decide — pendingUpdate.contains, not the display', () => {
+    const hold = (contains: PluginEntry['contains'], over: Partial<PluginEntry> = {}) => e({
+      approval: 'approved', ...over,
+      pendingUpdate: { version: '2.0.0', contains, capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
+    })
+    // display plugin + held skill candidate → the issue reviews skill bytes
+    expect(docketTargets(idx([hold(['skill'])]), [v({ version: '2.0.0' })])[0]!.skill).toBe(true)
+    // display skill + held plugin-only candidate → candidate wins
+    expect(docketTargets(idx([hold(['plugin'], { type: 'skill' })]), [v({ version: '2.0.0' })])[0]!.skill).toBeUndefined()
+  })
+  it('flag target labels by the DISPLAYED release — diverges from a held candidate', () => {
+    const both = docketTargets(idx([e({ type: 'skill', approval: 'approved',
+      capabilities: { scannedAt: 't', findings: [], redFlags: ['sec:x'] },
+      pendingUpdate: { version: '2.0.0', contains: ['plugin'], capabilities: { scannedAt: 't', findings: [], redFlags: [] }, verification: { status: 'verified' }, heldAt: 't' },
+    })]), [v({ version: '2.0.0' })])
+    const flagT = both.find(t => t.verdict === 'flag')!
+    const heldT = both.find(t => t.version === '2.0.0' && t.verdict !== 'flag')!
+    expect(flagT.skill).toBe(true)          // displayed release is skill-bearing
+    expect(heldT.skill).toBeUndefined()    // the held candidate is plugin-only
+  })
+  it('aggregate backlog issues stay unmarked', () => {
+    const t = docketTargets(idx([e({ type: 'skill', latestVersion: null })]), [])
+    expect(t).toHaveLength(1)
+    expect(t[0]!.name).toBe('(repo-only backlog)')
+    expect(t[0]!.skill).toBeUndefined()
+  })
+  it('main creates a skill issue with --label type:skill', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'dk-skill-'))
+    const idxPath = join(dir, 'index.json')
+    const vPath = join(dir, 'v.jsonl')
+    writeFileSync(idxPath, JSON.stringify(idx([e({ type: 'skill' })])))
+    writeFileSync(vPath, JSON.stringify(v()) + '\n')
+    const calls: string[][] = []
+    const ghFn = (args: string[]) => { calls.push(args); return args.includes('list') ? '[]' : '' }
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+    } finally { process.env.GH_REPO = saved }
+    const create = calls.find(c => c.includes('create'))!.join(' ')
+    expect(create).toContain('--label type:skill')
+  })
+  it('drift-sync adds a missing type:skill and removes a stale one', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { main } = await import('../pipeline/docket.ts')
+    const saved = process.env.GH_REPO
+    process.env.GH_REPO = 'o/r'
+    try {
+      // skill entry, existing issue lacks the label → added
+      let dir = mkdtempSync(join(tmpdir(), 'dk-skill-add-'))
+      let idxPath = join(dir, 'index.json'); let vPath = join(dir, 'v.jsonl')
+      writeFileSync(idxPath, JSON.stringify(idx([e({ type: 'skill' })])))
+      writeFileSync(vPath, JSON.stringify(v()) + '\n')
+      let calls: string[][] = []
+      let ghFn = (args: string[]) => {
+        calls.push(args)
+        if (args.includes('list')) return JSON.stringify([{
+          number: 5, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'ai:pass' }],
+          body: 'x',
+        }])
+        return ''
+      }
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+      expect(calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')).toContain('--add-label type:skill')
+      // plugin entry carrying a stale type:skill → removed
+      dir = mkdtempSync(join(tmpdir(), 'dk-skill-del-'))
+      idxPath = join(dir, 'index.json'); vPath = join(dir, 'v.jsonl')
+      writeFileSync(idxPath, JSON.stringify(idx([e()])))
+      writeFileSync(vPath, JSON.stringify(v()) + '\n')
+      calls = []
+      ghFn = (args: string[]) => {
+        calls.push(args)
+        if (args.includes('list')) return JSON.stringify([{
+          number: 6, title: '[review] pkg@1.0.0',
+          labels: [{ name: 'review:pending' }, { name: 'ai:pass' }, { name: 'type:skill' }],
+          body: 'x',
+        }])
+        return ''
+      }
+      await main(['x', 'y', '--index', idxPath, '--verdicts', vPath], ghFn)
+      expect(calls.filter(c => c.includes('edit')).map(c => c.join(' ')).join('\n')).toContain('--remove-label type:skill')
+    } finally { process.env.GH_REPO = saved }
+  })
+})
+
 describe('docket main', () => {
   it('creates ONE aggregate issue for repo-only pendings + closes decided ones', async () => {
     const { mkdtempSync, writeFileSync } = await import('node:fs')

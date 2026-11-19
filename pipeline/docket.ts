@@ -43,6 +43,7 @@ import { explainFlag } from './scan/flagExplain.ts'
 import { pickFailLine, unwrapLogLine, explainVerifyFail, isHarnessNoise, upstreamGitDepFail, UPSTREAM_GIT_DEP_WHY } from './verify/failExplain.ts'
 import { loadAssessments, latestAssessments, deadAssessmentKeys, type FlagAssessment } from './ai/flag-delta.ts'
 import { loadFlagContexts, latestFlagContexts, deadContextKeys, SCAN_FLAG_RE, FLAGS_PER_ENTRY, FINDINGS_PER_ENTRY, type FlagContext } from './ai/flag-context.ts'
+import { verifyPartsOf } from './verify/plan.ts'
 
 export interface DocketTarget {
   name: string
@@ -135,6 +136,11 @@ export interface DocketTarget {
    *  approval !== 'pending') — the 详情页 link must only be emitted for
    *  pages that will actually exist, or every pending-entry issue 404s */
   sitePage?: boolean
+  /** the reviewed payload carries a skill — drives the `type:skill` issue
+   *  label so a SKILL.md-pack review doesn't read as a plugin review.
+   *  Candidate-scoped for held versions (verifyPartsOf), displayed-scoped
+   *  for flag targets; absent on aggregate backlog issues */
+  skill?: boolean
   /** aggregate backlog — a per-entry standing issue per target floods the
    *  tracker (hundreds of rows and growing); the aggregate carries the queue
    *  in ONE issue whose body regenerates. Versioned 'none' rows carry
@@ -191,6 +197,16 @@ function heldStamp(e: PluginEntry): string | undefined {
   // date is worse than no date (aging still fails visible via candidateHeldAt)
   return undefined
 }
+
+/** Installable parts of the DISPLAYED release — flag targets judge the live
+ *  slot's bytes, not a held candidate's. contains (incl. []) authoritative,
+ *  type fallback — same rule as site build's entryParts / verify's
+ *  verifyPartsOf; only the skill check consumes it here. */
+const displayedParts = (e: PluginEntry): string[] =>
+  e.contains !== undefined ? e.contains
+    : e.type === 'skill' ? ['skill']
+    : e.type === 'plugin' ? ['plugin']
+    : []
 
 /** Pending targets that need a human surface: latest verdict came from AI,
  *  a live entry carries identity sec flags, or no verdict exists past the
@@ -326,6 +342,10 @@ export function docketTargets(
             : { kind: 'version' as const, value: e.latestVersion ?? '' } }
         : {}),
       ...(e.metrics?.stars != null ? { stars: e.metrics.stars } : {}),
+      // candidate-scoped parts — the type:skill label follows what the
+      // ISSUE reviews (a held skill update on a plugin display still
+      // earns the label; verifyPartsOf owns the contains/type rule)
+      ...(verifyPartsOf(e).includes('skill') ? { skill: true } : {}),
     }
     // flag target: identity-level sec:* redFlags on the DISPLAYED slot of a
     // live entry. Held entries already have a review channel (the held
@@ -401,6 +421,9 @@ export function docketTargets(
           // states the ordering so it can't read as "already reviewed"
           ...(prior ? { humanVerdict: prior } : {}),
           ...(flag ? { flaggedAt: flag } : {}),
+          // the flag judges the DISPLAYED release — its own contains/type,
+          // not a held candidate's (displayedParts mirrors entryParts)
+          ...(displayedParts(e).includes('skill') ? { skill: true } : {}),
         })
       }
     }
@@ -949,6 +972,10 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
       L.push(`  - [本次装测完整日志](${clean(t.verifyLogUrl ?? t.verifyRunUrl!, 300)})` +
         `${t.verifyLogUrl && t.verifyRunUrl ? `（[装测 job](${clean(t.verifyRunUrl, 300)})）` : ''}`)
   }
+  // payload kind — a skill entry's verify is SKILL.md structure, not a
+  // plugin load; without the marker the reviewer expects install evidence
+  // that was never the bar for this category
+  if (t.skill) L.push('- 条目类型：skill（结构级验证，非插件安装实测）')
   // package identity — "这是什么" before "安不安全". Pending entries have
   // no site page, so the npm/GitHub link IS the only way to see the package.
   if (t.src) {
@@ -1480,6 +1507,7 @@ export async function main(
       const args = ['issue', 'create', '-R', repo, '--title', title,
         '--label', 'review:pending', ...(t.verdict === 'pass' || t.verdict === 'concern' ? ['--label', `ai:${t.verdict}`] : []),
         ...(cl ? ['--label', cl] : []),
+        ...(t.skill ? ['--label', 'type:skill'] : []),
         ...(humanRequired(t) ? ['--label', 'review:human'] : []),
         '--body', issueBody(t, { repo, pagesBase, paused, compare: compareOf.get(issueTitle(t)) ?? null, assessments: assessments ?? null, flagContexts: flagContexts ?? null, deadCtx, deadDelta })]
       if (dry) { created.push(title); continue }
@@ -1509,6 +1537,11 @@ export async function main(
     const wantConcern = concernLabel(t)
     const staleConcern = [...curLabels].filter(l => l.startsWith('concern:') && l !== wantConcern)
     const missingConcern = wantConcern && !curLabels.has(wantConcern) ? wantConcern : null
+    // type:* labels follow the same drift rule — a contains/type change
+    // (or a hand-added label) converges; today only type:skill is minted
+    const wantType = t.skill ? 'type:skill' : null
+    const staleType = [...curLabels].filter(l => l.startsWith('type:') && l !== wantType)
+    const missingType = wantType && !curLabels.has(wantType) ? wantType : null
     // EVERY stuck verdict:* label folds into the body, not just the first —
     // verdict:blocked counts too: it means the last label attempt failed to
     // resolve (concern.yml already commented once, but the standing body is
@@ -1529,6 +1562,8 @@ export async function main(
     if (missingAi) edit.push('--add-label', missingAi)
     for (const l of staleConcern) edit.push('--remove-label', l)
     if (missingConcern) edit.push('--add-label', missingConcern)
+    for (const l of staleType) edit.push('--remove-label', l)
+    if (missingType) edit.push('--add-label', missingType)
     if (!curLabels.has('review:pending')) edit.push('--add-label', 'review:pending')
     // same drift rule as ai:* — a rescan clearing the flags (or a landing
     // human verdict) retires the human-only gate, so the label must follow
