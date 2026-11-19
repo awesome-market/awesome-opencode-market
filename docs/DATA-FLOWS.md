@@ -376,9 +376,21 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       npm 探活用**缩写 packument**（install-v1——只要存在性+dist.tarball，
       不拉全文档）
       **ruleset 周期重扫**（保留路径顺带）：槽位 rulesetVersion ≠ 当前 →
-      有界补扫（每轮 ≤20 个条目，npm 走 tarballOf、gh 走 HEAD tree+
+      有界补扫（代码默认 ≤20/轮，catalog.yml 传 CATALOG_RESCAN_BUDGET
+      默认 300——npm 走 tarballOf、gh 走 HEAD tree+
       codeload）——掉出发现窗口的老条目不会永远被退役规则审判；
-      失败保持可重试（undefined ruleset 恒旧），oversize 印记豁免
+      失败保持可重试（undefined ruleset 恒旧），oversize 印记豁免；
+      **重扫同闸插件形态否决**（pending 条目限定，与候选 worker 同判）：
+      展示槽本轮扫描成功 ∧ contains/type 领了 'plugin' ∧ 全包无插件形态
+      模块 ∧ 无 SKILL.md/GUI/.opencode-plugin 豁免 → npm skill-less 直接
+      filtered 立碑（rescanStaleNpm 返 null 落 gone-check 墓碑路），
+      含 SKILL.md 的双栖改写 contains 去 'plugin' 留 'skill'；github-kind
+      不立碑只改写 contains（与 ghWorker 诚实空 contains 同姿态）；
+      approved/legacy 展示版永不触碰——重扫重判的是已上架字节，
+      移除与否归人工 docket；扫描失败/缺席=缺席证据不否决。
+      `CATALOG_VETO_DRY_RUN=1`（repo var）或 `--veto-dry-run` 只报告不动手——
+      veto-report.json（catalog-out artifact）列出本轮 would-filter/
+      would-contains→ 全量名单，ruleset bump 清存量前先彩排一遍
       **integrity 漂移顺带检查**（缩写 packument 已带 integrityOf，零成本）：
       展示版锚点 ≠ registry 当前 sha → 冻结旧锚 + `sec:integrity-drift`
       redFlag；在押槽同规则但重锚到当次扫描实际覆盖的字节。掉出发现面的

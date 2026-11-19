@@ -47,6 +47,13 @@ export interface RunOptions {
    *  submissions.txt so the issue's status comment can explain WHY the
    *  package isn't queueing instead of leaving it 'queued' for 14 days */
   seedOutcomesPath?: string | undefined
+  /** shape-veto dry run (env CATALOG_VETO_DRY_RUN): pending kept-entries
+   *  that WOULD be tombstoned by the rescan plugin-shape gate are reported
+   *  but left untouched — preview the ruleset-sweep blast radius first */
+  vetoDryRun?: boolean | undefined
+  /** JSON audit of every shape-veto action this run (filtered tombstones,
+   *  contains rewrites, dry-run would-hits) — written whenever provided */
+  vetoReportPath?: string | undefined
 }
 
 export function loadOldIndex(path?: string): CatalogIndex | null {
@@ -1525,9 +1532,16 @@ export async function run(opts: RunOptions = {}) {
   // CATALOG_RESCAN_BUDGET lets a manual dispatch run a bulk sweep instead of
   // grinding through thousands of stale entries at 20/hour.
   let rescanBudget = Math.max(0, Number(process.env.CATALOG_RESCAN_BUDGET ?? 20) || 20)
+  // CATALOG_VETO_DRY_RUN=1 previews the pending shape-veto the rescan path
+  // applies (the kept-entry counterpart of the candidate-path gate) —
+  // report only, no tombstones, so a ruleset bump can be rehearsed first
+  const vetoDryRun = opts.vetoDryRun ?? /^(1|true)$/i.test(process.env.CATALOG_VETO_DRY_RUN ?? '')
+  const vetoReport: { name: string; version: string | null; kind: 'npm' | 'github'; action: string }[] = []
   const staleCaps = (c: PluginEntry['capabilities'] | undefined) =>
     c !== undefined && c.rulesetVersion !== RULESET_VERSION
-  const rescanStaleNpm = async (e: PluginEntry, pk: { tarballOf: Record<string, string | undefined>; integrityOf: Record<string, string | undefined> } | null): Promise<PluginEntry> => {
+  // returns null when the pending shape-veto refuses the entry — the
+  // caller (goneCheck) turns that into a 'filtered' tombstone
+  const rescanStaleNpm = async (e: PluginEntry, pk: { tarballOf: Record<string, string | undefined>; integrityOf: Record<string, string | undefined> } | null): Promise<PluginEntry | null> => {
     if (!pk) return e
     // candidateSlot: a pending entry's leftover hold is the B3 inverted
     // state — rescanning/drift-checking it burns budget on dead bytes and
@@ -1537,27 +1551,40 @@ export async function run(opts: RunOptions = {}) {
     let caps = e.capabilities
     let puCaps = pu?.capabilities
     let puScanned = false
+    // fresh-scan shape evidence for the DISPLAYED slot — the pending
+    // plugin-shape veto below consumes it (worker parity: a ruleset rescan
+    // must re-judge the plugin claim, not just refresh findings). null =
+    // scan didn't run/succeed → absent evidence, never a veto
+    let dispShape: { pluginModule: boolean; files: string[] } | null = null
     if (needScan && rescanBudget > 0) {
       rescanBudget--
-      const scanOf = async (ver: string | null, c: PluginEntry['capabilities']) => {
-        if (!staleCaps(c) || !ver) return c
+      const scanOf = async (ver: string | null, c: PluginEntry['capabilities']): Promise<{
+        caps: PluginEntry['capabilities']
+        shape: { pluginModule: boolean; files: string[] } | null
+      }> => {
+        if (!staleCaps(c) || !ver) return { caps: c, shape: null }
         const url = pk.tarballOf[ver]
-        if (!url) return c
+        if (!url) return { caps: c, shape: null }
         try {
           const r = await scanTarball(await fetchTarball(url, { fetchFn: f }))
           return {
-            scannedAt: now, rulesetVersion: RULESET_VERSION,
-            findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(c)])],
-            // union the persistent flags — sec:repo-recreated/sec-delta:* are
-            // re-derived by NO layer once repoId/findings converge (keepFlags)
-            redFlags: [...new Set([...r.redFlags.map(x => fmtFinding(x)), ...keepFlags(c)])],
+            caps: {
+              scannedAt: now, rulesetVersion: RULESET_VERSION,
+              findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(c)])],
+              // union the persistent flags — sec:repo-recreated/sec-delta:* are
+              // re-derived by NO layer once repoId/findings converge (keepFlags)
+              redFlags: [...new Set([...r.redFlags.map(x => fmtFinding(x)), ...keepFlags(c)])],
+            },
+            shape: { pluginModule: r.pluginModule, files: r.files },
           }
-        } catch { return c }
+        } catch { return { caps: c, shape: null } }
       }
-      caps = await scanOf(e.latestVersion, caps)
+      const dispScan = await scanOf(e.latestVersion, caps)
+      caps = dispScan.caps
+      dispShape = dispScan.shape
       if (pu) {
         const next = await scanOf(pu.version, puCaps!)
-        if (next !== puCaps) { puCaps = next; puScanned = true }
+        if (next.caps !== puCaps) { puCaps = next.caps; puScanned = true }
       }
     }
     // integrity drift check is free — the gone-probe already fetched pk, and
@@ -1578,10 +1605,45 @@ export async function run(opts: RunOptions = {}) {
     }
     const puChanged = pu !== null
       && (puCaps !== pu.capabilities || puIntegrity !== (pu.integrity ?? null))
+    // plugin-shape veto for PENDING kept entries — the same judgment the
+    // candidate worker applies to new packages: displayed bytes scanned,
+    // a 'plugin' part claimed (contains, or the type fallback), but no
+    // plugin-shaped module and no SKILL.md/GUI exemption → the claim is
+    // unsupported. A skill payload keeps an honest ['skill'] (worker
+    // parity — shapeless+skill is not a rejection); a skill-less shapeless
+    // pending entry is refused outright (null → 'filtered' tombstone).
+    // Approved/legacy displays are never touched: rescan re-judges bytes
+    // already on display, and those were admitted under older rules —
+    // removal decisions for them belong to the human docket, not a sweep.
+    let vetoContains: PluginEntry['contains'] | undefined
+    if (e.approval === 'pending' && dispShape && !dispShape.pluginModule
+        && !e.features?.includes('gui') && verifyPartsOf(e).includes('plugin')) {
+      const skillPaths = new Set(dispShape.files.map(f => f.replace(/^package\//, '')))
+      const kept = verifyPartsOf(e).filter(p => p !== 'plugin')
+      if (hasSkillPath(skillPaths)) {
+        if (!kept.includes('skill')) kept.push('skill')
+        vetoReport.push({ name: e.name, version: e.latestVersion, kind: 'npm', action: `${vetoDryRun ? 'would-' : ''}contains→[${kept.join(',')}]` })
+        console.log(`  shape-veto ${e.name}@${e.latestVersion}: plugin claim unsupported → contains [${kept.join(',')}]${vetoDryRun ? ' (dry-run)' : ''}`)
+        if (!vetoDryRun) vetoContains = kept
+      } else {
+        vetoReport.push({ name: e.name, version: e.latestVersion, kind: 'npm', action: `${vetoDryRun ? 'would-' : ''}filter` })
+        console.log(`  shape-veto ${e.name}@${e.latestVersion}: no plugin-shaped module → ${vetoDryRun ? 'WOULD filter (dry-run)' : 'filtered'}`)
+        if (!vetoDryRun) return null
+      }
+    }
     return {
       ...e, capabilities: dispA.capabilities, integrity: dispA.integrity,
+      ...(vetoContains !== undefined ? { contains: vetoContains } : {}),
       ...(pu && puChanged ? { pendingUpdate: { ...pu, capabilities: puCaps!, integrity: puIntegrity } } : {}),
     }
+  }
+  // rescanStaleNpm returns null on a pending shape-veto — the kept entry
+  // falls through to the 'filtered' tombstone below instead of surviving
+  const keepRescannedNpm = async (e: PluginEntry, pk: Parameters<typeof rescanStaleNpm>[1]) => {
+    const re = await rescanStaleNpm(e, pk)
+    if (re === null) return false
+    entries.push(re)
+    return true
   }
   const rescanStaleGh = async (e: PluginEntry, pushedAt: string | null): Promise<PluginEntry> => {
     // two triggers share the budget: a ruleset bump owes every kept entry a
@@ -1623,6 +1685,24 @@ export async function run(opts: RunOptions = {}) {
         if (repoPkg.pkg?.name && sub.pkg !== repoPkg.pkg.name)
           redFlags.push(`sec:repo-pkg-changed:${clip(repoPkg.pkg.name)}`)
       }
+      // plugin-shape honesty for PENDING kept repos — ghWorker parity: a
+      // 'plugin' contains claim needs plugin-shaped code unless explicit
+      // .opencode/plugin(s) artifact evidence or a GUI entrypoint stands.
+      // Fresh shapeless candidates are admitted with honest contains rather
+      // than tombstoned, so the keep-path rewrites the stale claim the same
+      // way — the entry itself always survives. Approved/legacy displays
+      // keep their claim: contains must not change under a live listing.
+      let vetoContains: PluginEntry['contains'] | undefined
+      if (e.approval === 'pending' && !r.pluginModule && !e.features?.includes('gui')
+          && verifyPartsOf(e).includes('plugin')
+          && ![...tree.paths].some(p => /(^|\/)\.opencode\/(plugin|plugins)\//.test(p))) {
+        const skillPaths = new Set([...tree.paths, ...r.files.map(strip)])
+        const kept = verifyPartsOf(e).filter(p => p !== 'plugin')
+        if (hasSkillPath(skillPaths) && !kept.includes('skill')) kept.push('skill')
+        vetoReport.push({ name: e.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}contains→[${kept.join(',') || 'none'}]` })
+        console.log(`  shape-veto ${e.name}: plugin claim unsupported → contains [${kept.join(',') || 'none'}]${vetoDryRun ? ' (dry-run)' : ''}`)
+        if (!vetoDryRun) vetoContains = kept
+      }
       // the pinned commit moved → the carried verification measured DIFFERENT
       // bytes. Reset to unverified so plan re-queues the new sha (merge's
       // samePinnedBytes gate can't help here — the stale status arrives
@@ -1634,10 +1714,11 @@ export async function run(opts: RunOptions = {}) {
       // (contains:[], or only command/agent/mcp parts) flipped to 'unverified'
       // sits "还没验" forever: verifyQueued requires plugin/skill parts, so
       // its prior status was the honest one
-      const ghParts = verifyPartsOf(e)
+      const ghParts = vetoContains ?? verifyPartsOf(e)
       const reverify = moved && (ghParts.includes('plugin') || ghParts.includes('skill'))
       return {
         ...e,
+        ...(vetoContains !== undefined ? { contains: vetoContains } : {}),
         capabilities: {
           scannedAt: now, rulesetVersion: RULESET_VERSION,
           // non-scan findings union back in (repo-mismatch/drift/delta signals
@@ -1693,8 +1774,8 @@ export async function run(opts: RunOptions = {}) {
           const evOk = full ? hasPluginEvidence({ name: full.name, keywords: full.keywords, main: full.main ?? undefined, exports: full.exports, readme: full.readme ?? undefined }).ok : null
           if (evOk === false && e.approval === 'pending') { reason = 'filtered' }
           else if (evOk === false) { entries.push({ ...e, capabilities: addFinding(e.capabilities, `sec:evidence-regressed@${pk?.latest ?? 'kept'}`) }); return }
-          else { entries.push(await rescanStaleNpm(e, pk)); return }
-        } else { entries.push(await rescanStaleNpm(e, pk)); return }
+          else if (await keepRescannedNpm(e, pk)) return
+        } else if (await keepRescannedNpm(e, pk)) return
       }
       reason = status === 'not-found' ? 'npm-404' : 'filtered'
     }
@@ -1758,6 +1839,14 @@ export async function run(opts: RunOptions = {}) {
   if (opts.seedOutcomesPath) {
     writeFileSync(opts.seedOutcomesPath, JSON.stringify(Object.fromEntries(seedOutcomes)))
     if (seedOutcomes.size) console.log(`seed outcomes: ${[...seedOutcomes].map(([k, v]) => `${k}→${v}`).join(', ')}`)
+  }
+
+  // shape-veto audit — every kept-entry plugin-shape action this run
+  // (filtered tombstones, contains rewrites, dry-run would-hits). Always
+  // written when a path is given so the artifact exists even when empty.
+  if (opts.vetoReportPath) {
+    writeFileSync(opts.vetoReportPath, JSON.stringify(vetoReport, null, 2))
+    if (vetoReport.length) console.log(`shape-veto report: ${vetoReport.length} action(s) → ${opts.vetoReportPath}`)
   }
 
   // metrics-history sidecar: snapshot {stars, npmDownloads30d} only on runs
@@ -1827,6 +1916,8 @@ if (isMain(import.meta.url)) {
     digestStatePath: arg('--digest-state'),
     seedOutcomesPath: arg('--seed-outcomes'),
     metricsHistPath: arg('--metrics-history'),
+    vetoReportPath: arg('--veto-report'),
+    ...(process.argv.includes('--veto-dry-run') ? { vetoDryRun: true } : {}),
     ...(process.argv.includes('--force-gate') ? { forceGate: true } : {}),
     ...(process.argv.includes('--fast-mature') ? { fastMatureAgeMs: GRANDFATHER_AGE_MS } : {}),
   }).catch(e => { console.error(e); process.exit(1) })

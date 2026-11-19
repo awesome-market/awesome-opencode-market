@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import type { CatalogIndex, PluginEntry } from '../src/schema.ts'
 import { unsafeRepoDir, fetchRepoPackageName, fetchRepoPackage } from '../pipeline/fetch/github.ts'
@@ -45,14 +45,23 @@ const idx = (plugins: PluginEntry[]): CatalogIndex => ({
   version: '1', generatedAt: '2026-01-01T00:00:00Z', categories: {}, plugins, removed: [],
 })
 
-function mkTgz(): Buffer {
+function mkTgzFiles(files: Record<string, string>): Buffer {
   const dir = tmp('fatgz-')
-  mkdirSync(join(dir, 'pkg'), { recursive: true })
-  writeFileSync(join(dir, 'pkg/package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
-  writeFileSync(join(dir, 'pkg/index.js'), 'export default { id: "p", setup() {} }')
+  const pkgDir = join(dir, 'pkg')
+  mkdirSync(pkgDir, { recursive: true })
+  writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: 'p', main: 'index.js' }))
+  for (const [p, content] of Object.entries(files)) {
+    const fp = join(pkgDir, p)
+    mkdirSync(dirname(fp), { recursive: true })
+    writeFileSync(fp, content)
+  }
   const out = join(dir, 'p.tgz')
   execFileSync('tar', ['-czf', out, '-C', dir, 'pkg'], { env: { ...process.env, COPYFILE_DISABLE: '1' } })
   return readFileSync(out)
+}
+
+function mkTgz(): Buffer {
+  return mkTgzFiles({ 'index.js': 'export default { id: "p", setup() {} }' })
 }
 
 const packument = (name: string, extra: Record<string, unknown> = {}) => JSON.stringify({
@@ -245,5 +254,132 @@ describe('mergeEntries: per-version restore requires byte-anchor agreement', () 
       verification: { status: 'unverified' as const } })
     const merged = mergeEntries([fresh], old, '2.3.0', RULESET_VERSION)
     expect(merged[0]!.verification.status).toBe('verified')
+  })
+})
+
+describe('gone-check rescan: pending plugin-shape veto', () => {
+  const SHAPELESS = 'module.exports = function cli() {}\n'
+  const PLUGIN_DEF = 'export default { id: "p", setup() {} }\n'
+  const SKILL_MD = '---\nname: demo\n---\n# demo\n'
+  const gonePack = (name: string, tarball = 'https://x/gone.tgz') =>
+    packument(name, { dist: { tarball, integrity: 'sha512-old' } })
+  const pendingEntry = (over: Partial<PluginEntry> = {}) => e({
+    approval: 'pending', contains: ['plugin'], verification: { status: 'unverified' },
+    capabilities: { scannedAt: 'old', rulesetVersion: 'r0', findings: [], redFlags: [] },
+    ...over,
+  })
+  const npmFetch = (goneTgz: Buffer | null) =>
+    baseFetch(mkTgz(), url => {
+      if (url.includes('registry.npmjs.org/gone-pkg')) return new Response(gonePack('gone-pkg'))
+      if (url.includes('x/gone.tgz')) {
+        return goneTgz ? new Response(new Uint8Array(goneTgz)) : mkRes({}, 404)
+      }
+      return null
+    })
+
+  it('npm pending + shapeless scan → filtered tombstone', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't' })
+    expect(out.plugins.some(p => p.name === 'gone-pkg')).toBe(false)
+    expect(out.removed.some(r => r.name === 'gone-pkg' && r.reason === 'filtered')).toBe(true)
+  })
+
+  it('npm pending + plugin-shaped scan → untouched, ruleset refreshed', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': PLUGIN_DEF })), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(p.capabilities.rulesetVersion).toBe(RULESET_VERSION)
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('npm pending + shapeless + SKILL.md → survives as contains:[skill]', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+    const tgz = mkTgzFiles({ 'index.js': SHAPELESS, 'skills/demo/SKILL.md': SKILL_MD })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(tgz), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['skill'])
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('vetoDryRun → entry kept unchanged, report lists would-filter', async () => {
+    const d = tmp('sv-')
+    const reportPath = join(d, 'veto.json')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't', vetoDryRun: true, vetoReportPath: reportPath })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+    const report = JSON.parse(readFileSync(reportPath, 'utf8')) as { name: string; action: string }[]
+    expect(report).toContainEqual(expect.objectContaining({ name: 'gone-pkg', kind: 'npm', action: 'would-filter' }))
+  })
+
+  it('npm approved + shapeless → display kept, contains unchanged', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([e({
+      name: 'gone-pkg', slug: 'gone-pkg', approval: 'approved', contains: ['plugin'],
+      capabilities: { scannedAt: 'old', rulesetVersion: 'r0', findings: [], redFlags: [] },
+    })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(mkTgzFiles({ 'index.js': SHAPELESS })), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('npm pending + tarball fetch failure → no veto (absent evidence)', async () => {
+    const d = tmp('sv-')
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({ name: 'gone-pkg', slug: 'gone-pkg' })])))
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: npmFetch(null), now: 't' })
+    const p = out.plugins.find(x => x.name === 'gone-pkg')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(p.capabilities.rulesetVersion).toBe('r0') // scan never succeeded — still stale
+    expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
+  })
+
+  it('github pending + shapeless → contains rewritten, entry survives', async () => {
+    const d = tmp('sv-')
+    const shapelessTgz = mkTgzFiles({ 'index.js': SHAPELESS })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'o/gh', slug: 'o/gh', latestVersion: null, contains: ['plugin'], features: ['server'],
+      source: { kind: 'github', id: 'o/gh', repo: 'o/gh', version: 'oldsha' },
+      integrity: null,
+    })])))
+    const f = baseFetch(mkTgz(), url => {
+      if (url.includes('api.github.com/repos/o/gh') && !url.includes('/git/trees/'))
+        return mkRes({ stargazers_count: 1, full_name: 'o/gh', default_branch: 'main' })
+      if (url.includes('/git/trees/'))
+        return mkRes({ tree: [{ path: 'package.json' }, { path: 'index.js' }], sha: 'newsha', truncated: false })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(shapelessTgz))
+      return null
+    })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.contains).toEqual([])
+    expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
+  })
+
+  it('github pending + .opencode/plugin evidence → contains kept', async () => {
+    const d = tmp('sv-')
+    const shapelessTgz = mkTgzFiles({ 'index.js': SHAPELESS })
+    writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
+      name: 'o/gh', slug: 'o/gh', latestVersion: null, contains: ['plugin'], features: ['server'],
+      source: { kind: 'github', id: 'o/gh', repo: 'o/gh', version: 'oldsha' },
+      integrity: null,
+    })])))
+    const f = baseFetch(mkTgz(), url => {
+      if (url.includes('api.github.com/repos/o/gh') && !url.includes('/git/trees/'))
+        return mkRes({ stargazers_count: 1, full_name: 'o/gh', default_branch: 'main' })
+      if (url.includes('/git/trees/'))
+        return mkRes({ tree: [{ path: '.opencode/plugin/x.ts' }, { path: 'package.json' }], sha: 'newsha', truncated: false })
+      if (url.includes('codeload.github.com')) return new Response(new Uint8Array(shapelessTgz))
+      return null
+    })
+    const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
+    const p = out.plugins.find(x => x.name === 'o/gh')!
+    expect(p.contains).toEqual(['plugin'])
+    expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
   })
 })
