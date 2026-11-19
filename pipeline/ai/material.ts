@@ -25,11 +25,11 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path'
 import { exit } from 'node:process'
 import { CatalogIndex } from '../../src/schema.ts'
-import { loadVerdicts } from '../verdicts.ts'
+import { loadVerdicts, candidateSlot } from '../verdicts.ts'
 import { isMain } from '../main-guard.ts'
 import {
   unreviewedTargets, reviewPin, reviewMaterial, contentMaterial, makePackumentOf,
-  materialFileName, type Material, type MaterialBundle,
+  materialFileName, flagLocations, type Material, type MaterialBundle,
 } from './diagnose.ts'
 
 const BUNDLE_CAP = 512 * 1024 // refuse to stage an oversized bundle — the daemon falls back to live collection
@@ -112,7 +112,8 @@ export async function main(argv: string[] = process.argv.slice(2),
       // a 'content-error' block (or a thrown failure) = degraded extraction —
       // distinct from an empty [] which is a legitimate "no whitelist files"
       // package. The flag keeps degraded builds out of the freshness check.
-      const content = await contentMaterial(e.name, pin, tarballUrl, deps.fetchFn, transportCap).catch(() => null)
+      const caps = candidateSlot(e)?.capabilities ?? e.capabilities
+      const content = await contentMaterial(e.name, pin, tarballUrl, deps.fetchFn, transportCap, flagLocations(caps)).catch(() => null)
       const degraded = content === null || content.some(b => b.id === 'content-error')
       const bundle: MaterialBundle = {
         name: e.name, version: pin, sourceSha: sha,

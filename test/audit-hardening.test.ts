@@ -545,3 +545,166 @@ describe('isStaleL05DocScore — pre-split doc concerns requeue', () => {
     expect(st('L0.5 命中注入信号（score 0.8 ≥ 0.662，块 content:README.md）', { source: 'human' })).toBe(false)
   })
 })
+
+describe('flagctx — scanner hits reach the judge with code context', () => {
+  const tarOf = async (files: Record<string, string>) => {
+    const { create } = await import('tar')
+    const { dirname } = await import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-flagctx-'))
+    const list: string[] = []
+    for (const [p, text] of Object.entries(files)) {
+      const fp = join(dir, p)
+      mkdirSync(dirname(fp), { recursive: true })
+      writeFileSync(fp, text)
+      list.push(p)
+    }
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, list)
+    return { tgz, fetchFn: (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch }
+  }
+
+  it('flagLocations parses rule:path — L<n>, dedupes, strips package/, redFlags first', async () => {
+    const { flagLocations } = await import('../pipeline/ai/diagnose.ts')
+    const locs = flagLocations({
+      redFlags: ['network-call:src/a.ts — L9: fetch(x)', 'network-call:src/a.ts — L9: fetch(x)'],
+      findings: ['child-process:package/dist/b.js — L3: spawn()', 'sec:identity-no-line', 'not-a-flag'],
+    })
+    expect(locs).toEqual([
+      { path: 'src/a.ts', line: 9, rule: 'network-call' },
+      { path: 'dist/b.js', line: 3, rule: 'child-process' },
+    ])
+  })
+
+  it('non-whitelisted flagged file yields flagctx windows incl. call-site expansion', async () => {
+    const { contentMaterial, flagLocations } = await import('../pipeline/ai/diagnose.ts')
+    // mimic opencode-zai-limits: execFile import early, sqlite3 -readonly
+    // call much later — the bare import line alone reads as exfiltration
+    const lines: string[] = []
+    for (let i = 1; i <= 80; i++) lines.push(`// filler ${i}`)
+    lines[4] = `import { execFile } from 'node:child_process';`                    // L5
+    lines[54] = `  execFile('sqlite3', ['-readonly', '-json', dbPath, sql], done)` // L55
+    const { fetchFn } = await tarOf({
+      'package/dist/utils/credentials.js': lines.join('\n'),
+      'package/SKILL.md': '# skill\nbenign',
+    })
+    const locs = flagLocations({ findings: [], redFlags: ['child-process:package/dist/utils/credentials.js — L5: import { execFile }'] })
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined, locs)
+    const blk = m.find(x => x.id === 'flagctx:dist/utils/credentials.js')
+    expect(blk).toBeTruthy()
+    expect(blk!.text).toContain('L5: import { execFile }')
+    expect(blk!.text).toContain("L55:   execFile('sqlite3'") // call-site expansion reached the real call
+    expect(blk!.scoreText).toBe('child-process:dist/utils/credentials.js')       // L0.5 sees rule:path, not code
+    expect(m.find(x => x.id === 'content:dist/utils/credentials.js')).toBeUndefined() // not whitelisted → no dup
+    // flagctx outranks whitelisted content in prompt order
+    expect(m.findIndex(x => x.id === 'flagctx:dist/utils/credentials.js'))
+      .toBeLessThan(m.findIndex(x => x.id === 'content:SKILL.md'))
+  })
+
+  it('whitelisted whole-file flagged member skips flagctx — content block already shows it', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { fetchFn } = await tarOf({ 'package/package.json': JSON.stringify({ name: 'p', scripts: { postinstall: 'node x.js' } }) })
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined,
+      [{ path: 'package.json', line: 7, rule: 'lifecycle-script' }])
+    expect(m.find(x => x.id.startsWith('flagctx:'))).toBeUndefined()
+    expect(m.find(x => x.id === 'content:package.json')).toBeTruthy()
+  })
+
+  it('flagged path absent from the tarball yields no flagctx block and no crash', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { fetchFn } = await tarOf({ 'package/index.js': 'export default {}' })
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined,
+      [{ path: 'ghost.js', line: 3, rule: 'child-process' }])
+    expect(m.find(x => x.id.startsWith('flagctx:'))).toBeUndefined()
+  })
+
+  it('stagedContentBlock keeps tarball-derived ids only', async () => {
+    const { stagedContentBlock } = await import('../pipeline/ai/diagnose.ts')
+    expect(stagedContentBlock('content:x.js')).toBe(true)
+    expect(stagedContentBlock('content-coverage')).toBe(true)
+    expect(stagedContentBlock('binary-manifest')).toBe(true)
+    expect(stagedContentBlock('flagctx:dist/x.js')).toBe(true)
+    expect(stagedContentBlock('manifest')).toBe(false)
+    expect(stagedContentBlock('finding:0:x')).toBe(false)
+    expect(stagedContentBlock('flag:1:y')).toBe(false)
+  })
+})
+
+describe('flagctx — bounds and edge cases', () => {
+  const tarOf = async (files: Record<string, string>) => {
+    const { create } = await import('tar')
+    const { dirname } = await import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-flagctx-b-'))
+    const list: string[] = []
+    for (const [p, text] of Object.entries(files)) {
+      const fp = join(dir, p)
+      mkdirSync(dirname(fp), { recursive: true })
+      writeFileSync(fp, text)
+      list.push(p)
+    }
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, list)
+    return { tgz, fetchFn: (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch }
+  }
+
+  it('disjoint windows in one file emit a … separator; overlapping flags merge', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const lines: string[] = []
+    for (let i = 1; i <= 200; i++) lines.push(`line ${i} ${'x'.repeat(10)}`)
+    const { fetchFn } = await tarOf({ 'package/src/a.ts': lines.join('\n') })
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined, [
+      { path: 'src/a.ts', line: 10, rule: 'child-process' },
+      { path: 'src/a.ts', line: 20, rule: 'child-process' },   // overlaps L10's window → merged
+      { path: 'src/a.ts', line: 150, rule: 'network-call' },   // disjoint → … separator
+    ])
+    const blk = m.find(x => x.id === 'flagctx:src/a.ts')!
+    expect(blk.text).toContain('L10:')
+    expect(blk.text).toContain('L20:')
+    expect(blk.text).toContain('L150:')
+    expect(blk.text).toContain('…')
+    // windows merged: L10±25 and L20±25 are contiguous → no separator inside
+    const firstSep = blk.text.indexOf('…')
+    expect(blk.text.slice(0, firstSep)).toContain('L35:') // L10 window reaches L35
+    expect(blk.text.slice(firstSep)).toContain('L125:')  // L150 window reaches back to L125
+    expect(blk.scoreText).toBe('child-process:src/a.ts network-call:src/a.ts')
+  })
+
+  it('distinct flagged paths cap at FLAGCTX_FILES', async () => {
+    const { contentMaterial, FLAGCTX_FILES } = await import('../pipeline/ai/diagnose.ts')
+    const files: Record<string, string> = {}
+    const locs = []
+    for (let i = 0; i < FLAGCTX_FILES + 2; i++) {
+      files[`package/src/f${i}.ts`] = `line1\nline2 execFile('x')\nline3`
+      locs.push({ path: `src/f${i}.ts`, line: 2, rule: 'child-process' })
+    }
+    const { fetchFn } = await tarOf(files)
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined, locs)
+    expect(m.filter(x => x.id.startsWith('flagctx:'))).toHaveLength(FLAGCTX_FILES)
+  })
+
+  it('flagged file containing NUL bytes is skipped (binary, not text)', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    const { create } = await import('tar')
+    const dir = mkdtempSync(join(tmpdir(), 'ct-flagctx-bin-'))
+    mkdirSync(join(dir, 'package'), { recursive: true })
+    writeFileSync(join(dir, 'package/blob.bin'), Buffer.from([0x41, 0x00, 0x42, 0x0a, 0x43]))
+    const tgz = join(dir, 'p.tgz')
+    await create({ gzip: true, file: tgz, cwd: dir }, ['package/blob.bin'])
+    const fetchFn = (async () => new Response(readFileSync(tgz))) as unknown as typeof fetch
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined,
+      [{ path: 'blob.bin', line: 2, rule: 'binary-blob' }])
+    expect(m.find(x => x.id.startsWith('flagctx:'))).toBeUndefined()
+  })
+
+  it('flagged line beyond the capture cap emits an honest truncation note', async () => {
+    const { contentMaterial } = await import('../pipeline/ai/diagnose.ts')
+    // >192KB file: flag sits past the buffered head — windows can't reach it
+    const lines: string[] = []
+    for (let i = 1; i <= 6000; i++) lines.push(`l${i} ${'y'.repeat(40)}`) // ~300KB total
+    const { fetchFn } = await tarOf({ 'package/big.js': lines.join('\n') })
+    const m = await contentMaterial('p', '1.0.0', 'https://r.test/p.tgz', fetchFn, undefined,
+      [{ path: 'big.js', line: 5999, rule: 'child-process' }])
+    const blk = m.find(x => x.id === 'flagctx:big.js')
+    expect(blk).toBeTruthy()
+    expect(blk!.text).toContain('捕获上限')
+  })
+})

@@ -195,11 +195,25 @@ user:   <data>
         - verify 结果（装得上/加载通/日志摘录）
         - 上下文信号：休眠 >30d 推版 / maintainer-changed / name-reused
         </data>
+        + flagctx:<path> 块——扫描命中行（finding/redFlag 的
+          rule:path — L<n>）±25 行代码窗口，同一趟 tarball 流解析顺手
+          捕获；import/require 型命中行还会展开到本文件首次调用点
+          （findCallSite），判官看到的是 execFile('sqlite3',[-readonly…])
+          这类真实调用而非孤立的 import 行。scoreText 只喂 L0.5
+          rule:path（代码窗口是 off-distribution 输入，同 finding 块处理）。
+          白名单内且 ≤32KB 整存的文件不再重复出 flagctx。
 ```
 
 不喂：描述、README、issue 散文、他人评论——残余注入只能藏代码行里且
 要先骗过机械规则；最坏回落基线。**超限包默认 concern**（审不完走保守）。
 **输出校验**：严格 JSON schema；非 pass 一律 concern；解析失败也 concern。
+
+system 侧附平台事实（opencode v2 契约）：provider.transform 的
+settings.apiKey 非空是「已配置凭据」信号、占位串正常（插件自带
+aisdk.hook 供 SDK）；读本机 opencode 凭据库调 provider 自家 API 是
+声明功能而非外泄（除非物料显示密钥发往无关目的地）；execFile/spawn
+走 argv 数组不算命令注入；物料未展示密钥去向/调用体时理由里须写明
+证据缺失，不得断言外泄或注入。
 
 **tarball sha 去重**：同内容重发/re-tag 跳过不重复审。
 
