@@ -130,7 +130,10 @@ jobs:
           # issues can't render file+code without it): 300/hr drains it in ~13h
           # instead of ~8 days at the default 20. vars override once caught up.
           CATALOG_RESCAN_BUDGET: ${{ vars.CATALOG_RESCAN_BUDGET || 300 }}
-        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}${{ inputs.fast_mature && ' --fast-mature' || '' }}
+          # '1'/'true' → pending shape-veto reports only, no tombstones —
+          # rehearse a ruleset sweep's blast radius before pulling the trigger
+          CATALOG_VETO_DRY_RUN: ${{ vars.CATALOG_VETO_DRY_RUN || '' }}
+        run: npx tsx pipeline/run.ts --out /tmp/index.json --old /tmp/old-index.json --seed /tmp/submissions.txt --blocklist /tmp/blocklist.json --verdicts /tmp/ai-verdicts.jsonl --digest-state /tmp/digest-state.json --seed-outcomes /tmp/seed-outcomes.json --metrics-history /tmp/metrics-history.json --veto-report /tmp/veto-report.json --max 2000${{ inputs.force_publish && ' --force-gate' || '' }}${{ inputs.fast_mature && ' --fast-mature' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: catalog-out
@@ -138,6 +141,7 @@ jobs:
             /tmp/index.json
             /tmp/seed-outcomes.json
             /tmp/metrics-history.json
+            /tmp/veto-report.json
           retention-days: 1
 
   publish:
