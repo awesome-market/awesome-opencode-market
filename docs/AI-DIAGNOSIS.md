@@ -471,12 +471,15 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   能解锁；失败记 `aiNote` 重试（预算 3，`<backend>-unavailable` 不计），
   inconclusive 维持 held。默认每 sweep `CONCERN_LOOK_LIMIT=5`。
   三个后端，`CONCERN_LOOK_BACKEND` 选择（默认 `oneshot`）：
-  - **`oneshot`**（默认，本地免费）：两轮制——planner（think 关）看
-    claim+物料+`unpkg ?meta` 文件清单，点名 ≤5 个最相关文件；管线
-    机械抓取（每文件 ≤6KB、共 ≤24KB）后 judge（think 开）一次出结论。
-    模型全程不碰网络/工具，无注入面；GitHub 条目无文件清单时退回
-    flagged 路径。代价：只追一跳、覆盖不如 agentic，疑难件会
-    inconclusive——但成本约为 agentic 的 1/10。
+  - **`oneshot`**（默认，本地免费）：最多三轮——tier-0 judge 只凭
+    物料做 claim-check（物料已含 flagctx 窗口），结论自洽
+    （unsupported+pass / supported+concern）即收工；混合信号或
+    inconclusive 才升级——planner（think 关）看 claim+物料+
+    `unpkg ?meta` 文件清单点名 ≤5 个文件，管线机械抓取（每文件
+    ≤6KB、共 ≤24KB）后 judge（think 开）出终判。模型全程不碰
+    网络/工具，无注入面；GitHub 条目无文件清单时退回 flagged
+    路径。代价：只追一跳、覆盖不如 agentic，疑难件会 inconclusive
+    ——但成本约为 agentic 的 1/10。
   - **`opencode`**：`opencode run --auto` agentic 会话，cwd 是空
     tmpdir + 专用 opencode.json 把 bash/edit/task/websearch 等全
     deny、`external_directory:deny`——agent 物理上只剩 GET-only 的

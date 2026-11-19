@@ -77,7 +77,7 @@ GALVANIZE_DIR=<L0.5 模型目录>           # REQUIRED——缺了 diagnose 直�
 | `FLAG_DELTA_LIMIT` | 30 | 每轮 flag-delta 判几条 |
 | `FLAG_CONTEXT_LIMIT` | 20 | 每轮 flag-context 预读几条 |
 | `CONCERN_LOOK_LIMIT` | 5 | 每轮 concern-look 二审几件（后端见 `CONCERN_LOOK_BACKEND`） |
-| `CONCERN_LOOK_BACKEND` | oneshot | `oneshot`=两轮制本地 Ornith（plan 选文件→机械抓取→judge，~分钟级/件，免费）；`opencode`=`opencode run --auto` agentic（权限锁死只剩 webfetch，~十分钟~半小时/件）；`devin`=`devin -p --sandbox`（最强沙箱，烧额度）。账号没钱时保持 oneshot/opencode |
+| `CONCERN_LOOK_BACKEND` | oneshot | `oneshot`=本地 Ornith 分档复审（tier-0 物料判→不自洽才 planner 选文件+机械抓取→judge，~分钟级/件，免费）；`opencode`=`opencode run --auto` agentic（权限锁死只剩 webfetch，~十分钟~半小时/件）；`devin`=`devin -p --sandbox`（最强沙箱，烧额度）。账号没钱时保持 oneshot/opencode |
 | `MARKET_PROXY` | 无 | 出站代理：`1080`/`ip:port`/`socks5://`/`http(s)://`。**刻意不读 `HTTP(S)_PROXY`**——本机死代理不能悄悄接管，未配置=纯直连 |
 | `MARKET_REPO` | 脚本所在 repo | 源码 checkout 路径 |
 | `DIAGNOSE_LEGACY` | 关 | 已无作用（v3.5 起 legacy 默认入队） |
@@ -119,8 +119,9 @@ cd <repo> && set -a && . ~/.config/opencode-market/ai.env && set +a
    `$STATED/flag-contexts.jsonl`
 4. **concern-look.ts**（`--limit 5`）：AI concern 槽的二审——把 concern
    指控交给第二审查者验证是否成立。默认 `oneshot` 后端：本地 Ornith
-   两轮制（planner 点名 ≤5 个文件 → 管线机械抓取 → judge 出结论），
-   模型不碰工具无注入面；`CONCERN_LOOK_BACKEND=opencode` 换 agentic
+   分档复审——先只凭物料判（tier-0），结论不自洽才 planner 点名 ≤5 个
+   文件→管线机械抓取→judge 终判；模型不碰工具无注入面；
+   `CONCERN_LOOK_BACKEND=opencode` 换 agentic
    （权限锁死的 opencode 会话，可多轮追证据）；`=devin` 换最强沙箱
    但烧额度。**只产 advisory 记录不产判词**，docket 渲染「AI 复审」行
    供人工参考 → `$STATED/concern-looks.jsonl`。后端不可用时记

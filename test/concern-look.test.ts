@@ -386,17 +386,48 @@ describe('docket 复审 rendering', () => {
 
 describe('oneshotLook', () => {
   const JUDGE_OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
-  const chatSeq = (plan: string, judge: string) => {
+  const INCONCLUSIVE = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+  // router: tier0 (material-only) → tier0Resp, planner (has file list) →
+  // planResp, final judge → judgeResp
+  const chatRouter = (plan: string, judge: string, tier0 = INCONCLUSIVE) => {
     const calls: { role: string; content: string }[][] = []
     const fn = async (msgs: { role: string; content: string }[]) => {
       calls.push(msgs)
-      return calls.length === 1 ? plan : judge
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY from the material above')) return tier0
+      if (u.includes('Package files:')) return plan
+      return judge
     }
     return { fn, calls }
   }
 
+  it('tier0 consistent verdict short-circuits — no plan, no fetch', async () => {
+    const { fn, calls } = chatRouter('{"fetch":[]}', JUDGE_OK, JUDGE_OK)
+    const fetched: string[] = []
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['src/client.js'],
+      fetchText: async (url) => { fetched.push(url); return 'x' },
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(calls).toHaveLength(1)
+    expect(fetched).toHaveLength(0)
+  })
+
+  it('tier0 mixed signal escalates to the fetch round', async () => {
+    const mixed = '{"claim_check":"unsupported","verdict_suggestion":"concern","reason_zh":"r","reason_en":"r"}'
+    const { fn, calls } = chatRouter('{"fetch":["src/client.js"]}', JUDGE_OK, mixed)
+    const fetched: string[] = []
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['src/client.js'],
+      fetchText: async (url) => { fetched.push(url); return 'export const x = 1' },
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(calls.length).toBeGreaterThanOrEqual(3)
+    expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
+  })
+
   it('plan → fetch → judge: fetched evidence reaches the judge prompt', async () => {
-    const { fn, calls } = chatSeq('{"fetch":["src/client.js"]}', JUDGE_OK)
+    const { fn, calls } = chatRouter('{"fetch":["src/client.js"]}', JUDGE_OK)
     const fetched: string[] = []
     const r = await oneshotLook(entry(), verdict(), '1.0.0', {
       chat: fn,
@@ -405,13 +436,13 @@ describe('oneshotLook', () => {
     })
     expect(r.resp?.claim_check).toBe('unsupported')
     expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
-    expect(calls).toHaveLength(2)
-    expect(calls[1]![1]!.content).toContain('[fetched src/client.js]')
-    expect(calls[1]![1]!.content).toContain('export const x = 1')
+    const judgeCall = calls[calls.length - 1]!
+    expect(judgeCall[1]!.content).toContain('[fetched src/client.js]')
+    expect(judgeCall[1]!.content).toContain('export const x = 1')
   })
 
   it('drops fetch picks outside the allowed set', async () => {
-    const { fn, calls } = chatSeq('{"fetch":["../etc/passwd","notreal.js","src/client.js"]}', JUDGE_OK)
+    const { fn, calls } = chatRouter('{"fetch":["../etc/passwd","notreal.js","src/client.js"]}', JUDGE_OK)
     const fetched: string[] = []
     await oneshotLook(entry(), verdict(), '1.0.0', {
       chat: fn,
@@ -419,12 +450,12 @@ describe('oneshotLook', () => {
       fetchText: async (url) => { fetched.push(url); return 'x' },
     })
     expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
-    expect(calls[1]![1]!.content).not.toContain('passwd')
+    expect(calls[calls.length - 1]![1]!.content).not.toContain('passwd')
   })
 
   it('empty file list falls back to flagged paths from capabilities', async () => {
     const e = entry({ capabilities: { scannedAt: 't', findings: ['network-call:src/net.js — L4: fetch(u)'], redFlags: [] } })
-    const { fn } = chatSeq('{"fetch":["src/net.js"]}', JUDGE_OK)
+    const { fn } = chatRouter('{"fetch":["src/net.js"]}', JUDGE_OK)
     const fetched: string[] = []
     const r = await oneshotLook(e, verdict(), '1.0.0', {
       chat: fn, listFiles: async () => [],
@@ -435,21 +466,458 @@ describe('oneshotLook', () => {
   })
 
   it('fetch failure skips the block; judge still runs on material alone', async () => {
-    const { fn, calls } = chatSeq('{"fetch":["src/gone.js"]}', JUDGE_OK)
+    const { fn, calls } = chatRouter('{"fetch":["src/gone.js"]}', JUDGE_OK)
     const r = await oneshotLook(entry(), verdict(), '1.0.0', {
       chat: fn, listFiles: async () => ['src/gone.js'],
       fetchText: async () => null,
     })
     expect(r.resp?.claim_check).toBe('unsupported')
-    expect(calls[1]![1]!.content).toContain('(no additional files fetched)')
+    expect(calls[calls.length - 1]![1]!.content).toContain('(no additional files fetched)')
   })
 
   it('unparseable judge output records parse-failed', async () => {
-    const { fn } = chatSeq('{"fetch":[]}', 'I cannot determine this.')
+    const { fn } = chatRouter('{"fetch":[]}', 'I cannot determine this.')
     const r = await oneshotLook(entry(), verdict(), '1.0.0', {
       chat: fn, listFiles: async () => [], fetchText: async () => null,
     })
     expect(r.resp).toBeNull()
     expect(r.note).toBe('parse-failed')
+  })
+})
+
+describe('ocTextOf', () => {
+  it('extracts text parts, skips noise lines and non-text events', async () => {
+    const { ocTextOf } = await import('../pipeline/ai/concern-look.ts')
+    const jsonl = [
+      '{"type":"step_start","part":{"type":"step-start"}}',
+      'plain noise line',
+      '{"type":"text","part":{"type":"text","text":"hello"}}',
+      '{"type":"text","part":{"type":"text"}}',
+      '',
+      '{"type":"text","part":{"type":"text","text":"world"}}',
+    ].join('\n')
+    expect(ocTextOf(jsonl)).toBe('hello\nworld')
+    expect(ocTextOf('')).toBe('')
+  })
+})
+
+describe('oneshotLook evidence plumbing', () => {
+  const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+  const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+  const router = (plan: string, judge: string, tier0 = J) => {
+    const calls: { role: string; content: string }[][] = []
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      calls.push(msgs)
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY from the material above')) return tier0
+      if (u.includes('Package files:')) return plan
+      return judge
+    }
+    return { fn, calls }
+  }
+
+  it('unpkg ?meta listing feeds the planner — code files only, no node_modules', async () => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      files: [{ path: '/src/a.ts' }, { path: '/node_modules/x/y.js' }, { path: '/README.md' }, { path: '/dist/b.js' }],
+    }))) as typeof fetch
+    try {
+      const { fn, calls } = router('{"fetch":[]}', OK)
+      await oneshotLook(entry(), verdict(), '1.0.0', { chat: fn, fetchText: async () => 'x' })
+      const plan = calls.find(c => c[1]!.content.includes('Package files:'))!
+      expect(plan[1]!.content).toContain('src/a.ts')
+      expect(plan[1]!.content).toContain('dist/b.js')
+      expect(plan[1]!.content).not.toContain('node_modules')
+      expect(plan[1]!.content).not.toContain('README.md')
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('github-source entries skip the file listing entirely', async () => {
+    const orig = globalThis.fetch
+    let hit = false
+    globalThis.fetch = (async () => { hit = true; return new Response('{}') }) as typeof fetch
+    try {
+      const gh = entry({ source: { kind: 'github', repo: 'a/b', version: 'deadbeef' } as never, capabilities: { scannedAt: 't', findings: ['network-call:src/n.js — L1: x'], redFlags: [] } })
+      const { fn, calls } = router('{"fetch":["src/n.js"]}', OK)
+      await oneshotLook(gh, verdict(), 'deadbeef', { chat: fn, fetchText: async () => 'x' })
+      expect(hit).toBe(false)
+      const plan = calls.find(c => c[1]!.content.includes('Package files:'))!
+      expect(plan[1]!.content).toContain('src/n.js')
+    } finally { globalThis.fetch = orig }
+  })
+
+  it('planner prose without a fetch array degrades to no picks', async () => {
+    const { fn, calls } = router('I think src/index.js looks important', OK)
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['src/index.js'], fetchText: async () => 'x',
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(calls[calls.length - 1]![1]!.content).toContain('(no additional files fetched)')
+  })
+
+  it('tier0 supported+concern also short-circuits (consistent pair)', async () => {
+    const sup = '{"claim_check":"supported","verdict_suggestion":"concern","reason_zh":"r","reason_en":"r"}'
+    const { fn, calls } = router('{"fetch":[]}', OK, sup)
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['a.js'], fetchText: async () => 'x',
+    })
+    expect(r.resp?.claim_check).toBe('supported')
+    expect(calls).toHaveLength(1)
+  })
+
+  it('tier0 unparseable output escalates instead of short-circuiting', async () => {
+    const { fn, calls } = router('{"fetch":["src/a.js"]}', OK, 'utter garbage')
+    const fetched: string[] = []
+    await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => ['src/a.js'],
+      fetchText: async (u) => { fetched.push(u); return 'x' },
+    })
+    expect(calls.length).toBeGreaterThanOrEqual(3)
+    expect(fetched.length).toBe(1)
+  })
+})
+
+describe('backend selection in main', () => {
+  it('oneshot backend without AI_MODEL records oneshot-unavailable', async () => {
+    const saved = process.env.AI_MODEL
+    delete process.env.AI_MODEL
+    process.env.CONCERN_LOOK_BACKEND = 'oneshot'
+    try {
+      const s = setup([entry()], [verdict()])
+      await lookMain([...args(s), '--limit', '3'])
+      const out = loadConcernLooks(s.spool)
+      expect(out[0]!.aiNote).toBe('oneshot-unavailable')
+      expect(out).toHaveLength(1)
+    } finally {
+      if (saved !== undefined) process.env.AI_MODEL = saved
+      delete process.env.CONCERN_LOOK_BACKEND
+    }
+  })
+
+  it('opencode backend name flows into the unavailable note', async () => {
+    process.env.CONCERN_LOOK_BACKEND = 'opencode'
+    try {
+      const s = setup([entry()], [verdict()])
+      await lookMain([...args(s), '--limit', '3'], { devinUp: async () => false })
+      expect(loadConcernLooks(s.spool)[0]!.aiNote).toBe('opencode-unavailable')
+    } finally { delete process.env.CONCERN_LOOK_BACKEND }
+  })
+})
+
+describe('deadLookKeys backend notes', () => {
+  it('oneshot-unavailable never counts toward the retry budget', () => {
+    const list = [0, 1, 2].map(() => look({ aiNote: 'oneshot-unavailable' }))
+    expect(deadLookKeys(list).size).toBe(0)
+  })
+})
+
+describe('opencodeLook transport', () => {
+  it('run mock returning JSONL events → ocTextOf → parsed verdict', async () => {
+    const { opencodeLook } = await import('../pipeline/ai/concern-look.ts')
+    const jsonl = [
+      '{"type":"text","part":{"type":"text","text":"working..."}}',
+      '{"type":"text","part":{"type":"text","text":"{\\"claim_check\\":\\"supported\\",\\"verdict_suggestion\\":\\"concern\\",\\"reason_zh\\":\\"r\\",\\"reason_en\\":\\"r\\"}"}}',
+    ].join('\n')
+    const r = await opencodeLook(entry(), verdict(), '1.0.0', { run: async () => jsonl })
+    expect(r.resp?.claim_check).toBe('supported')
+    expect(r.note).toBeUndefined()
+  })
+
+  it('unparseable agent output records parse-failed', async () => {
+    const { opencodeLook } = await import('../pipeline/ai/concern-look.ts')
+    const r = await opencodeLook(entry(), verdict(), '1.0.0', { run: async () => 'no json here' })
+    expect(r.resp).toBeNull()
+    expect(r.note).toBe('parse-failed')
+  })
+})
+
+describe('omlxChat transport via oneshotLook', () => {
+  it('default chat path posts to AI_BASE_URL chat/completions', async () => {
+    const savedM = process.env.AI_MODEL, savedB = process.env.AI_BASE_URL
+    process.env.AI_MODEL = 'test-model'
+    process.env.AI_BASE_URL = 'http://omlx.test/v1'
+    const orig = globalThis.fetch
+    const seen: string[] = []
+    globalThis.fetch = (async (url: unknown) => {
+      seen.push(String(url))
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}' } }] }))
+    }) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', { fetchText: async () => 'x' })
+      expect(r.resp?.claim_check).toBe('unsupported')
+      expect(seen).toEqual(['http://omlx.test/v1/chat/completions'])
+    } finally {
+      globalThis.fetch = orig
+      if (savedM === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = savedM
+      if (savedB === undefined) delete process.env.AI_BASE_URL; else process.env.AI_BASE_URL = savedB
+    }
+  })
+})
+
+describe('oneshotLook fetch-loop edges', () => {
+  const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+  const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+  const router = (plan: string, judge: string, tier0 = J) => {
+    const calls: { role: string; content: string }[][] = []
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      calls.push(msgs)
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY from the material above')) return tier0
+      if (u.includes('Package files:')) return plan
+      return judge
+    }
+    return { fn, calls }
+  }
+
+  it('entries with no resolvable version skip fetches (contextUrl null)', async () => {
+    const e = entry({ latestVersion: null, source: { kind: 'npm', id: 'pkg' } as never })
+    const { fn } = router('{"fetch":["ghost.js"]}', OK)
+    const fetched: string[] = []
+    const r = await oneshotLook(e, verdict(), null, {
+      chat: fn, listFiles: async () => ['ghost.js'],
+      fetchText: async (u) => { fetched.push(u); return 'x' },
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(fetched).toHaveLength(0)
+  })
+
+  it('total evidence cap stops later picks once 24KB is reached', async () => {
+    const files = ['a.js', 'b.js', 'c.js', 'd.js', 'e.js']
+    const plan = `{"fetch":[${files.map(f => `"${f}"`).join(',')}]}`
+    const { fn } = router(plan, OK)
+    const fetched: string[] = []
+    await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => files,
+      fetchText: async (u) => { fetched.push(u); return 'x'.repeat(7000) },
+    })
+    expect(fetched.length).toBeLessThanOrEqual(4)   // 4×6KB = 24KB cap
+    expect(fetched.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('devin backend model label', () => {
+  it('devin backend records the configured devin model name', async () => {
+    process.env.CONCERN_LOOK_BACKEND = 'devin'
+    try {
+      const s = setup([entry()], [verdict()])
+      await lookMain([...args(s), '--limit', '3'], {
+        devinUp: async () => true,
+        look: async () => ({ resp: { claim_check: 'supported', verdict_suggestion: 'concern', reason_zh: 'r', reason_en: 'r' }, raw: '' }),
+      })
+      const out = loadConcernLooks(s.spool)
+      expect(out[0]!.model).toBe('swe-2-flash-high')
+      expect(out[0]!.claimCheck).toBe('supported')
+    } finally { delete process.env.CONCERN_LOOK_BACKEND }
+  })
+})
+
+describe('omlxChat edge branches', () => {
+  const withEnv = async (fn: () => Promise<void>) => {
+    const savedM = process.env.AI_MODEL, savedB = process.env.AI_BASE_URL
+    process.env.AI_MODEL = 'm'; process.env.AI_BASE_URL = 'http://x/v1'
+    try { await fn() } finally {
+      if (savedM === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = savedM
+      if (savedB === undefined) delete process.env.AI_BASE_URL; else process.env.AI_BASE_URL = savedB
+    }
+  }
+  const chatStub = (content: string | null, ok = true) => {
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => ok
+      ? new Response(JSON.stringify({ choices: [{ message: { content } }] }))
+      : new Response('err', { status: 500 })) as typeof fetch
+    return () => { globalThis.fetch = orig }
+  }
+
+  it('non-OK response throws omlx <status>', () => withEnv(async () => {
+    const restore = chatStub(null, false)
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      await expect(oneshotLook(entry(), verdict(), '1.0.0', { fetchText: async () => 'x' }))
+        .rejects.toThrow('omlx 500')
+    } finally { restore() }
+  }))
+
+  it('empty content + think=false path (plan call) still flows', () => withEnv(async () => {
+    // tier0 → inconclusive, plan → think:false call returns empty content,
+    // judge → OK. Sequence keyed on call order.
+    const orig = globalThis.fetch
+    let n = 0
+    const bodies: Record<string, unknown>[] = []
+    globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+      n++
+      bodies.push(JSON.parse(init?.body ?? '{}'))
+      const content = n === 1
+        ? '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+        : n === 2 ? '' : '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }))
+    }) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+        listFiles: async () => [], fetchText: async () => null,
+      })
+      expect(r.resp?.claim_check).toBe('unsupported')
+      expect(bodies[1]!.chat_template_kwargs).toEqual({ enable_thinking: false })  // plan call
+      expect(bodies[0]!.chat_template_kwargs).toBeUndefined()                     // tier0 thinks
+    } finally { globalThis.fetch = orig }
+  }))
+})
+
+describe('pkgFileList edges', () => {
+  it('npm entry without any version yields empty file list', async () => {
+    const orig = globalThis.fetch
+    let hit = false
+    globalThis.fetch = (async () => { hit = true; return new Response('{}') }) as typeof fetch
+    try {
+      const e = entry({ latestVersion: null, source: { kind: 'npm', id: 'pkg' } as never })
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const J = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+      // tier0 consistent → short-circuit before listFiles; force escalation with inconclusive tier0
+      let n = 0
+      const fn = async (msgs: { role: string; content: string }[]) => {
+        n++
+        const u = msgs[1]!.content
+        if (u.includes('judge ONLY')) return '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+        return J
+      }
+      await oneshotLook(e, verdict(), null, { chat: fn, fetchText: async () => 'x' })
+      // pkgFileList ran (no listFiles opt) → hit fetch only if version existed; none → no hit
+      expect(hit).toBe(false)
+    } finally { globalThis.fetch = orig }
+  })
+})
+
+describe('real backend selection (oneshot end-to-end)', () => {
+  it('no deps.look + backend oneshot runs the real two-round path', async () => {
+    const savedM = process.env.AI_MODEL, savedB = process.env.AI_BASE_URL
+    process.env.AI_MODEL = 'm'; process.env.AI_BASE_URL = 'http://x/v1'
+    process.env.CONCERN_LOOK_BACKEND = 'oneshot'
+    const orig = globalThis.fetch
+    let n = 0
+    globalThis.fetch = (async (url: unknown) => {
+      const u = String(url)
+      if (u.includes('chat/completions')) {
+        n++
+        const content = n === 1
+          ? '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+          : '{"claim_check":"supported","verdict_suggestion":"concern","reason_zh":"r2","reason_en":"r2"}'
+        return new Response(JSON.stringify({ choices: [{ message: { content } }] }))
+      }
+      if (u.includes('?meta')) return new Response(JSON.stringify({ files: [{ path: '/a.js' }] }))
+      return new Response('file-body')
+    }) as typeof fetch
+    try {
+      const s = setup([entry()], [verdict()])
+      await lookMain([...args(s), '--limit', '3'])
+      const out = loadConcernLooks(s.spool)
+      expect(out).toHaveLength(1)
+      expect(out[0]!.claimCheck).toBe('supported')
+      expect(out[0]!.model).toBe('m')
+    } finally {
+      globalThis.fetch = orig
+      delete process.env.CONCERN_LOOK_BACKEND
+      if (savedM === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = savedM
+      if (savedB === undefined) delete process.env.AI_BASE_URL; else process.env.AI_BASE_URL = savedB
+    }
+  })
+})
+
+describe('coverage mop-up', () => {
+  it('deadLookKeys handles null-version records', () => {
+    const list = [look({ version: null as never, aiNote: 'judge-error:x' }),
+                  look({ version: null as never, aiNote: 'judge-error:x' }),
+                  look({ version: null as never, aiNote: 'judge-error:x' })]
+    expect(deadLookKeys(list).has('pkg\u0000')).toBe(true)
+  })
+
+  it('flagged locations with no resolvable URL render without link', async () => {
+    const e = entry({
+      latestVersion: null,
+      source: { kind: 'npm', id: 'pkg' } as never,
+      capabilities: { scannedAt: 't', findings: ['network-call:src/x.js — L1: fetch(u)'], redFlags: [] },
+    })
+    const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+    const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+    let sawPrompt = ''
+    await oneshotLook(e, { verdict: 'concern' }, null, {
+      chat: async (msgs) => { sawPrompt = msgs[1]!.content; return OK },
+      listFiles: async () => [], fetchText: async () => null,
+    })
+    expect(sawPrompt).toContain('network-call:src/x.js L1')
+    expect(sawPrompt).not.toContain('src/x.js L1 — http')   // flagged line carries no source URL
+  })
+
+  it('omlxChat throws when AI_MODEL unset', async () => {
+    const saved = process.env.AI_MODEL
+    delete process.env.AI_MODEL
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      await expect(oneshotLook(entry(), verdict(), '1.0.0', { fetchText: async () => 'x' }))
+        .rejects.toThrow('AI_MODEL unset')
+    } finally { if (saved !== undefined) process.env.AI_MODEL = saved }
+  })
+
+  it('omlxChat empty message content degrades to parse-failed', async () => {
+    const savedM = process.env.AI_MODEL, savedB = process.env.AI_BASE_URL
+    process.env.AI_MODEL = 'm'; process.env.AI_BASE_URL = 'http://x/v1'
+    const orig = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ choices: [{ message: {} }] }))) as typeof fetch
+    try {
+      const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+      const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+        listFiles: async () => [], fetchText: async () => null,
+      })
+      expect(r.resp).toBeNull()
+      expect(r.note).toBe('parse-failed')
+    } finally {
+      globalThis.fetch = orig
+      if (savedM === undefined) delete process.env.AI_MODEL; else process.env.AI_MODEL = savedM
+      if (savedB === undefined) delete process.env.AI_BASE_URL; else process.env.AI_BASE_URL = savedB
+    }
+  })
+
+  it('pkgFileList returns [] on HTTP error and on fetch throw', async () => {
+    const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+    const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+    const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+    const fn = async (msgs: { role: string; content: string }[]) =>
+      msgs[1]!.content.includes('judge ONLY') ? J : OK
+    for (const impl of [
+      (async () => new Response('no', { status: 404 })) as typeof fetch,
+      (async () => { throw new Error('net down') }) as typeof fetch,
+    ]) {
+      const orig = globalThis.fetch
+      globalThis.fetch = impl
+      try {
+        // no listFiles opt → real pkgFileList runs against the stubbed fetch
+        const r = await oneshotLook(entry(), verdict(), '1.0.0', { chat: fn, fetchText: async () => 'x' })
+        expect(r.resp?.claim_check).toBe('unsupported')
+      } finally { globalThis.fetch = orig }
+    }
+  })
+
+  it('parseFetchPlan caps at 5, dedupes, and drops traversal', async () => {
+    const { oneshotLook } = await import('../pipeline/ai/concern-look.ts')
+    const J = '{"claim_check":"inconclusive","verdict_suggestion":null,"reason_zh":"r","reason_en":"r"}'
+    const OK = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"r","reason_en":"r"}'
+    const files = ['a.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js', 'g.js']
+    const plan = `{"fetch":["a.js","a.js","../x.js","b.js","c.js","d.js","e.js","f.js","g.js"]}`
+    const calls: { role: string; content: string }[][] = []
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      calls.push(msgs)
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY')) return J
+      if (u.includes('Package files:')) return plan
+      return OK
+    }
+    const fetched: string[] = []
+    await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => files,
+      fetchText: async (u) => { fetched.push(u); return 'x' },
+    })
+    expect(fetched.length).toBe(5)                       // cap
+    expect(new Set(fetched).size).toBe(fetched.length)  // dedup
+    expect(fetched.every(u => !u.includes('x.js'))).toBe(true)  // no traversal escape... a.js contains 'x.js'? no
   })
 })
