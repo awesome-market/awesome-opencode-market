@@ -76,6 +76,7 @@ GALVANIZE_DIR=<L0.5 模型目录>           # REQUIRED——缺了 diagnose 直�
 | `DIAGNOSE_BUDGET` | 45 | 每轮 LLM 时间预算（分钟） |
 | `FLAG_DELTA_LIMIT` | 30 | 每轮 flag-delta 判几条 |
 | `FLAG_CONTEXT_LIMIT` | 20 | 每轮 flag-context 预读几条 |
+| `CONCERN_LOOK_LIMIT` | 5 | 每轮 concern-look agentic 二审几件（每件是一次沙箱 devin 会话，分钟级） |
 | `MARKET_PROXY` | 无 | 出站代理：`1080`/`ip:port`/`socks5://`/`http(s)://`。**刻意不读 `HTTP(S)_PROXY`**——本机死代理不能悄悄接管，未配置=纯直连 |
 | `MARKET_REPO` | 脚本所在 repo | 源码 checkout 路径 |
 | `DIAGNOSE_LEGACY` | 关 | 已无作用（v3.5 起 legacy 默认入队） |
@@ -115,9 +116,14 @@ cd <repo> && set -a && . ~/.config/opencode-market/ai.env && set +a
    文件 ±35 行发判官；lifecycle/pack/prepare 类 flag 还会顺命令抓被调
    脚本的入口区（`script` 字段记录解析到的叶子路径）→
    `$STATED/flag-contexts.jsonl`
-4. health 戳 → `diagnose-health.json` 推 catalog（CI watchdog 和日报读它）
-5. spool → catalog 分支推送（verdicts + flag-assessments + flag-contexts +
-   material-rm.list 一次 payload）
+4. **concern-look.ts**（`--limit 5`）：AI concern 槽的 agentic 二审——
+   `devin -p --sandbox` 会话可按域名白名单只读抓包源文件，验证 concern
+   指控本身是否成立。**只产 advisory 记录不产判词**，docket 渲染
+   「AI 复审」行供人工参考 → `$STATED/concern-looks.jsonl`。
+   需要本机 devin CLI + 沙箱可用；不可用时记 `devin-unavailable` 重试
+5. health 戳 → `diagnose-health.json` 推 catalog（CI watchdog 和日报读它）
+6. spool → catalog 分支推送（verdicts + flag-assessments + flag-contexts +
+   concern-looks + material-rm.list 一次 payload）
 
 所有 spool 都是「emit→落盘→推送成功才清」的持久化模型——推送失败下轮
 自动重放，不会丢判词也不会重复烧判官。
@@ -126,7 +132,7 @@ cd <repo> && set -a && . ~/.config/opencode-market/ai.env && set +a
 
 | 路径 | 内容 |
 |---|---|
-| `~/.local/share/opencode-market/` | STATED：`pending-verdicts.jsonl` / `flag-assessments.jsonl` / `flag-contexts.jsonl`（未推送 spool）、`diagnose-attempts.json`、`diagnose-sweep.stamp`、`diagnose-health.json`、`material-rm.list`、`diagnose.lock` |
+| `~/.local/share/opencode-market/` | STATED：`pending-verdicts.jsonl` / `flag-assessments.jsonl` / `flag-contexts.jsonl` / `concern-looks.jsonl`（未推送 spool）、`diagnose-attempts.json`、`diagnose-sweep.stamp`、`diagnose-health.json`、`material-rm.list`、`diagnose.lock` |
 | `~/.local/share/opencode-market-catalog/` | CAT：catalog 分支专属 worktree（判词/预读/health 的落点） |
 | `~/.local/share/opencode-market-code/` | CODE：钉在 origin/main 的代码 checkout（跑 pipeline 用，不碰开发工作区） |
 | `~/.local/share/opencode-market-catalog-digest/` + `-code-digest/` | publish-digest.sh 专属（不与 diagnose 共享 worktree，可并发） |
