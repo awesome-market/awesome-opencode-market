@@ -124420,8 +124420,13 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T12:46:20.750Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
+        "integrity": "aa54f6704d07fb25aad8bd096441ba33cfca611c",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -187493,7 +187498,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.814 ≥ 0.662，块 finding:1:network-call:install.sh — L102: command -v curl >/dev/null 2>&1 \\）；LLM 判 pass：该技能将用户输入视为数据而非指令（T2 测试专门防御内嵌注入），安装脚本仅从官方仓库拉取自身、无凭据外泄或恶意网络调用，且 manifest 描述与代码实际行为一致。"
+      "approvalReason": "L0.5 命中注入信号（score 0.814 ≥ 0.662，块 finding:1:network-call:install.sh — L102: command -v curl >/dev/null 2>&1 \\）；LLM 判 pass：该技能仅本地读取项目文件、将提示词作为数据处理而不执行，且显式避免写入机密，网络相关仅发现 curl 可用性检查与文档化的安装管道，描述准确。"
     },
     {
       "name": "engrtarun/opencode-model-badges",
@@ -272974,7 +272979,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.807 ≥ 0.662，块 finding:2:child-process:.opencode/tools/kodi_validate.ts — L3: import { spawn } from \"node）；LLM 判 pass：该包是合法的 Kodi 插件开发工具集，三个 child_process 导入仅用于调用通过显式配置的可信绝对路径运行已文档化的 kodi-toolkit CLI 命令，文档强调凭证与网络调用需保持独立，且 README 诚实地声明了未验证的运行时/自主能力，未发现提示注入、凭证外泄、恶意网络调用、混淆或夸大能力声明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.807 ≥ 0.662，块 finding:2:child-process:.opencode/tools/kodi_validate.ts — L3: import { spawn } from \"node）；LLM 判 pass：该包为 Kodi 加载项开发与离线验证工具集，扫描发现仅为子进程模块导入、无凭据外泄、无恶意网络调用、文档对能力局限声明诚实，且清单描述与 SKILL.md/CLI 代码功能一致。"
     },
     {
       "name": "mcp-weight",
@@ -335636,8 +335641,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "install",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T12:46:20.753Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/Mte90_opencode-auto-resume-35e56078cea1.log",
+        "logExcerpt": "NpmInstallFailedError: Failed to install Mte90/opencode-auto-resume#35e56078cea173a407f07993e2028f86499d4f73: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "integrity": "35e56078cea173a407f07993e2028f86499d4f73",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
@@ -342732,7 +342745,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.878 ≥ 0.662，块 finding:47:credential-read:scripts/__tests__/pre-tool-guard.test.mjs — L35: …esult = checkT）；LLM 判 concern：扫描结果0红旗且描述准确，但包体40MB超出内容提取上限，实际代码未被审查，仅能依赖元数据/扫描证据，且存在混淆代码，需人工复核。"
+      "approvalReason": "L0.5 命中注入信号（score 0.878 ≥ 0.662，块 finding:47:credential-read:scripts/__tests__/pre-tool-guard.test.mjs — L35: …esult = checkT）；LLM 判 concern：包内容提取因超时而失败，评审者无法查看任意被标记行（包括一个未展开的 obfuscation 发现）的真实源码，同时存在基于 eval 的代码执行面与向端点 POST 表单数据的网络调用，需人工核查。"
     },
     {
       "name": "@navopw/opencode-memory",
@@ -411021,12 +411034,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T10:47:45.884Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44508737115/job/135507369931",
+        "verifiedAt": "2026-11-19T12:46:20.746Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/oxdingzg_miao-1e9fa15735f9.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install oxdingzg/miao#1e9fa15735f9f6c885d00e3f3d1234c225a4b798: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring postinstall/prepare/workspaces makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "1e9fa15735f9f6c885d00e3f3d1234c225a4b798",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -520924,8 +520937,15 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T12:46:21.113Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/wangyufengsky_agent-workflow-93945e20e0a4.log",
+        "integrity": "93945e20e0a4fd5e3161b5fe8a3a74b96d0d47a8",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=24.19.0 <25"
@@ -541048,8 +541068,16 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "interactive",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-19T12:46:21.906Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/yriveiro_spectre-29e043161232.log",
+        "logExcerpt": "tre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/pr-canvas/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-attack-the-premise/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-boundary-discipline/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-build-the-lever/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-encode-lessons-in-structure/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-evidence/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-exhaust-the-design-space/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-experience-first/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-fix-root-causes/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-foundational-thinking/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-guard-the-context-window/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-hygiene/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-laziness-protocol/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-make-operations-idempotent/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-make-states-unrepresentable/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-migrate-callers-then-delete-legacy-apis/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-minimize-reader-load/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-model-the-domain/SKILL.md, spectre-29e0431612329b85cef04d6f0a726b736e90fdb6/skills/definitions/principle-never-block-on-the-human/SKILL.md)",
+        "integrity": "29e0431612329b85cef04d6f0a726b736e90fdb6",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "opencode >=2.3.0",
@@ -549071,11 +549099,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-19T12:37:37.358Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44525457919",
+        "verifiedAt": "2026-11-19T12:46:20.733Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44526739661/job/135569588458",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/zhitongblog_unterm-38014add6c88.log",
         "integrity": "38014add6c88ba0bf5769557a438ec1decb5c1d1",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
