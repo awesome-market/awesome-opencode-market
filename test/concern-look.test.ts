@@ -143,6 +143,20 @@ describe('parseLookOutput', () => {
     expect(parseLookOutput('no json here')).toBeNull()
     expect(parseLookOutput('{"foo":1}')).toBeNull()
   })
+
+  it('survives a stray "{" in prose AFTER the verdict object', () => {
+    // the model echoes claim vocabulary ("{id, setup}") in trailing prose —
+    // the last '{' is not always the verdict's opener
+    const out = '{"claim_check":"supported","verdict_suggestion":"concern","reason_zh":"入口缺 {id, setup} 契约","reason_en":"missing contract"}\n\nNote: this confirms the {id, setup} shape is absent.'
+    const r = parseLookOutput(out)
+    expect(r?.claim_check).toBe('supported')
+    expect(r?.verdict_suggestion).toBe('concern')
+  })
+
+  it('survives markdown fences around the object', () => {
+    const r = parseLookOutput('```json\n{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"ok","reason_en":"ok"}\n```')
+    expect(r?.claim_check).toBe('unsupported')
+  })
 })
 
 describe('main', () => {
@@ -482,6 +496,38 @@ describe('oneshotLook', () => {
     })
     expect(r.resp).toBeNull()
     expect(r.note).toBe('parse-failed')
+  })
+
+  it('judge parse failure triggers one corrective retry that can succeed', async () => {
+    let judgeCalls = 0
+    const fn = async (msgs: { role: string; content: string }[]) => {
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY from the material above')) return INCONCLUSIVE
+      if (u.includes('Package files:')) return '{"fetch":[]}'
+      judgeCalls++
+      // first judge reply: prose-wrapped garbage; the retry (4th message is
+      // the correction) gets clean JSON
+      return msgs.length > 2 ? JUDGE_OK : 'Let me think about this… {"claim_check":"unsupported"'
+    }
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => [], fetchText: async () => null,
+    })
+    expect(judgeCalls).toBe(2)
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(r.note).toBeUndefined()
+  })
+
+  it('double judge failure still records parse-failed', async () => {
+    const { fn, calls } = chatRouter('{"fetch":[]}', 'still not json')
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => [], fetchText: async () => null,
+    })
+    expect(r.resp).toBeNull()
+    expect(r.note).toBe('parse-failed')
+    // tier0 + plan + judge + corrective retry
+    expect(calls).toHaveLength(4)
+    // the retry shows the model its own bad output
+    expect(calls[3]!.some(m => m.role === 'assistant' && m.content === 'still not json')).toBe(true)
   })
 })
 
