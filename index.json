@@ -173419,12 +173419,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T10:19:16.904Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44718068124/job/136226685708",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -352805,7 +352805,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：所有子进程调用均使用数组形参数（无 shell 字符串，非命令注入），网络调用均发向用户配置的端点或提供商自有 API（插件声明功能），未发现凭据外泄、提示注入、混淆或夸大了实际功能的描述。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：扫描结果0个红旗，子进程调用均使用 argv 数组而非 shell 字符串，网络调用指向 GitHub/GitLab/Home Assistant 等自有 provider API，未见凭证被发送到无关目的地的证据，且 manifest 描述准确。"
     },
     {
       "name": "iron-horse-opencode",
@@ -398332,12 +398332,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.720Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T10:19:16.900Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44718068124/job/136226685708",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -415415,7 +415415,7 @@
         ],
         "integrity": "sha512-8k3ar1wZbavSc8Dp0ad5JI9VEBD1cjD4KRJHazZ5KaxuaCT4xibpO47kg5pk44h007jwEKaxFkrrl5pwk5ouyQ==",
         "publishedAt": "2026-11-20T09:24:18.782Z",
-        "reason": "awaiting-review",
+        "reason": "L0.5 命中注入信号（score 0.829 ≥ 0.662，块 flagctx:src/capabilities.ts）；LLM 判 pass：该包为正常的多智能体工作流编排插件，所有扫描命中（Bun.spawn 子进程调用、fetch 网络能力、base64 校验）均为其声明功能的合理实现，无凭证外泄、命令注入或混淆证据；manifest 描述准确对应代码。",
         "heldAt": "2026-11-20T09:45:16.739Z"
       }
     },
