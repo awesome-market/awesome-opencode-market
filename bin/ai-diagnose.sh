@@ -440,15 +440,16 @@ npx tsx pipeline/ai/flag-context.ts \
   --limit "${FLAG_CONTEXT_LIMIT:-20}" \
   || log "flag-context failed (non-fatal) — verdicts still push"
 
-# concern-look: agentic second-look on AI-concern slots — a sandboxed devin
-# session may fetch bounded package sources (domain allowlist, GET-only)
-# to verify the concern CLAIM the 32KB excerpt couldn't settle. Advisory
-# records only — never AiVerdicts, so they can't release anything.
+# concern-look: second-look on AI-concern slots — a bounded reviewer
+# (oneshot/opencode/devin backend) verifies the concern CLAIM the 32KB
+# excerpt couldn't settle. Look records stay advisory; ONLY a supported
+# claim also writes an ai-look:concern verdict into the verdicts spool —
+# terminal HOLD, never a release. --vspool rides the same push as verdicts.
 { cat "$CAT/concern-looks.jsonl" 2>/dev/null; cat "$LOOK_SPOOL" 2>/dev/null; } \
   | sort -u > "$VLOOK" 2>/dev/null || : > "$VLOOK"
 npx tsx pipeline/ai/concern-look.ts \
   --index "$CAT/index.json" --verdicts "$VVIEW" \
-  --looks "$VLOOK" --spool "$LOOK_SPOOL" \
+  --looks "$VLOOK" --spool "$LOOK_SPOOL" --vspool "$SPOOL" \
   --limit "${CONCERN_LOOK_LIMIT:-5}" \
   || log "concern-look failed (non-fatal) — verdicts still push"
 

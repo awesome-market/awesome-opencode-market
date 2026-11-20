@@ -1045,3 +1045,57 @@ describe('default fetchText HTTP failure', () => {
     } finally { globalThis.fetch = orig }
   })
 })
+
+describe('auto-resolve: supported claim writes ai-look:concern verdict', () => {
+  const SUP = '{"claim_check":"supported","verdict_suggestion":"concern","reason_zh":"实为默认导出工厂函数","reason_en":"default export is a factory"}'
+  const PASS = '{"claim_check":"unsupported","verdict_suggestion":"pass","reason_zh":"端点硬编码","reason_en":"hardcoded endpoint"}'
+
+  it('supported+concern → verdict lands in vspool as ai-look', async () => {
+    const s = setup([entry()], [verdict()])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ resp: { claim_check: 'supported', verdict_suggestion: 'concern', reason_zh: '实锤', reason_en: 'confirmed' }, raw: '' }),
+    })
+    const lines = readFileSync(vspool, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(lines).toHaveLength(1)
+    expect(lines[0].source).toBe('ai-look')
+    expect(lines[0].verdict).toBe('concern')
+    expect(lines[0].name).toBe('pkg')
+    expect(lines[0].reason).toContain('AI 二审坐实指控')
+  })
+
+  it('unsupported+pass → NO verdict written (release stays human-only)', async () => {
+    const s = setup([entry()], [verdict()])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ resp: { claim_check: 'unsupported', verdict_suggestion: 'pass', reason_zh: 'r', reason_en: 'r' }, raw: '' }),
+    })
+    expect(existsSync(vspool)).toBe(false)
+  })
+
+  it('inconclusive → NO verdict written', async () => {
+    const s = setup([entry()], [verdict()])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ resp: { claim_check: 'inconclusive', verdict_suggestion: 'concern', reason_zh: 'r', reason_en: 'r' }, raw: '' }),
+    })
+    expect(existsSync(vspool)).toBe(false)
+  })
+})
+
+describe('ai-look verdict semantics', () => {
+  it('latestHumanVerdicts brakes on ai-look:concern but never on ai-look:pass', async () => {
+    const { latestHumanVerdicts } = await import('../pipeline/verdicts.ts')
+    const { AiVerdict } = await import('../src/schema.ts')
+    const base = { name: 'p', version: '1.0.0', at: new Date().toISOString() }
+    const mk = (source: string, verdict: string) => AiVerdict.parse({ ...base, source, verdict })
+    const m = latestHumanVerdicts([
+      mk('ai-look', 'concern'), mk('ai-look', 'pass'), mk('ai', 'pass'),
+    ])
+    // ai-look:concern brakes; ai-look:pass and ai:pass do not
+    expect(m.get('p\u00001.0.0')?.verdict).toBe('concern')
+  })
+})

@@ -212,8 +212,11 @@ export const AiVerdict = z.looseObject({
    *  Offsets (+08:00) accepted — loadVerdicts normalizes to Z so akey/time
    *  compares stay lexicographic; rejecting offsets would drop the line. */
   at: z.iso.datetime({ offset: true }),
-  /** stamped by our writers, never by the model — AI can't forge 'human' */
-  source: z.enum(['ai', 'human']),
+  /** stamped by our writers, never by the model — AI can't forge 'human'.
+   *  'ai-look' = the concern-look second-look auto-resolved a supported
+   *  claim as concern: terminal HOLD only (never pass), provenance kept
+   *  honest — the record itself says a machine made the call. */
+  source: z.enum(['ai', 'human', 'ai-look']),
   /** sha of the reviewed tarball — same-sha re-tag/re-publish reuses the verdict */
   sha: z.string().optional(),
   /** reviewer model id — LEGACY field, parsed for existing records only:
@@ -233,7 +236,7 @@ export const AiVerdict = z.looseObject({
    *  ANOTHER version's verdict on identical bytes — which version, and whose
    *  call it was. Loose passthrough preserved it before; declared so the
    *  audit field is part of the schema contract. */
-  reusedFrom: z.looseObject({ version: z.string().nullable(), source: z.enum(['ai', 'human']) }).optional(),
+  reusedFrom: z.looseObject({ version: z.string().nullable(), source: z.enum(['ai', 'human', 'ai-look']) }).optional(),
   /** ai 'pass' that explicitly reviewed the slot's red flags — the release
    *  gate ignores ai passes on flagged slots UNLESS this marker says the
    *  model actually engaged the flag evidence (flags are always in the
