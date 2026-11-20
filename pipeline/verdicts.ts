@@ -132,10 +132,17 @@ export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdic
   const m = new Map<string, AiVerdict>()
   const now = Date.now()
   for (const v of verdicts) {
-    // 'ai-look' joins the brake layer ONLY in the hold direction — the
-    // concern-look second-look may auto-resolve supported claims to
-    // concern, but a pass from it must never count as decided here.
-    if (v.source !== 'human' && !(v.source === 'ai-look' && v.verdict === 'concern')) continue
+    // 'ai-look' joins the brake layer in the hold direction always, and in
+    // the release direction ONLY when the verdict itself carries the gate
+    // inputs: an evidence-backed (fetched-tier) dismissal of a mechanical
+    // claim — verify/install/contract claims judge mostly from the verify
+    // log, where package content has little injection surface. The brake
+    // re-verifies the fields rather than trusting the writer: an
+    // ai-look:pass missing any gate field is advisory forever.
+    const aiLookBrake = v.source === 'ai-look' && (v.verdict === 'concern'
+      || (v.verdict === 'pass' && v.lookCheck === 'unsupported'
+        && v.lookDepth === 'fetched' && v.claimClass === 'mechanical'))
+    if (v.source !== 'human' && !aiLookBrake) continue
     if (!rankable(v.at, now)) continue
     const k = vkey(v.name, v.version)
     const cur = m.get(k)
