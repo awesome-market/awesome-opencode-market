@@ -173843,12 +173843,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T09:11:57.865Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44708510664/job/136194273943",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -354008,7 +354008,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：所有网络调用均指向各自插件声明的提供商端点（GitHub/GitLab CLI、Home Assistant webhook），且使用用户自身凭据与 argv 数组调用子进程，manifest 与各 package.json 描述均准确对应代码行为，未出现凭证外发、注入、提示注入或混淆证据。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 concern：扫描证据（0红牌、子进程调用使用argv数组、网络调用指向已知厂商API、manifest描述为OpenCode插件monorepo）未显示注入/外泄/欺骗等安全问题，但包内容提取超时，实际代码未被查看，需人工复核。"
     },
     {
       "name": "iron-horse-opencode",
@@ -399594,12 +399594,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.720Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T09:11:57.858Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44708510664/job/136194273943",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
