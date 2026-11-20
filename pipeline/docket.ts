@@ -905,6 +905,17 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
           : '证据不足无法判定'
         const why = look.reasonZh ? `——${clean(look.reasonZh, 200)}` : ''
         L.push(`- 🔍 AI 复审（agentic 二审，${(look.at ?? '').slice(0, 10)}）：**${claim}** · 建议${sug}${why}——advisory 证据，放行仍需人工 verdict`)
+        // reviewer spot-check surface: which evidence tier answered and
+        // exactly which package files it pulled — one click opens the same
+        // bytes the judge saw. 'material' = tier-0 judged without new
+        // files — say so, that's a shallower signal to lean on
+        if (look.depth === 'material') {
+          L.push(`  ↳ 仅凭既有材料复核，未抓新文件——证据较浅`)
+        } else if (look.depth === 'fetched') {
+          const links = (look.fetched ?? []).map(x =>
+            `[${clean(x.path, 60)}](${x.url.replace(/\s|\(|\)/g, c => encodeURIComponent(c))})`)
+          L.push(`  ↳ 二审证据文件：${links.length ? links.join(' · ') : '（抓取轮未获得新文件）'}——点开可对照判词抽查`)
+        }
       }
     }
   }

@@ -376,6 +376,31 @@ describe('docket 复审 rendering', () => {
     expect(body).not.toContain('指控不成立')
   })
 
+  it('depth material renders the shallow-evidence label; fetched renders spot-check links', () => {
+    const mat = issueBody(target, {
+      concernLooks: looks(look({ name: 'pkg', depth: 'material' })),
+    })
+    expect(mat).toContain('仅凭既有材料复核')
+    expect(mat).not.toContain('二审证据文件')
+    const fet = issueBody(target, {
+      concernLooks: looks(look({
+        name: 'pkg', depth: 'fetched',
+        fetched: [
+          { path: 'src/client.js', url: 'https://unpkg.com/pkg@1.0.0/src/client.js' },
+          { path: 'dist/index.js', url: 'https://unpkg.com/pkg@1.0.0/dist/index.js' },
+        ],
+      })),
+    })
+    expect(fet).toContain('二审证据文件')
+    expect(fet).toContain('[src/client.js](https://unpkg.com/pkg@1.0.0/src/client.js)')
+    expect(fet).toContain('[dist/index.js](https://unpkg.com/pkg@1.0.0/dist/index.js)')
+    // a fetched round that pulled nothing still says so honestly
+    const empty = issueBody(target, {
+      concernLooks: looks(look({ name: 'pkg', depth: 'fetched' })),
+    })
+    expect(empty).toContain('抓取轮未获得新文件')
+  })
+
   it('no look record → no 复审 line; pass verdict → no 复审 line', () => {
     expect(issueBody(target)).not.toContain('AI 复审')
     expect(issueBody({ ...target, verdict: 'pass' }, {
@@ -401,7 +426,7 @@ describe('oneshotLook', () => {
     return { fn, calls }
   }
 
-  it('tier0 consistent verdict short-circuits — no plan, no fetch', async () => {
+  it('tier0 consistent verdict short-circuits — no plan, no fetch, depth material', async () => {
     const { fn, calls } = chatRouter('{"fetch":[]}', JUDGE_OK, JUDGE_OK)
     const fetched: string[] = []
     const r = await oneshotLook(entry(), verdict(), '1.0.0', {
@@ -409,11 +434,13 @@ describe('oneshotLook', () => {
       fetchText: async (url) => { fetched.push(url); return 'x' },
     })
     expect(r.resp?.claim_check).toBe('unsupported')
+    expect(r.depth).toBe('material')
+    expect(r.fetched).toBeUndefined()
     expect(calls).toHaveLength(1)
     expect(fetched).toHaveLength(0)
   })
 
-  it('tier0 mixed signal escalates to the fetch round', async () => {
+  it('tier0 mixed signal escalates to the fetch round — depth fetched + spot-check urls', async () => {
     const mixed = '{"claim_check":"unsupported","verdict_suggestion":"concern","reason_zh":"r","reason_en":"r"}'
     const { fn, calls } = chatRouter('{"fetch":["src/client.js"]}', JUDGE_OK, mixed)
     const fetched: string[] = []
@@ -422,6 +449,8 @@ describe('oneshotLook', () => {
       fetchText: async (url) => { fetched.push(url); return 'export const x = 1' },
     })
     expect(r.resp?.claim_check).toBe('unsupported')
+    expect(r.depth).toBe('fetched')
+    expect(r.fetched).toEqual([{ path: 'src/client.js', url: 'https://unpkg.com/pkg@1.0.0/src/client.js' }])
     expect(calls.length).toBeGreaterThanOrEqual(3)
     expect(fetched).toEqual(['https://unpkg.com/pkg@1.0.0/src/client.js'])
   })
@@ -1083,6 +1112,21 @@ describe('auto-resolve: supported claim writes ai-look:concern verdict', () => {
       look: async () => ({ resp: { claim_check: 'inconclusive', verdict_suggestion: 'concern', reason_zh: 'r', reason_en: 'r' }, raw: '' }),
     })
     expect(existsSync(vspool)).toBe(false)
+  })
+
+  it('depth + fetched from the adapter land on the spool record', async () => {
+    const s = setup([entry()], [verdict()])
+    await lookMain([...args(s), '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({
+        resp: { claim_check: 'unsupported', verdict_suggestion: 'pass', reason_zh: 'r', reason_en: 'r' }, raw: '',
+        depth: 'fetched' as const,
+        fetched: [{ path: 'src/client.js', url: 'https://unpkg.com/pkg@1.0.0/src/client.js' }],
+      }),
+    })
+    const rec = JSON.parse(readFileSync(s.spool, 'utf8').trim())
+    expect(rec.depth).toBe('fetched')
+    expect(rec.fetched).toEqual([{ path: 'src/client.js', url: 'https://unpkg.com/pkg@1.0.0/src/client.js' }])
   })
 })
 
