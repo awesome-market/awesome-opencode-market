@@ -286,6 +286,24 @@ export async function opencodeLook(
 const ONESHOT_FETCH_CAP = 5          // files the planner may request
 const ONESHOT_FILE_CAP = 6 * 1024    // per fetched file
 const ONESHOT_TOTAL_CAP = 24 * 1024  // across all fetched files
+
+/** claim-class gate for auto-release: mechanical claims (verify/install
+ *  failures, contract shapes, host-CLI issues) judge mostly from the
+ *  verify log + manifest — little package-content injection surface, so
+ *  an evidence-backed dismissal may auto-release. Behavioral claims
+ *  (credentials/exfil/exec/network) judge from fetched package bytes —
+ *  exactly where an attacker would plant a persuasive comment — so they
+ *  stay human-judged forever. BEHAVIORAL WINS when both patterns match:
+ *  "verify failed because it exfils credentials" is a security claim;
+ *  a mechanical claim missed by the regex just costs a human look —
+ *  fail-safe in both directions. */
+const BEHAVIORAL_CLAIM = /凭据|密钥|令牌|口令|密码|外发|外泄|泄露|上传|回传|exfil|secret|credential|token|api[_-]?key|\.env|npmrc|password|exec|子进程|subprocess|spawn|eval\s*\(|进程|网络|联网|域名|端点|endpoint|telemetry|遥测|curl|wget|https?:\/\//i
+const MECHANICAL_CLAIM = /装测|安装失败|加载失败|无法加载|verify|install|structure|manifest|契约|entrypoint|默认导出|default export|setup 函数|no server|schema|ENOENT|缺失|缺少|不符合|解析失败/i
+const mechanicalClaim = (v: { reason?: string | undefined; reasonEn?: string | undefined }): boolean => {
+  const t = `${v.reason ?? ''} ${v.reasonEn ?? ''}`
+  if (BEHAVIORAL_CLAIM.test(t)) return false
+  return MECHANICAL_CLAIM.test(t)
+}
 const PLAN_SYSTEM = 'You are triaging a security-review second look. Given the claim under test and the package file list, reply with ONLY a JSON object {"fetch":["path/one.js","path/two.js"]} naming up to 5 package files whose contents would most directly confirm or refute the claim — entry points, files the claim names, likely callers/callees. No prose.'
 
 type ChatFn = (messages: { role: string; content: string }[], think: boolean) => Promise<string>
@@ -574,8 +592,7 @@ export async function main(
     appendFileSync(spoolPath!, `${JSON.stringify(rec)}\n`)
     // auto-resolve: a supported claim is terminal HOLD evidence — write an
     // ai-look:concern verdict so the slot leaves the human queue without a
-    // person clicking. HOLD direction only, ever: unsupported+pass stays
-    // advisory and still needs a human verdict to release.
+    // person clicking.
     if (vspoolPath && rec.claimCheck === 'supported' && rec.suggestion === 'concern') {
       const verdict = {
         name: w.e.name, version: w.ver, verdict: 'concern',
@@ -585,6 +602,25 @@ export async function main(
       }
       appendFileSync(vspoolPath, `${JSON.stringify(verdict)}\n`)
       console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → auto-held (ai-look:concern)`)
+    }
+    // gated auto-RELEASE: an evidence-backed dismissal of a MECHANICAL
+    // claim (verify/install/contract — the judge leans on the verify log,
+    // not on attacker-writable package prose) is strong enough to close
+    // the slot itself. The verdict carries the gate inputs so the brake
+    // layer re-verifies them independently — a pass missing any field
+    // stays advisory. Behavioral claims and material-tier dismissals
+    // never reach this: their evidence IS the attack surface.
+    if (vspoolPath && rec.claimCheck === 'unsupported' && rec.suggestion === 'pass'
+        && rec.depth === 'fetched' && mechanicalClaim(w.v)) {
+      const verdict = {
+        name: w.e.name, version: w.ver, verdict: 'pass',
+        reason: `AI 二审推翻机械类指控，自动结案放行（concern-look ${backendName}）：${rec.reasonZh ?? rec.reasonEn ?? 'claim unsupported'}`,
+        ...(rec.reasonEn ? { reasonEn: `AI second-look refuted a mechanical claim — auto-released (${backendName}): ${rec.reasonEn}` } : {}),
+        at: rec.at, source: 'ai-look',
+        lookCheck: 'unsupported', lookDepth: 'fetched', claimClass: 'mechanical',
+      }
+      appendFileSync(vspoolPath, `${JSON.stringify(verdict)}\n`)
+      console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → auto-released (ai-look:pass, mechanical)`)
     }
     wrote++
     console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → ${rec.claimCheck ?? 'fail'}${rec.suggestion ? ` (${rec.suggestion})` : ''}${note ? ` [${note}]` : ''}`)

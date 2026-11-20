@@ -1130,16 +1130,83 @@ describe('auto-resolve: supported claim writes ai-look:concern verdict', () => {
   })
 })
 
+describe('auto-release gate: mechanical claims only, fetched tier only', () => {
+  const MECH = { reason: '装测失败（verify load 级）：Plugin must export a default definition', reasonEn: 'verify load failed: missing default export' }
+  const deepPass = { resp: { claim_check: 'unsupported', verdict_suggestion: 'pass', reason_zh: '端点硬编码', reason_en: 'hardcoded' }, raw: '', depth: 'fetched' as const }
+
+  it('unsupported+pass + fetched + mechanical claim → ai-look:pass with gate fields', async () => {
+    const s = setup([entry()], [verdict(MECH)])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => deepPass,
+    })
+    const lines = readFileSync(vspool, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(lines).toHaveLength(1)
+    expect(lines[0].source).toBe('ai-look')
+    expect(lines[0].verdict).toBe('pass')
+    expect(lines[0].lookCheck).toBe('unsupported')
+    expect(lines[0].lookDepth).toBe('fetched')
+    expect(lines[0].claimClass).toBe('mechanical')
+  })
+
+  it('behavioral claim (default: credential exfil) → NO pass verdict even at fetched depth', async () => {
+    const s = setup([entry()], [verdict()])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => deepPass,
+    })
+    expect(existsSync(vspool)).toBe(false)
+  })
+
+  it('mechanical claim but material depth → NO pass verdict (shallow dismissal stays advisory)', async () => {
+    const s = setup([entry()], [verdict(MECH)])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ ...deepPass, depth: 'material' as const }),
+    })
+    expect(existsSync(vspool)).toBe(false)
+  })
+
+  it('mechanical claim but no depth (devin/opencode backend) → NO pass verdict', async () => {
+    const s = setup([entry()], [verdict(MECH)])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ resp: deepPass.resp, raw: '' }),
+    })
+    expect(existsSync(vspool)).toBe(false)
+  })
+})
+
 describe('ai-look verdict semantics', () => {
-  it('latestHumanVerdicts brakes on ai-look:concern but never on ai-look:pass', async () => {
+  it('latestHumanVerdicts brakes on ai-look:concern and on GATED ai-look:pass only', async () => {
     const { latestHumanVerdicts } = await import('../pipeline/verdicts.ts')
     const { AiVerdict } = await import('../src/schema.ts')
     const base = { name: 'p', version: '1.0.0', at: new Date().toISOString() }
-    const mk = (source: string, verdict: string) => AiVerdict.parse({ ...base, source, verdict })
-    const m = latestHumanVerdicts([
+    const mk = (source: string, verdict: string, extra: object = {}) =>
+      AiVerdict.parse({ ...base, source, verdict, ...extra })
+    // ungated ai-look:pass (no gate fields) — advisory only, never brakes
+    const m1 = latestHumanVerdicts([
       mk('ai-look', 'concern'), mk('ai-look', 'pass'), mk('ai', 'pass'),
     ])
-    // ai-look:concern brakes; ai-look:pass and ai:pass do not
-    expect(m.get('p\u00001.0.0')?.verdict).toBe('concern')
+    expect(m1.get('p\u00001.0.0')?.verdict).toBe('concern')
+    // gated ai-look:pass — carries the three gate fields → brakes like human
+    const m2 = latestHumanVerdicts([
+      mk('ai-look', 'pass', { lookCheck: 'unsupported', lookDepth: 'fetched', claimClass: 'mechanical' }),
+      mk('ai', 'concern'),
+    ])
+    expect(m2.get('p\u00001.0.0')?.verdict).toBe('pass')
+    // missing or wrong ANY gate field → advisory forever
+    for (const extra of [
+      { lookCheck: 'unsupported', lookDepth: 'fetched' },
+      { lookCheck: 'unsupported', claimClass: 'mechanical' },
+      { lookCheck: 'supported', lookDepth: 'fetched', claimClass: 'mechanical' },
+      { lookCheck: 'unsupported', lookDepth: 'material', claimClass: 'mechanical' },
+    ]) {
+      expect(latestHumanVerdicts([mk('ai-look', 'pass', extra)]).size).toBe(0)
+    }
   })
 })

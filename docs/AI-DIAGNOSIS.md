@@ -467,12 +467,20 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   判官只见 32KB 摘录，「证据不足」型 concern 需要追调用点/凭据去向；
   本 job 把同一指控交给第二审查者产出 `concern-looks.jsonl`
   （catalog 分支），docket 在 concern 单上渲染「AI 复审」advisory 行。
-  **放行方向永远 advisory**——unsupported+pass 建议仍需人工 verdict
-  才能 release；但 **supported+concern 会自动结案**：写一条
-  `source:'ai-look'` 的 concern verdict 进 verdicts spool（终局扣押，
-  永不放行），`latestHumanVerdicts` 把它并入刹车层（仅 concern 方向），
-  docket 行随之消失、issue drift 关闭。失败记 `aiNote` 重试（预算 3，
-  `<backend>-unavailable` 不计），inconclusive 维持 held。
+  两个方向都能自动结案，门槛不对称：
+  - **supported+concern → 自动扣押**：写 `source:'ai-look'` 的 concern
+    verdict 进 verdicts spool，`latestHumanVerdicts` 并入刹车层，
+    docket 行消失、issue drift 关闭。
+  - **unsupported+pass → 仅「机械类指控 + fetched 深度」自动放行**：
+    机械类（装测/契约/宿主 CLI——判词主要看 verify 日志与 manifest，
+    包内容注入面小）且二审真的抓了新证据（`depth:'fetched'`）时写
+    ai-look:pass verdict，附带 `lookCheck/lookDepth/claimClass`
+    三个门槛字段——刹车层消费端独立复核，缺任何字段的 ai-look:pass
+    永远只是 advisory。**行为类指控**（凭据/exfil/exec/网络——判词
+    全靠抓来的包字节，恰是注入最值钱的方向）与 `material` 浅层
+    复核一律维持人工。
+  失败记 `aiNote` 重试（预算 3，`<backend>-unavailable` 不计），
+  inconclusive 维持 held。
   默认每 sweep `CONCERN_LOOK_LIMIT=5`。
   三个后端，`CONCERN_LOOK_BACKEND` 选择（默认 `oneshot`）：
   - **`oneshot`**（默认，本地免费）：最多三轮——tier-0 judge 只凭
