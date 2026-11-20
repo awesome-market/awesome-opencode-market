@@ -29973,7 +29973,7 @@
         ],
         "integrity": "sha512-rnmZfLKlDgPPMzvEgT63SJB7kpE3c6dfRtw6thyFAsvEs4jRdQAduo9JQolGmGh9Rzl0Zt3aifWllWLUAdWocA==",
         "publishedAt": "2026-11-20T15:25:04.767Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:0:sec:repo-mismatch:oc-plugins）；LLM 判 pass：清单描述准确对应其本地 TPS 计量/直方图功能，README 明确声明“什么都不存储、什么都不离开本机”，所给材料中无任何网络调用、凭据读取、注入或外泄代码，唯一扫描发现是低危的仓库地址元数据不匹配且 redFlags=0。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:0:sec:repo-mismatch:oc-plugins）",
         "heldAt": "2026-11-20T15:30:45.918Z"
       }
     },
@@ -47926,7 +47926,7 @@
         ],
         "integrity": "sha512-lzuEogH+3dbtaqtnLKvjWltjUh9xmGs+JN346VQ1prGwpLU7nFuo0bEREgZ3es3h4TKCw8cmTdgQp9YuPqzwTA==",
         "publishedAt": "2026-11-20T17:48:34.768Z",
-        "reason": "awaiting-review",
+        "reason": "L0.5 命中注入信号（score 0.911 ≥ 0.662，块 flagctx:src/init/detect.ts）；LLM 判 pass：未发现安全 Concern：子进程调用均使用 argv 数组（非 shell 字符串），唯一网络调用是本地 127.0.0.1 的内存查看器服务器（仅读取本地文件、loopback 开放、非回环绑定需 token），无任何凭证外泄或 prompt 注入证据，manifest 描述与代码功能一致。",
         "heldAt": "2026-11-20T17:59:36.912Z"
       }
     },
@@ -68094,7 +68094,7 @@
         "engines": "node ^22.13.0 || ^24.3.0 || ^26.0.0 || >=27.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install alvarolorentedev/opencode-mobile#9f297787c0ab51d1fac9433ec6aa9ef852b7c018: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install alvarolorentedev/opencode-mobile#56590fa521536111a0d4cafa4e95b36ad88a39b0: git dep preparation failed"
     },
     {
       "name": "alvaroofernaandez/dotfiles",
@@ -170544,7 +170544,13 @@
         "skillPayload": false
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T18:59:01.448Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44797723053/job/136501759736",
+        "integrity": "sha512-b35OSTBSwVcrPb2mutJio3O9OHFb7ExMtclku6fhoxn/+RXq8wcLFeX0zpmjuBTP9+RgYTUKkZc+oAfTqEVSjw==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=22.12",
@@ -196678,7 +196684,7 @@
         "peer": "effect@^4.0.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])"
     },
     {
       "name": "opencode-choose-directory",
@@ -220966,7 +220972,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-history#4ca311108ac47f6498cf0923a9dc953a00a84d66: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-history#efdfa1f2e6732d805eefa1312e22774e78fd4e63: git dep preparation failed"
     },
     {
       "name": "joe-broadhead/opencode-inference",
@@ -221210,7 +221216,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-jobs#488acda04335a6607e5511c070fe3f2e5448b007: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe-broadhead/opencode-jobs#43129cb383bf564aa57dc0f99e9aaa198fc60bda: git dep preparation failed"
     },
     {
       "name": "joe-broadhead/opencode-linear",
@@ -371508,12 +371514,17 @@
         "skillPayload": true
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T18:59:01.021Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44797723053/job/136501759736",
+        "integrity": "2e6f06529626f37e55604466c838f1b1f99ff401",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：清单描述为空（仅 'raulfdeztdo/epg: ' 后无任何内容），属于占位/无效文本，未说明该包的实际功能。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "raultov/opencode-moa-fusion",
@@ -376302,7 +376313,7 @@
         "engines": "node >=18.0.0"
       },
       "approval": "pending",
-      "approvalReason": "对账：版本级担忧涉及整包为完整Convex应用、清单为空且含未核实字面IP与base64 blob等未逐行审查的全局风险，而仅限三行 benign 的静态审查无法覆盖。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "ri0977-code/opencode-work-record-skills",
@@ -445135,7 +445146,7 @@
         ],
         "integrity": "sha512-g9blI5/KJMpZp5jy2efMOkN5PFPd22M2tw4Kz8cv9M0YQNM4gDxkkIf7xdbL0tzJ9W3UTF4tV57kxtjUVZj3ig==",
         "publishedAt": "2026-11-20T17:40:44.038Z",
-        "reason": "机械红旗待人工：prepare-script:package/package.json — L19: \"prepare\": \"lefthook install\",",
+        "reason": "awaiting-review",
         "heldAt": "2026-11-20T17:27:14.679Z"
       }
     },
@@ -463493,7 +463504,7 @@
         "peer": "@opencode/theme@>=2.3.0, @opentui/core@>=0.8.4, @opentui/solid@>=0.8.4, effect@^4.0.0, solid-js@>=1.9.12"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify interactive 级）：tre-7407f32f266e10065148ea510af8407396c9477c/skills/definitions/pr-canvas/SKILL.md, spectre-7407f32f266e10065148ea510af8407396c9477c/skills/definitions/principle-attack-the-premise/SKILL.md, spectre-7407f32f266e10065148ea510af8407396c9477c/skills/definitions/principle-boundary-discipline/SKILL.md, s"
+      "approvalReason": "装测失败（verify interactive 级）：tre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/pr-canvas/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-attack-the-premise/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-boundary-discipline/SKILL.md, s"
     },
     {
       "name": "opencode-codex-websearch",
