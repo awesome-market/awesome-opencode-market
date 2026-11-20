@@ -36333,7 +36333,7 @@
         "engines": "node >=24"
       },
       "approval": "pending",
-      "approvalReason": "机械红旗待人工：credential-read:package/dist/plugin.js — L8987: return { text: fs5.readFileSync(path7.join(home, \".ssh\", \"config\"), \"utf8\"), home };"
+      "approvalReason": "红旗在案，AI 判 concern：该插件读取 ~/.ssh/config 并返回其内容，同时构造 curl 命令字符串与 base64 解码，但材料未显示这些数据的去向或命令是否被执行，无法排除凭据外泄或注入风险。"
     },
     {
       "name": "@wwkit/harness",
@@ -68445,7 +68445,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "扫描发现 install.sh 使用 curl 从 GitHub 下载并执行脚本，且内容提取失败、证据不全，无法确认其下载内容是否安全。"
+      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 concern：可见内容（agent 配置、install.sh 仅拉取自作者 own repo 的 binary、verify_keyboard 仅读 DOM 属性、spawn 用法未展示）未发现凭证外泄、注入或混淆，但 101 个文件超出预算未被评审，扫描报告已明确将其标注为需人工注意的可疑信号。"
     },
     {
       "name": "alvarorojasdev/ai-dev-setup",
@@ -70496,7 +70496,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：内容提取失败（fetch 报错），无法查看实际代码，而安装时执行的 prepare 脚本、多个目的地不明的网络 fetch 以及 OS keychain 读取均未被验证，且 scan 仍有 8 个红旗未解决，需人工复核。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "amplifthq/openmeld",
@@ -89023,7 +89023,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "包内容因超时无法提取，且manifest为与代码无关的空洞营销话术，无法确认实际行为。"
+      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容提取因超时失败、静态扫描从未运行，且清单只是与代码无关的空洞营销话术，无法确认实际行为，需人工介入审查。"
     },
     {
       "name": "autopus-ai/autopus-adk",
@@ -137328,12 +137328,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T01:50:57.869Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44656445319/job/136023972652",
+        "verifiedAt": "2026-11-20T02:05:28.763Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44658172278/job/136029683206",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/dceoy_opencode-action-16bdedcda57b.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: dceoy/opencode-action#16bdedcda57b69ed760e75557a0be5736b083267\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "16bdedcda57b69ed760e75557a0be5736b083267",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -169600,7 +169600,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "扫描仅给出带裁剪的代码片段，但content-error显示包内容提取失败，实际代码不可见，需人工留意。"
+      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：manifest 描述为空（仅包名、无任何说明），且包内容提取因超时而失败，实际代码从未被审查，仅能依赖扫描元数据（均为相对 API 请求、localhost 调试、Firestore 部署脚本等，0 红旗），无法确认该包实际行为。"
     },
     {
       "name": "florianilch/opencode-llamacpp-provider",
@@ -423186,12 +423186,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T01:50:58.860Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44656445319/job/136023972652",
+        "verifiedAt": "2026-11-20T02:05:28.766Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44658172278/job/136029683206",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/terry2010_opencode-loop-recover-caafd77ba98b.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install terry2010/opencode-loop-recover#caafd77ba98b95314585587c4ba7d65bbc012772: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "caafd77ba98b95314585587c4ba7d65bbc012772",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
