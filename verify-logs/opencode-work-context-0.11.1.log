@@ -1,0 +1,60 @@
+spec: opencode-work-context@0.11.1
+apiNames: opencode-work-context
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-dVDbAh/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:46603
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-20T19:21:39.850Z level=INFO run=075c94b9 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"opencode-work-context@0.11.1\"]" role=cli
+timestamp=2026-11-20T19:21:48.465Z level=INFO run=3cc58147 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-20T19:21:48.863Z level=INFO run=3cc58147 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-20T19:21:48.972Z level=INFO run=3cc58147 message="database schema bootstrap completed" migrations=62 durationMs=109 role=server
+timestamp=2026-11-20T19:21:49.552Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/.config/opencode type=directory ignores=6 http.span=57 role=server
+timestamp=2026-11-20T19:21:49.558Z level=INFO run=3cc58147 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=63 role=server
+timestamp=2026-11-20T19:21:49.559Z level=INFO run=3cc58147 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=64 role=server
+timestamp=2026-11-20T19:21:49.560Z level=INFO run=3cc58147 message="watcher subscribe" path=/ type=entries ignores=0 http.span=65 role=server
+timestamp=2026-11-20T19:21:49.560Z level=INFO run=3cc58147 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=65 role=server
+timestamp=2026-11-20T19:21:49.560Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=65 role=server
+timestamp=2026-11-20T19:21:49.562Z level=INFO run=3cc58147 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-20T19:21:49.562Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-20T19:21:49.562Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh type=entries backend=node ignores=0 http.span=67 role=server
+timestamp=2026-11-20T19:21:49.562Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u type=entries ignores=0 http.span=67 role=server
+timestamp=2026-11-20T19:21:49.563Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u type=entries backend=node ignores=0 http.span=68 role=server
+timestamp=2026-11-20T19:21:49.597Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/.config/opencode type=directory backend=inotify ignores=6 http.span=102 role=server
+timestamp=2026-11-20T19:21:49.628Z level=INFO run=3cc58147 message="location services booted" directory=/tmp/verify-dVDbAh/u workspaceID=undefined durationMs=132 http.span=133 role=server
+timestamp=2026-11-20T19:21:49.658Z level=INFO run=3cc58147 msg="loading plugin" id=opencode-work-context@0.11.1 entrypoint=file:///tmp/verify-dVDbAh/u/cache/opencode/npm/opencode-work-context@0.11.1/1795202508182/node_modules/opencode-work-context/plugin/server.js http.span=163 role=server
+timestamp=2026-11-20T19:21:49.776Z level=WARN run=3cc58147 message="failed to load plugin" target=opencode-work-context@0.11.1 ref=err_fed94059 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"effect\"]\nMissing key\n  at [\"default\"][\"setup\"])))])" http.span=281 role=server
+timestamp=2026-11-20T19:21:51.086Z level=ERROR run=3cc58147 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1591 role=server
+timestamp=2026-11-20T19:21:51.119Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-20T19:21:51.120Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-20T19:21:51.120Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-20T19:21:51.120Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-20T19:21:51.121Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-20T19:21:51.121Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-20T19:21:51.121Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-20T19:21:51.171Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-20T19:21:51.172Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-20T19:21:51.183Z level=INFO run=3cc58147 message="watcher subscribe" path=/tmp/verify-dVDbAh/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-20T19:21:51.184Z level=INFO run=3cc58147 message="watcher started" path=/tmp/verify-dVDbAh/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-20T19:21:51.253Z level=INFO run=3cc58147 message=event event.id=evt_1fa687195001QwalusZ86pKWMj event.created=1795202511253 event.type=provider.updated event.location.directory=/tmp/verify-dVDbAh/u event.location.workspaceID=undefined event.data={} http.span=1758 role=server
+timestamp=2026-11-20T19:21:51.269Z level=INFO run=3cc58147 message=event event.id=evt_1fa6871a5001boCbNHZA1zl5oR event.created=1795202511269 event.type=model.updated event.location.directory=/tmp/verify-dVDbAh/u event.location.workspaceID=undefined event.data={} http.span=1774 role=server
+timestamp=2026-11-20T19:21:51.277Z level=INFO run=3cc58147 message=event event.id=evt_1fa6871ad001SEIcc9VR7KObUK event.created=1795202511277 event.type=agent.updated event.location.directory=/tmp/verify-dVDbAh/u event.location.workspaceID=undefined event.data={} http.span=1782 role=server
+timestamp=2026-11-20T19:21:51.277Z level=INFO run=3cc58147 message=event event.id=evt_1fa6871ad002cFEy2WD3AvP8y4 event.created=1795202511277 event.type=command.updated event.location.directory=/tmp/verify-dVDbAh/u event.location.workspaceID=undefined event.data={} http.span=1782 role=server
+timestamp=2026-11-20T19:21:51.569Z level=INFO run=3cc58147 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-20T19:21:51.569Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-20T19:21:51.569Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-20T19:21:51.575Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/CLAUDE.md type=file role=server
+timestamp=2026-11-20T19:21:51.575Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/AGENTS.md type=file role=server
+timestamp=2026-11-20T19:21:51.576Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-20T19:21:51.601Z level=INFO run=3cc58147 message="watcher stopped" path=/etc type=entries http.span=2106 role=server
+timestamp=2026-11-20T19:21:51.601Z level=INFO run=3cc58147 message="watcher stopped" path=/ type=entries http.span=2106 role=server
+timestamp=2026-11-20T19:21:51.601Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp type=entries http.span=2106 role=server
+timestamp=2026-11-20T19:21:51.601Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh type=entries http.span=2106 role=server
+timestamp=2026-11-20T19:21:51.601Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u type=entries http.span=2106 role=server
+timestamp=2026-11-20T19:21:51.606Z level=INFO run=3cc58147 message="watcher stopped" path=/tmp/verify-dVDbAh/u/.config/opencode type=directory http.span=2111 role=server
