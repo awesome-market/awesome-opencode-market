@@ -132,7 +132,11 @@ export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdic
   const m = new Map<string, AiVerdict>()
   const now = Date.now()
   for (const v of verdicts) {
-    if (v.source !== 'human' || !rankable(v.at, now)) continue
+    // 'ai-look' joins the brake layer ONLY in the hold direction — the
+    // concern-look second-look may auto-resolve supported claims to
+    // concern, but a pass from it must never count as decided here.
+    if (v.source !== 'human' && !(v.source === 'ai-look' && v.verdict === 'concern')) continue
+    if (!rankable(v.at, now)) continue
     const k = vkey(v.name, v.version)
     const cur = m.get(k)
     if (!cur || atCmp(v.at, cur.at) >= 0) m.set(k, v)
@@ -536,7 +540,7 @@ export interface SlotExplain {
   slot: 'displayed' | 'pendingUpdate'
   version: string | null
   verdict: 'pass' | 'concern' | null
-  source: 'ai' | 'human' | null
+  source: 'ai' | 'human' | 'ai-look' | null
   /** the winning line's `at` — what an announced/dedupe check keys on */
   at: string | null
   /** exact verdict line ∈ digest.announced — the maturity predicate */

@@ -467,9 +467,13 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   判官只见 32KB 摘录，「证据不足」型 concern 需要追调用点/凭据去向；
   本 job 把同一指控交给第二审查者产出 `concern-looks.jsonl`
   （catalog 分支），docket 在 concern 单上渲染「AI 复审」advisory 行。
-  **记录不是 AiVerdict**——二审 pass 建议永不放行，只有人工 verdict
-  能解锁；失败记 `aiNote` 重试（预算 3，`<backend>-unavailable` 不计），
-  inconclusive 维持 held。默认每 sweep `CONCERN_LOOK_LIMIT=5`。
+  **放行方向永远 advisory**——unsupported+pass 建议仍需人工 verdict
+  才能 release；但 **supported+concern 会自动结案**：写一条
+  `source:'ai-look'` 的 concern verdict 进 verdicts spool（终局扣押，
+  永不放行），`latestHumanVerdicts` 把它并入刹车层（仅 concern 方向），
+  docket 行随之消失、issue drift 关闭。失败记 `aiNote` 重试（预算 3，
+  `<backend>-unavailable` 不计），inconclusive 维持 held。
+  默认每 sweep `CONCERN_LOOK_LIMIT=5`。
   三个后端，`CONCERN_LOOK_BACKEND` 选择（默认 `oneshot`）：
   - **`oneshot`**（默认，本地免费）：最多三轮——tier-0 judge 只凭
     物料做 claim-check（物料已含 flagctx 窗口），结论自洽

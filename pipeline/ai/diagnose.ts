@@ -857,7 +857,7 @@ export async function omlxAlive(): Promise<boolean> {
 
 export function verdictRecord(
   e: CatalogIndex['plugins'][number], v: 'pass' | 'concern', reason: string,
-  extra: { sha?: string | undefined; reasonEn?: string | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' } | undefined; flagsReviewed?: boolean | undefined } = {},
+  extra: { sha?: string | undefined; reasonEn?: string | undefined; reusedFrom?: { version: string | null; source: 'ai' | 'human' | 'ai-look' } | undefined; flagsReviewed?: boolean | undefined } = {},
 ): AiVerdict {
   return {
     name: e.name,

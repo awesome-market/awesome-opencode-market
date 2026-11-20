@@ -471,7 +471,7 @@ function parseArgs(args: string[]) {
   const arg = (k: string) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined }
   return {
     idxPath: arg('--index'), verdictsPath: arg('--verdicts'),
-    looksPath: arg('--looks'), spoolPath: arg('--spool'),
+    looksPath: arg('--looks'), spoolPath: arg('--spool'), vspoolPath: arg('--vspool'),
     limit: Number(arg('--limit') ?? 10), dry: args.includes('--dry'),
     model: arg('--model') ?? arg('-m'), proxy: arg('--proxy') ?? arg('-p'),
   }
@@ -481,7 +481,7 @@ export async function main(
   args: string[] = process.argv,
   deps: { look?: typeof devinLook; devinUp?: () => Promise<boolean> } = {},
 ): Promise<void> {
-  const { idxPath, verdictsPath, looksPath, spoolPath, dry, limit, model, proxy } = parseArgs(args)
+  const { idxPath, verdictsPath, looksPath, spoolPath, vspoolPath, dry, limit, model, proxy } = parseArgs(args)
   installMarketProxy(proxy)
   const idx = CatalogIndex.parse(JSON.parse(readFileSync(idxPath!, 'utf8')))
   const queue = concernQueue(idx, verdictsPath!, looksPath)
@@ -544,6 +544,20 @@ export async function main(
         : (model ?? env.CONCERN_LOOK_MODEL ?? env.DEVIN_CONCERN_MODEL ?? 'swe-2-flash-high'),
     }
     appendFileSync(spoolPath!, `${JSON.stringify(rec)}\n`)
+    // auto-resolve: a supported claim is terminal HOLD evidence — write an
+    // ai-look:concern verdict so the slot leaves the human queue without a
+    // person clicking. HOLD direction only, ever: unsupported+pass stays
+    // advisory and still needs a human verdict to release.
+    if (vspoolPath && rec.claimCheck === 'supported' && rec.suggestion === 'concern') {
+      const verdict = {
+        name: w.e.name, version: w.ver, verdict: 'concern',
+        reason: `AI 二审坐实指控，自动结案扣押（concern-look ${backendName}）：${rec.reasonZh ?? rec.reasonEn ?? 'claim supported'}`,
+        ...(rec.reasonEn ? { reasonEn: `AI second-look confirmed the claim — auto-held (${backendName}): ${rec.reasonEn}` } : {}),
+        at: rec.at, source: 'ai-look',
+      }
+      appendFileSync(vspoolPath, `${JSON.stringify(verdict)}\n`)
+      console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → auto-held (ai-look:concern)`)
+    }
     wrote++
     console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → ${rec.claimCheck ?? 'fail'}${rec.suggestion ? ` (${rec.suggestion})` : ''}${note ? ` [${note}]` : ''}`)
   }
