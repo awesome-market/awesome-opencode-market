@@ -181857,7 +181857,7 @@
         "peer": "typescript@^5.9.3"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"][\\\"effect\\\"]\\nMissing key\\n  at [\\\"default\\\"][\\\"setup\\\"])))])"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：实际验证运行（opencode 2.3.1）明确报告了 load 级 LoadError，指出默认导出缺少 id/effect/setup；而抓取到的 dist/index.js 在截断处仍未显示任何有效的默认导出定义，因此该加载失败属实。"
     },
     {
       "name": "@gonkagate/opencode-setup",
@@ -351047,11 +351047,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T12:00:01.908Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44731949127",
+        "verifiedAt": "2026-11-20T13:18:50.064Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44743075935",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ParadevAI_Paradev-c8743a65dfd1.log",
         "integrity": "c8743a65dfd1111cd92d3eefa6119260f9a2f769",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -353114,7 +353114,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：该套件仅调用各提供方自有 API（GitHub/GitLab CLI、Home Assistant webhook），子进程均使用参数数组而非 shell 字符串，未见密钥发往无关目标、注入或混淆。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：所有子进程调用均使用 argv 数组（无 shell 字符串拼接，不构成注入）、网络调用仅指向用户自身的 GitHub/GitLab/Home Assistant 实例（属于声明函数而非外泄）、manifest 描述准确，未发现注入、凭证外泄、混淆或误导性声明。"
     },
     {
       "name": "iron-horse-opencode",
