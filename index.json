@@ -68021,7 +68021,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 pass：现有扫描证据显示0个red flag、3项发现均无威胁（spawn仅为子进程导入、curl为同仓库下载、Puppeteer $eval非真混淆），且清单描述准确对应包内容；但包内容提取因超时无效，无法完整核验setup源码。"
+      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 pass：扫描仅给出3条低危且证据不足的发现——install.sh中的curl仅指向本仓库的脚本、spawn仅见导入未见调用、verify_keyboard仅读取DOM属性，且manifest描述准确对应dotfiles与OpenCode技能配置，未显示任何凭据外泄或注入证据。"
     },
     {
       "name": "alvarorojasdev/ai-dev-setup",
@@ -88603,7 +88603,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：内容提取因超时失败导致审查时缺少全部包内原文，且清单描述为营销式空泛套话，未准确说明功能，而扫描又从未运行。"
+      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容因超时而提取失败（oversize-repo），实际未扫描或检查任何代码，且清单仅为营销话术、未准确说明插件功能，需人工注意。"
     },
     {
       "name": "autopus-ai/autopus-adk",
@@ -124382,12 +124382,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:37.571Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T06:00:26.940Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/codesensehq_codesense-8e4481acb912.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install codesensehq/codesense#8e4481acb91253a98383efbcf00958f17e80c40f: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "8e4481acb91253a98383efbcf00958f17e80c40f",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -153740,7 +153740,13 @@
         ]
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T06:00:30.683Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
+        "integrity": "sha512-iL/Y/aYt3IL+jY2xSo+5WTl5ghoPuWNxPENXQtC3dGQW107oRiIESvoMaopWu5GRlhDiU5hYwxDdy58gQ5lwEw==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=18"
@@ -169025,7 +169031,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：manifest 描述为空（仅显示包名 FlorenAnders/Price-Master: 后无内容），且包名 Price-Master 与实际内容（一个名为 timemaster 的完整 Next.js 应用/浏览器插件）矛盾，符合“占位符文本/与代码不符”的 concern 标准；可见代码中的 fetch/token 调用均指向其提供商自己的 API 端点，未发现凭证外泄或注入。"
+      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：manifest 描述为空占位（未说明包做什么），且可见代码中涉及扩展把 token/payload 发送到配置的外部 API、以及大量 Chrome/Next 应用逻辑，但未见凭证被发送到无关目的地的证据；其余为 env 引用的占位 API key、内部 /api 调用和 argv 数组子进程，均无注入或外泄证据。"
     },
     {
       "name": "florianilch/opencode-llamacpp-provider",
@@ -169905,11 +169911,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:38.669Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T06:00:26.946Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fnodotdev_fno-735f49506ba2.log",
         "integrity": "735f49506ba2ba6a5ec39ce1d6ebb51b4fae0e3d",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -306549,7 +306555,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T06:00:31.855Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
+          "integrity": "sha512-B9peITBB7bkgveh3uDZVSXbSyHAopHOJW62C58QPt799LNIPu8OB9Adzp1+/DwQouGX5WTv1WLeyESsw44RGiw==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -351608,11 +351620,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:44.275Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T06:00:26.948Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ParadevAI_Paradev-79951b98debd.log",
         "integrity": "79951b98debd4833d8aafdc0da77a1587cec3477",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -440121,12 +440133,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:42.229Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491150",
+        "verifiedAt": "2026-11-20T06:00:26.954Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44684632939/job/136116116226",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/Verbiflow_mako-decd64aef9db.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install Verbiflow/mako#decd64aef9db47024de81614ef12610215005473: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "decd64aef9db47024de81614ef12610215005473",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
