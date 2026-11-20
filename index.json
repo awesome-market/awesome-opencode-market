@@ -29973,7 +29973,7 @@
         ],
         "integrity": "sha512-rnmZfLKlDgPPMzvEgT63SJB7kpE3c6dfRtw6thyFAsvEs4jRdQAduo9JQolGmGh9Rzl0Zt3aifWllWLUAdWocA==",
         "publishedAt": "2026-11-20T15:25:04.767Z",
-        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:0:sec:repo-mismatch:oc-plugins）；LLM 判 pass：该插件仅本地读取会话消息以测量每秒 token 数，README 明确声明「不存储、不出机」且无服务器/无运行时依赖；仅存的 sec:repo-mismatch 为元数据追溯类发现（redFlags=0、上一版亦有），manifest 描述与代码功能一致，未见凭据外传、网络调用、注入或混淆。",
+        "reason": "L0.5 命中注入信号（score 0.667 ≥ 0.662，块 finding:0:sec:repo-mismatch:oc-plugins）；LLM 判 pass：材料仅展示README与package.json，插件声称仅读取本地会话消息、不存储且不离开本机，且manifest描述与内容一致，未见凭证外传、注入、网络调用或混淆代码证据",
         "heldAt": "2026-11-20T15:30:45.918Z"
       }
     },
@@ -68081,12 +68081,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:50.074Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047496",
+        "verifiedAt": "2026-11-20T18:00:50.387Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/alvarolorentedev_opencode-mobile-56590fa52153.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install alvarolorentedev/opencode-mobile#56590fa521536111a0d4cafa4e95b36ad88a39b0: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "56590fa521536111a0d4cafa4e95b36ad88a39b0",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -77302,12 +77302,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:50.093Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047496",
+        "verifiedAt": "2026-11-20T18:00:50.393Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/antick_skills-20d3d75a5882.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T17:22:54.994Z level=WARN run=8b4ec584 message=\"failed to load plugin\" target=antick/skills#20d3d75a58829fe25b1ef4b7fea84a9344c0d73c ref=err_bc0d0c7f cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=129 role=server\n--- stream tail ---\n17:22:56.908Z level=INFO run=8b4ec584 message=\"watcher stopped\" path=/tmp/verify-miiWxU/u type=entries http.span=2043 role=server\ntimestamp=2026-11-20T17:22:56.919Z level=INFO run=8b4ec584 message=\"watcher stopped\" path=/tmp/verify-miiWxU/u/.config/opencode type=directory http.span=2054 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T18:00:54.015Z level=WARN run=0f13d5b9 message=\"failed to load plugin\" target=antick/skills#20d3d75a58829fe25b1ef4b7fea84a9344c0d73c ref=err_14a5dda7 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=64 role=server\n--- stream tail ---\n18:00:55.331Z level=INFO run=0f13d5b9 message=\"watcher stopped\" path=/tmp/verify-oABEJZ/u type=entries http.span=1380 role=server\ntimestamp=2026-11-20T18:00:55.333Z level=INFO run=0f13d5b9 message=\"watcher stopped\" path=/tmp/verify-oABEJZ/u/.config/opencode type=directory http.span=1382 role=server\n\nserve reports the plugin failed to load",
         "integrity": "20d3d75a58829fe25b1ef4b7fea84a9344c0d73c",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -87486,11 +87486,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:44.075Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047370",
+        "verifiedAt": "2026-11-20T18:00:50.546Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/atqamz_hand-11bcf9c6ff73.log",
         "integrity": "11bcf9c6ff7319da319a52d1ff666d9e091645ec",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -132540,7 +132540,13 @@
         "skillPayload": true
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T18:00:54.805Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
+        "integrity": "sha512-mWgLIGlYtaY7CH/EN4t/n2lATAUlnrsEIqecpb4SxZTA3/2wW/T5fz0RXkfq3FzQuV6Ke8SYxpPdrAn1LJ5E6w==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=24.0.0"
@@ -159600,7 +159606,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：包内容提取失败（fetch failed），评审仅能依赖扫描到的 import/调用签名，而其中动态 eval 执行脚本、读取 ~/.ssh、以及多处网络调用均未显示数据去向，需人工核实实际行为。"
+      "approvalReason": "红旗在案，AI 判 concern：manifest 描述准确清晰，但内容提取超时（content-error）导致无法审查包内实际代码，且存在动态 eval 执行脚本、读取 ~/.ssh 凭证、多处网络调用，均未显示数据/凭证去向，证据不足，需人工留意。"
     },
     {
       "name": "@seangle/opencode-remember",
@@ -170421,7 +170427,13 @@
         "skillPayload": false
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T18:00:56.034Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
+        "integrity": "sha512-57wUNMjM24IzVvWy8JfrVnonJL1nvscAz6xGa2+JwV8Xx/wV90gSA2wl5lgbiqRIgXjSuwoYqK/pnBOKiYlDMA==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=22.12",
@@ -190174,11 +190186,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:44.088Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047370",
+        "verifiedAt": "2026-11-20T18:00:50.554Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/hashgraph-online_hol-guard-149fcb44b8f0.log",
         "integrity": "149fcb44b8f04e6fff7fe8b33392a7ae8b87ea99",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -196622,12 +196634,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:46.489Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047351",
+        "verifiedAt": "2026-11-20T18:00:51.505Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@tryvira_opencode-0.1.67.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T17:22:49.759Z level=WARN run=30b41ff1 message=\"failed to load plugin\" target=@tryvira/opencode@0.1.67 ref=err_76f6d3bd cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=121 role=server\n--- stream tail ---\n17:22:50.914Z level=INFO run=30b41ff1 message=\"watcher stopped\" path=/tmp/verify-CN4ABD/u type=entries http.span=1276 role=server\ntimestamp=2026-11-20T17:22:50.914Z level=INFO run=30b41ff1 message=\"watcher stopped\" path=/tmp/verify-CN4ABD/u/.config/opencode type=directory http.span=1276 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T18:00:55.394Z level=WARN run=948c0a34 message=\"failed to load plugin\" target=@tryvira/opencode@0.1.67 ref=err_1451f1cb cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=105 role=server\n--- stream tail ---\n18:00:56.704Z level=INFO run=948c0a34 message=\"watcher stopped\" path=/tmp/verify-a0nj7x/u type=entries http.span=1415 role=server\ntimestamp=2026-11-20T18:00:56.706Z level=INFO run=948c0a34 message=\"watcher stopped\" path=/tmp/verify-a0nj7x/u/.config/opencode type=directory http.span=1417 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-ZoFMo/j0LqwJ2jvtMGmQmtsD2mtww/pGj6mFjn3kPhZKArLGv2lyu6y9oJA4e87d9y7e36in83T97pB1Yfc2LQ==",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -201706,7 +201718,7 @@
         "engines": "node >=18.18.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install IgorGanapolsky/ThumbGate#178cbc8dbf6971c332930e377053a15a9b71d107: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install IgorGanapolsky/ThumbGate#9d9eede6d09fc3acb2f5a6851a188e328e6e7309: git dep preparation failed"
     },
     {
       "name": "igorkasyanchuk/laki",
@@ -220909,12 +220921,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:46.576Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047351",
+        "verifiedAt": "2026-11-20T18:00:50.552Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/joe-broadhead_opencode-history-efdfa1f2e673.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install joe-broadhead/opencode-history#efdfa1f2e6732d805eefa1312e22774e78fd4e63: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "efdfa1f2e6732d805eefa1312e22774e78fd4e63",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -221153,12 +221165,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:51.654Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047496",
+        "verifiedAt": "2026-11-20T18:00:50.401Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/joe-broadhead_opencode-jobs-43129cb383bf.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install joe-broadhead/opencode-jobs#43129cb383bf564aa57dc0f99e9aaa198fc60bda: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "43129cb383bf564aa57dc0f99e9aaa198fc60bda",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -269242,14 +269254,19 @@
         "skillPayload": true
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T18:00:51.943Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
+        "integrity": "f0cd6bf91ecc848e5e8dd678693af2068453b403",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "npm >=11.0.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：扫描仅捕获到 child_process 导入与未知网络调用，且包内容提取失败、状态未验证、install 后脚本会执行任意 JS，结合‘无遥测’声明无法证实，存在无法核实的安全疑虑"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-lazy-plugins",
@@ -283094,9 +283111,9 @@
         "verification": {
           "status": "verified",
           "level": "interactive",
-          "opencodeVersion": "2.3.0",
-          "verifiedAt": "2026-11-17T19:09:32.049Z",
-          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44155312664/job/134294652400",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T18:00:51.023Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
           "integrity": "sha512-jzWih1j0m7BQbsXN0wBa+Pt7bHXukWRuA2Rnpj1ZrRmjaP7Nh8rYdEdjMPrfZ/PyJ40YifWuxEjUXWLcvu47oA==",
           "harnessGen": 2
         },
@@ -293415,11 +293432,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:48.059Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047351",
+        "verifiedAt": "2026-11-20T18:00:51.742Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/NeoMei_SuperWagie-cfb4b52e2c78.log",
         "integrity": "cfb4b52e2c786ca31bb6e5f97d11f4ba5bd803ea",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -307178,7 +307195,7 @@
         ],
         "integrity": "sha512-hgzF/8/Ej97xf2oULeMAYqH+lUljwcxC2JNUAoqOfK4cHlj3o1EVcv0EWghPRVSlVBwYMLB7dQ/STfdZfOVxTA==",
         "publishedAt": "2026-11-19T06:14:39.788Z",
-        "reason": "红旗在案，AI 判 concern：该包含动态代码拼接(new Function)、README 中 curl|bash 远程安装管道、keychain 凭证读取，以及可抓取并执行任意 URL 的浏览器运行时，组合起来存在远程代码执行与凭证窃取风险。",
+        "reason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：该包实际同时包含 new Function 动态源码拼接、README 中 curl|bash 远程安装管道、keychain 凭证读取基础设施，以及可抓取/执行任意 URL 的浏览器运行时，并存在由输入驱动动态 command 的 child_process spawn，组合可达成 RCE 与凭证外泄。",
         "heldAt": "2026-11-19T17:31:16.677Z"
       }
     },
@@ -309983,7 +310000,7 @@
         "engines": "node >=18"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：代码中存在 eval(onclick) 动态执行与混淆告警，且 temp/ 目录含重复应用代码及 SQLite 数据库二进制文件，manifest 描述为空、插件定位不清，需人工确认。"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：需在原始代码中确认 eval() 实际执行来源——当前材料仅显示 scanner 标注了 eval(onclick) 且路径中存在 SQLite 二进制文件，尚不能判定其是否真的执行外部来源的回调。"
     },
     {
       "name": "opencode-sa-assistant",
@@ -360312,12 +360329,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:53.063Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047496",
+        "verifiedAt": "2026-11-20T18:00:54.874Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/Porabuild_Poracode-6b1f7684bc02.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install Porabuild/Poracode#6b1f7684bc029f6014595b5d612f8e4fcc6af8a9: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "6b1f7684bc029f6014595b5d612f8e4fcc6af8a9",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -421739,12 +421756,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:49.274Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047351",
+        "verifiedAt": "2026-11-20T18:00:52.908Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/terry2010_opencode-loop-recover-25533e017c5e.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install terry2010/opencode-loop-recover#25533e017c5ee6ff2d9ea54df19a5a793dc95b9e: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "25533e017c5ee6ff2d9ea54df19a5a793dc95b9e",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -445010,7 +445027,13 @@
           "skillPayload": false
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T18:00:56.301Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128414",
+          "integrity": "sha512-g9blI5/KJMpZp5jy2efMOkN5PFPd22M2tw4Kz8cv9M0YQNM4gDxkkIf7xdbL0tzJ9W3UTF4tV57kxtjUVZj3ig==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -450877,7 +450900,7 @@
         ],
         "integrity": "sha512-BuHJMyGeiBQbnkVliU3BI0ksHgk2DBCKEklg4jkhXmwXJzPV/S7iqjlkj+rSo7PRVbbbgmyXg1tld5WZHXOEAQ==",
         "publishedAt": "2026-11-20T16:56:57.939Z",
-        "reason": "awaiting-review",
+        "reason": "红旗在案，AI 判 concern：包内容提取因超时而失败，仅凭扫描元数据无法核实3处凭证读取（.npmrc、SSH密钥名）与1处网络调用是否把密钥发往无关目的地，证据严重不足",
         "heldAt": "2026-11-20T16:57:59.748Z"
       }
     },
@@ -463366,12 +463389,12 @@
         "status": "failed",
         "level": "interactive",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T17:22:55.635Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44782536268/job/136449047496",
+        "verifiedAt": "2026-11-20T18:00:56.201Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44788479460/job/136470128592",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/yriveiro_spectre-885caa97a68f.log",
         "logExcerpt": "tre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/pr-canvas/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-attack-the-premise/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-boundary-discipline/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-build-the-lever/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-encode-lessons-in-structure/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-evidence/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-exhaust-the-design-space/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-experience-first/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-fix-root-causes/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-foundational-thinking/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-guard-the-context-window/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-hygiene/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-laziness-protocol/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-make-operations-idempotent/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-make-states-unrepresentable/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-migrate-callers-then-delete-legacy-apis/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-minimize-reader-load/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-model-the-domain/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principle-never-block-on-the-human/SKILL.md)",
         "integrity": "885caa97a68f7bcc30c51e3a64585f3ba966f17a",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
