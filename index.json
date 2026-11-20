@@ -107857,7 +107857,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install BrainerVirus/workit#3725442b4f43f883f043c7196b642340b8496d2d: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install BrainerVirus/workit#5a97f1bf6d9ef4621593c015fc07b988285f0a2e: git dep preparation failed"
     },
     {
       "name": "@braintrust/trace-opencode",
@@ -118967,7 +118967,7 @@
         "peer": "@opencode-ai/plugin@>=1.0.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install chncaesar/opencode-plugin-memory#824d62944c95216e3b078387263e5ef819619a09: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install chncaesar/opencode-plugin-memory#126d0adbd07e36ee85e8ecead0dc15d7424d3f93: git dep preparation failed"
     },
     {
       "name": "@chncaesar/opencode-portable",
@@ -122618,7 +122618,13 @@
           "skillPayload": true
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "interactive",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T11:48:27.923Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44730453205",
+          "integrity": "sha512-CbuRFd9titW/NaJ8lc6ZsqL8WjutwvSi2kl0y+EIZqOtY33jc3WhqJbTnlGzKOMQLfJAc5ZGVI9lHGbkNPZS9w==",
+          "harnessGen": 2
         },
         "features": [
           "server",
@@ -150906,7 +150912,7 @@
         "engines": "node >=20.19.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：--- stream tail --- \" path=/tmp/verify-RVzIPz/u/.config/opencode type=directory backend=inotify ignores=6 http.span=100 role=server timestamp=2026-11-18T10:48:40.036Z level=INFO run=37c459a5 message=\"location services booted\" directory=/tmp/verify-RVzIPz/u workspaceID=undefined durationMs=116 http.s"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：验证日志与源码均显示插件在 load 阶段确实失败（/api/plugin 中缺失、status=failed level=load），且 lib/handshake.js、lnurl_auth.js、mock_server.js 均为 CLI/库/本地 mock，而非 OpenCode 插件契约，因此装测失败属实。"
     },
     {
       "name": "opencode-codex-switch",
@@ -173450,12 +173456,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T11:48:27.349Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44730453205",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -251663,7 +251669,7 @@
         "engines": "bun >=1.4.4 <1.5"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Looted/kibi#151293bb6e50ff3324d32513b5913a4a3080dc21: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Looted/kibi#29a933d3b587c6a453f6784fde3cac4f8b52068a: git dep preparation failed"
     },
     {
       "name": "opencode-evermemos-plugin",
@@ -263713,7 +263719,7 @@
         "peer": "@opencode-ai/plugin@>=1.14.41"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install marcusrbrown/opencode-copilot-delegate#ee21840a2866749fe20f6a55e5e3a94b5e316aa2: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install marcusrbrown/opencode-copilot-delegate#15b2a9a7f8d932dde5d9fe808dd36933f39d5e2c: git dep preparation failed"
     },
     {
       "name": "marcusrbrown/systematic",
@@ -263821,7 +263827,7 @@
         "peer": "@opencode-ai/plugin@>=1.18.29, @opencode/plugin@>=2.2.5, @earendil-works/pi-coding-agent@^1.0.0, typebox@^1.1.38"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install marcusrbrown/systematic#13c71ef35ac1f58ccd63422b615348b6ce7489fa: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install marcusrbrown/systematic#30b57460cfa08b3e63e5cba0ab282e8831d716d8: git dep preparation failed"
     },
     {
       "name": "marin-ai-tech/skillforge",
@@ -352896,7 +352902,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：该包是 OpenCode 插件的 monorepo，所有子包均按声明功能运行——通过 argv 数组调用用户已配置的 CLI/GraphQL/webhook，网络请求仅发往用户自行设置的同源服务端点，未发现凭据外泄、命令注入、提示注入或误导性声明。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：所有子进程调用均使用 argv 数组（无 shell 注入），网络调用均指向用户已认证的官方 API（GitHub/GitLab）或用户配置的 Home Assistant URL（声明功能），未显示凭证/数据发往无关目的地址，manifest 描述准确。"
     },
     {
       "name": "iron-horse-opencode",
@@ -384106,7 +384112,7 @@
         "engines": "node >=22"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install rynfar/meridian#ae78e27aaee649a4080376e20f96c134e3389fb7: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install rynfar/meridian#a9ee337250601320ed72febca1b7e51ab82b63c1: git dep preparation failed"
     },
     {
       "name": "@rynfar/meridian-plugin-opencode-scrub",
@@ -398427,12 +398433,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.720Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T11:48:27.341Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44730453205",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -433376,7 +433382,7 @@
         "engines": "node >=22.18"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install ultus-net/opencode-workflow-guard#cf4b026c53b791ce7993d702a6c95762ad9a3637: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install ultus-net/opencode-workflow-guard#2f889f22efe23cd7323e13fb05c8fa90922db19f: git dep preparation failed"
     },
     {
       "name": "@uluops/setup",
@@ -466415,7 +466421,7 @@
         "peer": "@xenova/transformers@^2.17.2"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install ZaxbyHub/opencode-swarm#94f5e983bce8df9442a5c9c3292196e303bd049a: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install ZaxbyHub/opencode-swarm#7fb699debb40e60005e8952e2914e95a3de36647: git dep preparation failed"
     },
     {
       "name": "opencode-zaxbystatus",
