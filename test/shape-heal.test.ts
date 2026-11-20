@@ -78,6 +78,7 @@ interface FetchOpts {
   metaBody?: unknown
   treeStatus?: number
   treeBody?: unknown
+  pkgBody?: unknown
   codeloadFiles?: Record<string, string>
   codeloadCalls?: string[]
 }
@@ -103,7 +104,10 @@ const mkFetch = (o: FetchOpts = {}) => (async (input: RequestInfo | URL) => {
     o.codeloadCalls?.push(url)
     return new Response(new Uint8Array(mkTgz(o.codeloadFiles ?? SHAPELESS)))
   }
-  if (url.includes('raw.githubusercontent.com')) return mkRes({}, 404)
+  if (url.includes('raw.githubusercontent.com')) {
+    if (url.endsWith('/package.json') && o.pkgBody !== undefined) return mkRes(o.pkgBody)
+    return mkRes({}, 404)
+  }
   return mkRes({}, 404)
 }) as typeof fetch
 
@@ -224,5 +228,175 @@ describe('ghWorker transient: in-discovery kept entry heals the same way', () =>
     })
     expect(idx.plugins.find(p => p.name === 'o/shapeless')).toBeUndefined()
     expect(idx.removed?.find(r => r.name === 'o/shapeless')?.reason).toBe('filtered')
+  })
+
+  it('meta-probe transient INSIDE ghWorker (partial search payload) heals too', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-meta-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { modifiedAt: 'pushA' })])))
+    // no id/pushed_at → ghWorker backfill branch → fetchRepoMeta → 429 → heal
+    const item = {
+      full_name: 'o/shapeless', stargazers_count: 5, archived: false, fork: false,
+      license: { spdx_id: 'MIT' }, description: 'x', topics: ['opencode-plugin'],
+      created_at: '2026-01-01T00:00:00Z', default_branch: 'main',
+    }
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ ghItems: [item], metaStatus: 429, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')).toBeUndefined()
+    expect(idx.removed?.find(r => r.name === 'o/shapeless')?.reason).toBe('filtered')
+  })
+
+  it('meta-probe transient + approved ghPrev → kept untouched', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-mapp-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { approval: 'approved', modifiedAt: 'pushA' })])))
+    const item = {
+      full_name: 'o/shapeless', stargazers_count: 5, archived: false, fork: false,
+      license: { spdx_id: 'MIT' }, description: 'x', topics: ['opencode-plugin'],
+      created_at: '2026-01-01T00:00:00Z', default_branch: 'main',
+    }
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ ghItems: [item], metaStatus: 429, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['plugin'])
+    expect(idx.removed?.find(r => r.name === 'o/shapeless')).toBeUndefined()
+  })
+})
+
+describe('shape-heal edge cases', () => {
+  it('CATALOG_HEAL_BUDGET=0 → heal skipped, stale claim kept (absent evidence ≠ proof)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-budget-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless')])))
+    const prev = process.env.CATALOG_HEAL_BUDGET
+    process.env.CATALOG_HEAL_BUDGET = '0'
+    try {
+      const idx = await run({
+        outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+        fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: SHAPELESS }), now: NOW,
+      })
+      expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['plugin'])
+      expect(idx.removed?.find(r => r.name === 'o/shapeless')).toBeUndefined()
+    } finally {
+      if (prev === undefined) delete process.env.CATALOG_HEAL_BUDGET
+      else process.env.CATALOG_HEAL_BUDGET = prev
+    }
+  })
+
+  it('persisted pluginModule:true → free keep, zero codeload fetch', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-pmtrue-'))
+    const oldPath = join(dir, 'old.json')
+    const caps = {
+      scannedAt: 't', rulesetVersion: RULESET_VERSION, findings: [], redFlags: [],
+      pluginModule: true, skillPayload: false,
+    }
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { capabilities: caps })])))
+    const calls: string[] = []
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadCalls: calls }), now: NOW,
+    })
+    expect(calls).toHaveLength(0)
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['plugin'])
+  })
+
+  it('codeload scan says plugin-shaped → kept + fields persisted', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-shapely-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless')])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: PLUGINISH }), now: NOW,
+    })
+    const e = idx.plugins.find(p => p.name === 'o/shapeless')
+    expect(e?.contains).toEqual(['plugin'])
+    expect(e?.capabilities.pluginModule).toBe(true)
+    expect(e?.capabilities.skillPayload).toBe(false)
+  })
+
+  it('contains already lists skill → rewrite does not duplicate it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-dupsk-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { contains: ['plugin', 'skill'] })])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: SHAPELESS_SKILL }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['skill'])
+  })
+
+  it('vetoDryRun → would-filter reported, entry kept with claim intact', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-dryf-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless')])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath, vetoDryRun: true,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['plugin'])
+    expect(idx.removed?.find(r => r.name === 'o/shapeless')).toBeUndefined()
+  })
+
+  it('vetoDryRun → would-rewrite reported, contains untouched', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-dryr-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless')])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath, vetoDryRun: true,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: SHAPELESS_SKILL }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')?.contains).toEqual(['plugin'])
+  })
+
+  it('entry without source.repo → heal falls back to entry name for codeload', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-norepo-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([
+      ghE('o/norepo', { source: { kind: 'github', id: 'o/norepo', version: 'pin1' } }),
+    ])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ metaStatus: 429, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    expect(idx.removed?.find(r => r.name === 'o/norepo')?.reason).toBe('filtered')
+  })
+})
+
+describe('ghShapeless candidate gate (npm parity)', () => {
+  const item = {
+    full_name: 'o/shapeless', pushed_at: '2026-05-30T00:00:00Z', id: 42,
+    stargazers_count: 5, archived: false, fork: false,
+    license: { spdx_id: 'MIT' }, description: 'x', topics: ['opencode-plugin'],
+    created_at: '2026-01-01T00:00:00Z', default_branch: 'main',
+  }
+  const pkgWithMain = { name: 'shapeless', main: 'cli.js' }
+
+  it('pending + declared entry + shapeless scan + no skill → filtered', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-gate-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { modifiedAt: 'pushA' })])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ ghItems: [item], pkgBody: pkgWithMain, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    expect(idx.plugins.find(p => p.name === 'o/shapeless')).toBeUndefined()
+    expect(idx.removed?.find(r => r.name === 'o/shapeless')?.reason).toBe('filtered')
+  })
+
+  it('approved prev + shapeless → kept with sec:plugin-shape-regressed finding', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sheal-gateap-'))
+    const oldPath = join(dir, 'old.json')
+    writeFileSync(oldPath, JSON.stringify(idxOf([ghE('o/shapeless', { approval: 'approved', modifiedAt: 'pushA' })])))
+    const idx = await run({
+      outPath: join(dir, 'i.json'), oldIndexPath: oldPath,
+      fetchFn: mkFetch({ ghItems: [item], pkgBody: pkgWithMain, codeloadFiles: SHAPELESS }), now: NOW,
+    })
+    const e = idx.plugins.find(p => p.name === 'o/shapeless')
+    expect(e).toBeDefined()
+    expect(e?.capabilities.findings.some(x => x.startsWith('sec:plugin-shape-regressed@'))).toBe(true)
+    expect(idx.removed?.find(r => r.name === 'o/shapeless')).toBeUndefined()
   })
 })
