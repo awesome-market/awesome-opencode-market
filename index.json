@@ -39711,7 +39711,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：包内容因超时而提取失败、无法审查实际代码，且已识别的postinstall在安装时执行任意Node脚本（patch-package及两个.mjs），system_prompt.md含curl|bash远程管道，多个网络调用的目的地与凭据流向均未明。"
+      "approvalReason": "红旗在案，AI 判 concern：系统提示文件 system_prompt.md 中嵌入了 `curl .../install.sh | bash` 的远程下载并执行命令，且 postinstall 会自动运行可能联网抓取目录的 Node 脚本，存在提示注入/安装管道风险；而凭据读取只是 i18n 错误文案，未见密钥被发送到无关目的地的证据。"
     },
     {
       "name": "@1930dev/opencode-usage",
@@ -130508,7 +130508,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：验证结果明确报告 load 级别失败，错误为 SchemaError「Expected object at [\"default\"]」，即按当前 OpenCode 插件契约默认导出不是有效定义对象，导致插件无法加载；且所取 dist/index.js 内容被截断，未覆盖到真正的 default export 代码段，无法自行确认其已正确导出。"
     },
     {
       "name": "opencode-limits-go",
@@ -173365,12 +173365,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T10:47:35.047Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44722035755",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -352765,7 +352765,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：子进程调用均使用 argv 数组（非 shell 字符串，无注入），网络调用均发往各 provider 自有 API，manifest 与 package.json 描述均准确对应代码。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：扫描0个红标志，所有发现均为常规插件行为（exec/spawn 使用 argv 数组而非 Shell 注入，fetch 调用已声明的 GitHub/GitLab/Home Assistant 提供者），manifest 简短且准确，且未显示任何密钥发往无关目的地的证据；仅因包内容提取超时未直接查看源码。"
     },
     {
       "name": "iron-horse-opencode",
@@ -398294,12 +398294,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.720Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T10:47:35.045Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44722035755",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
