@@ -154554,7 +154554,13 @@
         "skillPayload": true
       },
       "verification": {
-        "status": "unverified"
+        "status": "verified",
+        "level": "load",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T22:26:42.264Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44828883857",
+        "integrity": "sha512-p9qY2kUn8TxWatxuuUf7Tzb6ydT0wzDwQWmAxUjoXOcvbGu4xdtDaNH2GjEtFpISU6PRVW90Sr/wJSNFU6KNIQ==",
+        "harnessGen": 2
       },
       "compat": {
         "engines": "opencode >=1.18.29"
@@ -403231,7 +403237,7 @@
         "engines": "node >=24"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.811 ≥ 0.662，块 finding:5:child-process:package/dist/trust/verify.js — L1: import { execFileSync } from \"n）；LLM 判 pass：该插件为内部任务编排/信任引擎，子进程调用多用 argv 数组形式的固定 git/命令，commandEnv() 还主动剥离环境变量中的凭据；可见材料中未出现把凭据发送到无关外部目的的网络调用，且如实文档化了残余风险。"
+      "approvalReason": "L0.5 命中注入信号（score 0.811 ≥ 0.662，块 finding:5:child-process:package/dist/trust/verify.js — L1: import { execFileSync } from \"n）；LLM 判 pass：可见代码中未发现凭证外发、恶意网络调用或提示注入：commandEnv 实际剥离环境变量中的凭据，child_process 调用多使用 argv 数组调用 git，manifest 描述与技能/信任引擎内容一致。"
     },
     {
       "name": "opencode-supercharger",
