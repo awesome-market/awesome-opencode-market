@@ -483,7 +483,10 @@ skill 走 `installSkillTar` 独立路径，同步钉。
     ≤6KB、共 ≤24KB）后 judge（think 开）出终判。模型全程不碰
     网络/工具，无注入面；GitHub 条目无文件清单时退回 flagged
     路径。代价：只追一跳、覆盖不如 agentic，疑难件会 inconclusive
-    ——但成本约为 agentic 的 1/10。
+    ——但成本约为 agentic 的 1/10。记录还带 `depth`（material=
+    仅凭物料复核 / fetched=抓取轮）+ `fetched`（抓了哪些文件及
+    unpkg/raw 链接），docket 渲染成「二审证据文件」抽查链接——
+    人审的是论证链，不是整包源码。
   - **`opencode`**：`opencode run --auto` agentic 会话，cwd 是空
     tmpdir + 专用 opencode.json 把 bash/edit/task/websearch 等全
     deny、`external_directory:deny`——agent 物理上只剩 GET-only 的
