@@ -32760,7 +32760,16 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "failed",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T04:34:49.389Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
+          "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/@supanadit_morse-web-0.30.1.log",
+          "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T04:34:56.113Z level=WARN run=d97e0736 message=\"failed to load plugin\" target=@supanadit/morse-web@0.30.1 ref=err_763a147a cause=\"Cause([Die(Error: Failed to load native module: pty.node, checked: build/Release, build/Debug, prebuilds/linux-x64: ResolveMessage: Cannot find module './prebuilds/linux-x64//pty.node'\\nRequire stack:\\n- /tmp/verify-dUBQeu/u/cache/opencode/npm/@supanadit/morse-web@0.30.1/1795149295178/node_modules/node-pty/lib/utils.js)])\" http.span=294 role=server\n--- stream tail ---\n04:34:57.161Z level=INFO run=d97e0736 message=\"watcher stopped\" path=/tmp/verify-dUBQeu/u type=entries http.span=1342 role=server\ntimestamp=2026-11-20T04:34:57.161Z level=INFO run=d97e0736 message=\"watcher stopped\" path=/tmp/verify-dUBQeu/u/.config/opencode type=directory http.span=1342 role=server\n\nserve reports the plugin failed to load",
+          "integrity": "sha512-2fecTzoHQ8dk699zWfmgaCvRd3ejRupAD4FA1QRx7vtDd60jNzqZS4HybdlYXpjK7pbUEN0kdO+2N9+E0bnJXg==",
+          "retries": 1,
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -67981,7 +67990,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 concern：该包有101个文件因超出评审预算未进入视野（官方已标记为需人工留意的异常信号），且spawn子进程调用的具体用法在材料中未显示，需人工重点核查其余文件；现有可见内容尚无明确外泄/注入/混淆证据。"
+      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 pass：三个扫描命中均为良性（spawn 仅导入未见实际调用、install.sh 的 curl 指向作者自身仓库做安装引导、verify_keyboard 的 $eval 仅读取 DOM 属性用于可访问性测试），manifest 描述与已审查内容一致，未见凭证外传或 shell 注入证据；另有 101 个文件超出评审范围，建议人工留意。"
     },
     {
       "name": "alvarorojasdev/ai-dev-setup",
@@ -88563,7 +88572,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：manifest 宣称'终极 harness、所有 agent/所有机器、跨 CAD/电路/机器人/游戏/音乐'等夸大能力，与单一 skill 插件的实际范围明显矛盾；且包内容提取失败、扫描从未运行，实际代码无从核实，需人工复核。"
+      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：内容提取超时且未运行静态扫描、仓库过大、manifest为营销套话而非准确描述，实际行为无法确认。"
     },
     {
       "name": "autopus-ai/autopus-adk",
@@ -111038,12 +111047,12 @@
           "status": "failed",
           "level": "load",
           "opencodeVersion": "2.3.1",
-          "verifiedAt": "2026-11-20T04:16:53.882Z",
-          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44673210089/job/136078938795",
+          "verifiedAt": "2026-11-20T04:34:50.416Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
           "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/magpie-gemini-web-0.17.0.log",
-          "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T04:16:55.073Z level=WARN run=c9a8132c message=\"failed to load plugin\" target=magpie-gemini-web@0.17.0 ref=err_58d3b55c cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=83 role=server\n--- stream tail ---\n04:16:56.258Z level=INFO run=c9a8132c message=\"watcher stopped\" path=/tmp/verify-eUv9LD/u type=entries http.span=1268 role=server\ntimestamp=2026-11-20T04:16:56.259Z level=INFO run=c9a8132c message=\"watcher stopped\" path=/tmp/verify-eUv9LD/u/.config/opencode type=directory http.span=1269 role=server\n\nserve reports the plugin failed to load",
+          "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T04:34:51.910Z level=WARN run=54f18e62 message=\"failed to load plugin\" target=magpie-gemini-web@0.17.0 ref=err_99e54d10 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=111 role=server\n--- stream tail ---\n04:34:53.146Z level=INFO run=54f18e62 message=\"watcher stopped\" path=/tmp/verify-GEe0gA/u type=entries http.span=1347 role=server\ntimestamp=2026-11-20T04:34:53.148Z level=INFO run=54f18e62 message=\"watcher stopped\" path=/tmp/verify-GEe0gA/u/.config/opencode type=directory http.span=1349 role=server\n\nserve reports the plugin failed to load",
           "integrity": "sha512-pDD5z9RkbgSo9KC/6C7q+KMuwT9FWMcOy8UE2mMHHpezmWjho5kIur5XaL1A4YWFs7KTAz95fJ47zrmsCUyrCw==",
-          "retries": 2,
+          "retries": 3,
           "harnessGen": 2
         },
         "features": [
@@ -124342,12 +124351,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:37.571Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T04:34:45.659Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/codesensehq_codesense-8e4481acb912.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install codesensehq/codesense#8e4481acb91253a98383efbcf00958f17e80c40f: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "8e4481acb91253a98383efbcf00958f17e80c40f",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {
@@ -168910,7 +168919,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：清单描述行为空/仅占位（\"FloresAnders/Price-Master: \"），未说明该插件实际功能，属于描述性占位文本；代码层面未见凭证外发、注入或提示注入证据。"
+      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：清单描述仅包含包名的空占位文本，未说明插件功能，且扫描到的实际代码是与该包名（Price-Master）完全无关的认证/Firebase/邮件/凭证管理应用，存在包名与内容矛盾；同时内容提取超时，无法确认密钥是否发往无关目的地址。"
     },
     {
       "name": "florianilch/opencode-llamacpp-provider",
@@ -169790,11 +169799,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:38.669Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T04:34:45.670Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fnodotdev_fno-735f49506ba2.log",
         "integrity": "735f49506ba2ba6a5ec39ce1d6ebb51b4fae0e3d",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -303732,7 +303741,7 @@
         ],
         "integrity": "sha512-NKUPQJJVCg+wHKIl974g3IK94pgpVxTuMt1XveALGzKYODKFpoWnrSH5vsT6nDLq0qCn1cfc9yjSNheEVcpjFw==",
         "publishedAt": "2026-11-20T03:57:32.080Z",
-        "reason": "awaiting-review",
+        "reason": "manifest 仅一行 UI 描述且完全没有展示 setup 注册 provider、apiKey 来源、fetch 目标地址或 spawn 用法，关键证据缺失，无法判断凭据/网络调用是否安全。",
         "heldAt": "2026-11-20T04:00:14.410Z"
       }
     },
@@ -305000,7 +305009,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T04:34:53.848Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
+          "integrity": "sha512-MhY5kPRLcShyB058Q42n/rQmGU57EjPSxwWwp3ozaQn2GPlsjayeHW2+hKFazPOn947Py1CtCDm4oAQ8Mr4CNg==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -307341,7 +307356,7 @@
         ],
         "integrity": "sha512-8iEkJTZW3D+4iA6+Q8LlWkYK8D7tAARzAiLjqC4S8ojqtrYMgfQRMLschCYaJYHd6Xb76EZjjsH/C6GGUClYYA==",
         "publishedAt": "2026-11-19T06:12:22.652Z",
-        "reason": "机械红旗待人工：credential-read:package/dist/cli-node/index.js — L94627: \"keychain_locked\",; credential-read:package/dist/cli/index.js — L94548: \"keychain_locked\",; lifecycle-script:package/package.json — L150: \"postinstall\": \"node postinstall.mjs\",",
+        "reason": "awaiting-review",
         "heldAt": "2026-11-20T02:54:23.058Z"
       }
     },
@@ -351416,11 +351431,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:44.275Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491125",
+        "verifiedAt": "2026-11-20T04:34:45.665Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ParadevAI_Paradev-79951b98debd.log",
         "integrity": "79951b98debd4833d8aafdc0da77a1587cec3477",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -439929,12 +439944,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T02:12:42.229Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44659014662/job/136032491150",
+        "verifiedAt": "2026-11-20T04:34:45.674Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44675201869",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/Verbiflow_mako-decd64aef9db.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install Verbiflow/mako#decd64aef9db47024de81614ef12610215005473: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "decd64aef9db47024de81614ef12610215005473",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
