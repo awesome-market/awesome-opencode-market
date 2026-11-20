@@ -163926,12 +163926,12 @@
         "status": "failed",
         "level": "load",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T12:48:41.822Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44738706864",
+        "verifiedAt": "2026-11-20T12:57:31.763Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44739949835",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/opencode-ollama-multi-auth-1.6.3.log",
-        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T12:48:46.070Z level=WARN run=d8bc9877 message=\"failed to load plugin\" target=opencode-ollama-multi-auth@1.6.3 ref=err_f32483d0 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=81 role=server\n--- stream tail ---\n12:48:47.170Z level=INFO run=d8bc9877 message=\"watcher stopped\" path=/tmp/verify-VxANUk/u type=entries http.span=1181 role=server\ntimestamp=2026-11-20T12:48:47.170Z level=INFO run=d8bc9877 message=\"watcher stopped\" path=/tmp/verify-VxANUk/u/.config/opencode type=directory http.span=1181 role=server\n\nserve reports the plugin failed to load",
+        "logExcerpt": "--- errors ---\ntimestamp=2026-11-20T12:57:36.631Z level=WARN run=92376a71 message=\"failed to load plugin\" target=opencode-ollama-multi-auth@1.6.3 ref=err_030341f4 cause=\"Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\\n  at [\\\"default\\\"])))])\" http.span=108 role=server\n--- stream tail ---\n12:57:37.759Z level=INFO run=92376a71 message=\"watcher stopped\" path=/tmp/verify-qtAkm7/u type=entries http.span=1236 role=server\ntimestamp=2026-11-20T12:57:37.759Z level=INFO run=92376a71 message=\"watcher stopped\" path=/tmp/verify-qtAkm7/u/.config/opencode type=directory http.span=1236 role=server\n\nserve reports the plugin failed to load",
         "integrity": "sha512-OtTkt7NL3C4acNPmNWg/DhjX6jWwGg0LLAKGZDnFJr5OMXMaa41U/ueYEk+SJsG/fojnSaWmLxW+onUQimedvA==",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -169124,7 +169124,7 @@
         "engines": "bun >=1.1.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify load 级）：插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\\n  at [\\\"default\\\"])))])"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：包未导出符合 OpenCode 插件契约的默认定义：src/index.ts 无 default 导出，唯一 default 导出的 opencodePlugin 是 HarnessPlugin（含 name/description/supportedScopes/locations/describe/install/uninstall），缺少 id 与 effect/setup，确实无法通过 load 级验证。"
     },
     {
       "name": "@uvl000/claude-trace",
@@ -173469,12 +173469,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.722Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T12:57:30.930Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44739949835",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -352968,7 +352968,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：该仓库是合法的 OpenCode 插件集合，子进程调用均使用 argv 数组而非 shell 字符串（非命令注入），网络调用仅指向其声明的服务（GitHub/GitLab/Home Assistant），且 manifest 与各包描述准确对应，未发现凭据外泄、注入、混淆或误导性声称。"
+      "approvalReason": "L0.5 命中注入信号（score 0.711 ≥ 0.662，块 finding:0:child-process:.mise/bundle.ts — L29: const build = Bun.spawnSync(）；LLM 判 pass：未发现安全疑虑——这是合法的 OpenCode 插件 monorepo，子进程调用均使用 argv 数组（非 shell 字符串，不构成注入），网络调用发往各自声明的服务端点（GitHub/GitLab/Home Assistant），且各包描述与代码功能一致。"
     },
     {
       "name": "iron-horse-opencode",
@@ -398536,12 +398536,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T08:58:42.720Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44706691642",
+        "verifiedAt": "2026-11-20T12:57:30.938Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44739949835",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
         "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
