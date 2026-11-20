@@ -1131,7 +1131,9 @@ describe('auto-resolve: supported claim writes ai-look:concern verdict', () => {
 })
 
 describe('auto-release gate: mechanical claims only, fetched tier only', () => {
-  const MECH = { reason: '装测失败（verify load 级）：Plugin must export a default definition', reasonEn: 'verify load failed: missing default export' }
+  // mechanical but NOT installability — the deterministic lane refuses
+  // it (claim isn't about install failure), so it reaches the LLM look
+  const MECH = { reason: 'manifest schema 校验不符合插件契约', reasonEn: 'manifest schema violates plugin contract' }
   const deepPass = { resp: { claim_check: 'unsupported', verdict_suggestion: 'pass', reason_zh: '端点硬编码', reason_en: 'hardcoded' }, raw: '', depth: 'fetched' as const }
 
   it('unsupported+pass + fetched + mechanical claim → ai-look:pass with gate fields', async () => {
@@ -1181,6 +1183,60 @@ describe('auto-release gate: mechanical claims only, fetched tier only', () => {
   })
 })
 
+describe('deterministic lane: installability claims settle without an LLM', () => {
+  const CLAIM = { reason: '装测失败（verify load 级）：Plugin must export a default definition', reasonEn: 'verify load failed: missing default export' }
+  let llmCalls = 0
+  const spyLook = async () => { llmCalls++; return { resp: { claim_check: 'supported', verdict_suggestion: 'concern', reason_zh: 'r', reason_en: 'r' }, raw: '' } }
+
+  it('status failed → deterministic supported+concern, zero LLM calls', async () => {
+    llmCalls = 0
+    const s = setup([entry({ verification: { status: 'failed' } })], [verdict(CLAIM)])
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool], { devinUp: async () => true, look: spyLook })
+    expect(llmCalls).toBe(0)
+    const rec = JSON.parse(readFileSync(s.spool, 'utf8').trim())
+    expect(rec.claimCheck).toBe('supported')
+    expect(rec.depth).toBe('deterministic')
+    const v = JSON.parse(readFileSync(vspool, 'utf8').trim())
+    expect(v.verdict).toBe('concern')
+    expect(v.source).toBe('ai-look')
+  })
+
+  it.each(['verified', 'skipped', 'unverified'] as const)(
+    'status %s → deterministic unsupported+pass with deterministic gate fields', async (status) => {
+      llmCalls = 0
+      const s = setup([entry({ verification: { status } })], [verdict(CLAIM)])
+      const vspool = join(s.dir, 'vspool.jsonl')
+      await lookMain([...args(s), '--vspool', vspool], { devinUp: async () => true, look: spyLook })
+      expect(llmCalls).toBe(0)
+      const v = JSON.parse(readFileSync(vspool, 'utf8').trim())
+      expect(v.verdict).toBe('pass')
+      expect(v.lookDepth).toBe('deterministic')
+      expect(v.claimClass).toBe('mechanical')
+    })
+
+  it('behavioral claim on a failed entry → still goes to the LLM (deterministic lane refuses)', async () => {
+    llmCalls = 0
+    const s = setup([entry({ verification: { status: 'failed' } })], [verdict()])
+    await lookMain([...args(s)], { devinUp: async () => true, look: spyLook })
+    expect(llmCalls).toBe(1)
+  })
+
+  it('deterministic slots bypass --limit entirely', async () => {
+    llmCalls = 0
+    const mk = (n: string) => entry({ name: n, slug: n, source: { kind: 'npm', id: n }, verification: { status: 'failed' } })
+    const s = setup(
+      [mk('a'), mk('b'), mk('c'), entry({ name: 'x', slug: 'x', source: { kind: 'npm', id: 'x' } })],
+      [...['a', 'b', 'c'].map(n => ({ ...verdict(CLAIM), name: n })), { ...verdict(), name: 'x' }],
+    )
+    const vspool = join(s.dir, 'vspool.jsonl')
+    await lookMain([...args(s), '--vspool', vspool, '--limit', '1'], { devinUp: async () => true, look: spyLook })
+    const vlines = readFileSync(vspool, 'utf8').trim().split('\n')
+    expect(vlines).toHaveLength(4)   // 3 deterministic holds + 1 LLM auto-hold
+    expect(llmCalls).toBe(1)         // limit still caps the LLM lane
+  })
+})
+
 describe('ai-look verdict semantics', () => {
   it('latestHumanVerdicts brakes on ai-look:concern and on GATED ai-look:pass only', async () => {
     const { latestHumanVerdicts } = await import('../pipeline/verdicts.ts')
@@ -1199,6 +1255,12 @@ describe('ai-look verdict semantics', () => {
       mk('ai', 'concern'),
     ])
     expect(m2.get('p\u00001.0.0')?.verdict).toBe('pass')
+    // deterministic lane — verification.status ground truth counts too
+    const m3 = latestHumanVerdicts([
+      mk('ai-look', 'pass', { lookCheck: 'unsupported', lookDepth: 'deterministic', claimClass: 'mechanical' }),
+      mk('ai', 'concern'),
+    ])
+    expect(m3.get('p\u00001.0.0')?.verdict).toBe('pass')
     // missing or wrong ANY gate field → advisory forever
     for (const extra of [
       { lookCheck: 'unsupported', lookDepth: 'fetched' },

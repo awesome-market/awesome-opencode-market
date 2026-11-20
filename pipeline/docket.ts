@@ -911,6 +911,8 @@ export function issueBody(t: DocketTarget, opts: IssueBodyOpts = {}): string {
         // files — say so, that's a shallower signal to lean on
         if (look.depth === 'material') {
           L.push(`  ↳ 仅凭既有材料复核，未抓新文件——证据较浅`)
+        } else if (look.depth === 'deterministic') {
+          L.push(`  ↳ 确定性复核：对照目录装测实测状态判定，未经模型——指控针对装测本身，实测状态即证据`)
         } else if (look.depth === 'fetched') {
           const links = (look.fetched ?? []).map(x =>
             `[${clean(x.path, 60)}](${x.url.replace(/\s|\(|\)/g, c => encodeURIComponent(c))})`)
