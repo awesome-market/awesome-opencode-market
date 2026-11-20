@@ -120,7 +120,7 @@ CatalogIndex { version:'1', generatedAt, categories:{id→{en,zh?}}, plugins: Pl
 | `publishedAt` | string? | 展示版的发布时间 |
 | `integrity` | string? | 展示版 `dist.integrity`（sha512-…）——装包逐字节校验公告值；github-kind 恒 null |
 | `metrics` | obj | `{stars, npmDownloads30d, checkedAt}` |
-| `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[], flaggedAt?}`；`scannedAt:null`=没扫过（≠扫过没发现）；`flaggedAt`=当前身份级 flag 集合（`sec:*` redFlags）首次被观察到的时刻——merge 盖章：集合不变保留、集合变了/无旧章→now、清空→undefined；docket flag 目标靠它区分「裁决晚于信号=已决议」与「裁决早于信号=没决议过」 |
+| `capabilities` | obj | `{scannedAt, rulesetVersion?, findings[], redFlags[], flaggedAt?, pluginModule?, skillPayload?}`；`scannedAt:null`=没扫过（≠扫过没发现）；`flaggedAt`=当前身份级 flag 集合（`sec:*` redFlags）首次被观察到的时刻——merge 盖章：集合不变保留、集合变了/无旧章→now、清空→undefined；docket flag 目标靠它区分「裁决晚于信号=已决议」与「裁决早于信号=没决议过」。`pluginModule`/`skillPayload`=本槽字节的形态证据（扫描成功才写布尔值；扫描失败/旧数据=undefined=缺席证据，永不作否决依据）——github-kind 描述 pinned commit、npm 描述槽位版本；merge 时新鲜扫描值优先、缺席回落旧值 |
 | `verification` | obj | `{status, level?, opencodeVersion?, verifiedAt?, runUrl?, logExcerpt≤2048, retries?, integrity?}`；status ∈ `verified|failed|unverified|skipped`，level ∈ `install|load|interactive|render|structure`；`retries` 只在 failed 上计数（V-3 自动重试预算）；`integrity`=实测字节锚点（npm=tarball SRI，github=commit sha）——merge 拿它对槽位钉值做 drift 检测，也让同字节槽复用同一次实测 |
 | `compat` | obj | `{engines?, peer?}`——npm 侧取 packument 展示版的 `engines`/`peerDependencies`，github-kind 取 repo 根 package.json；**序列化为两条展示字符串**（engines `k v; …` ≤300 字符，peer `k@v, …` ≤500 字符）——packument 字段是攻击者可控文本，绝不原样入库 |
 | `approval` | enum | `pending`=hold 默认 / `approved`=放行 / `legacy`=门禁前老条目（schema 默认 legacy 兼容旧 index） |
@@ -356,9 +356,14 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
         features 还需 codeload 扫描文本里存在插件形态模块
         （looksLikePluginModule，与 npm 同一判定）；`.opencode/plugin(s)/`
         目录证据是显式意图声明，不受形态否决；approved 展示版 keeps claim；
-        扫描失败不否决；形状不符的 pending repo 领诚实空 contains——repo
-        证据门比 npm 严，仓库本身仍值得挂名，只是不虚报 'plugin' 给
-        verify 必败的字节（installPlan 对 [] fail-closed 无安装路由）
+        扫描失败不否决；**shapelessPlugin 闸**（npm 同判）：扫描成功 ∧
+        根 package.json 声明 main/exports 入口 ∧ 无 SKILL.md ∧ 全包无
+        插件形态模块 ∧ 非 gui/`.opencode/plugin(s)/` 显式证据 → pending
+        直接拒收（rejectedGh → gone-check 落 filtered 立碑），approved/
+        legacy 展示版不动、挂 `sec:plugin-shape-regressed@<sha12>`
+        finding；无声明入口的仓库（纯文档/配置/无 main 的库）仍领诚实
+        空 contains 挂名——不虚报 'plugin' 给 verify 必败的字节
+        （installPlan 对 [] fail-closed 无安装路由）
       条目命名：既有条目保持已存 name（显示大小写改名不分叉身份）；新条目
         用 fetchRepoMeta 的 canonical fullName；slug 恒小写
       latestVersion:null、verification 按部件发牌（有可装部件→
@@ -384,10 +389,22 @@ discoverNpm + discoverGithub（并行；npm keyword ×6（opencode-plugin/openco
       展示槽本轮扫描成功 ∧ contains/type 领了 'plugin' ∧ 全包无插件形态
       模块 ∧ 无 SKILL.md/GUI/.opencode-plugin 豁免 → npm skill-less 直接
       filtered 立碑（rescanStaleNpm 返 null 落 gone-check 墓碑路），
-      含 SKILL.md 的双栖改写 contains 去 'plugin' 留 'skill'；github-kind
-      不立碑只改写 contains（与 ghWorker 诚实空 contains 同姿态）；
+      含 SKILL.md 的双栖改写 contains 去 'plugin' 留 'skill'；skill-less
+      shapeless **双侧同落 filtered 立碑**（rescanStaleNpm/rescanStaleGh
+      均返 null 走 gone-check 墓碑路——此前 github 只改写 contains，
+      shapeless+无 skill 的 pending repo 会以空 contains 永久挂起）；
       approved/legacy 展示版永不触碰——重扫重判的是已上架字节，
       移除与否归人工 docket；扫描失败/缺席=缺席证据不否决。
+      **shape-heal（限流盲区补丁）**：api.github.com 配额耗尽时 tree/meta
+      探针全挂、kept 条目的 veto/rescan 永远轮不到——codeload tarball
+      走独立配额，healGhShape 改判 **pinned commit**（source.version
+      锚定的不可变字节）上的 'plugin' 领法：capabilities.pluginModule/
+      skillPayload 已持久化 → 零请求重判；字段缺失（闸前旧数据）→
+      有界 codeload 扫描回填（CATALOG_HEAL_BUDGET 默认 100/轮）；
+      shapeless+skill-less → filtered 立碑（healedOut 防 gone-check
+      复活）、双栖 → contains 改写、approved/未锚定/扫描失败 → 原样
+      保留。挂载点：ghWorker meta/tree 两条 transient 分支 + goneCheck
+      meta 探针失败分支
       `CATALOG_VETO_DRY_RUN=1`（repo var）或 `--veto-dry-run` 只报告不动手——
       veto-report.json（catalog-out artifact）列出本轮 would-filter/
       would-contains→ 全量名单，ruleset bump 清存量前先彩排一遍

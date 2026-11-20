@@ -47,6 +47,14 @@ export const Capabilities = z.looseObject({
    *  on this slot — stamped by merge, cleared when the set empties. Docket uses
    *  it to tell "a human verdict decided this flag" from "verdict predates it". */
   flaggedAt: z.string().optional(),
+  /** scan outcome on THIS slot's bytes: ≥1 plugin-shaped module found.
+   *  undefined = predates the field or the scan failed — absent evidence,
+   *  never grounds for a shape veto. Describes the pinned commit for
+   *  github-kind entries, the slot version for npm. */
+  pluginModule: z.boolean().optional(),
+  /** scan outcome on THIS slot's bytes: a SKILL.md payload exists.
+   *  Same absent-evidence semantics as pluginModule. */
+  skillPayload: z.boolean().optional(),
 })
 
 export const Verification = z.looseObject({

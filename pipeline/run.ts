@@ -807,6 +807,8 @@ export async function run(opts: RunOptions = {}) {
                 puCaps = {
                   scannedAt: now,
                   rulesetVersion: RULESET_VERSION,
+                  pluginModule: r.pluginModule,
+                  skillPayload: hasSkillPath(new Set(r.files.map(f => f.replace(/^package\//, '')))),
                   findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(heldPin.capabilities)])],
                   // a confirmed re-tag stays flagged even after the fresh
                   // scan — "bytes changed under a stable version" is the
@@ -1033,7 +1035,14 @@ export async function run(opts: RunOptions = {}) {
         publishedAt: pk.latestPublishedAt,
         integrity: pk.integrityOf[pk.latest ?? ''] ?? null,
         metrics: { stars: repoMeta?.stars ?? null, npmDownloads30d: downloads, downloadsMonth: downloadsMo, starsDelta30d: null, checkedAt: now },
-        capabilities: scan,
+        // pluginModule/skillPayload describe this version's bytes — same
+        // persisted shape evidence the github side records (undefined on a
+        // failed scan = absent evidence, never a veto ground)
+        capabilities: {
+          ...scan,
+          pluginModule: scan.scannedAt !== null ? pluginModule : undefined,
+          skillPayload: hasSkill,
+        },
         // no installable payload → 'skipped' like repo-only entries: the
         // release gate treats it as "deliberately not run", and verifyPartsOf
         // honors the explicit empty contains (never queues). Red flags do not
@@ -1227,10 +1236,16 @@ export async function run(opts: RunOptions = {}) {
           // (archived:false, fork:false, id:null, createdAt:null), silently
           // bypassing the archived/fork guard, repojack repoId check and
           // name-reuse createdAt tombstone. Same posture as a tree failure:
-          // keep the old entry / defer a new seed to the next run.
+          // keep the old entry / defer a new seed to the next run — with the
+          // same pinned-bytes shape heal the tree-transient branch applies.
           ghStats.treeTransient++
           if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-fetch-error')
-          return ghPrev ?? null
+          if (ghPrev) {
+            const healed = await healKeptGh(ghPrev, lower)
+            if (healed === null && isSeedRepo(cand)) seedOutcomes.set(lower, 'no-plugin-shape')
+            return healed
+          }
+          return null
         }
       }
       // fork guard for candidates that never entered the backfill branch —
@@ -1274,7 +1289,16 @@ export async function run(opts: RunOptions = {}) {
         // repo whose tree keeps erroring must not sit 'queued' unexplained
         // until the 30-day dead cutoff
         if (isSeedRepo(cand)) seedOutcomes.set(lower, 'repo-fetch-error')
-        return ghPrev ?? null
+        // the tree probe failed but codeload didn't — heal the kept entry's
+        // stale 'plugin' claim against its PINNED bytes (different quota),
+        // or tombstone it when they prove shapeless + skill-less. Without
+        // this a rate-limit storm freezes every kept claim indefinitely.
+        if (ghPrev) {
+          const healed = await healKeptGh(ghPrev, lower)
+          if (healed === null && isSeedRepo(cand)) seedOutcomes.set(lower, 'no-plugin-shape')
+          return healed
+        }
+        return null
       }
       if (!treeRes.paths || treeRes.paths.size === 0) {
         // 404/409 → paths null (gone); a 200 with zero entries is a real repo
@@ -1434,6 +1458,31 @@ export async function run(opts: RunOptions = {}) {
         ...(pluginPart ? ['plugin' as const] : []),
         ...(hasSkill ? ['skill' as const] : []),
       ]
+      // github parity with the npm shapelessPlugin gate: a repo that declares
+      // a loadable entry (root package.json main/exports — what `plugin add
+      // o/r` resolves) but whose scanned bytes hold no plugin-shaped module,
+      // no SKILL.md and no explicit .opencode/plugin artifact is a CLI /
+      // server / plain lib wearing opencode signals — refused for pending
+      // entries ('filtered' via gone-check when the name was already listed).
+      // Approved/legacy displays are never touched: they keep their listing
+      // and gain a regression finding instead (npm parity). A failed scan is
+      // absent evidence — the veto only fires on scanned bytes; a repo with
+      // no declared entry stays admissible as honest contains:[] material.
+      const ghHasEntry = !!(repoPkg.pkg?.main || repoPkg.pkg?.exports)
+      const ghShapeless = scan.scannedAt !== null && ghHasEntry && !hasSkill
+        && !pluginModule && !feats.includes('gui') && !pluginArtifact
+      if (ghShapeless) {
+        if (ghPrev && ghPrev.approval !== 'pending' && !isBlockedAnyCase(ghPrev.name, ghPrev.slug)) {
+          return {
+            ...ghPrev,
+            metrics: { ...ghPrev.metrics, stars: cand.stars, checkedAt: now },
+            capabilities: addFinding(ghPrev.capabilities, `sec:plugin-shape-regressed@${(treeRes.sha ?? 'HEAD').slice(0, 12)}`),
+          }
+        }
+        rejectedGh.add(lower)
+        if (isSeedRepo(cand)) seedOutcomes.set(lower, 'no-plugin-shape')
+        return null
+      }
       // marketMeta/submission categories are author-controlled — whitelist
       // to the canonical taxonomy (unrecognized claims fall back to classify)
       const ghClaimedCats = (marketMeta?.category ?? sub?.category ?? [])
@@ -1470,7 +1519,16 @@ export async function run(opts: RunOptions = {}) {
         publishedAt: null,
         integrity: null,
         metrics: { stars: cand.stars, npmDownloads30d: null, downloadsMonth: null, starsDelta30d: null, checkedAt: now },
-        capabilities: scan,
+        // pluginModule/skillPayload describe the PINNED bytes — persisted so
+        // shape-heal can re-judge kept entries without any api.github.com
+        // call. A failed scan leaves pluginModule undefined (absent evidence,
+        // never a veto ground); skillPayload still records the tree-side
+        // SKILL.md check which doesn't need the tarball.
+        capabilities: {
+          ...scan,
+          pluginModule: scan.scannedAt !== null ? pluginModule : undefined,
+          skillPayload: hasSkill,
+        },
         // parts-aware initial state: an installable payload (plugin/skill) is
         // 'unverified' and enters the shard queue — github-kind now verifies
         // via `plugin add owner/repo#<commit>` / codeload structure checks.
@@ -1496,6 +1554,86 @@ export async function run(opts: RunOptions = {}) {
       }
       return entry
   }
+
+  // gone-check bookkeeping + the pending shape-veto live here (before the
+  // worker pool) because ghWorker's transient branch heals kept entries
+  // through the same judgment — a rate-limited tree/meta probe must not
+  // freeze a stale 'plugin' claim forever.
+  const removedNow: RemovedEntry[] = []
+  /** names already tombstoned by shape-heal this run — goneCheck must not
+   *  resurrect them when the discovery probe that follows also fails */
+  const healedOut = new Set<string>()
+  /** per-run cap on heal codeload scans — each is a full repo tarball, so
+   *  the backfill of pre-field entries spreads across runs instead of
+   *  bursting the runner's bandwidth in one pass */
+  let healBudget = Math.max(0, Number(process.env.CATALOG_HEAL_BUDGET ?? 100) || 0)
+  // CATALOG_VETO_DRY_RUN=1 previews the pending shape-veto the rescan path
+  // applies (the kept-entry counterpart of the candidate-path gate) —
+  // report only, no tombstones, so a ruleset bump can be rehearsed first
+  const vetoDryRun = opts.vetoDryRun ?? /^(1|true)$/i.test(process.env.CATALOG_VETO_DRY_RUN ?? '')
+  const vetoReport: { name: string; version: string | null; kind: 'npm' | 'github'; action: string }[] = []
+
+  /** pinned-bytes shape heal for kept github entries the api.github.com
+   *  budget can't reach. Rate-limit storms freeze tree/meta probes, but
+   *  codeload tarballs ride a different quota — the pending 'plugin' claim
+   *  can still be re-judged against the PINNED commit (immutable archive,
+   *  same bytes source.version anchors). capabilities.pluginModule /
+   *  skillPayload persist the verdict so repeat checks are free; a bounded
+   *  codeload scan backfills entries scanned before the fields existed.
+   *  Returns the entry (possibly contains/capabilities-corrected), or null
+   *  when the pinned bytes prove shapeless + no skill payload — the caller
+   *  turns that into a 'filtered' tombstone. Absent evidence (scan failure,
+   *  budget exhausted, unpinned entry) keeps the entry unchanged: a failed
+   *  probe is never proof of shapelessness. */
+  const healGhShape = async (e: PluginEntry): Promise<PluginEntry | null> => {
+    if (e.source.kind !== 'github' || e.approval !== 'pending'
+        || e.features?.includes('gui') || !e.source.version
+        || !verifyPartsOf(e).includes('plugin')) return e
+    let cur = e
+    let pm = cur.capabilities.pluginModule
+    let sp = cur.capabilities.skillPayload
+    if (pm === undefined || (pm === false && sp === undefined)) {
+      if (healBudget <= 0) return e
+      healBudget--
+      try {
+        const repo = cur.source.repo ?? cur.name
+        const tgz = await fetchTarball(`https://codeload.github.com/${repo}/tar.gz/${cur.source.version}`, { fetchFn: f, maxBytes: 192 * 1024 * 1024 })
+        const r = await scanTarball(tgz)
+        pm = r.pluginModule
+        sp = hasSkillPath(new Set(r.files.map(p => p.replace(/^[^/]+\//, ''))))
+        cur = { ...cur, capabilities: { ...cur.capabilities, pluginModule: pm, skillPayload: sp } }
+      } catch { return e }
+    }
+    if (pm !== false) return cur
+    // shapeless on the pinned bytes — the same judgment rescanStaleGh and
+    // the npm kept-entry veto apply: a skill payload keeps an honest
+    // ['skill'] claim, skill-less shapeless is refused outright
+    const parts = verifyPartsOf(cur).filter(p => p !== 'plugin')
+    if (sp === true) {
+      if (!parts.includes('skill')) parts.push('skill')
+      vetoReport.push({ name: cur.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}contains→[${parts.join(',')}]` })
+      console.log(`  shape-heal ${cur.name}: plugin claim unsupported → contains [${parts.join(',')}]${vetoDryRun ? ' (dry-run)' : ''}`)
+      return vetoDryRun ? cur : { ...cur, contains: parts }
+    }
+    vetoReport.push({ name: cur.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}filter` })
+    console.log(`  shape-heal ${cur.name}: no plugin-shaped module → ${vetoDryRun ? 'WOULD filter (dry-run)' : 'filtered'}`)
+    return vetoDryRun ? cur : null
+  }
+
+  /** heal + tombstone bookkeeping for a kept github entry whose api probe
+   *  failed — returns the healed entry, or null after recording the
+   *  'filtered' tombstone (healedOut blocks goneCheck resurrection) */
+  const healKeptGh = async (e: PluginEntry, lower: string): Promise<PluginEntry | null> => {
+    const healed = await healGhShape(e)
+    if (healed !== null) return healed
+    healedOut.add(lower)
+    removedNow.push({
+      slug: e.slug, name: e.name, lastSource: e.source,
+      disappearedAt: now, reason: 'filtered', createdAt: e.createdAt,
+    })
+    return null
+  }
+
   await pool(ghMissing, async c => {
     try {
       const e = await ghWorker(c)
@@ -1522,7 +1660,6 @@ export async function run(opts: RunOptions = {}) {
   //    kept, not tombstoned: absence from a paginated search result is not
   //    evidence of anything (R-3). Real departures still tombstone via 404.
   const freshNames = new Set(entries.map(e => e.name.toLowerCase()))
-  const removedNow: RemovedEntry[] = []
 
   // periodic ruleset sweep (bounded slice per run): carried-over entries whose
   // scan predates the current ruleset never re-enter discovery, so without a
@@ -1532,11 +1669,6 @@ export async function run(opts: RunOptions = {}) {
   // CATALOG_RESCAN_BUDGET lets a manual dispatch run a bulk sweep instead of
   // grinding through thousands of stale entries at 20/hour.
   let rescanBudget = Math.max(0, Number(process.env.CATALOG_RESCAN_BUDGET ?? 20) || 20)
-  // CATALOG_VETO_DRY_RUN=1 previews the pending shape-veto the rescan path
-  // applies (the kept-entry counterpart of the candidate-path gate) —
-  // report only, no tombstones, so a ruleset bump can be rehearsed first
-  const vetoDryRun = opts.vetoDryRun ?? /^(1|true)$/i.test(process.env.CATALOG_VETO_DRY_RUN ?? '')
-  const vetoReport: { name: string; version: string | null; kind: 'npm' | 'github'; action: string }[] = []
   const staleCaps = (c: PluginEntry['capabilities'] | undefined) =>
     c !== undefined && c.rulesetVersion !== RULESET_VERSION
   // returns null when the pending shape-veto refuses the entry — the
@@ -1570,6 +1702,11 @@ export async function run(opts: RunOptions = {}) {
           return {
             caps: {
               scannedAt: now, rulesetVersion: RULESET_VERSION,
+              // shape evidence for this slot's bytes — same fields the
+              // github side persists (absent-evidence = undefined, and a
+              // successful scan always writes a definite boolean)
+              pluginModule: r.pluginModule,
+              skillPayload: hasSkillPath(new Set(r.files.map(f => f.replace(/^package\//, '')))),
               findings: [...new Set([...r.findings.map(x => fmtFinding(x)), ...keepFindings(c)])],
               // union the persistent flags — sec:repo-recreated/sec-delta:* are
               // re-derived by NO layer once repoId/findings converge (keepFlags)
@@ -1645,7 +1782,7 @@ export async function run(opts: RunOptions = {}) {
     entries.push(re)
     return true
   }
-  const rescanStaleGh = async (e: PluginEntry, pushedAt: string | null): Promise<PluginEntry> => {
+  const rescanStaleGh = async (e: PluginEntry, pushedAt: string | null): Promise<PluginEntry | null> => {
     // two triggers share the budget: a ruleset bump owes every kept entry a
     // re-scan, and an upstream push owes it fresh drift flags + a re-anchored
     // pin. Without the pushedAt arm a fallen-out-of-discovery repo could move
@@ -1690,18 +1827,29 @@ export async function run(opts: RunOptions = {}) {
       // .opencode/plugin(s) artifact evidence or a GUI entrypoint stands.
       // Fresh shapeless candidates are admitted with honest contains rather
       // than tombstoned, so the keep-path rewrites the stale claim the same
-      // way — the entry itself always survives. Approved/legacy displays
-      // keep their claim: contains must not change under a live listing.
+      // way — except a shapeless + skill-less pending entry, which is
+      // refused outright (null → 'filtered' tombstone, npm parity). Approved/
+      // legacy displays keep their claim: contains must not change under a
+      // live listing.
       let vetoContains: PluginEntry['contains'] | undefined
+      // skillPaths is computed once — the veto judges it and the
+      // capabilities stamp below persists the same evidence (skillPayload
+      // describes the pinned bytes for shape-heal's free re-checks)
+      const skillPaths = new Set([...tree.paths, ...r.files.map(strip)])
       if (e.approval === 'pending' && !r.pluginModule && !e.features?.includes('gui')
           && verifyPartsOf(e).includes('plugin')
           && ![...tree.paths].some(p => /(^|\/)\.opencode\/(plugin|plugins)\//.test(p))) {
-        const skillPaths = new Set([...tree.paths, ...r.files.map(strip)])
         const kept = verifyPartsOf(e).filter(p => p !== 'plugin')
-        if (hasSkillPath(skillPaths) && !kept.includes('skill')) kept.push('skill')
-        vetoReport.push({ name: e.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}contains→[${kept.join(',') || 'none'}]` })
-        console.log(`  shape-veto ${e.name}: plugin claim unsupported → contains [${kept.join(',') || 'none'}]${vetoDryRun ? ' (dry-run)' : ''}`)
-        if (!vetoDryRun) vetoContains = kept
+        if (hasSkillPath(skillPaths)) {
+          if (!kept.includes('skill')) kept.push('skill')
+          vetoReport.push({ name: e.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}contains→[${kept.join(',')}]` })
+          console.log(`  shape-veto ${e.name}: plugin claim unsupported → contains [${kept.join(',')}]${vetoDryRun ? ' (dry-run)' : ''}`)
+          if (!vetoDryRun) vetoContains = kept
+        } else {
+          vetoReport.push({ name: e.name, version: null, kind: 'github', action: `${vetoDryRun ? 'would-' : ''}filter` })
+          console.log(`  shape-veto ${e.name}: no plugin-shaped module → ${vetoDryRun ? 'WOULD filter (dry-run)' : 'filtered'}`)
+          if (!vetoDryRun) return null
+        }
       }
       // the pinned commit moved → the carried verification measured DIFFERENT
       // bytes. Reset to unverified so plan re-queues the new sha (merge's
@@ -1721,6 +1869,10 @@ export async function run(opts: RunOptions = {}) {
         ...(vetoContains !== undefined ? { contains: vetoContains } : {}),
         capabilities: {
           scannedAt: now, rulesetVersion: RULESET_VERSION,
+          // shape evidence for this pinned commit — shape-heal re-judges
+          // kept entries from these fields without any api.github.com call
+          pluginModule: r.pluginModule,
+          skillPayload: hasSkillPath(skillPaths),
           // non-scan findings union back in (repo-mismatch/drift/delta signals
           // nothing re-derives on this keep-path); tree-truncated is the one
           // exception — it describes THIS probe's completeness, so it
@@ -1747,6 +1899,10 @@ export async function run(opts: RunOptions = {}) {
 
   const goneCheck = async (e: PluginEntry) => {
     const lower = e.name.toLowerCase()
+    // shape-heal already tombstoned this name in ghWorker's transient
+    // branch — re-probing it here could only resurrect a proven shapeless
+    // entry when the same rate limit that triggered the heal persists
+    if (healedOut.has(lower)) return
     let reason: RemovedEntry['reason'] = 'unknown'
     if (cappedOut.has(lower)) reason = 'capped'
     else if (isBlockedAnyCase(e.name, e.slug) || blockedFresh.has(lower)) reason = 'manual'
@@ -1787,8 +1943,14 @@ export async function run(opts: RunOptions = {}) {
       const { status, meta } = await fetchRepoMeta(e.source.repo ?? e.name, { token: opts.ghToken, fetchFn: f })
       if (status === 'rate-limited') rateLimitedCalls++
       if (status === 'error' || status === 'rate-limited') {
-        entries.push(e)
-        return
+        // the meta probe failed but codeload didn't — heal the pending
+        // 'plugin' claim against the PINNED bytes before keeping the entry
+        // frozen. null = shapeless + skill-less proven → 'filtered' below.
+        const healed = await healGhShape(e)
+        if (healed !== null) {
+          entries.push(healed)
+          return
+        }
       }
       if (status === 'ok' && !rejectedGh.has(lower)) {
         // same kept-entry re-gate as the npm arm — repo topics/name/desc
@@ -1801,8 +1963,16 @@ export async function run(opts: RunOptions = {}) {
           const evOk = tree.paths ? hasRepoEvidence(tree.paths, meta?.topics ?? [], repo, descText).ok : null
           if (evOk === false && e.approval === 'pending') { reason = 'filtered' }
           else if (evOk === false) { entries.push({ ...e, capabilities: addFinding(e.capabilities, `sec:evidence-regressed@${(tree.sha ?? 'HEAD').slice(0, 12)}`) }); return }
-          else { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
-        } else { entries.push(await rescanStaleGh(e, meta?.pushedAt ?? null)); return }
+          else {
+            // rescanStaleGh returns null on the pending shape-veto — fall
+            // through to the 'filtered' tombstone below (npm parity)
+            const re = await rescanStaleGh(e, meta?.pushedAt ?? null)
+            if (re !== null) { entries.push(re); return }
+          }
+        } else {
+          const re = await rescanStaleGh(e, meta?.pushedAt ?? null)
+          if (re !== null) { entries.push(re); return }
+        }
       }
       reason = status === 'not-found' ? 'repo-404' : 'filtered'
     }

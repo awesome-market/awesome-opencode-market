@@ -314,6 +314,12 @@ export function mergeEntries(
         // restored evidence, moved-on delta — immortal on the detail page.
         // Byte-stable scan findings (rule:file) still union normally.
         ...prevVer.capabilities,
+        // shape evidence prefers the FRESH scan when it produced one — the
+        // worker/rescan/heal paths write pluginModule/skillPayload this run;
+        // prev's copy only stands when the fresh side scanned nothing
+        // (undefined = absent evidence, never overwrites a recorded verdict)
+        pluginModule: e.capabilities.pluginModule ?? prevVer.capabilities.pluginModule,
+        skillPayload: e.capabilities.skillPayload ?? prevVer.capabilities.skillPayload,
         findings: [...new Set([
           ...prevVer.capabilities.findings.filter(f => !f.startsWith('sec:') && !f.startsWith('sec-delta:')),
           ...e.capabilities.findings])],

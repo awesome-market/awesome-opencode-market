@@ -339,7 +339,7 @@ describe('gone-check rescan: pending plugin-shape veto', () => {
     expect(out.removed.some(r => r.name === 'gone-pkg')).toBe(false)
   })
 
-  it('github pending + shapeless → contains rewritten, entry survives', async () => {
+  it('github pending + shapeless + skill-less → filtered tombstone (npm parity)', async () => {
     const d = tmp('sv-')
     const shapelessTgz = mkTgzFiles({ 'index.js': SHAPELESS })
     writeFileSync(join(d, 'old.json'), JSON.stringify(idx([pendingEntry({
@@ -356,9 +356,8 @@ describe('gone-check rescan: pending plugin-shape veto', () => {
       return null
     })
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't' })
-    const p = out.plugins.find(x => x.name === 'o/gh')!
-    expect(p.contains).toEqual([])
-    expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
+    expect(out.plugins.find(x => x.name === 'o/gh')).toBeUndefined()
+    expect(out.removed.find(r => r.name === 'o/gh')?.reason).toBe('filtered')
   })
 
   it('github pending + .opencode/plugin evidence → contains kept', async () => {
@@ -471,7 +470,7 @@ describe('gone-check rescan: pending plugin-shape veto — branch coverage', () 
     expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
   })
 
-  it('github pending + shapeless + vetoDryRun → contains kept, report would-contains', async () => {
+  it('github pending + shapeless + vetoDryRun → entry kept, report would-filter', async () => {
     const d = tmp('sv-')
     const reportPath = join(d, 'veto.json')
     const shapelessTgz = mkTgzFiles({ 'index.js': SHAPELESS })
@@ -491,7 +490,8 @@ describe('gone-check rescan: pending plugin-shape veto — branch coverage', () 
     const out = await run({ outPath: join(d, 'i.json'), oldIndexPath: join(d, 'old.json'), fetchFn: f, now: 't', vetoDryRun: true, vetoReportPath: reportPath })
     const p = out.plugins.find(x => x.name === 'o/gh')!
     expect(p.contains).toEqual(['plugin'])
+    expect(out.removed.some(r => r.name === 'o/gh')).toBe(false)
     const report = JSON.parse(readFileSync(reportPath, 'utf8')) as { name: string; action: string }[]
-    expect(report).toContainEqual(expect.objectContaining({ name: 'o/gh', kind: 'github', action: 'would-contains→[none]' }))
+    expect(report).toContainEqual(expect.objectContaining({ name: 'o/gh', kind: 'github', action: 'would-filter' }))
   })
 })
