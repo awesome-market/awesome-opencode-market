@@ -467,6 +467,11 @@ skill 走 `installSkillTar` 独立路径，同步钉。
   判官只见 32KB 摘录，「证据不足」型 concern 需要追调用点/凭据去向；
   本 job 把同一指控交给第二审查者产出 `concern-looks.jsonl`
   （catalog 分支），docket 在 concern 单上渲染「AI 复审」advisory 行。
+  **确定性车道（零 LLM）**：断言「装测/加载/契约失败」的指控直接对照
+  index 自身的 `verification.status` 判定——`failed` → supported
+  自动扣押；`verified`/`skipped`/`unverified` → 无此实测失败，指控不
+  成立自动放行（槽位照常要过其它放行闸）。不经模型、不占 limit、
+  backend 挂了也照跑；记录标 `depth:'deterministic'`。
   两个方向都能自动结案，门槛不对称：
   - **supported+concern → 自动扣押**：写 `source:'ai-look'` 的 concern
     verdict 进 verdicts spool，`latestHumanVerdicts` 并入刹车层，

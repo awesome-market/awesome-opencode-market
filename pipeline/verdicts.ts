@@ -141,7 +141,8 @@ export function latestHumanVerdicts(verdicts: AiVerdict[]): Map<string, AiVerdic
     // ai-look:pass missing any gate field is advisory forever.
     const aiLookBrake = v.source === 'ai-look' && (v.verdict === 'concern'
       || (v.verdict === 'pass' && v.lookCheck === 'unsupported'
-        && v.lookDepth === 'fetched' && v.claimClass === 'mechanical'))
+        && (v.lookDepth === 'fetched' || v.lookDepth === 'deterministic')
+        && v.claimClass === 'mechanical'))
     if (v.source !== 'human' && !aiLookBrake) continue
     if (!rankable(v.at, now)) continue
     const k = vkey(v.name, v.version)

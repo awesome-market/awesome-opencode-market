@@ -61,8 +61,10 @@ export interface ConcernLook {
   /** which evidence tier answered (oneshot backend only): 'material' =
    *  tier-0 judged from the existing review material alone — a weaker
    *  signal the reviewer should know; 'fetched' = the deterministic fetch
-   *  round ran, see `fetched` for exactly what it pulled */
-  depth?: 'material' | 'fetched'
+   *  round ran, see `fetched` for exactly what it pulled; 'deterministic'
+   *  = no model involved — an installability claim decided against the
+   *  index's own verification.status */
+  depth?: 'material' | 'fetched' | 'deterministic'
   /** package files the fetch round pulled into evidence — the reviewer's
    *  one-click spot-check: the reason cites files, these links open the
    *  exact bytes the judge saw (unpkg / raw.githubusercontent pin) */
@@ -304,6 +306,21 @@ const mechanicalClaim = (v: { reason?: string | undefined; reasonEn?: string | u
   if (BEHAVIORAL_CLAIM.test(t)) return false
   return MECHANICAL_CLAIM.test(t)
 }
+
+/** narrower than mechanicalClaim: the claim specifically ASSERTS an
+ *  install/load/contract failure — decidable with zero LLM against the
+ *  index's own verification.status, the live ground truth of whether the
+ *  package installs. 'failed' → the claim holds (auto-hold); anything
+ *  else — verified, skipped, unverified — means no such test failure
+ *  exists, so the claim is refuted (auto-release; the slot still can't
+ *  ship until verified, the verdict only clears the stale accusation).
+ *  Claims merely MENTIONING install-adjacent words (postinstall risk,
+ *  schema nits) fall through to the LLM look. */
+const INSTALLABILITY_CLAIM = /装测失败|安装失败|加载失败|无法加载|无法安装|装不上|加载不了|非可装插件|不可装载|verify\s*(?:install|load|structure|interactive)?\s*级|缺\s*default|must export|no server|missing default export|failed to (?:install|load)|NpmInstallFailedError/i
+const installabilityClaim = (v: { reason?: string | undefined; reasonEn?: string | undefined }): boolean => {
+  const t = `${v.reason ?? ''} ${v.reasonEn ?? ''}`
+  return !BEHAVIORAL_CLAIM.test(t) && INSTALLABILITY_CLAIM.test(t)
+}
 const PLAN_SYSTEM = 'You are triaging a security-review second look. Given the claim under test and the package file list, reply with ONLY a JSON object {"fetch":["path/one.js","path/two.js"]} naming up to 5 package files whose contents would most directly confirm or refute the claim — entry points, files the claim names, likely callers/callees. No prose.'
 
 type ChatFn = (messages: { role: string; content: string }[], think: boolean) => Promise<string>
@@ -530,6 +547,47 @@ export async function main(
     for (const w of queue.slice(0, limit)) console.log(`  ${w.e.name}@${w.ver ?? '?'} — ${(w.v.reason ?? '').slice(0, 80)}`)
     return
   }
+  // deterministic lane, zero-LLM: an installability claim is decidable
+  // against the index's own verification.status — the live ground truth
+  // of whether the package installs. Runs before the backend check so an
+  // unavailable backend never stalls this free lane, and these slots
+  // don't consume --limit. Both directions land verdicts through the
+  // same ai-look gates as model looks (depth 'deterministic').
+  const detQueue: typeof queue = []
+  const llmQueue: typeof queue = []
+  for (const w of queue) (installabilityClaim(w.v) ? detQueue : llmQueue).push(w)
+  let wrote = 0
+  if (detQueue.length) {
+    console.log(`[concern-look] ${detQueue.length} slot(s) resolve deterministically via verification.status (no LLM)`)
+    for (const w of detQueue) {
+      const st = w.e.verification?.status ?? 'unverified'
+      const supported = st === 'failed'
+      const rec: ConcernLook = {
+        name: w.e.name, version: w.ver, verdictAt: w.v.at, at: new Date().toISOString(),
+        claimCheck: supported ? 'supported' : 'unsupported',
+        suggestion: supported ? 'concern' : 'pass',
+        reasonZh: `确定性复核：装测实测状态为 ${st}，指控${supported ? '成立' : '不成立'}（未经模型判定）`,
+        reasonEn: `deterministic check: verification.status is ${st} → claim ${supported ? 'supported' : 'unsupported'} (no model involved)`,
+        depth: 'deterministic',
+      }
+      appendFileSync(spoolPath!, `${JSON.stringify(rec)}\n`)
+      if (vspoolPath) {
+        const verdict = {
+          name: w.e.name, version: w.ver,
+          verdict: supported ? 'concern' : 'pass',
+          reason: supported
+            ? `确定性复核坐实指控（装测实测 ${st}），自动结案扣押（concern-look deterministic）`
+            : `确定性复核推翻机械类指控（装测实测 ${st}），自动结案放行（concern-look deterministic）`,
+          reasonEn: `deterministic second look: verification.status=${st} → ${supported ? 'claim supported, auto-held' : 'mechanical claim refuted, auto-released'}`,
+          at: rec.at, source: 'ai-look',
+          ...(supported ? {} : { lookCheck: 'unsupported', lookDepth: 'deterministic', claimClass: 'mechanical' }),
+        }
+        appendFileSync(vspoolPath, `${JSON.stringify(verdict)}\n`)
+      }
+      console.log(`[concern-look] ${w.e.name}@${w.ver ?? '?'} → deterministic:${supported ? 'held' : 'released'} (verify=${st})`)
+      wrote++
+    }
+  }
   // backend: opencode (default — local Ornith, free) or devin (swe-2-flash,
   // costs credits). CONCERN_LOOK_BACKEND overrides; the sweep passes the
   // env through. deps.look/devinUp stay injectable for tests.
@@ -549,7 +607,7 @@ export async function main(
     // still land records so the docket can show the queue is alive-but-degraded
     // and so dead-key accounting stays honest; no LLM burn
     const now = new Date().toISOString()
-    for (const w of queue.slice(0, limit)) {
+    for (const w of llmQueue.slice(0, limit)) {
       const rec: ConcernLook = {
         name: w.e.name, version: w.ver, verdictAt: w.v.at, at: now,
         claimCheck: null, suggestion: null, aiNote: `${backendName}-unavailable`,
@@ -558,8 +616,7 @@ export async function main(
     }
     return
   }
-  let wrote = 0
-  for (const w of queue.slice(0, limit)) {
+  for (const w of llmQueue.slice(0, limit)) {
     // one crashed session must not abort the batch — record the failure and
     // let the next slot try (same fail-closed posture as flag-context)
     let resp: LookResp | null = null
