@@ -39512,7 +39512,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：凭证仅以 i18n 错误字符串形式出现、网络调用看似正常的目录/清单拉取，但材料含 curl|bash 远程安装管道、postinstall 生命周期脚本在安装时执行任意 node 脚本，且内容提取超时、未能验证实际行为，需人工复核。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取失败，无法查看实际源码；安装时运行的 postinstall 脚本、curl|bash 安装管道、未知目的地的网络调用以及系统凭据库访问，均无法确认不会导致凭据外泄。"
     },
     {
       "name": "@1930dev/opencode-usage",
@@ -40498,7 +40498,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：扫描显示该插件读取了.ssh/.gnupg/.aws/.azure/.kube/.docker/.gcloud等多个本地凭证目录，并存在网络调用，但包内容提取因超时而失败，无法确认这些读取到的凭证是否被发送至无关目的地。"
     },
     {
       "name": "@2jmalvarez/opencode-editor",
@@ -43222,7 +43222,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：扫描报告含2条读取 .npmrc 的凭证读取红旗与若干 curl 网络调用，但未显示密钥实际发往何处；且包内容提取超时、实际代码未被 inspect，需人工确认凭证是否发送至无关目标。"
     },
     {
       "name": "777genius/universal-plugins-for-ai-agents",
@@ -50545,12 +50545,19 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:11.242Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/adnanmokhtar_refract-d9ebc9c103d4.log",
+        "integrity": "d9ebc9c103d483d5cf612851232cb436eb12ac9a",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "对账：已审阅的逐行均为其声明功能的正常实现，但红旗明确指出的约3225个未审阅文件中存在文件量/数量异常，且脚本扫描覆盖了本包的 hooks、signals 等未逐行评审的其它文件，存在未被证据覆盖的潜在风险。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "adolfomarques/karaokeando",
@@ -64936,7 +64943,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：扫描器将 '.npmrc' 复制到打包输出（可能含 registry 认证令牌）以及 package.json 的 postinstall 执行任意 Node 代码列为两个红旗，存在凭据泄露与安装时执行脚本风险。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容因超时而提取失败，无法核对实际代码；且残留 postinstall 执行 JS、拷贝 .npmrc、未审计的 macOS 原生二进制、'webtracking-post' 网络上报等多处高危信号，无法验证其 'security audit / local-first' 声明。"
     },
     {
       "name": "alicankiraz1/SentinelXPrime",
@@ -68022,7 +68029,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.753 ≥ 0.662，块 finding:2:obfuscation:shared/skills/design-gates/scripts/verify_keyboard.mjs — L225: const）；LLM 判 pass：内容提取因超时失败、仅能依据元数据与扫描证据；三个发现均为安全模式（curl 仅拉取本仓库 raw 安装脚本、spawn 导入、简单的 DOM 属性读取），未见凭证外泄、注入或提示注入证据。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "alvarorojasdev/ai-dev-setup",
@@ -69016,7 +69023,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install ambystechcom/AmbyKit#e8b36c2d044ddddff9adf5a2dfa21e1d56b48745: git dep preparation failed"
     },
     {
       "name": "ameshkov/opencode-sdd",
@@ -71521,7 +71528,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "清单描述为无意义的占位符（'More dependencies !!!'），且材料超时未提取到源码，无法验证其宣称与实际行为一致。"
+      "approvalReason": "manifest描述只是占位符文字（'More dependencies !!!'），没有准确说明插件实际功能；且安装包含有多个不明来源的.so二进制文件，未见其来源与用途说明。"
     },
     {
       "name": "@and7ey/opencode-deepseek-peak",
@@ -78144,7 +78151,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "manifest 声称“打开每个职位到你的已登录浏览器并写每日 Markdown 清单”，但 package 内实际仅含只读搜索/SMTP 通知脚本与纯文本 SKILL.md，没有浏览器控制、职位抓取或报告生成代码，描述与实现明显不符。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "n8n-nodes-opencode-v2",
@@ -88604,7 +88611,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.846 ≥ 0.662，块 finding:0:scan:oversize-repo）；LLM 判 concern：包内容提取因超时而失败、且未运行静态扫描，实际代码不可见，仅有‘oversize-repo’提示与一段模糊的营销式描述，无法审查是否存在 prompt injection/凭证泄漏/恶意调用，需人工进一步审查。"
+      "approvalReason": "包内容提取失败，清单描述为与代码无关的占位/营销套话，且无静态扫描证据，需人工介入核查。"
     },
     {
       "name": "autopus-ai/autopus-adk",
@@ -100463,7 +100470,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install BharatCode-ai/bharatcode-desktop#ae4432482b368ef0c3e857d9c1e802587fc0fe66: git dep preparation failed"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：根 package.json 第15-16行确实声明了 postinstall 与 prepare（husky）两个生命周期脚本，且安装报错 'git dep preparation failed' 与上游 bug #62817 描述的 git 依赖带 build/prepare 脚本时 plugin add 失败的机制完全一致，支持第一遍将故障归因于上游而非包本身缺陷的判断。"
     },
     {
       "name": "@bhardwj-sarvesh-projects/curlycoder",
@@ -101129,7 +101136,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时而失败，无法核对包内实际代码是否与声明及扫描结果一致，而扫描已检出动态Function执行、外部网络调用与base64凭证处理，需人工复查。"
     },
     {
       "name": "BIMpraxis/opencode-addins",
@@ -101679,7 +101686,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "load",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T08:10:14.975Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+          "integrity": "sha512-7FA56GibpnmIDastkNKI7+J0ItRRTdvSU0VqY2Zi5ytYdiwAit5A8U7bpVWOghXGmG0f65vmVpDtvPu2aczUgQ==",
+          "harnessGen": 2
         },
         "features": [
           "server"
@@ -107998,7 +108011,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install BrainerVirus/workit#5a97f1bf6d9ef4621593c015fc07b988285f0a2e: git dep preparation failed"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install BrainerVirus/workit#3725442b4f43f883f043c7196b642340b8496d2d: git dep preparation failed"
     },
     {
       "name": "@braintrust/trace-opencode",
@@ -123838,7 +123851,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：清单行使用模糊营销话术（'Just type \"mass ulw\" keyword...master of graph engineering'），未清晰说明包的实际功能，且暗示一个未解释的隐藏关键词触发机制，按清单描述规范属于措辞/能力声明含糊的 concern。"
+      "approvalReason": "红旗在案，AI 判 concern：清单描述（'mass ulw' 关键字…图工程大师）是模糊的营销话术，未能准确说明功能；且扫描在整个上游 monorepo（packages/、crates/、.github/、.agents/、测试套件、钥匙串签名基础设施、安装脚本）中报告了 501 项发现，41 条红色标记，相当于把整个上游项目作为单一插件分发，而非聚焦且准确描述的插件。"
     },
     {
       "name": "@skj1724/oh-my-opencode",
@@ -124442,19 +124455,19 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T06:30:22.268Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44688128150",
+        "verifiedAt": "2026-11-20T07:11:42.463Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/codesensehq_codesense-8e4481acb912.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install codesensehq/codesense#8e4481acb91253a98383efbcf00958f17e80c40f: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "8e4481acb91253a98383efbcf00958f17e80c40f",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
         "engines": "node ^24.11.0"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install codesensehq/codesense#fea13f8ce683645205d42a9b4a37fad39f2dd46d: git dep preparation failed"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时而失败，且4个凭证读取红旗（SSH密钥、.npmrc、钥匙串）与发往自有后端的网络调用未能追踪到凭据/数据实际去向，外泄风险待人工核对。"
     },
     {
       "name": "opencode-guildhall",
@@ -125863,7 +125876,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "技能描述 'botica-rule-author' 将 'ref' 定义为分支或 tag，暗示可从 remote 安装 skill，与仅含本 repo 1 个原生成员且文档明确 '该 skill 从不声明自己的规则、不复制规则文本' 的声明矛盾。"
+      "approvalReason": "manifest/scan 均未提供 setup() 代码；且本 package 是 skill 集合而非带 setup() 的 opencode 插件，无法确认是否存在 apiKey 等凭据路径，安全信号缺失。"
     },
     {
       "name": "openengineer",
@@ -134275,7 +134288,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "内容提取失败且仓库规模异常，无法验证代码实际行为，存在未知风险。"
+      "approvalReason": "扫描器因内容提取失败/超时未能检查包内代码，无法排除注入、凭证外泄或虚假描述等风险，需人工审查。"
     },
     {
       "name": "@darknesskiller/opencode-cliproxyapi",
@@ -153518,7 +153531,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：该包的 postinstall 生命周期脚本会在安装时执行任意 Node.js 脚本，且文档系统提示中包含 curl|bash 远程安装管道，而包内容提取因超时失败，无法确认这些代码实际执行内容。"
     },
     {
       "name": "EDMUND-RUSSELL/sidebranch",
@@ -159483,7 +159496,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时而失败、无法查看包内实际代码；扫描发现读取 ~/.ssh（SSH 密钥/凭据）且存在 curl 管道到 shell 与多个网络调用，但未显示凭据实际流向或这些调用的目的，证据不足，需人工审查。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取超时失败，仅余元数据与扫描模式，其中含 eval() 动态执行脚本、读取 ~/.ssh 凭证及多处网络调用，虽未见凭证外传或注入证据，但提取失败本身需人工复查。"
     },
     {
       "name": "@seangle/opencode-remember",
@@ -168611,7 +168624,7 @@
         "engines": "node >=22.9.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：清单描述与代码相符，但扫描因体量预算仅覆盖201/612个候选文件，并明确标注其余411个文件为「文件数量/体量异常本身即是可疑信号」，且存在从第三方域名（antigravity.google、trae.cn）curl | bash 执行安装脚本的模式，未覆盖代码量过大且部分需人工复核。"
     },
     {
       "name": "omos-fitzpa",
@@ -169092,7 +169105,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.916 ≥ 0.662，块 finding:6:network-call:scripts/verify-android-passkeys.mjs — L94: const pages = await (awa）；LLM 判 concern：清单描述符为空（仅包名加冒号，未说明任何功能），且包内容提取因超时失败、无法验证实际行为，需人工介入审查。"
+      "approvalReason": "manifest 描述为空（无任何实质内容），未能声明该插件的功能，构成不准确/占位式 listing。"
     },
     {
       "name": "florianilch/opencode-llamacpp-provider",
@@ -169972,16 +169985,16 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T06:30:22.263Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44688128150",
+        "verifiedAt": "2026-11-20T07:11:42.474Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fnodotdev_fno-735f49506ba2.log",
         "integrity": "735f49506ba2ba6a5ec39ce1d6ebb51b4fae0e3d",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify structure 级）：(无日志摘录)"
+      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时失败，未能查看包内实际代码；3个红旗均仅指向Shell脚本注释或安装/CI脚本，未见凭证被发送至无关目的地，但核心插件的实际行为无法验证。"
     },
     {
       "name": "@foae/opencode-timings",
@@ -170847,7 +170860,7 @@
         "peer": "typescript@^7.0.2"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：agent-review 的 writeDiffFiles 把 GitHub PR 元数据（head/mergeBase/since 等分支/引用）拼成 shell 字符串传给 exec 而非 argv 数组，攻击者可通过命名分支注入任意命令；且 setup.md 等把远程 curl 输出直接管道喂给 bash/sh/tar 执行。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "@french-castle/skill-scanner",
@@ -173793,14 +173806,22 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "install",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:11.236Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/fworks-tech_agenthood-65885dcb1b92.log",
+        "logExcerpt": "NpmInstallFailedError: Failed to install fworks-tech/agenthood#65885dcb1b922f48a260c56bffae39062ce5af2a: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring build/prepublishOnly/postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "integrity": "65885dcb1b922f48a260c56bffae39062ce5af2a",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {
         "engines": "node >=22.14.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该包在 package.json 中配置了可在安装时自动执行的 postinstall 生命周期脚本，而本次内容提取因 fetch 失败未能获取包内原文，其实际行为未经证实；同时 skills/sentry/SKILL.md 存在 `curl ... | bash` 远程下载后执行的模式，需人工复查。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "fworkslab/build-with-me",
@@ -210494,7 +210515,7 @@
         "engines": "node >=20.9.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该包有5个红色标记，包括3处系统密钥链凭证读取、browser-mirror中用 new Function() 执行用户可控 script 参数实现任意代码执行，且其运行 AI 代理（易受提示注入）并访问 GitHub/Google/Netlify 等网络服务，存在凭证访问与任意代码执行风险。"
+      "approvalReason": "红旗在案，AI 判 concern：该包在 browser-mirror 的 HTTP /control 端点中把请求体里的 params.script 用 new Function() 执行，构成可网络触发的任意脚本执行/注入；同时 keychain 读取出的 Claude 凭证以明文返回，且材料未显示其去向或安全使用。"
     },
     {
       "name": "opencode-ntk",
@@ -236152,12 +236173,17 @@
         "flaggedAt": "2026-11-16T01:16:31.089Z"
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:11.224Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "integrity": "09301c9c009796678679f30c765708df2d498885",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：扫描器自身标记了1个红旗（sec:name-reused 名称复用），且存在通过 Bun.spawn 执行任意 bash -c 命令的子进程调用，加之作者、发布时间与包内容提取均不明确，存在名称劫持/供应链与命令注入风险。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "Klaus101-ai/skill-mcp",
@@ -244672,7 +244698,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：内容提取超时导致无法直接验证包内实际代码，且仓库在发布后被迁移，仅凭扫描结果存在元数据完整性与未知代码的残留不确定性。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时失败，setup()/provider.transform 与凭证及网络出口行为未被观察到，仅见 2 个 keychain 签名身份读取标记及大量网络/子进程调用，无法确认任何凭证最终去向，需人工审计。"
     },
     {
       "name": "lee259/oh-my-claudian",
@@ -264473,7 +264499,7 @@
         "peer": "typescript@^5.0.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：清单是夸大/营销式占位描述而非准确的功能说明，且代码含远程 curl | bash 安装管道、读取 .ssh/.env/.aws 等凭证文件、向外部端点发起大量网络请求及 base64 解码令牌，存在凭证外泄与远程执行风险。"
+      "approvalReason": "红旗在案，AI 判 concern：清单描述是空泛营销套话（'SOTA everything'、'最强AI harness'），且包内自身的 onboarding 文档写了 `curl ... | bash && openclaw onboard --install-daemon` 这种从远端拉取脚本并 pip 给 bash、再安装守护进程的代码执行/供应链模式。"
     },
     {
       "name": "marcusrbrown/opencode-copilot-delegate",
@@ -268967,7 +268993,7 @@
         "engines": "node >=22.6.0"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时报错失败，未能看到实际插件源码，manifest 声明与代码行为、以及被标记的凭证处理逻辑均未经验证，red flags 仅显示禁用 keychain 的标志而无法确认秘密实际去向。"
     },
     {
       "name": "opencode-message-rail",
@@ -269383,7 +269409,7 @@
         "engines": "npm >=11.0.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该包在安装时执行 postinstall/prepare 生命周期脚本，并在源码与脚本中触发网络调用，与 manifest 声称的 local-first、no telemetry 相矛盾，且包内容提取超时、未能审查实际行为。"
+      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时失败导致对包内实际行为可见性不完整，且该包声明了会在安装时执行任意 Node.js 代码的生命周期脚本（postinstall 运行 install.js、prepare 运行 husky），同时存在目的地与用途均未在证据中展示的 network 调用，无法验证其实际行为。"
     },
     {
       "name": "opencode-lazy-plugins",
@@ -274615,7 +274641,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该插件会读取系统钥匙串以及 .env/.netrc/.pgpass/.npmrc/.pypirc 等凭证文件，同时打包了不可审计的原生 .node 与 .wasm 二进制，安装流程还用 curl|bash 执行远程脚本，存在凭证泄露与远程代码执行风险。"
+      "approvalReason": "红旗在案，AI 判 concern：该插件随包跨五平台预编译并附带原生 .node 与 wasm 二进制、且安装脚本用 curl | bash 执行远程代码，二者均在导入/安装时执行无法静态审计的代码；此外 context-scan 含扫描 .env/.credentials/.netrc 等敏感文件的正则，但材料未显示明确的外传证据。"
     },
     {
       "name": "opencode-browser",
@@ -278111,7 +278137,7 @@
         "engines": "node >=18.13"
       },
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install MisonL/magpie-plugin-msmoli#e103944bf1582bc40b902a038058bb536d4b6c53: git dep preparation failed"
+      "approvalReason": "扫描结果中唯一有注释说明的网络调用（index.mjs）把 token 作为 Cookie 发回同一官方站点 modelscope.cn，未见发往无关目的地的证据；但另有一条被标记为 network-call 的 fetch 未给出调用上下文，无法确认其是否把凭据发往无关目的地。"
     },
     {
       "name": "cli-agent-mode",
@@ -279406,7 +279432,7 @@
         "engines": "node ^24.15.0 || >=26.0.0"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：包内存在 base64 编码后 eval 执行的混淆代码、向外部 relay/OpenRouter 的网络调用、ssh.allow=always 等凭证相关信号，且 178 个文件未进入评审视野、另有一枚标记为可执行的 JSON 二进制，综合构成安全顾虑。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时而失败，插件实际的 setup(ctx) 源码、网络调用去向与凭证读取后的流向均未被审查，仅能依赖扫描元数据，需人工复核。"
     },
     {
       "name": "moah0911/aftermath",
@@ -284664,7 +284690,7 @@
         "engines": "node >=24; pnpm >=9"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：extension 的 postinstall 生命周期脚本在安装时执行 node init.mjs，自动 fetch 并加载维护者 GitHub Pages 上的远程 JS，构成安装期远程代码执行/供应链风险，且内容覆盖率说明中 500 个文件未审本身即被标记为可疑信号。"
+      "approvalReason": "红旗在案，AI 判 concern：扩展的 postinstall 生命周期脚本会执行 init.mjs，在安装时从第三方 GitHub Pages 地址 fetch 外部脚本，构成安装期网络调用/潜在远程代码执行风险，且因内容提取超时未能完整审查包体。"
     },
     {
       "name": "opencode-codex-websearch-byok",
@@ -285753,7 +285779,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：可见代码主要是正常的 agent/网络/子进程/凭证读取功能且说明中包含 curl|bash 安装管道，但存在 10 个红色标记且 109 条扫描发现被截断未展示，无法确认隐藏部分不含提示注入或凭据外泄。"
+      "approvalReason": "红旗在案，AI 判 concern：清单行只是模糊营销口号 'All your work and agents in one place'，未说明实际功能；且该包是完整应用 monorepo 而非插件，内含 eval 代码执行、curl|bash 远程安装、base64 解压可执行文件、广泛读取 ~/.ssh/.aws/.git 等凭据目录等风险。"
     },
     {
       "name": "opencode-whisper-dictation",
@@ -294236,12 +294262,17 @@
         "redFlags": []
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:11.695Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "integrity": "ba3b8e15dc11809306155297709ce790f9e4c024",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "manifest仅30词的纯营销空话（与功能无关的占位文本），且包体1054个文件中880个未进评审，体量异常；核心C#源码未进入评审视野，install.sh脚本将curl | bash结果直接提供给后续shell（注入风险），且evals网络调用检查均未通过。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "neuland-ingolstadt/neuland.app-native",
@@ -303053,7 +303084,13 @@
           "redFlags": []
         },
         "verification": {
-          "status": "unverified"
+          "status": "verified",
+          "level": "interactive",
+          "opencodeVersion": "2.3.1",
+          "verifiedAt": "2026-11-20T08:10:15.522Z",
+          "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+          "integrity": "sha512-wGMlVERWpE5dShAfurQB+gPNHOrEk+6edmgWMwZuyn670sreRrY+aM97G5yzKKrxpZ7GaSlrvJU6Hv//GdWRDw==",
+          "harnessGen": 2
         },
         "features": [
           "server",
@@ -306759,7 +306796,7 @@
         ],
         "integrity": "sha512-B9peITBB7bkgveh3uDZVSXbSyHAopHOJW62C58QPt799LNIPu8OB9Adzp1+/DwQouGX5WTv1WLeyESsw44RGiw==",
         "publishedAt": "2026-11-20T05:29:23.524Z",
-        "reason": "L0.5 命中注入信号（score 0.805 ≥ 0.662，块 finding:12:sec:repo-mismatch:oh-my-agent-workspace）；LLM 判 pass：扫描仅显示 spawnSync 的 import 导入语句与一条仓库元数据不匹配提示，未见带攻击者可控输入的实际调用、网络调用或凭据外泄，且 redFlags=0、manifest 描述准确",
+        "reason": "awaiting-review",
         "heldAt": "2026-11-20T05:30:23.593Z"
       }
     },
@@ -349017,7 +349054,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：安装失败（NpmInstallFailedError）且包内容提取超时，未提取到任何插件源码，扫描结果指向与小型 opencode 插件不符的大型 monorepo，无法验证实际行为，需人工审查。"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install oxdingzg/miao#517b961c5f81633a68eecd829eb89d59db385326: git dep preparation failed"
     },
     {
       "name": "@oxhive/opencode-hivemind",
@@ -351808,11 +351845,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T06:30:22.267Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44688128150",
+        "verifiedAt": "2026-11-20T08:10:13.466Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/ParadevAI_Paradev-79951b98debd.log",
         "integrity": "79951b98debd4833d8aafdc0da77a1587cec3477",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
@@ -353797,7 +353834,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "这是用户个人dotfiles快照，含大量无关上游技能与网络/子进程调用，manifest仅为个人dotfiles无setup/ctx凭据，缺乏OpenCode v2 plugin所需结构，且未声明凭证来源。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "pedropombeiro/opencode-plugins",
@@ -353870,7 +353907,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "扫描仅给出各插件子程序/网络调用代码片段，未提取到完整源码，无法确认网络调用是否发往无关目的地或子进程是否使用数组参数防注入，证据不足。"
+      "approvalReason": "包内容提取失败（超时），无法验证扫描到的子进程/网络调用是否安全，且manifest仅一行占位式仓库说明，需人工核查。"
     },
     {
       "name": "iron-horse-opencode",
@@ -356903,7 +356940,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时无效，仅凭扫描/装测片段无法确认凭证来源、execSync 调用目标及 localhost 请求去向，且存在 keychain/authorized_keys 读凭证等红标，无法排除凭据外泄或注入风险。"
     },
     {
       "name": "pilgrimagesoftware/Knot-App",
@@ -371379,7 +371416,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：manifest 描述行为空（仅'raulfdeztdo/epg: '），属占位符式空描述，未说明包的真实功能；而可见代码中的网络调用均为从西班牙官方电视台抓取节目数据的正常功能，未检测到凭据外泄、提示注入、混淆或恶意调用。"
+      "approvalReason": "红旗在案，AI 判 concern：清单描述为空（仅 'raulfdeztdo/epg: ' 后无任何内容），属于占位/无效文本，未说明该包的实际功能。"
     },
     {
       "name": "raultov/opencode-moa-fusion",
@@ -384038,7 +384075,7 @@
         "engines": "node >=20"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：核心运行时（免费模型路由/回退/配额追踪）与清单描述一致且网络调用指向合理的免费提供商，但包内含的 npm-publish.mjs --capture 脚本会从 ~/.npmrc 读取 npm registry token 并写入 secrets 文件，构成凭证捕获行为，即使有显式 flag 且未随 npm 包发布也需标记。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "@rvboris/opencode-decision-router",
@@ -393747,12 +393784,17 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:14.200Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "integrity": "35c61f5e456245438e7b0088e33f773e02f567e0",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：仓库在发布快照后发生移动/重命名（repo-moved-since-release），且406个文件超出评审预算未进入审查，覆盖量异常本身被列为可疑信号，需人工复核整一致性与遗漏内容。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "@sethwv/opencode-usage",
@@ -399447,12 +399489,20 @@
         ]
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "failed",
+        "level": "install",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-20T08:10:11.231Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658/job/136166860391",
+        "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/simwai_perplexity-prompts-da9ef225d6a9.log",
+        "logExcerpt": "Error: Plugin package has no server, GUI, or TUI entrypoint: simwai/perplexity-prompts#da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef\n    at <anonymous> (/$bunfs/root/chunk-d1t7nwsr.js:2:1457)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220)\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
+        "integrity": "da9ef225d6a91b8abe0daf6f5d16c610cb7d12ef",
+        "retries": 1,
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：sqlite-shim.ts 使用 new Function 构造函数实现动态 import（被扫描直接标记为混淆红旗），且包内 90 个文件因体量/数量超出预算未进入评审，文件异常本身是可疑信号。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-media-panel",
@@ -414025,7 +414075,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "manifest声明为’ comfortable GUI’与‘setup(ctx) → credentials api’模型不符，且实际代码出现 curl install.sh、指向 pi.dev/install.sh 的安装、chain命令读取本地JSON、Chat → Chain 与 non-streaming 等不符描述，仅凭扫描片段无法确认这些行为，且内容提取失败，需人工核对。"
     },
     {
       "name": "opencode-search1api",
@@ -415354,7 +415404,7 @@
         "engines": "node >=22.13"
       },
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：扫描标记了 'repo moved since release'（cbabb0f85cd3），且包内容提取因超时而失败，本次评审只能依赖元数据/扫描证据、从未看到实际包内源码，来源与内容均无法验证，属来源不确定风险。"
+      "approvalReason": "红旗在案，AI 判 concern：install.sh 从 keychain 读取服务器 URL + 令牌，但内容提取因超时而失败，无法确认令牌去向、husky prepare 红标脚本行为以及若干 exec 调用的实际用法，安全证据不足。"
     },
     {
       "name": "@mensa/btw",
@@ -417472,7 +417522,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：包内容提取超时失败，无法验证实际代码；而扫描已命中 postinstall 自动执行任意代码、service worker 代理全部 fetch、以及读写 .npmrc 凭据等高危模式，均不可信，存在凭据窃取与网络调用劫持风险。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取超时导致无法查看实际源码，仅能依据元数据与扫描行号标记，虽未见外泄/注入证据，但需人工复核"
     },
     {
       "name": "syyzit/opencode-agent-sound",
@@ -431056,7 +431106,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：该包含 curl|bash 安装管道、读取 SSH 凭证（id_rsa/.ssh/authorized_keys）、子进程执行、网络请求，且仓库发布后迁移、包内容提取超时失败无法核对实际行为，风险组合过高。"
+      "approvalReason": "红旗在案，AI 判 concern：该包声称只是“企业架构治理/需求/设计评审”命令集，但其实际代码会读取 ~/.ssh/id_rsa 与 .ssh/ 等 SSH 密钥/凭证文件，并执行 curl|bash 远程安装管道，已超出声明范围；虽然未显示任何密钥被发送到无关目的地，仍需人工审查。"
     },
     {
       "name": "tractorjuice/arckit-opencode",
@@ -440321,17 +440371,17 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-20T06:30:22.271Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44688128150",
+        "verifiedAt": "2026-11-20T07:11:42.476Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44700274658",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/Verbiflow_mako-decd64aef9db.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install Verbiflow/mako#decd64aef9db47024de81614ef12610215005473: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "decd64aef9db47024de81614ef12610215005473",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "装测失败（verify install 级）：依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Verbiflow/mako#69d2eb9d8523cc2fc820a588abac74579b352378: git dep preparation failed"
+      "approvalReason": "红旗在案，AI 判 concern：安装验证已失败（git依赖准备失败、opencode unrecognized flags），且manifest自称轻量插件、实际代码却是与OpenCode插件合约不匹配的庞大单仓库产品，并含curl|bash安装管道与new Function动态执行，属能力/体积/合约不符与结构异常，而非已证实的凭据外泄。"
     },
     {
       "name": "vercel-labs/durable-harness",
@@ -464626,7 +464676,7 @@
         "engines": "opencode >=1.18.29"
       },
       "approval": "pending",
-      "approvalReason": "awaiting-review"
+      "approvalReason": "装测失败（verify install 级）：上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install yuhp/opencode-models-discovery#ce6467e0bc09dead548d1b7e7bbae1a11b32dab2: git dep preparation failed"
     },
     {
       "name": "opencode-gpt-imagegen",
