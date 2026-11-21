@@ -143,6 +143,14 @@ describe('parseLookOutput', () => {
     expect(parseLookOutput('no json here')).toBeNull()
     expect(parseLookOutput('{"foo":1}')).toBeNull()
   })
+
+  it('skips a stray brace in trailing prose to reach the real object', () => {
+    const r = parseLookOutput('{"claim_check":"unsupported","verdict_suggestion":"pass"} because the {id, setup} contract fails here')
+    expect(r?.claim_check).toBe('unsupported')
+    // and a later REAL object wins over an earlier one (the verdict is last)
+    const r2 = parseLookOutput('{"foo":1} mid prose {"claim_check":"supported","verdict_suggestion":"concern"}')
+    expect(r2?.claim_check).toBe('supported')
+  })
 })
 
 describe('main', () => {
@@ -506,6 +514,39 @@ describe('oneshotLook', () => {
 
   it('unparseable judge output records parse-failed', async () => {
     const { fn } = chatRouter('{"fetch":[]}', 'I cannot determine this.')
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat: fn, listFiles: async () => [], fetchText: async () => null,
+    })
+    expect(r.resp).toBeNull()
+    expect(r.note).toBe('parse-failed')
+  })
+
+  it('malformed judge reply gets ONE corrective retry showing the model its own output', async () => {
+    let judgeCalls = 0
+    let retryMsgs: { role: string; content: string }[] = []
+    const chat = async (msgs: { role: string; content: string }[]) => {
+      const u = msgs[1]!.content
+      if (u.includes('judge ONLY from the material above')) return INCONCLUSIVE
+      if (u.includes('Package files:')) return '{"fetch":[]}'
+      judgeCalls++
+      if (judgeCalls === 1) return 'I think it uses the {id, setup} contract…'  // no valid JSON
+      retryMsgs = msgs
+      return JUDGE_OK
+    }
+    const r = await oneshotLook(entry(), verdict(), '1.0.0', {
+      chat, listFiles: async () => ['a.js'], fetchText: async () => null,
+    })
+    expect(r.resp?.claim_check).toBe('unsupported')
+    expect(judgeCalls).toBe(2)
+    // the retry carries the model's own malformed reply as assistant context
+    expect(retryMsgs).toHaveLength(4)
+    expect(retryMsgs[2]!.role).toBe('assistant')
+    expect(retryMsgs[2]!.content).toContain('{id, setup}')
+    expect(retryMsgs[3]!.content).toContain('not a valid JSON object')
+  })
+
+  it('double-malformed judge output still lands parse-failed (queue budget untouched by the retry)', async () => {
+    const { fn } = chatRouter('{"fetch":[]}', 'still not json {oops')
     const r = await oneshotLook(entry(), verdict(), '1.0.0', {
       chat: fn, listFiles: async () => [], fetchText: async () => null,
     })
@@ -1112,6 +1153,19 @@ describe('auto-resolve: supported claim writes ai-look:concern verdict', () => {
       look: async () => ({ resp: { claim_check: 'inconclusive', verdict_suggestion: 'concern', reason_zh: 'r', reason_en: 'r' }, raw: '' }),
     })
     expect(existsSync(vspool)).toBe(false)
+  })
+
+  it('parse-failed persists rawTail (last 600 chars) for diagnosis', async () => {
+    const s = setup([entry()], [verdict()])
+    const big = 'y'.repeat(700) + 'TAIL'
+    await lookMain([...args(s), '--limit', '3'], {
+      devinUp: async () => true,
+      look: async () => ({ resp: null, raw: big, note: 'parse-failed' }),
+    })
+    const rec = JSON.parse(readFileSync(s.spool, 'utf8').trim())
+    expect(rec.aiNote).toBe('parse-failed')
+    expect(rec.rawTail).toHaveLength(600)
+    expect(rec.rawTail.endsWith('TAIL')).toBe(true)
   })
 
   it('depth + fetched from the adapter land on the spool record', async () => {
