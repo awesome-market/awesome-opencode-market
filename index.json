@@ -153930,7 +153930,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：扫描已检出多个红旗（system_prompt.md 中的 curl | bash 远程脚本执行、postinstall 生命周期脚本执行任意 Node 代码、new Function() 动态构造代码），且内容提取失败未能完整审计，故标记为待核查。"
+      "approvalReason": "红旗在案，AI 判 concern：该包在 system_prompt.md 中嵌入 curl|bash 安装管道（指向无关域名 openclaw.ai），并存在动态 fetch 后 import 模块、new Function 动态源码执行、postinstall 在安装时执行任意脚本等多处可由网络/供应链执行任意代码的路径，且因 tarball 过大未能提取实际包内容，仅凭扫描与元数据证据无法确认其安全性。"
     },
     {
       "name": "EDMUND-RUSSELL/sidebranch",
@@ -190511,11 +190511,11 @@
         "status": "failed",
         "level": "structure",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-21T01:53:24.396Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44852680204/job/136687636906",
+        "verifiedAt": "2026-11-21T02:00:44.996Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/44853348173/job/136689829402",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/hashgraph-online_hol-guard-4db50301f015.log",
         "integrity": "4db50301f015bc0f2a36d708161c5b1a508c15eb",
-        "retries": 1,
+        "retries": 2,
         "harnessGen": 2
       },
       "compat": {},
@@ -357416,7 +357416,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "材料中的内容覆盖说明明确指出包内有827个文件超出预算、未进入评审视野，并被平台自身标注为“文件数量/体量异常本身即是可疑信号，需人工留意”，而清单描述“AI coding agents, tied together”过于含糊，在大量文件被排除审查的情况下构成可疑信号。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "opencode-antigravity-auth-tweaked",
