@@ -1,0 +1,49 @@
+spec: logmem/logmem#fc80ce831051350f0fde882a45023c429bcc9a46
+apiNames: logmem/logmem, logmem
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-MRBzn1/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40665
+server password [redacted]
+received SIGTERM again during shutdown; exiting. Still pending:
+  nothing tracked; the stuck finalizer is outside any LayerNode layer
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-22T03:11:47.914Z level=INFO run=9a20835e message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"logmem/logmem#fc80ce831051350f0fde882a45023c429bcc9a46\"]" role=cli
+timestamp=2026-11-22T03:11:53.148Z level=INFO run=81383d0a message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-22T03:11:53.814Z level=INFO run=81383d0a message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-22T03:11:54.061Z level=INFO run=81383d0a message="database schema bootstrap completed" migrations=62 durationMs=247 role=server
+timestamp=2026-11-22T03:11:54.378Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-22T03:11:54.381Z level=INFO run=81383d0a message="watcher subscribe" path=/etc type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-22T03:11:54.382Z level=INFO run=81383d0a message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-22T03:11:54.382Z level=INFO run=81383d0a message="watcher subscribe" path=/ type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-22T03:11:54.382Z level=INFO run=81383d0a message="watcher started" path=/ type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-22T03:11:54.382Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=24 role=server
+timestamp=2026-11-22T03:11:54.383Z level=INFO run=81383d0a message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-22T03:11:54.383Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1 type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-22T03:11:54.383Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1 type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-22T03:11:54.383Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u type=entries ignores=0 http.span=25 role=server
+timestamp=2026-11-22T03:11:54.383Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u type=entries backend=node ignores=0 http.span=25 role=server
+timestamp=2026-11-22T03:11:54.399Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/.config/opencode type=directory backend=inotify ignores=6 http.span=41 role=server
+timestamp=2026-11-22T03:11:54.406Z level=INFO run=81383d0a message="location services booted" directory=/tmp/verify-MRBzn1/u workspaceID=undefined durationMs=47 http.span=48 role=server
+timestamp=2026-11-22T03:11:54.420Z level=INFO run=81383d0a msg="loading plugin" id=logmem/logmem#fc80ce831051350f0fde882a45023c429bcc9a46 entrypoint=file:///tmp/verify-MRBzn1/u/cache/opencode/npm/git-logmem-7d3f2483243f/1795317112889/node_modules/@logmem/mcp/server.json http.span=62 role=server
+timestamp=2026-11-22T03:11:54.421Z level=WARN run=81383d0a message="failed to load plugin" target=logmem/logmem#fc80ce831051350f0fde882a45023c429bcc9a46 ref=err_fe239d8c cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=63 role=server
+timestamp=2026-11-22T03:11:55.012Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-22T03:11:55.013Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-22T03:11:55.013Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-22T03:11:55.014Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-22T03:11:55.014Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-22T03:11:55.014Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-22T03:11:55.014Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-22T03:11:55.031Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-22T03:11:55.031Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-22T03:11:55.032Z level=INFO run=81383d0a message="watcher subscribe" path=/tmp/verify-MRBzn1/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-22T03:11:55.032Z level=INFO run=81383d0a message="watcher started" path=/tmp/verify-MRBzn1/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-22T03:11:55.052Z level=INFO run=81383d0a message=event event.id=evt_2013d28ac001XSLQsBAzNeZzp2 event.created=1795317115052 event.type=provider.updated event.location.directory=/tmp/verify-MRBzn1/u event.location.workspaceID=undefined event.data={} http.span=694 role=server
+timestamp=2026-11-22T03:11:55.069Z level=INFO run=81383d0a message=event event.id=evt_2013d28bd001XJomAV458HXAb3 event.created=1795317115069 event.type=model.updated event.location.directory=/tmp/verify-MRBzn1/u event.location.workspaceID=undefined event.data={} http.span=711 role=server
+timestamp=2026-11-22T03:11:55.077Z level=INFO run=81383d0a message=event event.id=evt_2013d28c5001QSA6F2B44GLpXv event.created=1795317115077 event.type=agent.updated event.location.directory=/tmp/verify-MRBzn1/u event.location.workspaceID=undefined event.data={} http.span=719 role=server
+timestamp=2026-11-22T03:11:55.077Z level=INFO run=81383d0a message=event event.id=evt_2013d28c50025kpTqmU5BB0rwo event.created=1795317115077 event.type=command.updated event.location.directory=/tmp/verify-MRBzn1/u event.location.workspaceID=undefined event.data={} http.span=719 role=server
