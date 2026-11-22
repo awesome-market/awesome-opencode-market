@@ -3,58 +3,30 @@ apiNames: klkkeio/music-sheet-enhancer, music-sheet-enhancer
 verdict: serve reports the plugin failed to load
 
 --- /api/plugin (head) ---
-{"location":{"directory":"/tmp/verify-mi3MmO/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+{"location":{"directory":"/tmp/verify-XGva7B/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
 
 --- serve output (tail 64k, password redacted) ---
-server listening on http://127.0.0.1:43807
+server listening on http://127.0.0.1:35609
 server password [redacted]
 
 
 --- opencode log (tail 256k) ---
-timestamp=2026-11-22T03:15:07.497Z level=INFO run=a2af23f0 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8\"]" role=cli
-timestamp=2026-11-22T03:15:11.608Z level=INFO run=0facb95c message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
-timestamp=2026-11-22T03:15:12.069Z level=INFO run=0facb95c message="database schema bootstrap started" migrations=62 role=server
-timestamp=2026-11-22T03:15:12.106Z level=INFO run=0facb95c message="database schema bootstrap completed" migrations=62 durationMs=37 role=server
-timestamp=2026-11-22T03:15:12.654Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/.config/opencode type=directory ignores=6 http.span=86 role=server
-timestamp=2026-11-22T03:15:12.671Z level=INFO run=0facb95c message="watcher subscribe" path=/etc type=entries ignores=0 http.span=103 role=server
-timestamp=2026-11-22T03:15:12.672Z level=INFO run=0facb95c message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=104 role=server
-timestamp=2026-11-22T03:15:12.673Z level=INFO run=0facb95c message="watcher subscribe" path=/ type=entries ignores=0 http.span=105 role=server
-timestamp=2026-11-22T03:15:12.673Z level=INFO run=0facb95c message="watcher started" path=/ type=entries backend=node ignores=0 http.span=105 role=server
-timestamp=2026-11-22T03:15:12.673Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=105 role=server
-timestamp=2026-11-22T03:15:12.673Z level=INFO run=0facb95c message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=105 role=server
-timestamp=2026-11-22T03:15:12.676Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO type=entries ignores=0 http.span=108 role=server
-timestamp=2026-11-22T03:15:12.676Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO type=entries backend=node ignores=0 http.span=108 role=server
-timestamp=2026-11-22T03:15:12.676Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u type=entries ignores=0 http.span=108 role=server
-timestamp=2026-11-22T03:15:12.676Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u type=entries backend=node ignores=0 http.span=108 role=server
-timestamp=2026-11-22T03:15:12.755Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/.config/opencode type=directory backend=inotify ignores=6 http.span=187 role=server
-timestamp=2026-11-22T03:15:12.827Z level=INFO run=0facb95c msg="loading plugin" id=klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8 entrypoint=file:///tmp/verify-mi3MmO/u/cache/opencode/npm/git-music-sheet-enhancer-3d4fd6e5a896/1795317311140/node_modules/music-sheet-enhancer/src/index.js http.span=259 role=server
-timestamp=2026-11-22T03:15:12.848Z level=WARN run=0facb95c message="failed to load plugin" target=klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8 ref=err_993b51b8 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=280 role=server
-timestamp=2026-11-22T03:15:12.884Z level=INFO run=0facb95c message="location services booted" directory=/tmp/verify-mi3MmO/u workspaceID=undefined durationMs=315 http.span=316 role=server
-timestamp=2026-11-22T03:15:14.666Z level=ERROR run=0facb95c message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=2098 role=server
-timestamp=2026-11-22T03:15:14.857Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/.config/opencode/AGENTS.md type=file ignores=0
-timestamp=2026-11-22T03:15:14.858Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-22T03:15:14.858Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/.claude/CLAUDE.md type=file ignores=0
-timestamp=2026-11-22T03:15:14.859Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/AGENTS.md type=file ignores=0
-timestamp=2026-11-22T03:15:14.859Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/AGENTS.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-22T03:15:14.859Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/CLAUDE.md type=file ignores=0
-timestamp=2026-11-22T03:15:14.859Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/CLAUDE.md type=file backend=node ignores=0 role=server
-timestamp=2026-11-22T03:15:14.898Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/.config/opencode/skill type=file ignores=0
-timestamp=2026-11-22T03:15:14.899Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/.config/opencode/skill type=file backend=node ignores=0 role=server
-timestamp=2026-11-22T03:15:14.899Z level=INFO run=0facb95c message="watcher subscribe" path=/tmp/verify-mi3MmO/u/.config/opencode/skills type=file ignores=0
-timestamp=2026-11-22T03:15:14.900Z level=INFO run=0facb95c message="watcher started" path=/tmp/verify-mi3MmO/u/.config/opencode/skills type=file backend=node ignores=0 role=server
-timestamp=2026-11-22T03:15:14.979Z level=INFO run=0facb95c message=event event.id=evt_2014035a1001SfV5cKl3FpATcT event.created=1795317314979 event.type=provider.updated event.location.directory=/tmp/verify-mi3MmO/u event.location.workspaceID=undefined event.data={} http.span=2411 role=server
-timestamp=2026-11-22T03:15:15.027Z level=INFO run=0facb95c message=event event.id=evt_2014035d20012R9LJnvBINh2B5 event.created=1795317315027 event.type=model.updated event.location.directory=/tmp/verify-mi3MmO/u event.location.workspaceID=undefined event.data={} http.span=2459 role=server
-timestamp=2026-11-22T03:15:15.038Z level=INFO run=0facb95c message=event event.id=evt_2014035de00197GTxDNGcr2niW event.created=1795317315038 event.type=agent.updated event.location.directory=/tmp/verify-mi3MmO/u event.location.workspaceID=undefined event.data={} http.span=2470 role=server
-timestamp=2026-11-22T03:15:15.038Z level=INFO run=0facb95c message=event event.id=evt_2014035de002XGN5oQaHxRUhy6 event.created=1795317315038 event.type=command.updated event.location.directory=/tmp/verify-mi3MmO/u event.location.workspaceID=undefined event.data={} http.span=2470 role=server
-timestamp=2026-11-22T03:15:15.524Z level=INFO run=0facb95c message="shutdown started" signal=SIGTERM role=cli
-timestamp=2026-11-22T03:15:15.525Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/.config/opencode/skill type=file role=server
-timestamp=2026-11-22T03:15:15.525Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/.config/opencode/skills type=file role=server
-timestamp=2026-11-22T03:15:15.543Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/CLAUDE.md type=file role=server
-timestamp=2026-11-22T03:15:15.543Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/AGENTS.md type=file role=server
-timestamp=2026-11-22T03:15:15.544Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/.config/opencode/AGENTS.md type=file role=server
-timestamp=2026-11-22T03:15:15.636Z level=INFO run=0facb95c message="watcher stopped" path=/etc type=entries http.span=3068 role=server
-timestamp=2026-11-22T03:15:15.636Z level=INFO run=0facb95c message="watcher stopped" path=/ type=entries http.span=3068 role=server
-timestamp=2026-11-22T03:15:15.636Z level=INFO run=0facb95c message="watcher stopped" path=/tmp type=entries http.span=3068 role=server
-timestamp=2026-11-22T03:15:15.636Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO type=entries http.span=3068 role=server
-timestamp=2026-11-22T03:15:15.637Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u type=entries http.span=3069 role=server
-timestamp=2026-11-22T03:15:15.640Z level=INFO run=0facb95c message="watcher stopped" path=/tmp/verify-mi3MmO/u/.config/opencode type=directory http.span=3072 role=server
+timestamp=2026-11-22T04:37:04.792Z level=INFO run=45399eaf message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8\"]" role=cli
+timestamp=2026-11-22T04:37:07.234Z level=INFO run=ee5cfaf4 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-22T04:37:07.486Z level=INFO run=ee5cfaf4 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-22T04:37:07.506Z level=INFO run=ee5cfaf4 message="database schema bootstrap completed" migrations=62 durationMs=20 role=server
+timestamp=2026-11-22T04:37:07.646Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/tmp/verify-XGva7B/u/.config/opencode type=directory ignores=6 http.span=27 role=server
+timestamp=2026-11-22T04:37:07.650Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-22T04:37:07.650Z level=INFO run=ee5cfaf4 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=31 role=server
+timestamp=2026-11-22T04:37:07.650Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/ type=entries ignores=0 http.span=31 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/tmp/verify-XGva7B type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher started" path=/tmp/verify-XGva7B type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher subscribe" path=/tmp/verify-XGva7B/u type=entries ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.651Z level=INFO run=ee5cfaf4 message="watcher started" path=/tmp/verify-XGva7B/u type=entries backend=node ignores=0 http.span=32 role=server
+timestamp=2026-11-22T04:37:07.668Z level=INFO run=ee5cfaf4 message="watcher started" path=/tmp/verify-XGva7B/u/.config/opencode type=directory backend=inotify ignores=6 http.span=49 role=server
+timestamp=2026-11-22T04:37:07.677Z level=INFO run=ee5cfaf4 message="location services booted" directory=/tmp/verify-XGva7B/u workspaceID=undefined durationMs=56 http.span=58 role=server
+timestamp=2026-11-22T04:37:07.683Z level=INFO run=ee5cfaf4 msg="loading plugin" id=klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8 entrypoint=file:///tmp/verify-XGva7B/u/cache/opencode/npm/git-music-sheet-enhancer-3d4fd6e5a896/1795322226952/node_modules/music-sheet-enhancer/src/index.js http.span=64 role=server
+timestamp=2026-11-22T04:37:07.688Z level=WARN run=ee5cfaf4 message="failed to load plugin" target=klkkeio/music-sheet-enhancer#81d449a8373b0b79f83f6b0a4e1c9e2b459daea8 ref=err_2ea91f26 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=69 role=server
