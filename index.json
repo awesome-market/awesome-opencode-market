@@ -39150,7 +39150,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：清单作出“无ComandOS云/数据库/遥测/SSH代理”的强否定声明，但代码仍打包了含多个网络调用的Web/CLI基础设施，且包内容因超时而提取失败、未显示任何调用的实际目标与密钥去向，该声明与代码结构的一致性无法从现有证据证实。"
+      "approvalReason": "红旗在案，AI 判 concern：包内容提取因超时而失败、未能核对内部实现，而清单声称“无遥测/无云”，已观察到的网络请求却指向可配置/本地 URL（与内嵌仪表盘、新闻阅读器相符），且存在 curl 管道到 bash 安装远端脚本，需人工审查包 internals 以确认不与该声明矛盾。"
     },
     {
       "name": "megamemory",
@@ -39515,7 +39515,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "扫描仅标记一个未充分呈现的 fetch 调用且未显示其目标或用途，加上无法提取正文，无法确认其是否为网络外传，但现有证据不足以通过。"
+      "approvalReason": "manifest为不完整/占位式销售文案（如’dash’、单字符），与包实际九技能Remotion视频生成功能不符，且未准确描述功能"
     },
     {
       "name": "1000gn/-",
@@ -67004,7 +67004,7 @@
         "engines": "bun >=1.1"
       },
       "approval": "pending",
-      "approvalReason": "L0.5 命中注入信号（score 0.868 ≥ 0.662，块 finding:0:network-call:get.sh — L4: #   curl -fsSL https://raw.githubusercontent.com/alok-）；LLM 判 pass：该包为OpenCode Agent防火墙/监控工具，所有网络调用均指向本地127.0.0.1或仓库自身GitHub，base64/hex解码是防御Agent smuggle命令的扫描逻辑本身而非混淆，spawn/execFile均使用argv数组无shell拼接，manifest描述与代码功能一致。"
+      "approvalReason": "L0.5 命中注入信号（score 0.868 ≥ 0.662，块 finding:0:network-call:get.sh — L4: #   curl -fsSL https://raw.githubusercontent.com/alok-）；LLM 判 pass：该插件所有网络调用均指向本地127.0.0.1的本地守护进程，唯一外部调用仅是安装脚本从同名仓库下载预构建二进制，未发现有凭证外发、命令注入或提示词注入，且清单描述与代码行为一致。"
     },
     {
       "name": "opencode-usage-total",
@@ -68407,12 +68407,12 @@
         "status": "failed",
         "level": "install",
         "opencodeVersion": "2.3.1",
-        "verifiedAt": "2026-11-22T09:21:48.976Z",
-        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/45007079695/job/137161076127",
+        "verifiedAt": "2026-11-22T09:58:57.298Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/45010078523/job/137170373116",
         "logUrl": "https://github.com/awesome-market/awesome-opencode-market/blob/catalog/verify-logs/alvarolorentedev_opencode-mobile-d1115184aa6d.log",
         "logExcerpt": "NpmInstallFailedError: Failed to install alvarolorentedev/opencode-mobile#d1115184aa6d7b9f190beca4a50c25b9fc7545f6: git dep preparation failed\nERRORS\n  Unrecognized flag: --force in command opencode\n  Unrecognized flag: --cache in command opencode\n  Unrecognized flag: --prefer-offline in command opencode\n  Unrecognized flag: --prefer-online in command opencode\n  Unrecognized flag: --offline in command opencode\n  Unrecognized flag: --no-progress in command opencode\n  Unrecognized flag: --no-save in command opencode\n  Unrecognized flag: --no-audit in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --include in command opencode\n  Unrecognized flag: --no-package-lock-only in command opencode\n  Unrecognized flag: --no-dry-run in command opencode\n    at catch (/$bunfs/root/chunk-zz237e4f.js:3:2967)\n    at Npm.reify (/$bunfs/root/chunk-zz237e4f.js:3:3006)\n    at Npm.add (/$bunfs/root/chunk-d1t7nwsr.js:2:1408)\n    at Npm.add (definition) (/$bunfs/root/chunk-zz237e4f.js:3:4704)\n    at cli.plugin.add (/$bunfs/root/chunk-wt5b8zsd.js:7:23383)\n    at cli.plugin.add (definition) (/$bunfs/root/chunk-d1t7nwsr.js:2:1220) {\n  [cause]: Error: git dep preparation failed\n      at Pt (/$bunfs/root/chunk-wmhdg2vw.js:8:4481)\n}\n\n[upstream opencode bug: a git dep declaring postinstall makes `plugin add` fail on every opencode ≤2.3.0 (anomalyco/opencode#62817) — not a package defect; auto-retested once a fixed host version ships]\n[sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package]",
         "integrity": "d1115184aa6d7b9f190beca4a50c25b9fc7545f6",
-        "retries": 2,
+        "retries": 3,
         "harnessGen": 2
       },
       "compat": {
@@ -100001,7 +100001,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "manifest自称非官方Android客户端，但包内容提取失败且未见setup/transform与凭据流向，仅能确认发现为base64字体数据、fetch(url)/fetch(ur)等无上下文调用，无法排除凭据/网络调用去向，且清单描述与代码不可验证，需人工核查。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "berenddeboer/ready-for-agent",
@@ -246128,8 +246128,13 @@
         "skillPayload": true
       },
       "verification": {
-        "status": "unverified",
-        "level": "install"
+        "status": "verified",
+        "level": "structure",
+        "opencodeVersion": "2.3.1",
+        "verifiedAt": "2026-11-22T09:58:57.302Z",
+        "runUrl": "https://github.com/awesome-market/awesome-opencode-market/actions/runs/45010078523/job/137170373116",
+        "integrity": "5b9bda68305866007bb07d355ae0e8e8661ceaf8",
+        "harnessGen": 2
       },
       "compat": {},
       "approval": "approved",
@@ -363053,7 +363058,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时失败、实际源码未被查看，无法核实标记调用（execSync/fetch等）的真实行为，且仓库已搬迁使验证快照可能过时。"
+      "approvalReason": "awaiting-review"
     },
     {
       "name": "pilgrimagesoftware/Knot-App",
@@ -384506,7 +384511,7 @@
         "engines": "node >=24"
       },
       "approval": "pending",
-      "approvalReason": "manifest 的 listing 描述为其他插件复制来的通用占位/ boilerplate 文本（\"Efficient, Evidence-based, Opinionated vibe-coding pipeline for CC / Codex / OpenCode / Antigravity / Pi\"），未准确说明这是通过 evals 调用 claude CLI 与真实 SDK 做自动评测的底层评估工具，存在能力/用途误导。"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：manifest listing 描述是通用 boilerplate（“Efficient, Evidence-based, Opinionated vibe-coding pipeline for CC / Codex / OpenCode / Antigravity / Pi”），而代码实际通过 evals/*.mjs 与 lib/submission.mjs 中 spawnSync/execFileSync 调用 claude CLI 和真实模型 SDK 运行自动评测，描述未准确反映其作为 Claude 评测框架的能力与用途。"
     },
     {
       "name": "opencode-glm-extras",
@@ -413434,7 +413439,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "红旗在案，AI 判 concern：仓库在发布后已迁移（sec:repo-moved-since-release）且包内容因超时未能提取，仅凭元数据/扫描证据，无法确认 install.sh 从 get.sortie-ai.com 取回后 pipe 给 sh 以及各类 fetch 的实际数据去向，存在溯源断点与内容不可见的风险。"
+      "approvalReason": "红旗在案，AI 判 concern：内容提取因超时失败、未看到包内原文，且扫描发现 install.sh 把远程 curl 结果直接管道给 sh 执行、仓库自发布后已移动，需人工复核。"
     },
     {
       "name": "sortie-dogs",
@@ -423087,7 +423092,7 @@
       },
       "compat": {},
       "approval": "pending",
-      "approvalReason": "网络调用与子进程仅出现在 web 应用、GitHub Actions 脚本及开发/CI 脚本中，而非 anymd 插件本身；需人工确认那 41 个未评审文件不属于插件，且 manifest 未说明 web 子目录是否随包发布。"
+      "approvalReason": "AI 二审坐实指控，自动结案扣押（concern-look oneshot）：anymd.js CLI 使用 spawnSync 调用外部程序，且未确认 web 子目录是否从发布的 npm 包中排除，41 个未评审文件仍未确认。"
     },
     {
       "name": "@syn7xx/opencode-dynamic-workflows",
@@ -438828,7 +438833,7 @@
         "contains": [],
         "integrity": "sha512-qEt27roeIUTQzauKRF0HzyYMA/54rK+iVoUJTghgUggWhZUq6JWBtwAQSW0wqx/Uh0IF1oxNBOVMWhboz71wKA==",
         "publishedAt": "2026-11-22T07:15:08.344Z",
-        "reason": "机械红旗待人工：credential-read:package/lib/devices/cloudBoot.mjs — L107: typeof boot.ssh?.keys === \"string\" && typeof boot.ssh?.gate === \"string\"; credential-read:package/lib/devices/cloudSsh.mjs — L35: \"id_rsa\",; credential-read:package/lib/daemon/daemon.mjs — L4140: typeof config.ssh?.keys === \"string\" &&; crede",
+        "reason": "红旗在案，AI 判 concern：该包存在多个值得关注的模式：curl|bash/sh 下载并运行脚本、通过 Lua loadstring/eval 实现动态代码执行（混淆），以及广泛扫描/读取本地密钥与凭证文件；尽管部分本地凭证读取可能属合法功能，但结合网络调用与远程执行路径，仍需标记。",
         "heldAt": "2026-11-22T07:21:37.872Z"
       }
     },
