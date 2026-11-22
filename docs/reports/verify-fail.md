@@ -1,12 +1,12 @@
-# 装测失败日报 — 2026-11-21
+# 装测失败日报 — 2026-11-22
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
 
 ## 汇总
-- 当前装测失败条目：**135**
-- 按阶段：**install** 70 · **load** 50 · **structure** 11 · **render** 3 · **interactive** 1
-- AI 判过但装不上：**256**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- 当前装测失败条目：**133**
+- 按阶段：**install** 70 · **load** 48 · **structure** 11 · **render** 3 · **interactive** 1
+- AI 判过但装不上：**249**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -83,7 +83,6 @@
 | zufall-upon/Sortie-dogs | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install zufa |
 | yriveiro/spectre | — | interactive | tre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/pr-canvas/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principl |
 | @alvarovfon/opencode-agent-monitor | 1.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
-| @austinthesing/magic-shell | 1.2.2 | load | --- stream tail --- timestamp=2026-11-18T10:48:42.270Z level=INFO run=44e50656 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\" |
 | @bloodf/opencode-claude-mem | 1.2.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @codemcp/workflows-opencode | 6.24.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @crixue/opencode-voice-stt | 0.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Die(TypeError: storage.store is not a function. (In 'storage.store(\"state\", { |
@@ -91,7 +90,6 @@
 | @deveco-test/deveco-harness | 0.2.0-test.8 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @devtheops/opencode-plugin-mempalace | 1.2.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @dmmop/opencode-key-rotator | 2.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Die(TypeError: Schema.isStartsWith is not a function. (In 'Schema.isStartsWith( |
-| @dorokuma/magpie-gemini-web | 0.18.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @gfn-cis/opencode-temp-sanitize | 0.3.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Die(Error: EACCES: permission denied, mkdir '/tmp/opencode/home-753855bc')]) |
 | @ghilteras/opencode-model-fallback | 0.4.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @gitawego/opencode-vision | 0.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -167,7 +165,6 @@
 | @joe-broadhead/opencode-artifacts | 0.7.0 |
 | @justmpm/agent-runner | 0.10.1 |
 | @kimchi-dev/opencode-kimchi | 1.0.6 |
-| @kodizm/acp | 0.9.4 |
 | @lawaty/lacode | 2.3.0-beta.8 |
 | @mark_future_ai/opencode-buddy | 1.1.2 |
 | @mcrescenzo/opencode-workflows | 0.2.0 |
@@ -187,12 +184,9 @@
 | @scrylog/opencode-plugin | 0.9.3 |
 | @sublang/cligent | 0.40.0 |
 | @sunerpy/oh-my-openagent | 4.21.0 |
-| @supanadit/morse-web | 0.30.1 |
 | @super-pocock-ai/suite | 2.3.30 |
-| @te-river/opencode-alibabatokenplan | 0.2.17 |
 | @vicoa/opencode | 0.2.1 |
 | @wolfx/oh-my-openagent | 4.19.0 |
-| @wwkit/harness | 1.0.46 |
 | @xeedio/prompt-plumber | 0.6.0 |
 | @yourlocalai/your-local-ai | 0.1.5 |
 | @yoyoyoake/pi-token-plan-monitor | 0.2.3 |
@@ -268,7 +262,6 @@
 | magpie-wakatime | 0.2.0 |
 | memory-bank-skill | 7.4.3 |
 | mike-zentarisystems/zentari-mac-dev-workstation | — |
-| NekoYume517/opencode-xiaoyiwork-auth | — |
 | novel-writer-english | 1.5.1 |
 | oc-arkive | 5.3.0 |
 | oc-nonstop-router | 1.0.1 |
@@ -302,7 +295,6 @@
 | opencode-datalens-harness | 0.1.0 |
 | opencode-discord-rpc | 1.0.1 |
 | opencode-event-debug | 1.0.0 |
-| opencode-fish-pet | 0.10.0 |
 | opencode-focus | 0.1.3 |
 | opencode-forgekeeper | 5.0.1 |
 | opencode-gemini-proxy | 1.1.0 |
@@ -390,7 +382,6 @@
 | pixincreate/opencode-global-sessions | — |
 | po-po-code | 0.9.6 |
 | project-knowledge | 4.6.1 |
-| Realmagnum/opencode-session-timestamps | — |
 | rhmcp | 1.1.1 |
 | rjstone/opencode-plugin-template | — |
 | SaberOnGo/public-domain-books-translation | — |
