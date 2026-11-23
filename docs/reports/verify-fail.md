@@ -1,12 +1,12 @@
-# 装测失败日报 — 2026-11-22
+# 装测失败日报 — 2026-11-23
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
 
 ## 汇总
-- 当前装测失败条目：**133**
-- 按阶段：**install** 70 · **load** 48 · **structure** 11 · **render** 3 · **interactive** 1
-- AI 判过但装不上：**249**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- 当前装测失败条目：**128**
+- 按阶段：**install** 69 · **load** 47 · **structure** 9 · **render** 2 · **interactive** 1
+- AI 判过但装不上：**259**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -51,9 +51,8 @@
 | bulga138/peso | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install bulg |
 | cbartens/bkit | — | install | 依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install cbartens/bkit#56363678d784bc2615e1785a39f152b550bce67d: git dep preparation failed |
 | chncaesar/opencode-plugin-memory | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install chnc |
+| cosminfuica/opencode-prompt-optimizer | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install cosm |
 | devshaydez/seira | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install devs |
-| esafak/muninn | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install esaf |
-| gonzalezpazmonica/savia | — | install | [sandboxed egress is allow-listed — an install fetch failure can be network policy, not a broken package] |
 | gotenksIN/opencode-websearch-addons | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install gote |
 | hamzasoussi53/opencode-island | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install hamz |
 | heyimteee/ensemble | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install heyi |
@@ -65,7 +64,7 @@
 | kunickiaj/codemem | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install kuni |
 | leohenon/opencode-vim-plugin | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install leoh |
 | lichenzhao060507/opencode-tavily-proxy-quota | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install lich |
-| Looted/kibi | — | install | 依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Looted/kibi#fb835695469fa856c0ec62d0cf3d10699e7f488b: git dep preparation failed |
+| Looted/kibi | — | install | 依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install Looted/kibi#19da7325c3857acb614c8039346b84ba53cdc2fa: git dep preparation failed |
 | marcusrbrown/systematic | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install marc |
 | Mte90/opencode-auto-resume | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install Mte9 |
 | rsshub | 1.0.0-master.501aa77 | install | 依赖安装失败（npm/git 拉取或包准备阶段报错） — NpmInstallFailedError: Failed to install rsshub@1.0.0-master.501aa77: An unknown git error occurred |
@@ -81,7 +80,7 @@
 | yuhp/opencode-models-discovery | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install yuhp |
 | yurgeno/saut | — | install | Error: Plugin package has no server, GUI, or TUI entrypoint: yurgeno/saut#a456c9620151fdb7dfceb5034790cf3f539cba73 |
 | zufall-upon/Sortie-dogs | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install zufa |
-| yriveiro/spectre | — | interactive | tre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/pr-canvas/SKILL.md, spectre-885caa97a68f7bcc30c51e3a64585f3ba966f17a/skills/definitions/principl |
+| yriveiro/spectre | — | interactive | tre-9041134d3a98e9ef25f23555729c41702e48414e/skills/definitions/pr-canvas/SKILL.md, spectre-9041134d3a98e9ef25f23555729c41702e48414e/skills/definitions/principl |
 | @alvarovfon/opencode-agent-monitor | 1.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @bloodf/opencode-claude-mem | 1.2.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @codemcp/workflows-opencode | 6.24.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -114,7 +113,6 @@
 | Asno-dev/apex | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | autosquid/omo-mem | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | Barathaner/paul-persistent-atlassian-undestanding-meeting-logger | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
-| bc1xxx/orchestrator-opencode | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | benskls/openstrat | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | bhumitschaudhry/Slopnought | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | BowTiedSwan/opencode-video-gateway | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -132,15 +130,12 @@
 | P-Core-System/pcore-orchestra | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @rizal72/oc-git | 0.2.4 | render | gui setup: Unknown error (cause: Cannot read properties of undefined (reading 'catch')) |
 | alexandr777git/opencode-session-tokens | — | render | gui render: Panel.render threw: Unknown error (cause: d(...).toFixed is not a function) |
-| almas/opencode-read-aloud | — | render | ambiguous gui bundle under git-opencode-read-aloud-c0da1adb30b4: plugin, opencode-tts — cannot identify the plugin's own |
 | adriansoriacastellano/hitl-analytics-team | — | structure | 63f56866139f7c87ddf38b29b/.agents/skills/skill_build_marts_layer/SKILL.md, hitl-analytics-team-e529082c885d23863f56866139f7c87ddf38b29b/.agents/skills/skill_bui |
-| agent-sh/agnix | — | structure | (无日志摘录) |
 | agisota/old-one | — | structure | (无日志摘录) |
 | ArkFlame/FlameWM | — | structure | (无日志摘录) |
 | ashikonik/skills-library-mcp | — | structure | (无日志摘录) |
 | bthavanish/demiurge | — | structure | no parseable SKILL.md frontmatter in bthavanish/demiurge#3bd448bb56d7cee99fbbf9eea35991446e3286fd (checked 12: demiurge-3bd448bb56d7cee99fbbf9eea35991446e3286fd |
 | dilanrojas/dotfiles | — | structure | (无日志摘录) |
-| fnodotdev/fno | — | structure | (无日志摘录) |
 | NeoMei/SuperWagie | — | structure | (无日志摘录) |
 | openchamber/openchamber | — | structure | (无日志摘录) |
 | wangyufengsky/agent-workflow | — | structure | (无日志摘录) |
@@ -149,11 +144,13 @@
 | 包 | 版本 |
 |---|---|
 | @alex123bob/opencode-cache-stats | 1.5.0 |
+| @austinthesing/magic-shell | 1.2.3 |
 | @basicbit/vrchat-mcp | 0.1.17 |
 | @clicktocode/core | 0.3.3 |
 | @ctliz/agent-intercom-opencode | 0.14.0 |
 | @cultivx/codereach | 0.2.39 |
 | @darknesskiller/opencode-cliproxyapi | 0.4.0 |
+| @dorokuma/magpie-gemini-web | 0.19.0 |
 | @grinev/opencode-telegram-bot | 0.28.0 |
 | @guru.prasath/model-opencode | 0.1.0 |
 | @happycastle/opencode-litellm | 0.8.0 |
@@ -165,6 +162,7 @@
 | @joe-broadhead/opencode-artifacts | 0.7.0 |
 | @justmpm/agent-runner | 0.10.1 |
 | @kimchi-dev/opencode-kimchi | 1.0.6 |
+| @kodizm/acp | 0.9.5 |
 | @lawaty/lacode | 2.3.0-beta.8 |
 | @mark_future_ai/opencode-buddy | 1.1.2 |
 | @mcrescenzo/opencode-workflows | 0.2.0 |
@@ -184,6 +182,7 @@
 | @scrylog/opencode-plugin | 0.9.3 |
 | @sublang/cligent | 0.40.0 |
 | @sunerpy/oh-my-openagent | 4.21.0 |
+| @supanadit/morse-web | 0.31.0 |
 | @super-pocock-ai/suite | 2.3.30 |
 | @vicoa/opencode | 0.2.1 |
 | @wolfx/oh-my-openagent | 4.19.0 |
@@ -195,7 +194,6 @@
 | 199084/opencode-relay-pool | — |
 | 1cyberlangke1/my-opencode-toolkit | — |
 | 4nkitd/opencode-workspace-sidebar | — |
-| 521ox/OpenCode-V2-zh-CN | — |
 | 6yte96/freebuffet | — |
 | 81ueman/relay | — |
 | 897243839/dream-RSI-memory | — |
@@ -237,22 +235,19 @@
 | Builderstar/opencode-v1.18.21-custom-snapshot | — |
 | context-signals-mcp | 1.1.3 |
 | cortex-agents | 5.0.1 |
-| cosminfuica/opencode-prompt-optimizer | — |
 | CultureDigitali/opencode-cron | — |
-| dceoy/opencode-action | — |
 | denggui-ai/shy-cameo-skill | — |
+| forcedotcom/salesforcedx-vscode | — |
 | garikipatisai-code/sdlc-lean | — |
 | gazacode | 2.0.2 |
 | gitnexus-opencode | 0.5.3 |
 | goatcode-sh | 0.1.9 |
 | habithive-code | 0.3.1 |
 | harness-mdocs | 2.2.0 |
-| hashgraph-online/hol-guard | — |
 | hc-teleport-agent | 0.3.0 |
 | hivemind-3.0 | 0.1.0 |
 | iamironz/opencode-sessions-explorer | — |
 | ilahomesick/opencode-true-mem-v2 | — |
-| involvex/Desk-Escape | — |
 | jira-cli-agent | 0.2.0 |
 | jn-s3s/opencode-tui-quota-usage | — |
 | joe-broadhead/opencode-ashby | — |
@@ -262,8 +257,8 @@
 | magpie-wakatime | 0.2.0 |
 | memory-bank-skill | 7.4.3 |
 | mike-zentarisystems/zentari-mac-dev-workstation | — |
+| mpsuesser/effect-oxlint | — |
 | novel-writer-english | 1.5.1 |
-| oc-arkive | 5.3.0 |
 | oc-nonstop-router | 1.0.1 |
 | oc-ping | 0.0.3 |
 | oh-my-groundcontrol | 0.0.1 |
@@ -285,6 +280,8 @@
 | opencode-autopm | 3.7.0 |
 | opencode-autoship | 2.21.1 |
 | opencode-autoskills | 1.2.0 |
+| opencode-blindfold | 0.5.1 |
+| opencode-bubble-tabs | 0.4.0 |
 | opencode-business-flow-reviewer | 2.0.0 |
 | opencode-cloudflare-image | 2.0.0 |
 | opencode-cn | 1.2.27 |
@@ -299,9 +296,11 @@
 | opencode-forgekeeper | 5.0.1 |
 | opencode-gemini-proxy | 1.1.0 |
 | opencode-gitbutler | 0.1.11 |
+| opencode-github-pr | 0.2.0 |
 | opencode-gliner-prune | 0.1.5 |
 | opencode-godot-toolkit | 1.1.0 |
 | opencode-island | 0.9.0 |
+| opencode-keep-going | 1.1.1 |
 | opencode-kickbacks | 0.1.1 |
 | opencode-langgraph | 0.13.3 |
 | opencode-lark | 0.2.2 |
@@ -328,14 +327,17 @@
 | opencode-plugin-hub | 0.6.7 |
 | opencode-plugin-inspector | 0.0.7 |
 | opencode-powerpack | 2.0.0 |
+| opencode-pr-link | 0.3.1 |
 | opencode-promemory-4861 | 0.6.10 |
 | opencode-prompt-rail | 0.1.9 |
 | opencode-prompt-recorder | 1.9.9 |
 | opencode-provider-litellm | 1.0.1 |
+| opencode-quick-links | 1.3.1 |
 | opencode-qwen-auth-plugin | 0.1.4 |
 | opencode-raven | 2.4.1 |
 | opencode-rive-sidebar | 0.1.0 |
 | opencode-sdlc-plugin | 1.1.4 |
+| opencode-session-media | 0.2.1 |
 | opencode-shell-safety | 0.7.0 |
 | opencode-shell-tasks | 0.1.1 |
 | opencode-shingan | 1.3.0 |
@@ -360,6 +362,7 @@
 | opencode-voice2text | 0.1.21 |
 | opencode-web-plugin | 0.1.1 |
 | opencode-websearch-cited-fork | 2.0.4 |
+| opencode-work-context | 0.11.2 |
 | opencode-worklog | 0.0.2 |
 | opencode-wrap | 0.3.0 |
 | opencode-xai-oauth | 1.2.0 |
@@ -391,11 +394,13 @@
 | skill-author | 1.1.0 |
 | skillsmp-mcp | 1.0.4 |
 | slipway-agents | 0.17.0 |
+| Snakeblack/ospec-workflow | — |
 | solidity-argus | 0.7.0 |
 | solomemory-ai/opencode-solomemory | — |
 | specifica-br | 1.12.2 |
 | status-provider | 0.3.1 |
 | tobias-weiss-ai-xr/opencode-saia-plugin | — |
+| Verbiflow/mako | — |
 | YonCZ/OpenCode-Presence | — |
 
 > 数据源：catalog 分支 index.json + ai-verdicts.jsonl（governing concern 判词 reason 以 装测失败 开头的目标；另含 ai:pass + verify:failed 目标）。
