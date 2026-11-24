@@ -1,4 +1,4 @@
-# 装测失败日报 — 2026-11-23
+# 装测失败日报 — 2026-11-24
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
@@ -6,7 +6,7 @@
 ## 汇总
 - 当前装测失败条目：**128**
 - 按阶段：**install** 69 · **load** 47 · **structure** 9 · **render** 2 · **interactive** 1
-- AI 判过但装不上：**259**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- AI 判过但装不上：**252**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -150,7 +150,6 @@
 | @ctliz/agent-intercom-opencode | 0.14.0 |
 | @cultivx/codereach | 0.2.39 |
 | @darknesskiller/opencode-cliproxyapi | 0.4.0 |
-| @dorokuma/magpie-gemini-web | 0.19.0 |
 | @grinev/opencode-telegram-bot | 0.28.0 |
 | @guru.prasath/model-opencode | 0.1.0 |
 | @happycastle/opencode-litellm | 0.8.0 |
@@ -158,16 +157,12 @@
 | @howaboua/opencode-roadmap-plugin | 0.2.1 |
 | @jack-yang/opencode-quota | 4.11.1 |
 | @jacob-z/opencode-token-usage | 0.1.0 |
-| @jeikeilim/tenet | 26.11.0 |
-| @joe-broadhead/opencode-artifacts | 0.7.0 |
 | @justmpm/agent-runner | 0.10.1 |
 | @kimchi-dev/opencode-kimchi | 1.0.6 |
 | @kodizm/acp | 0.9.5 |
-| @lawaty/lacode | 2.3.0-beta.8 |
 | @mark_future_ai/opencode-buddy | 1.1.2 |
 | @mcrescenzo/opencode-workflows | 0.2.0 |
 | @mingzzz/ocx-wechat-control | 0.2.6 |
-| @moxxy/plugin-provider-acp | 0.49.1 |
 | @nano-step/oh-my-harness | 1.2.5 |
 | @niebaopeng/ocusage | 1.0.6 |
 | @npll/omol | 5.0.0-beta.6-omol.202608120621 |
@@ -287,13 +282,11 @@
 | opencode-cn | 1.2.27 |
 | opencode-code-archaeology | 2.16.11 |
 | opencode-codebuddy-external-auth | 1.0.28 |
-| opencode-computer-use-win | 0.1.3 |
 | opencode-copilot-1m | 1.10.0 |
 | opencode-datalens-harness | 0.1.0 |
 | opencode-discord-rpc | 1.0.1 |
 | opencode-event-debug | 1.0.0 |
 | opencode-focus | 0.1.3 |
-| opencode-forgekeeper | 5.0.1 |
 | opencode-gemini-proxy | 1.1.0 |
 | opencode-gitbutler | 0.1.11 |
 | opencode-github-pr | 0.2.0 |
