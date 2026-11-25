@@ -1,0 +1,60 @@
+spec: aaronpiipponen/opencode-keepalive#9c586d3c0ac19a44a1464a5cd3becd6a40651d1e
+apiNames: aaronpiipponen/opencode-keepalive, opencode-keepalive
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-ikVT8H/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:40795
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-25T03:12:01.015Z level=INFO run=6bbe8953 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"aaronpiipponen/opencode-keepalive#9c586d3c0ac19a44a1464a5cd3becd6a40651d1e\"]" role=cli
+timestamp=2026-11-25T03:12:01.843Z level=INFO run=63dcd702 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-25T03:12:02.765Z level=INFO run=63dcd702 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-25T03:12:03.133Z level=INFO run=63dcd702 message="database schema bootstrap completed" migrations=62 durationMs=368 role=server
+timestamp=2026-11-25T03:12:03.261Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/.config/opencode type=directory ignores=6 http.span=20 role=server
+timestamp=2026-11-25T03:12:03.263Z level=INFO run=63dcd702 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=22 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher subscribe" path=/ type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H type=entries backend=node ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.264Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u type=entries ignores=0 http.span=23 role=server
+timestamp=2026-11-25T03:12:03.265Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u type=entries backend=node ignores=0 http.span=24 role=server
+timestamp=2026-11-25T03:12:03.281Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/.config/opencode type=directory backend=inotify ignores=6 http.span=40 role=server
+timestamp=2026-11-25T03:12:03.292Z level=INFO run=63dcd702 message="location services booted" directory=/tmp/verify-ikVT8H/u workspaceID=undefined durationMs=50 http.span=51 role=server
+timestamp=2026-11-25T03:12:03.299Z level=INFO run=63dcd702 msg="loading plugin" id=aaronpiipponen/opencode-keepalive#9c586d3c0ac19a44a1464a5cd3becd6a40651d1e entrypoint=file:///tmp/verify-ikVT8H/u/cache/opencode/npm/git-opencode-keepalive-b314f62e3539/1795576321587/node_modules/opencode-keepalive/index.js http.span=58 role=server
+timestamp=2026-11-25T03:12:03.884Z level=WARN run=63dcd702 message="failed to load plugin" plugin.id=keepalive cause="Cause([Die(Error: ENOENT: no such file or directory, open '/tmp/verify-ikVT8H/u/cache/opencode/npm/git-opencode-keepalive-b314f62e3539/1795576321587/node_modules/opencode-keepalive/config.json')])" http.span=643 role=server
+timestamp=2026-11-25T03:12:03.887Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-25T03:12:03.887Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T03:12:03.888Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-25T03:12:03.888Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-25T03:12:03.889Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T03:12:03.889Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-25T03:12:03.889Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T03:12:03.916Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-25T03:12:03.916Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T03:12:03.917Z level=INFO run=63dcd702 message="watcher subscribe" path=/tmp/verify-ikVT8H/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-25T03:12:03.917Z level=INFO run=63dcd702 message="watcher started" path=/tmp/verify-ikVT8H/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T03:12:03.938Z level=INFO run=63dcd702 message=event event.id=evt_210b05f62001xyaEtUkV9fcUBV event.created=1795576323938 event.type=provider.updated event.location.directory=/tmp/verify-ikVT8H/u event.location.workspaceID=undefined event.data={} http.span=697 role=server
+timestamp=2026-11-25T03:12:03.957Z level=INFO run=63dcd702 message=event event.id=evt_210b05f75001ByhwRz86cm3TEE event.created=1795576323957 event.type=model.updated event.location.directory=/tmp/verify-ikVT8H/u event.location.workspaceID=undefined event.data={} http.span=716 role=server
+timestamp=2026-11-25T03:12:03.967Z level=INFO run=63dcd702 message=event event.id=evt_210b05f7c001J5yKCHKPAAtw8I event.created=1795576323967 event.type=agent.updated event.location.directory=/tmp/verify-ikVT8H/u event.location.workspaceID=undefined event.data={} http.span=726 role=server
+timestamp=2026-11-25T03:12:03.968Z level=INFO run=63dcd702 message=event event.id=evt_210b05f7f001FbaorhtQKHVL8T event.created=1795576323968 event.type=command.updated event.location.directory=/tmp/verify-ikVT8H/u event.location.workspaceID=undefined event.data={} http.span=727 role=server
+timestamp=2026-11-25T03:12:04.187Z level=ERROR run=63dcd702 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=946 role=server
+timestamp=2026-11-25T03:12:04.376Z level=INFO run=63dcd702 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-25T03:12:04.376Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-25T03:12:04.376Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-25T03:12:04.378Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/CLAUDE.md type=file role=server
+timestamp=2026-11-25T03:12:04.378Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/AGENTS.md type=file role=server
+timestamp=2026-11-25T03:12:04.380Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-25T03:12:04.401Z level=INFO run=63dcd702 message="watcher stopped" path=/etc type=entries http.span=1160 role=server
+timestamp=2026-11-25T03:12:04.401Z level=INFO run=63dcd702 message="watcher stopped" path=/ type=entries http.span=1160 role=server
+timestamp=2026-11-25T03:12:04.401Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp type=entries http.span=1160 role=server
+timestamp=2026-11-25T03:12:04.402Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H type=entries http.span=1161 role=server
+timestamp=2026-11-25T03:12:04.402Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u type=entries http.span=1161 role=server
+timestamp=2026-11-25T03:12:04.402Z level=INFO run=63dcd702 message="watcher stopped" path=/tmp/verify-ikVT8H/u/.config/opencode type=directory http.span=1161 role=server

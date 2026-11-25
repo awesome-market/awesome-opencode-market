@@ -1,0 +1,32 @@
+spec: @yugimob/pi-opencode-go-rotation@1.7.5
+apiNames: @yugimob/pi-opencode-go-rotation, pi-opencode-go-rotation
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-fuwcpd/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:34949
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-25T03:12:16.128Z level=INFO run=2970b81f message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@yugimob/pi-opencode-go-rotation@1.7.5\"]" role=cli
+timestamp=2026-11-25T03:12:16.740Z level=INFO run=dd34e694 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-25T03:12:16.995Z level=INFO run=dd34e694 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-25T03:12:17.031Z level=INFO run=dd34e694 message="database schema bootstrap completed" migrations=62 durationMs=36 role=server
+timestamp=2026-11-25T03:12:17.248Z level=INFO run=dd34e694 message="watcher subscribe" path=/tmp/verify-fuwcpd/u/.config/opencode type=directory ignores=6 http.span=41 role=server
+timestamp=2026-11-25T03:12:17.253Z level=INFO run=dd34e694 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-25T03:12:17.253Z level=INFO run=dd34e694 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=46 role=server
+timestamp=2026-11-25T03:12:17.253Z level=INFO run=dd34e694 message="watcher subscribe" path=/ type=entries ignores=0 http.span=46 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher subscribe" path=/tmp/verify-fuwcpd type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher started" path=/tmp/verify-fuwcpd type=entries backend=node ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.254Z level=INFO run=dd34e694 message="watcher subscribe" path=/tmp/verify-fuwcpd/u type=entries ignores=0 http.span=47 role=server
+timestamp=2026-11-25T03:12:17.255Z level=INFO run=dd34e694 message="watcher started" path=/tmp/verify-fuwcpd/u type=entries backend=node ignores=0 http.span=48 role=server
+timestamp=2026-11-25T03:12:17.275Z level=INFO run=dd34e694 message="watcher started" path=/tmp/verify-fuwcpd/u/.config/opencode type=directory backend=inotify ignores=6 http.span=68 role=server
+timestamp=2026-11-25T03:12:17.295Z level=INFO run=dd34e694 message="location services booted" directory=/tmp/verify-fuwcpd/u workspaceID=undefined durationMs=86 http.span=88 role=server
+timestamp=2026-11-25T03:12:17.297Z level=INFO run=dd34e694 msg="loading plugin" id=@yugimob/pi-opencode-go-rotation@1.7.5 entrypoint=file:///tmp/verify-fuwcpd/u/cache/opencode/npm/@yugimob/pi-opencode-go-rotation@1.7.5/1795576336523/node_modules/@yugimob/pi-opencode-go-rotation/dist/index.js http.span=90 role=server
+timestamp=2026-11-25T03:12:17.305Z level=WARN run=dd34e694 message="failed to load plugin" target=@yugimob/pi-opencode-go-rotation@1.7.5 ref=err_cccc41b1 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=98 role=server
