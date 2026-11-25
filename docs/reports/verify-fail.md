@@ -1,12 +1,12 @@
-# 装测失败日报 — 2026-11-24
+# 装测失败日报 — 2026-11-25
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
 
 ## 汇总
-- 当前装测失败条目：**128**
-- 按阶段：**install** 69 · **load** 47 · **structure** 9 · **render** 2 · **interactive** 1
-- AI 判过但装不上：**252**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- 当前装测失败条目：**125**
+- 按阶段：**install** 67 · **load** 46 · **structure** 9 · **render** 2 · **interactive** 1
+- AI 判过但装不上：**244**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -58,9 +58,7 @@
 | heyimteee/ensemble | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install heyi |
 | IgorGanapolsky/ThumbGate | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install Igor |
 | itsmeadarsh2008/opencode-senses | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install itsm |
-| joe-broadhead/opencode-history | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe- |
 | joe-broadhead/opencode-inference | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe- |
-| joe-broadhead/opencode-jobs | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install joe- |
 | kunickiaj/codemem | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install kuni |
 | leohenon/opencode-vim-plugin | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install leoh |
 | lichenzhao060507/opencode-tavily-proxy-quota | — | install | 上游 opencode bug——git 插件带 build/prepare 类脚本时 plugin add 在 ≤2.3.0 必失败（anomalyco/opencode#62817），非包本身问题，宿主版本修复后自动重测 — NpmInstallFailedError: Failed to install lich |
@@ -101,7 +99,6 @@
 | 3294798852/magpie-musework-plus | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | agent-data/job-search | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | agentic-remem | 0.2.3 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
-| alchemylab | 3.6.0 | load | 2026-11-18T10:23:01.342Z [error]: Failed to start HTTP API server {"service":"mcp-http-server","error":"RangeError: options.port should be >= 0 and < 65536. Rec |
 | alexmarco/opencode-skill-pulse | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | alkevintan/opencode-advisor | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | alkevintan/opencode-vision | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -159,7 +156,6 @@
 | @jacob-z/opencode-token-usage | 0.1.0 |
 | @justmpm/agent-runner | 0.10.1 |
 | @kimchi-dev/opencode-kimchi | 1.0.6 |
-| @kodizm/acp | 0.9.5 |
 | @mark_future_ai/opencode-buddy | 1.1.2 |
 | @mcrescenzo/opencode-workflows | 0.2.0 |
 | @mingzzz/ocx-wechat-control | 0.2.6 |
@@ -172,7 +168,6 @@
 | @paflopes/opencode-qwen-auth | 0.0.7 |
 | @pathrule/opencode | 1.0.8 |
 | @privacypillar/pii-shield-opencode | 0.0.1-alpha.6 |
-| @reasoning-router/opencode | 0.1.11 |
 | @redivo/opencode | 1.2.2 |
 | @scrylog/opencode-plugin | 0.9.3 |
 | @sublang/cligent | 0.40.0 |
@@ -184,7 +179,6 @@
 | @xeedio/prompt-plumber | 0.6.0 |
 | @yourlocalai/your-local-ai | 0.1.5 |
 | @yoyoyoake/pi-token-plan-monitor | 0.2.3 |
-| @yugimob/pi-opencode-go-rotation | 1.7.4 |
 | 00bx-photoshop-mcp | 1.1.2 |
 | 199084/opencode-relay-pool | — |
 | 1cyberlangke1/my-opencode-toolkit | — |
@@ -200,7 +194,6 @@
 | adyoi/mcp-rag-memory | — |
 | afwlehmann/opencode-worktree-plugin | — |
 | agent-security-policies | 1.5.7 |
-| agent-steward | 0.0.6 |
 | agentjoey/opencode-remote-control | — |
 | agyforclaude | 0.0.3 |
 | ai4nucleome/BioMaster | — |
@@ -289,7 +282,6 @@
 | opencode-focus | 0.1.3 |
 | opencode-gemini-proxy | 1.1.0 |
 | opencode-gitbutler | 0.1.11 |
-| opencode-github-pr | 0.2.0 |
 | opencode-gliner-prune | 0.1.5 |
 | opencode-godot-toolkit | 1.1.0 |
 | opencode-island | 0.9.0 |
@@ -337,7 +329,6 @@
 | opencode-side-panel-sessions | 0.2.0 |
 | opencode-slim-mcp | 1.0.0 |
 | opencode-switchback | 2026.11.6 |
-| opencode-tailscale | 0.0.6 |
 | opencode-talk | 0.1.1 |
 | opencode-taskflow | 1.0.0 |
 | opencode-telegram-bot | 1.1.2 |
@@ -352,7 +343,6 @@
 | opencode-v2-tui-closetab | 0.1.0 |
 | opencode-vcc | 0.1.0-alpha.1 |
 | opencode-vibeplan | 0.2.0 |
-| opencode-voice2text | 0.1.21 |
 | opencode-web-plugin | 0.1.1 |
 | opencode-websearch-cited-fork | 2.0.4 |
 | opencode-work-context | 0.11.2 |
@@ -370,7 +360,6 @@
 | openengineer | 0.3.1 |
 | openeuler-agent-shennong-crash-online | 0.10.4 |
 | openpaul | 1.0.0 |
-| openprototype | 1.8.4 |
 | openrouter-genimage-kote-opencode | 0.1.0 |
 | Ownistic/opencode-subagent-control | — |
 | pasei-dev/opencode-profile-switcher | — |
