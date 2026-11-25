@@ -1,0 +1,304 @@
+spec: @jaimevalasek/aioson@1.84.1
+apiNames: @jaimevalasek/aioson, aioson
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-hV9xAP/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:39433
+server password [redacted]
+Unknown command: serve
+
+AIOSON CLI
+
+Usage:
+  aioson init <project-name> [--force] [--dry-run] [--all] [--lang=<bcp47-tag>] [--tool=codex|claude|opencode] [--locale=en]
+  aioson install [path] [--force] [--dry-run] [--lang=<bcp47-tag>] [--tool=codex|claude|opencode] [--locale=en]
+  aioson setup [path] [--defaults] [--framework=<name>] [--lang=<bcp47-tag>] [--project-name=<name>] [--force] [--dry-run] [--tool=codex|claude|opencode] [--locale=en]
+  aioson update [path] [--dry-run] [--allow-downgrade] [--lang=<bcp47-tag>] [--locale=en]
+  aioson info [path] [--json] [--locale=en]
+  aioson doctor [path] [--fix] [--dry-run] [--json] [--locale=en]
+  aioson hygiene:scan [path] [--json] [--locale=en]
+  aioson evidence:prune [path] [--slug=<feature>] [--all] [--dry-run] [--json] [--locale=en]
+  aioson storage:triage [path] [--global] [--apply] [--remove=<path>[,<path>]] [--dry-run] [--json] [--locale=en]
+  aioson i18n:add <locale> [--force] [--dry-run] [--locale=en]
+  aioson agents [path] [--lang=<bcp47-tag>] [--locale=en]
+  aioson agent:prompt <agent> [path] [--tool=codex|claude|opencode] [--lang=<bcp47-tag>] [--locale=en]
+  aioson agent:help [agent] [--json]
+  aioson agent:invoke <agent> [path] [--tool=codex|claude|opencode] [--mode=framework_target|app_target] [--feature=<slug>] [--scope=<area>] [--lang=<bcp47-tag>] [--locale=en]
+  aioson agent:epilogue [path] --agent=<agent> --summary=<text> [--feature=<slug>] [--slug=<slug>] [--file=<path>] [--dir=<dir>] [--approve-gate=A|B|C|D] [--json] [--locale=en]
+  aioson rule:new [path] --name=<kebab-name> [--description=<text>] [--agents=a,b] [--paths=glob,glob] [--triggers=t,t] [--task-types=t,t] [--priority=0-100] [--load-tier=trigger|always] [--aliases=a,b] [--examples="task|task"] [--no-evals] [--force] [--json] [--locale=en]
+  aioson doc:new [path] [--folder=<topic>] --name=<kebab-name> [--description=<text>] [--agents=a,b] [--paths=glob,glob] [--triggers=t,t] [--task-types=t,t] [--load-tier=trigger|always] [--aliases=a,b] [--examples="task|task"] [--no-evals] [--force] [--json] [--locale=en]
+  aioson decide [path] --question="<decision>" [--options="a|b"] [--evidence=<text>] [--agents=a,b] [--paths=glob] [--triggers=t,t] [--record --choice="<option>" --why=<text> --by=<who>] [--json] [--locale=en]
+  aioson observe [path] --kind=<defect|idea|process|risk|question> --summary="<one line>" [--detail="..."] [--paths=a,b] [--feature=<slug>] [--agent=<self>] [--reopen] [--json] [--locale=en]
+  aioson observation:list [path] [--kind=<defect|idea|process|risk|question>] [--feature=<slug>|project] [--all] [--resolved] [--json] [--locale=en]
+  aioson observation:resolve [path] --id=OBS-xxxxxx --as=<fixed|planned|promoted|answered|dismissed> [--ref=<plan path|feature slug>] [--why="..."] [--by=<who>] [--json] [--locale=en]
+  aioson observation:route [path] --id=OBS-xxxxxx --to=<feature|simple-plan|draft> [--slug=<kebab-case>] [--feature=<slug>] [--by=<who>] [--json] [--locale=en]
+  aioson op:list [path] [--proposals] [--include-archived] [--all] [--feature=<slug>] [--agent=<name>] [--match=<words>] [--limit=<n>] [--titles-only] [--format=table|json] [--json] [--locale=en]
+  aioson op:show [path] <slug> [--json] [--locale=en]
+  aioson op:capture [path] --signal=<authorization|exclusion|correction|confirmation> --quote="<verbatim>" --proposal="<paraphrase>" --source-agent=<agent> [--scope=operator|project] [--json] [--locale=en]
+  aioson op:profile [path] [--scan=<folder>] [--depth=<n>] [--json] [--locale=en]
+  aioson hooks:recap [path] [--when=compact|always] [--agent=<agent>] [--source=claude|codex|opencode] [--session=<id>] [--max-chars=<n>] [--json] [--locale=en]
+  aioson briefing:sources [path] [--slug=<slug>] [--json] [--locale=en]
+  aioson briefing:approve [path] [--slug=<slug>] [--accept-craft] [--locale=en]
+  aioson briefing:unapprove [path] [--slug=<slug>] [--force] [--locale=en]
+  aioson briefing:review [path] [--slug=<slug>] [--findings=<path>] [--force] [--json] [--locale=en]
+  aioson briefing:apply-feedback [path] [--slug=<slug>] [--feedback=<path>] [--confirm|--confirm-if-clean|--declined] [--allow-stale] [--json] [--locale=en]
+  aioson briefing:feedback [path] [--slug=<slug>] [--feedback=<path>] [--json] [--locale=en]
+  aioson briefing:migrate-lineage [path] --slug=<slug> [--dry-run|--write] [--json] [--locale=en]
+  aioson exploration:<init|configure|references|intake|scan|add-run|record|validate|status|review|select|promote|run> [path] --slug=<slug> [options] [--json]
+  aioson context:validate [path] [--json] [--locale=en]
+  aioson context:digest [path] [--task="<task words>"] [--json] [--locale=en]
+  aioson context:pack [path] [--agent=<agent>] [--goal=<text>] [--module=<module-or-folder>] [--max-files=8] [--json] [--locale=en]
+  aioson context:search [path] --query=<text> [--agent=<agent>] [--mode=planning|executing] [--task=<text>] [--paths=<path[,path2]>] [--intent=memory|feature|rules] [--limit=10] [--json] [--locale=en]
+  aioson context:select [path] [--explain=<path[,path2]>] [--agent=<agent>] [--mode=planning|executing] [--task=<text>] [--paths=<path[,path2]>] [--feature=<slug>] [--no-semantic] [--json] [--locale=en]
+  aioson context:brief [path] [--agent=<agent>] [--mode=planning|executing] [--task=<text>] [--paths=<path[,path2]>] [--feature=<slug>] [--no-semantic] [--no-recall] [--full] [--json] [--locale=en]
+  aioson context:guard [path] [--tool=claude] [--agent=<agent>] [--event=<json>] [--event-file=<path>] [--json] [--locale=en]
+  aioson context:evals [path] [--strict] [--filter=<text>] [--no-coverage] [--json] [--locale=en]
+  aioson context:usage [path] [--since=<days>] [--feature=<slug>] [--json] [--locale=en]
+  aioson context:load [path] --target=<rule|brain|doc|skill>:<slug> --agent=<name> [--batch="slug1,slug2"] [--feature=<slug>] [--classification=<MICRO|SMALL|MEDIUM>] [--verbose] [--json] [--locale=en]
+  aioson chain:audit <file> [path] [--limit=N] [--feature=<slug>] [--json] [--locale=en]
+  aioson chain:list [path] [--feature=<slug>] [--agent=dev] [--status=<open,claimed>] [--include-resolved] [--limit=N] [--json] [--locale=en]
+  aioson chain:claim [path] --agent=<agent> [--id=NC-N] [--feature=<slug>] [--limit=N] [--lease-minutes=N] [--json] [--locale=en]
+  aioson chain:resolve [path] --id=NC-N --agent=<agent> --token=<token> --outcome=<fixed|verified-no-change|false-positive|obsolete> --evidence=<text> [--json] [--locale=en]
+  aioson chain:release [path] --id=NC-N --agent=<agent> --token=<token> [--json] [--locale=en]
+  aioson chain:reconcile [path] [--json] [--locale=en]
+  aioson memory:status [path] [--json] [--locale=en]
+  aioson memory:summary [path] [--last=5] [--json] [--locale=en]
+  aioson memory:search "<query>" [path] [--limit=5] [--surface=rules|learnings|all] [--include-archived] [--json] [--locale=en]
+  aioson memory:archive [path] --id=<rule|learning|brain>:<slug> --reason="<text>" [--feature=<slug>] [--dry-run] [--json] [--locale=en]
+  aioson memory:restore [path] --id=<rule|learning|brain>:<slug> [--reason="<text>"] [--feature=<slug>] [--dry-run] [--json] [--locale=en]
+  aioson memory:trim [path] [--keep=<N>] [--archive=<path>] [--dry-run] [--json] [--locale=en]
+  aioson brain:query [path] [--tags=<csv>] [--agent=<agent>] [--id=<csv>] [--min-quality=4] [--format=compact|index|json|ids] [--json] [--locale=en]
+  aioson setup:context [path] [--defaults] [--project-type=web_app|api|site|script|dapp|desktop_app] [--framework=<name>] [--backend=<name>] [--frontend=<name>] [--database=<name>] [--auth=<name>] [--uiux=<name>] [--language=<bcp47-tag>] [--web3-enabled=true|false] [--locale=en]
+  aioson locale:apply [path] [--lang=<bcp47-tag>] [--dry-run] [--locale=en]
+  aioson locale:diff [agent] [--lang=<bcp47-tag>] [--json] [--locale=en]
+  aioson test:agents [path] [--json] [--locale=en]
+  aioson test:smoke [workspace-path] [--lang=<bcp47-tag>] [--web3=ethereum|solana|cardano] [--profile=standard|mixed|parallel] [--keep] [--json] [--locale=en]
+  aioson test:package [source-path] [--keep] [--dry-run] [--json] [--locale=en]
+  aioson workflow:plan [path] [--classification=MICRO|SMALL|MEDIUM] [--json] [--locale=en]
+  aioson workflow:next [path] [--expect-feature=<slug|none>] [--complete[=<agent>]] [--agent=<agent>] [--skip=<agent>] [--status] [--suggest] [--tool=codex|claude|opencode] [--json] [--locale=en]
+  aioson workflow:status [path] [--suggest] [--tool=codex|claude|opencode] [--json] [--locale=en]
+  aioson workflow:mode [path] [--feature=<slug>] [--auto] [--step] [--json] [--locale=en]
+  aioson workflow:execute [path] [--feature=<slug>] [--agentic] [--max-dev-qa-cycles=<n>] [--max-tester-cycles=<n>] [--max-pentester-cycles=<n>] [--dry-run] [--lane=<n>] [--json] [--locale=en]
+  aioson review-cycle:<status|advance|resolve|reset> [path] --feature=<slug> [--plan=<path>] [--source=qa|tester|pentester] [--json] [--locale=en]
+  aioson review:feature [path] [--feature=<slug>] [--scope=<target>] [--skip-audit] [--out-dir=<dir>] [--tool=<tool>] [--json] [--locale=en]
+  aioson review:prepare [path] --agent=<agent> --feature=<slug> [--artifact=<path>] [--json] [--locale=en]
+  aioson review:check [path] --agent=<agent> --feature=<slug> --report=<path> [--json] [--locale=en]
+  aioson review:status [path] --feature=<slug> [--json] [--locale=en]
+  aioson parallel:init [path] [--workers=2..6] [--force] [--dry-run] [--json] [--locale=en]
+  aioson parallel:doctor [path] [--workers=2..6] [--fix] [--force] [--dry-run] [--json] [--locale=en]
+  aioson parallel:assign [path] [--source=auto|prd|architecture|discovery|<file>] [--workers=2..6] [--force] [--dry-run] [--json] [--locale=en]
+  aioson parallel:status [path] [--json] [--locale=en]
+  aioson parallel:merge [path] [--apply] [--json] [--locale=en]
+  aioson parallel:guard [path] --lane=<n> --paths=<path[,path2]> [--json] [--locale=en]
+  aioson mcp:init [path] [--tool=claude|codex|opencode] [--dry-run] [--json] [--locale=en]
+  aioson mcp:doctor [path] [--strict-env] [--json] [--locale=en]
+  aioson qa:doctor [path] [--json] [--locale=en]
+  aioson qa:init [path] [--url=<app-url>] [--dry-run] [--json] [--locale=en]
+  aioson qa:run [path] [--url=<app-url>] [--feature=<slug>] [--persona=naive|hacker|power|mobile] [--headed] [--html] [--json] [--locale=en]
+  aioson qa:scan [path] [--url=<app-url>] [--depth=3] [--max-pages=50] [--headed] [--html] [--json] [--locale=en]
+  aioson browser:run [path] --script=<walkthrough.json> [--url=<app-url>|--file=<html>] [--slug=<feature>] [--prototype] [--cdp=<endpoint>] [--browser=chrome|msedge|chromium] [--headed] [--slow-mo=<ms>] [--video[=<file>]] [--state=<file>] [--save-state=<file>] [--continue] [--out=<dir>] [--no-persist] [--json] [--locale=en]
+  aioson browser:snapshot [path] --url=<page-url>|--file=<html> [--target=<locator>] [--max-lines=80] [--cdp=<endpoint>] [--browser=chrome|msedge|chromium] [--headed] [--json] [--locale=en]
+  aioson qa:report [path] [--html] [--json] [--locale=en]
+  aioson pentester:report [path] [--feature=<slug>] [--list] [--json] [--locale=en]
+  aioson pentester:coverage [path] --feature=<slug> [--json] [--locale=en]
+  aioson feature:list [path] [--status=<status[,status2]>] [--limit=N] [--json] [--locale=en]
+  aioson feature:register [path] --feature=<slug> [--status=planning|in_progress|paused|qa_blocked|abandoned] [--started=YYYY-MM-DD] [--json] [--locale=en]
+  aioson feature:tidy [path] [--dry-run] [--json] [--locale=en]
+  aioson feature:triage [path] [--apply] [--close=<slug,...>] [--pause=<slug,...>] [--abandon=<slug,...>] [--resume=<slug,...>] [--include-active] [--stale-days=21] [--paused-days=60] [--dry-run] [--json] [--locale=en]
+  aioson feature:current [path] [--with-summary] [--json] [--locale=en]
+  aioson feature:trace [path] --feature=<slug> [--json] [--locale=en]
+  aioson feature:diff [path] --feature=<slug> [--base=<ref>] [--paths-only] [--json] [--locale=en]
+  aioson setup:detect [path] [--json] [--locale=en]
+  aioson genome:apply [path] --genome=<slug> --squad=<slug> [--executor=<slug>] [--json] [--locale=en]
+  aioson profiler:coverage [path] --slug=<slug> [--file=<path>] [--json] [--locale=en]
+  aioson feature:closure [path] [--enable --by=<owner> --auto --allow-secondary | --disable --by=<owner> | --feature=<slug> --prepare=<json> | --list --include-resolved] [--json]
+  aioson feature:close [path] --feature=<slug> --verdict=PASS|FAIL|ACCEPTED_WITH_FOLLOWUPS [--residual=<text>] [--preflight|--explain] [--force] [--no-archive] [--no-distill] [--json] [--locale=en]
+  aioson feature:archive [path] --feature=<slug> [--dry-run] [--restore] [--sweep] [--force] [--json] [--locale=en]
+  aioson gate:check [path] --feature=<slug> --gate=A|B|C|D [--json] [--locale=en]
+  aioson gate:approve [path] --feature=<slug> --gate=A|B|C|D [--json] [--locale=en]
+  aioson prototype:check [path] --feature=<slug> [--json] [--locale=en]
+  aioson ac:test-audit [path] --feature=<slug> [--strict] [--seed] [--json] [--locale=en]
+  aioson preflight [path] [--agent=<name>] [--feature=<slug>] [--json] [--locale=en]
+  aioson pulse:update [path] [--agent=<name>] [--feature=<slug>] [--gate=<text>] [--verdict=<text>] [--locale=en]
+  aioson agent:done [path] --agent=<name> --summary=<text> [--title=<text>] [--status=completed|failed] [--json] [--locale=en]
+  aioson commit:prepare [path] [--staged-only] [--agent-safe] [--mode=guarded|trusted|headless] [--json] [--locale=en]
+  aioson dossier:init [path] --slug=<feature-slug> [--classification=MICRO|SMALL|MEDIUM] [--json] [--locale=en]
+  aioson dossier:show [path] --slug=<feature-slug> [--json] [--locale=en]
+  aioson dossier:add-finding [path] --slug=<slug> --agent=<name> --section=<name> --content=<text> [--json] [--locale=en]
+  aioson detect:test-runner [path] [--json] [--locale=en]
+  aioson dev:resume-data [path] [--feature=<slug> (default: the feature of the live session running this, else the one of the last handoff)] [--phase=<n> --capsule (needs --feature=<slug>) [--base=<ref>] [--out=<file>]] [--json] [--locale=en]
+  aioson dev:progress [path] --feature=<slug> [--json] [--locale=en]
+  aioson phase:next [path] --feature=<slug> --finished=<n> --note=<text|none> [--tool=<harness>] [--json] [--locale=en]
+  aioson session:kickoff [path] --agent=<id> --feature=<slug> (optional inside a live session that named its feature) [--phase=<n>] [--tool=<harness>] [--json] [--locale=en]
+  aioson plan [path] [--sub=show|status|checkpoint|stale|register] [--feature=<slug>] [--phase=<N>] [--locale=en]
+  aioson harness:init [path] --slug=<slug> [--mode=balanced|safe|builder|autopilot] [--locale=en]
+  aioson harness:validate [path] --slug=<slug> [--base=<ref>] [--no-diff] [--max-diff-bytes=<n>] [--artifact=<path>] [--locale=en]
+  aioson harness:apply-validation [path] --slug=<slug> [--input=<file>] [--json] [--locale=en]
+  aioson harness:approve [path] --slug=<slug> --gate=<gate-id> [--json] [--locale=en]
+  aioson harness:reject [path] --slug=<slug> --gate=<gate-id> [--reason=<text>] [--json] [--locale=en]
+  aioson harness:status [path] [--slug=<slug>] [--json] [--locale=en]
+  aioson harness:check [path] --slug=<slug> [--criteria=C1,C2] [--timeout=<ms>] [--json] [--locale=en]
+  aioson harness:retro [path] --feature=<slug> | --last=<N> [--json] [--locale=en]
+  aioson harness:preview <file> [--max-bytes=8192] [--json] [--locale=en]
+  aioson verification:plan [path] [--feature=<slug>] [--trigger=per-phase|end-of-feature|sensitive-surface] [--host=claude|codex|opencode] [--classification=MICRO|SMALL|MEDIUM] [--sensitive] [--json] [--locale=en]
+  aioson delegation:plan [path] --explicit-model-request --host=<host> [--provider=<provider>] --model=<model> --kind=<kind> (--task=<text>|--task-file=<path>) [--json]
+  aioson delegation:run [path] --explicit-model-request --host=<host> [--provider=<provider>] --model=<model> --kind=<kind> (--task=<text>|--task-file=<path>) [--json]
+  aioson web:map [path] --url=<url> [--depth=<N>] [--max-pages=<N>] [--include-external] [--json] [--locale=en]
+  aioson web:scrape [path] --url=<url> [--format=markdown|text|html|links] [--json] [--locale=en]
+  aioson web:save [path] --url=<url> [--slug=<slug>] [--dir=<dir>] [--max-files=<N>] [--max-bytes=<N>] [--json] [--locale=en]
+  aioson web:extract [path] --slug=<slug>|--dir=<dir> [--query=<text>] [--context=<N>] [--max-matches=<N>] [--out=<file>] [--json] [--locale=en]
+  aioson web:discover [path] --query=<text> [--url=<feed-or-page>] [--urls=<url,url>] [--limit=<N>] [--out=<file>] [--json] [--locale=en]
+  aioson web:collect [path] --slug=<slug> [--url=<url>] [--urls=<url,url>] [--candidates=<file>] [--query=<text>] [--json] [--locale=en]
+  aioson jev:judge [path] --file=<judgment.json> [--dry-run] [--out=<file>] [--require-pass] [--json] | --example=raw|gate|select|rank|all [--dry-run] | --check
+  aioson jev:review [path] [--file=<html>|--dir=<interface>|--slug=<feature>|--url=<app>] [--profile=premium|prototype|qa|design-system|accessibility|code-quality] [--runtime] [--criteria=<file>] [--include-source] [--evidence-only|--dry-run] [--require-pass] [--out=<file>] [--json]
+  aioson jev:agent-review [path] --agent=briefing|refiner|product|sheldon|planner|dev|qa|tester|pentester --feature=<slug> [--phase=preflight|review|handoff] [--evidence-only|--dry-run] [--require-pass] [--out=<file>] [--json]
+  aioson scan:project [path] --folder=<path[,path2]> [--summary-mode=titles|summaries|raw] [--context-mode=merge|rewrite] [--with-llm] [--provider=<name>] [--llm-model=<name>] [--dry-run] [--json] [--locale=en]
+  aioson config <set KEY=value|show|get KEY> [--json] [--locale=en]
+  aioson genome:doctor <file> [--json] [--locale=en]
+  aioson genome:approve [path] --squad=<slug> --genome=<slug> [--executor=<slug>] [--specimen=<path>] [--json] [--locale=en]
+  aioson genome:migrate <file-or-dir> [--write] [--no-backup] [--json] [--locale=en]
+  aioson squad:status [path] [--json] [--locale=en]
+  aioson squad:doctor [path] [--squad=<slug>] [--stale-minutes=5] [--json] [--locale=en]
+  aioson squad:repair-genomes <manifest.json> [--write] [--no-backup] [--json] [--locale=en]
+  aioson squad:validate [path] --squad=<slug> [--strict] [--json] [--locale=en]
+  aioson squad:gateway [path] --squad=<slug> [--dry-run] [--json] [--locale=en]
+  aioson squad:eval [path] --squad=<slug> [--no-persist] [--json] [--locale=en]
+  aioson squad:preflight [path] --operation=<default-create|design|create|validate|eval|pilot|analyze|extend|repair|refresh|export|investigate|plan|configure-output|session-run> [--lane=quick|standard|premium|regulated] [--mode=content|software|research|mixed] [--signals=<a,b>] [--json] [--locale=en]
+  aioson squad:pilot-approve [path] --squad=<slug> [--json] [--locale=en]
+  aioson squad:export [path] --squad=<slug> [--locale=en]
+  aioson squad:pipeline [path] [--sub=list|show|status] [--pipeline=<slug>] [--locale=en]
+  aioson squad:plan [path] [--sub=show|status|checkpoint|stale|register] [--squad=<slug>] [--round=<N>] [--locale=en]
+  aioson squad:agent-create [path] --name=<name> [--scope=my-agents|squad] [--squad=<slug>] [--type=agent|assistant|clone|worker] [--tier=0|1|2|3] [--disc=<profile>] [--mission=<text>] [--domain=<text>] [--specialist=<name>] [--with-infra] [--locale=en]
+  aioson squad:investigate [path] [--sub=list|show|score|link|register] [--investigation=<slug>] [--squad=<slug>] [--locale=en]
+  aioson squad:dashboard [path] [--port=4180] [--squad=<slug>] [--locale=en]
+  aioson squad:worker [path] [--sub=list|run|test|logs|scaffold] [--squad=<slug>] [--worker=<slug>] [--input=<json>] [--locale=en]
+  aioson squad:daemon [path] [--sub=start|status|stop|logs] [--squad=<slug>] [--port=<N>] [--locale=en]
+  aioson squad:mcp [path] [--sub=status|connectors|configure|test] [--squad=<slug>] [--mcp=<slug>] [--connector=<id>]
+  aioson squad:roi [path] [--sub=config|metric|report|export] [--squad=<slug>] [--key=<metric>] [--value=<N>]
+  aioson squad:score [path] --squad=<slug> [--locale=en]
+  aioson squad:learning [path] [--sub=list|stats|archive|promote|export] [--squad=<slug>] [--status=<status>] [--locale=en]
+  aioson agent:audit [path] [--runtime-only|--template-only|--inception] [--locales] [--verbose] [--fix] [--json] [--locale=en]
+  aioson quality:audit [path] [--feature=<slug>] [--provider-output=<path>] [--baseline=<path>] [--changed=<path[,path]>] [--json] [--locale=en]
+  quality:run [path] --profile=<product|framework> [--dry-run] [--json] — Run native quality checks (product/framework; --dry-run previews)
+  quality:evals [path] [--validate-seeds | --executor=<JSON argv>] [--compare=<run.json> --baseline=<run.json>] — Run repair evaluations or compare immutable paired runs
+  quality:bench [path] --argv=<JSON argv> --label=<name> [--samples=10] [--warmup=2] [--metric=wall|reported] | --baseline=<result.json> [--compare=<result.json>] — Time a hotspot with repeated samples, or replay/compare it before and after a change
+  aioson learning [path] [--sub=list|stats|promote|import-from-claude] [--status=<status>] [--id=<learning-id>] [--project-hash=<hash>] [--dry-run] [--select=<n[,n]|all>] [--locale=en]
+  aioson runtime:init [path] [--json] [--locale=en]
+  aioson runtime:ingest [path] [--squad=<slug>] [--agent=<name>] [--session=<key>] [--task=<key>] [--json] [--locale=en]
+  aioson runtime:task:start [path] --title=<text> [--squad=<slug>] [--session=<key>] [--goal=<text>] [--by=<agent>] [--task=<key>] [--json] [--locale=en]
+  aioson runtime:start [path] --agent=<name> [--squad=<slug>] [--session=<key>] [--title=<text>] [--run=<key>] [--json] [--locale=en]
+  aioson runtime:update [path] --run=<key> [--message=<text>] [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aioson runtime:task:finish [path] --task=<key> [--goal=<text>] [--json] [--locale=en]
+  aioson runtime:finish [path] --run=<key> [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aioson runtime:task:fail [path] --task=<key> [--goal=<text>] [--json] [--locale=en]
+  aioson runtime:fail [path] --run=<key> [--message=<text>] [--summary=<text>] [--output=<path>] [--json] [--locale=en]
+  aioson runtime:status [path] [--json] [--locale=en]
+  aioson runtime:log [path] --agent=<name> --message=<text> [--type=<event>] [--finish] [--status=completed|failed] [--summary=<text>] [--title=<task-title>] [--json] [--locale=en]
+  aioson runtime:storage [path] [--older-than=<days>] [--output-older-than=<days>] [--json] [--locale=en]
+  aioson runtime:prune [path] [--older-than=<days>] [--output-older-than=<days>] [--dry-run] [--compact] [--force] [--json] [--locale=en]
+  aioson runtime:compact [path] [--force] [--json] [--locale=en]
+  aioson agent:recover [path] [--dry-run] [--older-than=<24h|7d>] [--json] [--locale=en]
+  aioson runtime:session:start [path] --agent=<name> [--title=<text>] [--message=<text>] [--session=<key>] [--json] [--locale=en]
+  aioson runtime:session:log [path] --agent=<name> --message=<text> [--type=<event>] [--title=<text>] [--json] [--locale=en]
+  aioson runtime:session:finish [path] --agent=<name> [--message=<text>] [--summary=<text>] [--status=completed|failed] [--json] [--locale=en]
+  aioson runtime:session:status [path] --agent=<name> [--limit=8] [--watch=2] [--json] [--locale=en]
+  aioson runtime:emit [path] --agent=<name> [--type=<event>] [--summary=<text>] [--title=<text>] [--refs=<file[,file2]>] [--used-skills=<id[,id2]>] [--plan-step=<id>] [--meta=<json>] [--json] [--locale=en]
+  aioson host:signature [path] --host=antigravity|claude|codex|cursor|grok|kimi|opencode|qwen [--model=<id>|configured-default] [--effort=low|medium|high|xhigh|max|ultra] [--ttl=<hours>] [--timeout=<ms>] [--status] [--list] [--json] [--locale=en]
+  aioson execution:offer [path] [--feature=<slug>] [--confirm-defaults] [--json] [--locale=en]
+  aioson execution:seed [path] --lanes=<lane-a,lane-b> [--feature=<slug>] [--json] [--locale=en]
+  aioson execution:configure [path] --feature=<slug> [--lanes=<lane-a,lane-b>] [--config=<reviewed-json-file> --expect-digest=<digest> --confirm] [--json] — role model and effort wizard in the monitoring chat
+  aioson execution:profiles:validate [path] [--profile=<name[,name2]>] [--concurrency=<1..10>] [--ttl=<hours>] [--timeout=<ms>] [--refresh] [--status] [--json] [--locale=en]
+  aioson execution:compile [path] --feature=<slug> [--dry-run] [--json] [--locale=en]
+  aioson execution:run [path] --feature=<slug> [--preflight] [--resume] [--fresh] [--wave=<n>] [--until-complete|--bounded-recovery] [--detach] [--json] [--locale=en]
+  aioson execution:decide [path] --feature=<slug> --unit=<unit-id> --choice=retry|fallback:<host>/<model>[/<effort>]|skip|skip-qa|abort [--json] [--locale=en]
+  aioson execution:status [path] --feature=<slug> [--watch[=<seconds>]] [--format=table|full|line] [--json] [--locale=en]
+  aioson execution:dashboard [path] [--feature=<slug>] [--port=4181] [--json]
+  aioson execution:prices [path] [--refresh] [--json]
+  aioson execution:graph [path] --feature=<slug> [--format=ascii|mermaid|json] [--json] [--locale=en]
+  aioson execution:dependencies [path] --feature=<slug> [--dev-minutes=<n>] [--qa-minutes=<n>] [--json]  — Jev infers the real Depends on edges and waves of the plan
+  aioson live:start [path] --tool=<claude|codex|opencode|kimi|qwen|grok|muse|agy|antigravity> --agent=<name> [--tool-bin=<binary>] [--permission-mode=yolo|default (default: yolo — the host runs unattended)] [--tool-args=<args>] [--title=<text>] [--goal=<text>] [--plan=<file>] [--session=<key>] [--own-session (with --session=<key>: a session of its own — never reuses, closes or changes another session of the folder; several per folder)] [--feature=<slug> (the feature the session starts on)] [--message=<text>] [--attach] [--no-launch] [--tmux] [--json] [--locale=en]
+  aioson live:status [path] [--agent=<name>] [--session=<key> (that session only)] [--limit=8] [--watch=2] [--format=compact|tmux-bar] [--json] [--locale=en]
+  aioson live:handoff [path] --agent=<name> --to=<name> [--session=<key>] [--reason=<text>] [--summary=<text>] [--message=<text>] [--json] [--locale=en]
+  aioson live:close [path] [--agent=<name>] [--session=<key> (that session only)] [--summary=<text>] [--message=<text>] [--status=completed|failed] [--json] [--locale=en]
+  aioson live:list [path] [--json] [--locale=en]
+  aioson scaffold:complete [path] --slug=<slug> [--manifest=<path>] [--scaffold-path=<path>] [--session=<key>] [--agent=<name>] [--json] [--locale=en]
+  aioson runtime:backup [path] [--tables=tasks,runs,...] [--force] [--dry-run] [--json] [--locale=en]
+  aioson runtime:restore [path] [--tables=tasks,runs,...] [--dry-run] [--json] [--locale=en]
+  aioson skill:install [path] --slug=<name> [--from=npm|cloud|./path] [--force] [--json] [--locale=en]
+  aioson skill:list [path] [--json] [--locale=en]
+  aioson skill:remove [path] --slug=<name> [--json] [--locale=en]
+  aioson skill:audit [path] [--scope=runtime|template|all] [--reachability] [--usage] [--json] [--locale=en]
+  aioson design-hybrid:options [path] [--advanced] [--json] [--locale=en]
+  aioson cloud:import:squad [path] --url=<snapshot-url> [--force] [--snapshots-only] [--dry-run] [--json] [--locale=en]
+  aioson cloud:import:genome [path] --url=<snapshot-url> [--force] [--snapshots-only] [--dry-run] [--json] [--locale=en]
+  aioson cloud:publish:squad [path] --slug=<slug> --resource-version=<version> [--url=<publish-url>|--base-url=<site>] [--title=<text>] [--summary=<text>] [--compatibility-min=<version>] [--compatibility-max=<version>] [--linked-genome-version=<version>] [--dry-run] [--json] [--locale=en]
+  aioson cloud:publish:genome [path] --slug=<slug> --resource-version=<version> [--url=<publish-url>|--base-url=<site>] [--title=<text>] [--summary=<text>] [--source-kind=LOCAL|AIOSLITE|IMPORTED|REMOTE_PROVIDER] [--dry-run] [--json] [--locale=en]
+  aioson auth:login --token=<token> [--locale=en]
+  aioson auth:logout [--locale=en]
+  aioson auth:status [--locale=en]
+  aioson workspace:init [path] [--name=<slug>] [--force] [--locale=en]
+  aioson workspace:status [path] [--locale=en]
+  aioson workspace:open [path] [--locale=en]
+  aioson genome:publish [path] --slug=<slug> [--private] [--paid] [--dry-run] [--locale=en]
+  aioson genome:install <slug-or-code> [path] [--force] [--locale=en]
+  aioson genome:list [path] [--locale=en]
+  aioson genome:remove --slug=<slug> [path] [--force] [--locale=en]
+  aioson genome:install:store [path] <code-or-slug> [--slug=<slug>] [--force] [--locale=en]
+  aioson skill:publish [path] --slug=<slug> [--private] [--paid] [--dry-run] [--locale=en]
+  aioson squad:list [path] [--remote] [--locale=en]
+  aioson squad:publish [path] --slug=<slug> [--bundle-skills=a,b] [--bundle-genomes=a,b] [--version=<semver>] [--private] [--paid] [--dry-run] [--locale=en]
+  aioson squad:install [path] <code-or-slug> [--email=<email>] [--force] [--locale=en]
+  aioson squad:grant <code> <email> [--locale=en]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-25T22:25:04.070Z level=INFO run=2161bd7e message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"@jaimevalasek/aioson@1.84.1\"]" role=cli
+timestamp=2026-11-25T22:25:09.679Z level=INFO run=3fcd7894 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-25T22:25:09.922Z level=INFO run=3fcd7894 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-25T22:25:09.941Z level=INFO run=3fcd7894 message="database schema bootstrap completed" migrations=62 durationMs=19 role=server
+timestamp=2026-11-25T22:25:10.210Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/.config/opencode type=directory ignores=6 http.span=31 role=server
+timestamp=2026-11-25T22:25:10.230Z level=INFO run=3fcd7894 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=51 role=server
+timestamp=2026-11-25T22:25:10.231Z level=INFO run=3fcd7894 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=52 role=server
+timestamp=2026-11-25T22:25:10.231Z level=INFO run=3fcd7894 message="watcher subscribe" path=/ type=entries ignores=0 http.span=52 role=server
+timestamp=2026-11-25T22:25:10.232Z level=INFO run=3fcd7894 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=53 role=server
+timestamp=2026-11-25T22:25:10.232Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=53 role=server
+timestamp=2026-11-25T22:25:10.233Z level=INFO run=3fcd7894 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=54 role=server
+timestamp=2026-11-25T22:25:10.233Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP type=entries ignores=0 http.span=54 role=server
+timestamp=2026-11-25T22:25:10.234Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-25T22:25:10.234Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u type=entries ignores=0 http.span=55 role=server
+timestamp=2026-11-25T22:25:10.234Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u type=entries backend=node ignores=0 http.span=55 role=server
+timestamp=2026-11-25T22:25:10.261Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/.config/opencode type=directory backend=inotify ignores=6 http.span=82 role=server
+timestamp=2026-11-25T22:25:10.279Z level=INFO run=3fcd7894 message="location services booted" directory=/tmp/verify-hV9xAP/u workspaceID=undefined durationMs=98 http.span=100 role=server
+timestamp=2026-11-25T22:25:10.288Z level=INFO run=3fcd7894 msg="loading plugin" id=@jaimevalasek/aioson@1.84.1 entrypoint=file:///tmp/verify-hV9xAP/u/cache/opencode/npm/@jaimevalasek/aioson@1.84.1/1795645509438/node_modules/@jaimevalasek/aioson/src/cli.js http.span=109 role=server
+timestamp=2026-11-25T22:25:10.388Z level=WARN run=3fcd7894 message="failed to load plugin" target=@jaimevalasek/aioson@1.84.1 ref=err_c34e3edf cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Missing key\n  at [\"default\"][\"id\"]\nMissing key\n  at [\"default\"][\"id\"])))])" http.span=209 role=server
+timestamp=2026-11-25T22:25:11.695Z level=ERROR run=3fcd7894 message="Failed to fetch models.dev" cause="Cause([Fail(HttpClientError: Transport error (GET https://models.opencode.ai/experimental/v2.0/api.json?type=chat,decision,image,video) (cause: TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?))])" http.span=1516 role=server
+timestamp=2026-11-25T22:25:11.796Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/.config/opencode/AGENTS.md type=file ignores=0
+timestamp=2026-11-25T22:25:11.797Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/.config/opencode/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T22:25:11.797Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/.claude/CLAUDE.md type=file ignores=0
+timestamp=2026-11-25T22:25:11.798Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/AGENTS.md type=file ignores=0
+timestamp=2026-11-25T22:25:11.798Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/AGENTS.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T22:25:11.798Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/CLAUDE.md type=file ignores=0
+timestamp=2026-11-25T22:25:11.799Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/CLAUDE.md type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T22:25:11.854Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/.config/opencode/skill type=file ignores=0
+timestamp=2026-11-25T22:25:11.855Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/.config/opencode/skill type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T22:25:11.859Z level=INFO run=3fcd7894 message="watcher subscribe" path=/tmp/verify-hV9xAP/u/.config/opencode/skills type=file ignores=0
+timestamp=2026-11-25T22:25:11.860Z level=INFO run=3fcd7894 message="watcher started" path=/tmp/verify-hV9xAP/u/.config/opencode/skills type=file backend=node ignores=0 role=server
+timestamp=2026-11-25T22:25:11.914Z level=INFO run=3fcd7894 message=event event.id=evt_214d018ea001WH4fJjun9ob12S event.created=1795645511914 event.type=provider.updated event.location.directory=/tmp/verify-hV9xAP/u event.location.workspaceID=undefined event.data={} http.span=1735 role=server
+timestamp=2026-11-25T22:25:11.941Z level=INFO run=3fcd7894 message=event event.id=evt_214d01903001GaJ4YWrT6fTtYQ event.created=1795645511941 event.type=model.updated event.location.directory=/tmp/verify-hV9xAP/u event.location.workspaceID=undefined event.data={} http.span=1762 role=server
+timestamp=2026-11-25T22:25:11.945Z level=INFO run=3fcd7894 message=event event.id=evt_214d01909001VUg9xxwfXbhNlE event.created=1795645511945 event.type=agent.updated event.location.directory=/tmp/verify-hV9xAP/u event.location.workspaceID=undefined event.data={} http.span=1766 role=server
+timestamp=2026-11-25T22:25:11.945Z level=INFO run=3fcd7894 message=event event.id=evt_214d019090025OnUPMFHpuVOwT event.created=1795645511945 event.type=command.updated event.location.directory=/tmp/verify-hV9xAP/u event.location.workspaceID=undefined event.data={} http.span=1766 role=server
+timestamp=2026-11-25T22:25:12.446Z level=INFO run=3fcd7894 message="shutdown started" signal=SIGTERM role=cli
+timestamp=2026-11-25T22:25:12.446Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/.config/opencode/skill type=file role=server
+timestamp=2026-11-25T22:25:12.446Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/.config/opencode/skills type=file role=server
+timestamp=2026-11-25T22:25:12.458Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/CLAUDE.md type=file role=server
+timestamp=2026-11-25T22:25:12.459Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/AGENTS.md type=file role=server
+timestamp=2026-11-25T22:25:12.459Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/.config/opencode/AGENTS.md type=file role=server
+timestamp=2026-11-25T22:25:12.494Z level=INFO run=3fcd7894 message="watcher stopped" path=/etc type=entries http.span=2315 role=server
+timestamp=2026-11-25T22:25:12.494Z level=INFO run=3fcd7894 message="watcher stopped" path=/ type=entries http.span=2315 role=server
+timestamp=2026-11-25T22:25:12.494Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp type=entries http.span=2315 role=server
+timestamp=2026-11-25T22:25:12.494Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP type=entries http.span=2315 role=server
+timestamp=2026-11-25T22:25:12.494Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u type=entries http.span=2315 role=server
+timestamp=2026-11-25T22:25:12.496Z level=INFO run=3fcd7894 message="watcher stopped" path=/tmp/verify-hV9xAP/u/.config/opencode type=directory http.span=2317 role=server
