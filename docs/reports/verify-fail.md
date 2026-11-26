@@ -1,12 +1,12 @@
-# 装测失败日报 — 2026-11-25
+# 装测失败日报 — 2026-11-26
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
 
 ## 汇总
-- 当前装测失败条目：**125**
-- 按阶段：**install** 67 · **load** 46 · **structure** 9 · **render** 2 · **interactive** 1
-- AI 判过但装不上：**244**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- 当前装测失败条目：**123**
+- 按阶段：**install** 67 · **load** 44 · **structure** 9 · **render** 2 · **interactive** 1
+- AI 判过但装不上：**242**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -81,7 +81,6 @@
 | yriveiro/spectre | — | interactive | tre-9041134d3a98e9ef25f23555729c41702e48414e/skills/definitions/pr-canvas/SKILL.md, spectre-9041134d3a98e9ef25f23555729c41702e48414e/skills/definitions/principl |
 | @alvarovfon/opencode-agent-monitor | 1.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @bloodf/opencode-claude-mem | 1.2.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
-| @codemcp/workflows-opencode | 6.24.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @crixue/opencode-voice-stt | 0.2.1 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Die(TypeError: storage.store is not a function. (In 'storage.store(\"state\", { |
 | @dendaio/opencode-9router-plugin | 1.1.2 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | @deveco-test/deveco-harness | 0.2.0-test.8 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -117,7 +116,6 @@
 | clew-code | 0.11.0 | load | 插件入口疑似是 CLI 程序——宿主加载入口模块时顶层 program.parse() 吞掉宿主 argv（包把命令行工具当插件入口打包，真包缺陷） — error: unknown option '--port' |
 | goodtome/magpie-teleagent-login | — | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | llisa | 1.1.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
-| magpie-gemini-web | 0.17.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | oc-codex-multi-account | 1.0.20 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | oh-my-china | 1.1.3 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
 | opencode-agy | 0.16.0 | load | 插件模块无法被宿主加载（初始化抛错或导出不符契约——常见于未适配当前 opencode 版本） — failed to load plugin — Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id |
@@ -172,7 +170,6 @@
 | @scrylog/opencode-plugin | 0.9.3 |
 | @sublang/cligent | 0.40.0 |
 | @sunerpy/oh-my-openagent | 4.21.0 |
-| @supanadit/morse-web | 0.31.0 |
 | @super-pocock-ai/suite | 2.3.30 |
 | @vicoa/opencode | 0.2.1 |
 | @wolfx/oh-my-openagent | 4.19.0 |
@@ -236,7 +233,6 @@
 | hivemind-3.0 | 0.1.0 |
 | iamironz/opencode-sessions-explorer | — |
 | ilahomesick/opencode-true-mem-v2 | — |
-| jira-cli-agent | 0.2.0 |
 | jn-s3s/opencode-tui-quota-usage | — |
 | joe-broadhead/opencode-ashby | — |
 | Khip01/opencode-rich-presence | — |
