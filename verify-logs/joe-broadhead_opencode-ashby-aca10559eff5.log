@@ -1,0 +1,31 @@
+spec: joe-broadhead/opencode-ashby#aca10559eff5517feb9dd1307fd34286f96bedda
+apiNames: joe-broadhead/opencode-ashby, opencode-ashby
+verdict: serve reports the plugin failed to load
+
+--- /api/plugin (head) ---
+{"location":{"directory":"/tmp/verify-zVKBUN/u"},"data":[{"id":"opencode.tool.input.repair","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.worktree","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.config.mcp","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.mcp.codemode.defaults","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}},{"id":"opencode.wellknown","source":{"type":"builtin"},"features":{"serv…
+
+--- serve output (tail 64k, password redacted) ---
+server listening on http://127.0.0.1:37553
+server password [redacted]
+
+
+--- opencode log (tail 256k) ---
+timestamp=2026-11-26T14:18:45.382Z level=INFO run=e4661653 message="cli starting" version=2.3.1 channel=latest local=false args="[\"plugin\",\"add\",\"joe-broadhead/opencode-ashby#aca10559eff5517feb9dd1307fd34286f96bedda\"]" role=cli
+timestamp=2026-11-26T14:18:46.746Z level=INFO run=9b37eb14 message="cli starting" version=2.3.1 channel=latest local=false args="[\"serve\",\"--port\",\"0\"]" role=cli
+timestamp=2026-11-26T14:18:47.111Z level=INFO run=9b37eb14 message="database schema bootstrap started" migrations=62 role=server
+timestamp=2026-11-26T14:18:47.164Z level=INFO run=9b37eb14 message="database schema bootstrap completed" migrations=62 durationMs=53 role=server
+timestamp=2026-11-26T14:18:47.364Z level=INFO run=9b37eb14 message="watcher subscribe" path=/tmp/verify-zVKBUN/u/.config/opencode type=directory ignores=6 http.span=36 role=server
+timestamp=2026-11-26T14:18:47.368Z level=INFO run=9b37eb14 message="watcher subscribe" path=/etc type=entries ignores=0 http.span=40 role=server
+timestamp=2026-11-26T14:18:47.369Z level=INFO run=9b37eb14 message="watcher started" path=/etc type=entries backend=node ignores=0 http.span=41 role=server
+timestamp=2026-11-26T14:18:47.369Z level=INFO run=9b37eb14 message="watcher subscribe" path=/ type=entries ignores=0 http.span=41 role=server
+timestamp=2026-11-26T14:18:47.370Z level=INFO run=9b37eb14 message="watcher started" path=/ type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-26T14:18:47.370Z level=INFO run=9b37eb14 message="watcher subscribe" path=/tmp type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-26T14:18:47.370Z level=INFO run=9b37eb14 message="watcher started" path=/tmp type=entries backend=node ignores=0 http.span=42 role=server
+timestamp=2026-11-26T14:18:47.370Z level=INFO run=9b37eb14 message="watcher subscribe" path=/tmp/verify-zVKBUN type=entries ignores=0 http.span=42 role=server
+timestamp=2026-11-26T14:18:47.371Z level=INFO run=9b37eb14 message="watcher started" path=/tmp/verify-zVKBUN type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-26T14:18:47.371Z level=INFO run=9b37eb14 message="watcher subscribe" path=/tmp/verify-zVKBUN/u type=entries ignores=0 http.span=43 role=server
+timestamp=2026-11-26T14:18:47.371Z level=INFO run=9b37eb14 message="watcher started" path=/tmp/verify-zVKBUN/u type=entries backend=node ignores=0 http.span=43 role=server
+timestamp=2026-11-26T14:18:47.390Z level=INFO run=9b37eb14 message="watcher started" path=/tmp/verify-zVKBUN/u/.config/opencode type=directory backend=inotify ignores=6 http.span=62 role=server
+timestamp=2026-11-26T14:18:47.400Z level=INFO run=9b37eb14 message="location services booted" directory=/tmp/verify-zVKBUN/u workspaceID=undefined durationMs=72 http.span=72 role=server
+timestamp=2026-11-26T14:18:47.410Z level=INFO run=9b37eb14 msg="loading plugin" id=joe-broadhead/opencode-ashby#aca10559eff5517feb9dd1307fd34286f96bedda entrypoint=file:///tmp/verify-zVKBUN/u/cache/opencode/npm/git-opencode-ashby-d6463addfbec/1795702726326/node_modules/@we-the-rebel-alliance/ashby-plugin/dist/index.js http.span=82 role=server
