@@ -1,4 +1,4 @@
-# 装测失败日报 — 2026-11-26
+# 装测失败日报 — 2026-11-27
 
 > 机械装测测量结果，**不是安全判定**：verify 管线实测"装不上/加载失败"的条目。
 > 这些条目不再逐条开 issue——翻案靠重测转 verified 或人工 verdict；条目离开本表即翻案成功。
@@ -6,7 +6,7 @@
 ## 汇总
 - 当前装测失败条目：**123**
 - 按阶段：**install** 67 · **load** 44 · **structure** 9 · **render** 2 · **interactive** 1
-- AI 判过但装不上：**242**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
+- AI 判过但装不上：**241**（判词有效、字节装不上——同样等重测/上游修复翻案，见第二表）
 
 ## 明细
 | 包 | 版本 | 阶段 | 原因摘要 |
@@ -258,7 +258,6 @@
 | opencode-agentic-engine | 0.5.12 |
 | opencode-agentrouter-auth1 | 0.2.0-dev.2 |
 | opencode-antigravity-auth-updated | 1.7.0 |
-| opencode-anyrouter-auth | 0.1.0 |
 | opencode-arise | 0.1.6 |
 | opencode-asyntai | 1.0.0 |
 | opencode-autopm | 3.7.0 |
