@@ -1,7 +1,7 @@
-机械装测测量结果日报（2026-11-27 更新）——逐条 issue 已停用，全表见 https://github.com/awesome-market/awesome-opencode-market/blob/main/docs/reports/verify-fail.md
+机械装测测量结果日报（2026-11-28 更新）——逐条 issue 已停用，全表见 https://github.com/awesome-market/awesome-opencode-market/blob/main/docs/reports/verify-fail.md
 
 **当前 123 个装测失败条目** · **install** 67 · **load** 44 · **structure** 9 · **render** 2 · **interactive** 1
-**241 个 AI 判过但装不上**（判词有效、字节装不上——不再逐条开单，翻案靠重测/上游修复）
+**240 个 AI 判过但装不上**（判词有效、字节装不上——不再逐条开单，翻案靠重测/上游修复）
 
 这些条目是 verify 实测"装不上/加载失败"的测量回声，不是安全判定：重测翻 verified 或人工 verdict 后自动离开日报。历史 issue 见 label:concern:verify（已关闭）。
 
